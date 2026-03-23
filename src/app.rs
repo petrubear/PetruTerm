@@ -821,6 +821,50 @@ impl ApplicationHandler for App {
     }
 }
 
+/// Crop a glyph quad to fit within a cell rectangle `[0, cell_w] × [0, cell_h]`.
+///
+/// Returns `(glyph_offset, glyph_size, atlas_uv)` with both the screen rect and
+/// the atlas UV range trimmed so only the visible portion of the bitmap is drawn.
+/// Nerd Font PUA icons are often taller than `cell_height`; this prevents them
+/// from bleeding into adjacent rows (TD-012).
+fn clamp_glyph_to_cell(
+    offset: [f32; 2],
+    size: [f32; 2],
+    uv: [f32; 4],
+    cell_w: f32,
+    cell_h: f32,
+) -> ([f32; 2], [f32; 2], [f32; 4]) {
+    let [ox, oy] = offset;
+    let [gw, gh] = size;
+    let [u0, v0, u1, v1] = uv;
+
+    // Visible pixel extent within the cell.
+    let x0 = ox.max(0.0);
+    let y0 = oy.max(0.0);
+    let x1 = (ox + gw).min(cell_w);
+    let y1 = (oy + gh).min(cell_h);
+
+    // Fully outside — emit a zero-size instance (will be invisible).
+    if x1 <= x0 || y1 <= y0 || gw == 0.0 || gh == 0.0 {
+        return ([0.0; 2], [0.0; 2], [0.0; 4]);
+    }
+
+    // Map pixel crop fractions back to atlas UV space.
+    let fx0 = (x0 - ox) / gw;
+    let fy0 = (y0 - oy) / gh;
+    let fx1 = (x1 - ox) / gw;
+    let fy1 = (y1 - oy) / gh;
+
+    let cropped_uv = [
+        u0 + fx0 * (u1 - u0),
+        v0 + fy0 * (v1 - v0),
+        u0 + fx1 * (u1 - u0),
+        v0 + fy1 * (v1 - v0),
+    ];
+
+    ([x0, y0], [x1 - x0, y1 - y0], cropped_uv)
+}
+
 /// Build the GPU instance list from raw terminal cell data.
 ///
 /// Shapes each row with cosmic-text, rasterizes glyphs into the atlas,
@@ -856,11 +900,15 @@ fn build_instances(
             let entry = shaper.rasterize_to_atlas(glyph.cache_key, atlas, queue);
 
             let (atlas_uv, glyph_offset, glyph_size) = match entry {
-                Some(e) => (
-                    e.uv,
-                    [e.bearing_x as f32, shaped.ascent - e.bearing_y as f32],
-                    [e.width as f32, e.height as f32],
-                ),
+                Some(e) => {
+                    let off = [e.bearing_x as f32, shaped.ascent - e.bearing_y as f32];
+                    let sz  = [e.width as f32, e.height as f32];
+                    let (off, sz, uv) = clamp_glyph_to_cell(
+                        off, sz, e.uv,
+                        shaper.cell_width, shaper.cell_height,
+                    );
+                    (uv, off, sz)
+                }
                 None => ([0.0f32; 4], [0.0; 2], [0.0; 2]),
             };
 

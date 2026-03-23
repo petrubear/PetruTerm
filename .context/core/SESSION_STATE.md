@@ -26,8 +26,7 @@ Two new debt items logged from visual inspection (TD-011, TD-012).
 - [ ] None
 
 ## Next Session Priorities (in order)
-1. TD-012 — Nerd Font icons overflow cell bounds (clamp glyph_size to cell)
-2. Custom title bar — borderless + traffic lights via objc2
+1. Custom title bar — borderless + traffic lights via objc2
 3. `.app` bundle script — `scripts/bundle.sh`
 4. 100k scrollback verification (TD-004)
 5. Ligatures verify (`->` `=>` etc.)

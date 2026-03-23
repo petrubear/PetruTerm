@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-03-23
-**Total Items:** 6
-**Critical (P0):** 0 | **P1:** 1 | **P2:** 3 | **P3:** 2
+**Total Items:** 5
+**Critical (P0):** 0 | **P1:** 1 | **P2:** 2 | **P3:** 2
 
 ## Priority Definitions
 
@@ -37,7 +37,8 @@ _None_
 
 ## P2 - Medium Priority
 
-### TD-012: Nerd Font / special-character glyphs overflow cell bounds
+### ~~TD-012: Nerd Font / special-character glyphs overflow cell bounds~~ — RESOLVED
+<!--
 - **File:** `src/font/shaper.rs`, `src/app.rs` (`build_instances`)
 - **Issue:** Nerd Font PUA icons (U+E000–U+F8FF, U+F0000+) such as the Apple logo,
   git branch glyph, and Starship separator arrows render visibly taller/larger than
@@ -55,6 +56,7 @@ _None_
 - **Priority:** P2 — cosmetic but prominent with any Starship / Nerd Font theme.
 - **Observed:** Apple logo, ⎇ branch icon, Starship separator arrows are taller than
   text rows; the prompt background segments look correct but icons bleed vertically.
+-->
 
 ### TD-004: Scrollback not verified at 100k lines
 - **File:** `src/term/mod.rs`
@@ -102,6 +104,7 @@ _None_
 
 | ID | Title | Resolved | Resolution |
 |----|-------|----------|------------|
+| TD-012 | Nerd Font icons overflow cell | 2026-03-23 | clamp_glyph_to_cell() crops glyph_size + atlas_uv to cell bounds before emitting CellVertex |
 | TD-011 | exit doesn't close window | 2026-03-23 | poll_pty_events returns (has_data, shell_exited); both about_to_wait and RedrawRequested call event_loop.exit() on exit |
 | TD-003 | PTY cell_width/height hardcoded | 2026-03-23 | Pty::spawn/resize now accept cell_w/h from TextShaper; Terminal::resize propagated; WindowEvent::Resized now calls terminal.resize() |
 | TD-007 | No clipboard integration | 2026-03-23 | arboard crate; Cmd+C copies selection, Cmd+V pastes (bracketed-paste aware); OSC 52 via PtyEvent::ClipboardStore/Load; PtyWrite forwarding |
