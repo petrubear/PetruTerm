@@ -1,50 +1,50 @@
 # Session State
 
 **Last Updated:** 2026-03-23
-**Session Focus:** Phase 1 — TD-003 PTY cell dimensions from shaper
+**Session Focus:** Phase 1 — bundle script (next session start)
 
 ## Session Summary
-Mouse handling, clipboard, and cursor rendering all completed and committed
-(commit 67de8b6). Build passes 0 errors. Runtime verified on M4 Max / Metal.
-Two new debt items logged from visual inspection (TD-011, TD-012).
+Phase 1 feature-complete. Custom title bar implemented, shell exit fixed.
+Build: 0 errors, 19 warnings (dead code stubs only). Runtime verified on M4 Max.
 
-## Completed This Session
-- [x] Mouse handling (TD-006) — CursorMoved/MouseInput/MouseWheel; drag selection
-      via alacritty Selection API; SGR + X10 mouse reporting; scrollback scroll wheel
-- [x] Clipboard (TD-007) — arboard; Cmd+C/V; OSC 52 via PtyEvent channel;
-      bracketed paste wrapping; PtyWrite forwarding
-- [x] Cursor rendering — CursorInfo + cursor_info(); FLAG_CURSOR bit in vs_bg shader;
-      block/underline/beam shapes; 530ms blink via ControlFlow::WaitUntil; reset on keypress
-- [x] TD-011 logged — `exit` command doesn't close window
-- [x] TD-012 logged — Nerd Font icons overflow cell bounds (visual, from screenshot)
+## Commits This Arc (chronological)
+- `a666bb0` feat: Phase 1 MVP — core terminal foundation
+- `67de8b6` feat: Phase 1 — mouse, clipboard, and cursor rendering
+- `8a63522` fix: PTY cell dimensions from font shaper (TD-003)
+- `49f17d9` fix: shell exit now closes the window (TD-011)
+- `cf11e3a` fix: clamp Nerd Font / oversized glyphs to cell bounds (TD-012)
+- `6325719` feat: custom title bar via objc2 (TitleBarStyle::Custom/None)
+- (pending) fix: shell exit via Event::ChildExit + EventLoopProxy wakeup
 
 ## Build Status
-- **cargo build:** PASS — 0 errors, 22 warnings (dead code stubs only)
-- **Runtime:** PASS — Metal GPU, 18×36px cell, PTY spawns, cursor visible, Starship renders
+- **cargo build:** PASS — 0 errors, 19 warnings (dead code stubs only)
+- **Runtime:** PASS — Metal GPU, custom title bar, traffic lights, PTY, exit closes window
 
 ## In Progress
-- [ ] None
+- [ ] None — clean handoff
 
 ## Next Session Priorities (in order)
-1. Custom title bar — borderless + traffic lights via objc2
-3. `.app` bundle script — `scripts/bundle.sh`
-4. 100k scrollback verification (TD-004)
-5. Ligatures verify (`->` `=>` etc.)
-6. `nvim` / `tmux` verify
+1. `.app` bundle script — `scripts/bundle.sh`
+2. TD-004 — 100k scrollback verification (`printf '%s\n' {1..110000}`)
+3. Ligatures verify — `->` `=>` `!=` `>=` `|>` in the terminal
+4. `nvim` / `tmux` smoke test
+5. Top padding fix — increase `padding.top` so terminal row 0 clears the traffic lights
 
-## Key Technical Decisions
-- Cursor: FLAG_CURSOR (0x08) in CellVertex.flags; vs_bg uses glyph_offset/glyph_size
-  as partial-cell rect when flag is set — no extra GPU pass needed
-- Cursor blink: ControlFlow::WaitUntil(now + 530ms) in about_to_wait; resets on keypress
-- Mouse scroll: Scroll::Delta(-lines), positive LineDelta y = wheel up = show history
-- SGR mouse: \x1b[<btn;col;rowM/m (1-indexed); X10: \x1b[Mbxy press-only
-- Clipboard: arboard::Clipboard created per-call on main thread (not stored in App)
-- OSC 52: PtyEvent::ClipboardStore/Load routed via channel to main thread
+## Key Technical Decisions (stable)
+- Surface: non-sRGB `Bgra8Unorm` on Metal — hex colors stored as sRGB, no double-gamma
+- Atlas: `Rgba8Unorm`, glyph mask as `[a,a,a,255]`, shader samples `.r` for coverage
+- Scale: `window.scale_factor()` = 2.0 on M4 Max; font 15pt → 30pt physical → 18×36px cell
+- Cursor: `FLAG_CURSOR = 0x08`; `vs_bg` uses `glyph_offset`/`glyph_size` as cursor rect
+- Blink: 530ms toggle in `about_to_wait` via `ControlFlow::WaitUntil`, reset on keypress
+- Mouse scroll: `Scroll::Delta(-lines)` — positive LineDelta y = wheel up = show history
+- Cell dims: `TextShaper::cell_width/height` (physical px) passed through to TIOCSWINSZ
+- Glyph clamping: `clamp_glyph_to_cell()` crops bitmap + UV to cell bounds
+- Shell exit: `Event::ChildExit(i32)` is the correct alacritty_terminal 0.25.1 variant
+  (not `Event::Exit`). EventLoopProxy wakes NSApp immediately on any PTY event.
 
-## Files Modified This Session
+## Files Modified (this arc)
 - `src/app.rs`
+- `src/main.rs`
 - `src/term/mod.rs`
 - `src/term/pty.rs`
-- `src/renderer/cell.rs`
-- `src/renderer/pipeline.rs`
-- `Cargo.toml` (added arboard = "3")
+- `config/default/ui.lua`

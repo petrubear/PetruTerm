@@ -32,7 +32,11 @@ fn main() -> Result<()> {
     // Poll mode: we drive redraws from PTY events and input, not OS events only.
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    let mut app = App::new(config);
+    // Proxy lets PTY background threads wake the winit event loop immediately
+    // (e.g. on shell exit) without waiting for the next WaitUntil blink timer.
+    let wakeup_proxy = event_loop.create_proxy();
+
+    let mut app = App::new(config, wakeup_proxy);
     event_loop.run_app(&mut app)?;
 
     log::info!("PetruTerm exiting.");

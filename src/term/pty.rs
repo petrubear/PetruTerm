@@ -7,6 +7,7 @@ use alacritty_terminal::Term;
 use alacritty_terminal::sync::FairMutex;
 use crossbeam_channel::Sender;
 use std::sync::Arc;
+use winit::event_loop::EventLoopProxy;
 
 use crate::config::Config;
 
@@ -15,7 +16,7 @@ impl EventListener for PtyEventProxy {
         use alacritty_terminal::event::Event;
         let pty_event = match event {
             Event::Wakeup               => PtyEvent::DataReady,
-            Event::Exit                 => PtyEvent::Exit,
+            Event::Exit | Event::ChildExit(_) => PtyEvent::Exit,
             Event::Title(t)             => PtyEvent::TitleChanged(t),
             Event::Bell                 => PtyEvent::Bell,
             // OSC 52 write: app wants to store text in the system clipboard.
@@ -26,7 +27,12 @@ impl EventListener for PtyEventProxy {
             Event::PtyWrite(text)       => PtyEvent::PtyWrite(text),
             _                           => return,
         };
-        let _ = self.tx.send(pty_event);
+        // Send the event to the main thread's channel. If the send succeeds,
+        // immediately wake the winit event loop so it processes the event
+        // without waiting for the next WaitUntil timer (~530 ms).
+        if self.tx.send(pty_event).is_ok() {
+            let _ = self.wakeup.send_event(());
+        }
     }
 }
 
@@ -49,9 +55,12 @@ pub enum PtyEvent {
 }
 
 /// Bridges alacritty_terminal events to our PtyEvent channel.
+/// Also holds an `EventLoopProxy` to wake the winit event loop immediately
+/// when any PTY event (including Exit) is emitted by the background I/O thread.
 #[derive(Clone)]
 pub struct PtyEventProxy {
     pub tx: Sender<PtyEvent>,
+    pub wakeup: EventLoopProxy<()>,
 }
 
 /// A spawned PTY with a running alacritty_terminal I/O thread.
@@ -74,9 +83,10 @@ impl Pty {
         rows: u16,
         cell_width: u16,
         cell_height: u16,
+        wakeup: EventLoopProxy<()>,
     ) -> Result<Self> {
         let (tx, rx) = crossbeam_channel::unbounded::<PtyEvent>();
-        let proxy = PtyEventProxy { tx };
+        let proxy = PtyEventProxy { tx, wakeup };
 
         let pty_options = PtyOptions {
             shell: Some(Shell::new(config.shell.clone(), vec!["-l".into()])),

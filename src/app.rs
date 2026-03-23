@@ -11,6 +11,8 @@ use alacritty_terminal::index::{Column, Line};
 use alacritty_terminal::selection::SelectionType;
 use alacritty_terminal::vte::ansi::Color as AnsiColor;
 
+use winit::event_loop::EventLoopProxy;
+
 use crate::config::{self, Config};
 use crate::config::schema::TitleBarStyle;
 use crate::config::watcher::ConfigWatcher;
@@ -59,10 +61,13 @@ pub struct App {
     // Cursor blink state
     cursor_blink_on: bool,
     cursor_last_blink: std::time::Instant,
+
+    // winit event loop proxy — lets PTY threads wake the event loop immediately.
+    wakeup_proxy: EventLoopProxy<()>,
 }
 
 impl App {
-    pub fn new(config: Config) -> Self {
+    pub fn new(config: Config, wakeup_proxy: EventLoopProxy<()>) -> Self {
         let config_watcher = config::config_dir()
             .exists()
             .then(|| ConfigWatcher::new(&config::config_dir()).ok())
@@ -90,6 +95,7 @@ impl App {
             mouse_left_pressed: false,
             cursor_blink_on: true,
             cursor_last_blink: std::time::Instant::now(),
+            wakeup_proxy,
         }
     }
 
@@ -97,7 +103,7 @@ impl App {
     fn open_terminal(&mut self, viewport: Option<Rect>) -> Result<usize> {
         let (cols, rows) = self.default_grid_size();
         let (cell_w, cell_h) = self.cell_dims();
-        let terminal = Terminal::new(&self.config, cols, rows, cell_w, cell_h)?;
+        let terminal = Terminal::new(&self.config, cols, rows, cell_w, cell_h, self.wakeup_proxy.clone())?;
         let id = self.next_terminal_id;
         self.next_terminal_id += 1;
 
@@ -234,7 +240,7 @@ impl App {
             let new_id = pane_mgr.split(dir);
             let (split_cols, split_rows) = self.default_grid_size();
             let (cell_w, cell_h) = self.cell_dims();
-            match Terminal::new(&self.config, split_cols, split_rows, cell_w, cell_h) {
+            match Terminal::new(&self.config, split_cols, split_rows, cell_w, cell_h, self.wakeup_proxy.clone()) {
                 Ok(terminal) => {
                     if self.terminals.len() <= new_id {
                         self.terminals.resize_with(new_id + 1, || None);
@@ -429,34 +435,47 @@ impl App {
         let mut has_data = false;
         let mut shell_exited = false;
         for terminal in self.terminals.iter().flatten() {
-            while let Ok(event) = terminal.pty.rx.try_recv() {
+            loop {
                 use crate::term::PtyEvent;
-                match event {
-                    PtyEvent::DataReady => { has_data = true; }
-                    PtyEvent::TitleChanged(t) => {
-                        log::debug!("PTY title: {t}");
-                    }
-                    PtyEvent::Exit => {
-                        log::info!("PTY shell exited.");
-                        shell_exited = true;
-                    }
-                    PtyEvent::Bell => {}
-                    PtyEvent::ClipboardStore(text) => {
-                        if let Ok(mut cb) = arboard::Clipboard::new() {
-                            let _ = cb.set_text(text);
+                use crossbeam_channel::TryRecvError;
+                match terminal.pty.rx.try_recv() {
+                    Ok(event) => match event {
+                        PtyEvent::DataReady => { has_data = true; }
+                        PtyEvent::TitleChanged(t) => {
+                            log::debug!("PTY title: {t}");
                         }
+                        PtyEvent::Exit => {
+                            log::info!("PTY shell exited (Exit event).");
+                            shell_exited = true;
+                        }
+                        PtyEvent::Bell => {}
+                        PtyEvent::ClipboardStore(text) => {
+                            if let Ok(mut cb) = arboard::Clipboard::new() {
+                                let _ = cb.set_text(text);
+                            }
+                        }
+                        PtyEvent::ClipboardLoad(fmt) => {
+                            let text = arboard::Clipboard::new()
+                                .ok()
+                                .and_then(|mut cb| cb.get_text().ok())
+                                .unwrap_or_default();
+                            let response = fmt(&text);
+                            terminal.write_input(response.as_bytes());
+                        }
+                        PtyEvent::PtyWrite(text) => {
+                            terminal.write_input(text.as_bytes());
+                        }
+                    },
+                    // Channel TX was dropped — the PTY event-loop thread exited
+                    // without sending PtyEvent::Exit (common on macOS when the
+                    // shell exits and alacritty_terminal drains the PTY before
+                    // dispatching the event).  Treat as shell exit.
+                    Err(TryRecvError::Disconnected) => {
+                        log::info!("PTY shell exited (channel disconnected).");
+                        shell_exited = true;
+                        break;
                     }
-                    PtyEvent::ClipboardLoad(fmt) => {
-                        let text = arboard::Clipboard::new()
-                            .ok()
-                            .and_then(|mut cb| cb.get_text().ok())
-                            .unwrap_or_default();
-                        let response = fmt(&text);
-                        terminal.write_input(response.as_bytes());
-                    }
-                    PtyEvent::PtyWrite(text) => {
-                        terminal.write_input(text.as_bytes());
-                    }
+                    Err(TryRecvError::Empty) => break,
                 }
             }
         }
@@ -568,7 +587,23 @@ impl App {
     }
 }
 
-impl ApplicationHandler for App {
+impl ApplicationHandler<()> for App {
+    /// Called by the PTY background thread (via `EventLoopProxy::send_event`)
+    /// whenever a PTY event is ready.  This wakes the NSApp run loop immediately
+    /// so we don't wait up to 530 ms for the next `WaitUntil` blink timer.
+    fn user_event(&mut self, event_loop: &ActiveEventLoop, _event: ()) {
+        let (has_data, shell_exited) = self.poll_pty_events();
+        if shell_exited {
+            event_loop.exit();
+            return;
+        }
+        if has_data {
+            if let Some(window) = &self.window {
+                window.request_redraw();
+            }
+        }
+    }
+
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_some() {
             return; // Already initialized.

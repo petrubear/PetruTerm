@@ -14,6 +14,7 @@ use alacritty_terminal::sync::FairMutex;
 use std::sync::Arc;
 
 use crate::config::Config;
+use winit::event_loop::EventLoopProxy;
 
 /// Cursor rendering info extracted from the terminal for one frame.
 #[derive(Debug, Clone, Copy)]
@@ -68,9 +69,16 @@ impl Terminal {
         rows: u16,
         cell_width: u16,
         cell_height: u16,
+        wakeup: EventLoopProxy<()>,
     ) -> Result<Self> {
+        // TD-002: Term requires an EventListener at construction, but the real
+        // PTY channel is created inside Pty::spawn.  We give Term a placeholder
+        // whose tx sends to a dead receiver (_rx is immediately dropped).
+        // Events routed through this placeholder (Bell, Title from VTE) are
+        // silently dropped; PTY-level events (DataReady, Exit) go through the
+        // real proxy created in Pty::spawn.
         let (tx_placeholder, _rx) = crossbeam_channel::unbounded();
-        let proxy = PtyEventProxy { tx: tx_placeholder };
+        let proxy = PtyEventProxy { tx: tx_placeholder, wakeup: wakeup.clone() };
 
         let term_config = TermConfig {
             scrolling_history: config.scrollback_lines as usize,
@@ -84,7 +92,7 @@ impl Terminal {
         };
 
         let term = Arc::new(FairMutex::new(Term::new(term_config, &size, proxy)));
-        let pty = Pty::spawn(config, Arc::clone(&term), cols, rows, cell_width, cell_height)?;
+        let pty = Pty::spawn(config, Arc::clone(&term), cols, rows, cell_width, cell_height, wakeup)?;
 
         Ok(Self { term, pty, cols, rows })
     }

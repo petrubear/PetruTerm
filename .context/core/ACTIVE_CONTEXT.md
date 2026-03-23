@@ -1,38 +1,41 @@
 # Active Context
 
-**Current Focus:** Phase 1 — TD-003 PTY cell dimensions from shaper
+**Current Focus:** Phase 1 — .app bundle script
 **Last Active:** 2026-03-23
 **Target Completion:** Phase 1 MVP
 **Priority:** P0
 
 ## Current State
 
-**Working terminal as of commit 67de8b6:**
+**Working terminal as of this session:**
 - Dracula Pro background `#22212c` ✓
-- JetBrains Mono Nerd Font Mono 15pt, 18×36px physical at 2× Retina ✓
+- JetBrains Mono Nerd Font Mono 15pt, 18×36px at 2× Retina ✓
 - zsh + Starship prompt, keyboard input, `ls` output ✓
 - Mouse: drag selection, scroll wheel, SGR/X10 reporting ✓
 - Clipboard: Cmd+C/V, OSC 52, bracketed paste ✓
-- Cursor: block/underline/beam shapes, 530ms blink ✓
+- Cursor: block/underline/beam, 530ms blink, resets on keypress ✓
+- PTY resize: uses actual cell px from TextShaper ✓
+- Shell exit: `exit` / Ctrl+D closes the window ✓ (fixed: ChildExit + EventLoopProxy)
+- Nerd Font icons: clamped to cell bounds, no row bleeding ✓
 - Config hot-reload ✓
-- Known visual issue: Nerd Font icons overflow cell bounds (TD-012)
-- Known functional issue: `exit` doesn't close window (TD-011)
+- Custom title bar: transparent, traffic lights native position, draggable ✓
 
 ## Scope
 
-### Completed
-- `Cargo.toml` — all Phase 1 deps pinned + arboard
-- `src/main.rs` — winit EventLoop + App
-- `src/app.rs` — full render loop, key/mouse input, clipboard, cursor blink,
-  tab/pane commands, config reload, scale factor
-- `src/renderer/gpu.rs` — full wgpu renderer (Metal)
-- `src/renderer/pipeline.rs` — WGSL bg + glyph pipelines; FLAG_CURSOR support
-- `src/renderer/atlas.rs` — glyph atlas, Rgba8Unorm
-- `src/renderer/cell.rs` — CellVertex + CellUniforms + FLAG_CURSOR
-- `src/term/mod.rs` — Terminal wrapper, selection, scroll, cursor, mouse mode APIs
-- `src/term/pty.rs` — PTY spawn + I/O + OSC 52/PtyWrite events
+### Completed (Phase 1)
+- `Cargo.toml` — all deps pinned
+- `src/main.rs` — winit EventLoop + App + EventLoopProxy
+- `src/app.rs` — full render loop; key/mouse input; clipboard; cursor blink;
+  tab/pane commands; scale factor; glyph cell-clamping; terminal resize;
+  custom title bar (objc2); ApplicationHandler<()> with user_event wakeup
+- `src/renderer/gpu.rs` — wgpu 29 renderer (Metal)
+- `src/renderer/pipeline.rs` — WGSL bg + glyph pipelines; FLAG_CURSOR in vs_bg
+- `src/renderer/atlas.rs` — glyph atlas, Rgba8Unorm shelf packing
+- `src/renderer/cell.rs` — CellVertex + CellUniforms + FLAG_CURSOR = 0x08
+- `src/term/mod.rs` — Terminal wrapper; wakeup proxy threaded through
+- `src/term/pty.rs` — PTY spawn; ChildExit + EventLoopProxy wakeup
 - `src/term/color.rs` — AnsiColor → RGBA
-- `src/font/loader.rs` — JetBrains Mono NF Mono bundled
+- `src/font/loader.rs` — JetBrains Mono NF Mono bundled via include_bytes!
 - `src/font/shaper.rs` — cosmic-text shaping + swash rasterization
 - `src/config/` — Lua DSL, schema, watcher, hot-reload
 - `src/ui/` — tabs, panes, command palette
@@ -42,14 +45,11 @@
 ### Not Yet Implemented (Phase 1)
 | Feature | Debt ID | Notes |
 |---------|---------|-------|
-| PTY cell px from shaper | TD-003 | cell_width/height hardcoded 8×16 in PTY resize |
-| `exit` closes window | TD-011 | PtyEvent::Exit received but ignored |
-| Custom title bar | — | Borderless + objc2 traffic lights |
 | `.app` bundle script | — | `scripts/bundle.sh` |
-| Nerd Font icon sizing | TD-012 | Icons overflow cell height (cosmetic) |
 | 100k scrollback verify | TD-004 | Not tested |
 | Ligatures verify | — | `->` `=>` etc. not confirmed |
-| `nvim` / `tmux` verify | — | Not tested |
+| `nvim` / `tmux` verify | — | Not smoke-tested |
+| Top padding fix | — | `padding.top=30` slightly overlaps traffic lights (~44px needed) |
 
 ### Out of Scope (Phase 2+)
 - `src/llm/` — Phase 2
@@ -65,24 +65,29 @@
 - [x] HiDPI Retina correct sizing
 - [x] JetBrains Mono Nerd Font Mono bundled
 - [x] Lua config loads and hot-reloads
-- [x] Nerd Font icons render (Starship)
+- [x] Nerd Font icons render (Starship, clamped to cell)
 - [x] Mouse: drag selection, scroll wheel, SGR/X10
 - [x] Clipboard: Cmd+C/V, OSC 52
 - [x] Cursor rendering: block/underline/beam, blink
+- [x] Resize handling: terminal grid + PTY resize on window resize
+- [x] Shell exit closes window
+- [x] Custom title bar / borderless
 - [ ] Font ligatures verified
-- [ ] Custom title bar / borderless
 - [ ] `nvim` renders correctly
 - [ ] `tmux` works
 - [ ] 100k scrollback
 
 ## Technical Reference
-- Surface: non-sRGB (`Bgra8Unorm` on Metal)
-- Atlas: `Rgba8Unorm`, glyph mask as `[a,a,a,255]`, shader samples `.r`
-- Scale: `window.scale_factor()` = 2.0 on M4 Max → 30pt font → 18×36px cell
-- Cursor flag: `FLAG_CURSOR = 0x08`; `vs_bg` uses `glyph_offset`/`glyph_size` as rect
-- `build_instances(cell_data, shaper, renderer, config, font, cursor, blink_on)`
-- `active_terminal() -> Option<&Terminal>` — pane/tab lookup helper
-- PTY resize uses hardcoded `cell_width: 8, cell_height: 16` (TD-003)
+- Shell exit: alacritty_terminal 0.25.1 sends `Event::ChildExit(i32)`, not `Event::Exit`
+- EventLoopProxy: `wakeup.send_event(())` wakes NSApp immediately from PTY thread
+- Custom title bar: `HasWindowHandle → AppKitWindowHandle.ns_view → [view window]`
+  then `setStyleMask | (1<<15)`, `setTitlebarAppearsTransparent`, `setTitleVisibility:1`,
+  `setMovableByWindowBackground`
+- Surface: non-sRGB `Bgra8Unorm` on Metal
+- Atlas: `Rgba8Unorm`, mask `[a,a,a,255]`, shader samples `.r`
+- Scale: `window.scale_factor()` = 2.0 on M4 Max
+- Cursor flag: `FLAG_CURSOR = 0x08`
+- PTY cell dims: `shaper.cell_width as u16`, `shaper.cell_height as u16`
 
 ## Files to Reference
 - `.context/specs/term_specs.md` — authoritative spec
