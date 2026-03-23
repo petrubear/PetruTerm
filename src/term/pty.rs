@@ -10,6 +10,7 @@ use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
 
 use crate::config::Config;
+use dirs;
 
 impl EventListener for PtyEventProxy {
     fn send_event(&self, event: alacritty_terminal::event::Event) {
@@ -90,7 +91,7 @@ impl Pty {
 
         let pty_options = PtyOptions {
             shell: Some(Shell::new(config.shell.clone(), vec!["-l".into()])),
-            working_directory: None,
+            working_directory: dirs::home_dir(),
             drain_on_exit: false,
             env: Default::default(),
         };
