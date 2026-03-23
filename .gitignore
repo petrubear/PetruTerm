@@ -66,3 +66,6 @@ temp/
 *.tmp
 *.bak
 *.orig
+
+# AI folders
+.claude
