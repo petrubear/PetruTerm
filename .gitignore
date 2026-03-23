@@ -1,0 +1,68 @@
+# Rust
+target/
+# Cargo.lock
+*.rs.bk
+*.pdb
+
+# Build artifacts
+dist/
+*.app
+*.dmg
+*.pkg
+
+# IDE — RustRover / JetBrains
+.idea/
+*.iml
+*.ipr
+*.iws
+.idea_modules/
+
+# IDE — VS Code
+.vscode/
+*.code-workspace
+
+# IDE — Kiro
+.kiro/
+
+# IDE — Zed
+.zed/
+
+# IDE — Vim / Neovim
+*.swp
+*.swo
+*~
+.netrwhist
+Session.vim
+.nvim/
+
+# IDE — Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+Icon?
+
+# Logs
+*.log
+logs/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Lua compiled
+*.luac
+
+# Generated / temp
+tmp/
+temp/
+*.tmp
+*.bak
+*.orig
