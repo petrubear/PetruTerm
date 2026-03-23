@@ -69,3 +69,4 @@ temp/
 
 # AI folders
 .claude
+dist/
