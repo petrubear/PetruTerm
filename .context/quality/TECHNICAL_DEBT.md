@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-03-23
-**Total Items:** 7
-**Critical (P0):** 0 | **P1:** 2 | **P2:** 3 | **P3:** 2
+**Total Items:** 6
+**Critical (P0):** 0 | **P1:** 1 | **P2:** 3 | **P3:** 2
 
 ## Priority Definitions
 
@@ -23,16 +23,7 @@ _None_
 
 ## P1 - High Priority
 
-### TD-011: Shell `exit` does not close the terminal window
-- **File:** `src/app.rs`, `src/term/pty.rs`
-- **Issue:** When the shell process exits (`exit`, `Ctrl+D`), `PtyEvent::Exit` is
-  received and logged, but `event_loop.exit()` (or pane/tab close) is never called.
-  The window stays open with a dead PTY.
-- **Impact:** Functional — user has to force-quit the app to close after `exit`.
-- **Fix:** In `poll_pty_events`, set a flag (e.g. `needs_exit: bool`) when `Exit` is
-  received. In `about_to_wait` or `RedrawRequested`, call `event_loop.exit()` when
-  the flag is set. For multi-pane: close the pane/tab instead; only quit when the
-  last pane exits.
+### ~~TD-011: Shell `exit` does not close the terminal window~~ — RESOLVED
 
 ### TD-002: PTY placeholder event proxy on Term construction
 - **File:** `src/term/mod.rs`
@@ -111,6 +102,7 @@ _None_
 
 | ID | Title | Resolved | Resolution |
 |----|-------|----------|------------|
+| TD-011 | exit doesn't close window | 2026-03-23 | poll_pty_events returns (has_data, shell_exited); both about_to_wait and RedrawRequested call event_loop.exit() on exit |
 | TD-003 | PTY cell_width/height hardcoded | 2026-03-23 | Pty::spawn/resize now accept cell_w/h from TextShaper; Terminal::resize propagated; WindowEvent::Resized now calls terminal.resize() |
 | TD-007 | No clipboard integration | 2026-03-23 | arboard crate; Cmd+C copies selection, Cmd+V pastes (bracketed-paste aware); OSC 52 via PtyEvent::ClipboardStore/Load; PtyWrite forwarding |
 | TD-006 | No mouse event handling | 2026-03-23 | CursorMoved/MouseInput/MouseWheel handled; drag selection via alacritty Selection API; SGR+X10 mouse reporting; scrollback scroll wheel |

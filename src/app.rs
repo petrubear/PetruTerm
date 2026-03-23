@@ -420,8 +420,13 @@ impl App {
         }
     }
 
-    fn poll_pty_events(&self) -> bool {
+    /// Poll all terminal PTY event queues.
+    /// Returns `(has_new_data, shell_exited)`.
+    /// `shell_exited` is true when any PTY sends an Exit event — the caller
+    /// should then call `event_loop.exit()`.
+    fn poll_pty_events(&self) -> (bool, bool) {
         let mut has_data = false;
+        let mut shell_exited = false;
         for terminal in self.terminals.iter().flatten() {
             while let Ok(event) = terminal.pty.rx.try_recv() {
                 use crate::term::PtyEvent;
@@ -432,6 +437,7 @@ impl App {
                     }
                     PtyEvent::Exit => {
                         log::info!("PTY shell exited.");
+                        shell_exited = true;
                     }
                     PtyEvent::Bell => {}
                     PtyEvent::ClipboardStore(text) => {
@@ -453,7 +459,7 @@ impl App {
                 }
             }
         }
-        has_data
+        (has_data, shell_exited)
     }
 
     /// Collect visible cell data from the active terminal grid.
@@ -637,7 +643,11 @@ impl ApplicationHandler for App {
 
             WindowEvent::RedrawRequested => {
                 self.check_config_reload();
-                let _ = self.poll_pty_events();
+                let (_, shell_exited) = self.poll_pty_events();
+                if shell_exited {
+                    event_loop.exit();
+                    return;
+                }
 
                 // Collect cells (releases term lock immediately).
                 let cell_data = self.collect_grid_cells();
@@ -783,7 +793,11 @@ impl ApplicationHandler for App {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        let has_data = self.poll_pty_events();
+        let (has_data, shell_exited) = self.poll_pty_events();
+        if shell_exited {
+            event_loop.exit();
+            return;
+        }
         if has_data {
             if let Some(window) = &self.window {
                 window.request_redraw();

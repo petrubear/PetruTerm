@@ -23,15 +23,15 @@ Two new debt items logged from visual inspection (TD-011, TD-012).
 - **Runtime:** PASS — Metal GPU, 18×36px cell, PTY spawns, cursor visible, Starship renders
 
 ## In Progress
-- [ ] TD-003 — PTY cell dimensions from shaper (started this session)
+- [ ] None
 
 ## Next Session Priorities (in order)
-1. Custom title bar — borderless + traffic lights via objc2
-2. `.app` bundle script — `scripts/bundle.sh`
-3. TD-011 — `exit` doesn't close window
-4. TD-012 — Nerd Font icons overflow cell bounds
-5. 100k scrollback verification (TD-004)
-6. Ligatures verify (`->` `=>` etc.)
+1. TD-012 — Nerd Font icons overflow cell bounds (clamp glyph_size to cell)
+2. Custom title bar — borderless + traffic lights via objc2
+3. `.app` bundle script — `scripts/bundle.sh`
+4. 100k scrollback verification (TD-004)
+5. Ligatures verify (`->` `=>` etc.)
+6. `nvim` / `tmux` verify
 
 ## Key Technical Decisions
 - Cursor: FLAG_CURSOR (0x08) in CellVertex.flags; vs_bg uses glyph_offset/glyph_size
