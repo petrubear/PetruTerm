@@ -12,6 +12,7 @@ use alacritty_terminal::selection::SelectionType;
 use alacritty_terminal::vte::ansi::Color as AnsiColor;
 
 use crate::config::{self, Config};
+use crate::config::schema::TitleBarStyle;
 use crate::config::watcher::ConfigWatcher;
 use crate::font::{build_font_system, TextShaper};
 use crate::renderer::cell::{CellVertex, FLAG_CURSOR};
@@ -575,6 +576,12 @@ impl ApplicationHandler for App {
 
         let mut attrs = WindowAttributes::default().with_title("PetruTerm");
 
+        // TitleBarStyle::None → remove all window chrome (no traffic lights).
+        // TitleBarStyle::Custom → keep native frame; we'll patch it via objc2 below.
+        if self.config.window.title_bar_style == TitleBarStyle::None {
+            attrs = attrs.with_decorations(false);
+        }
+
         if let Some(w) = self.config.window.initial_width {
             if let Some(h) = self.config.window.initial_height {
                 attrs = attrs.with_inner_size(winit::dpi::LogicalSize::new(w, h));
@@ -591,6 +598,12 @@ impl ApplicationHandler for App {
                 return;
             }
         };
+
+        // Apply macOS-specific title bar customization before renderer init.
+        #[cfg(target_os = "macos")]
+        if self.config.window.title_bar_style == TitleBarStyle::Custom {
+            unsafe { apply_macos_custom_titlebar(&window); }
+        }
 
         let renderer = match pollster::block_on(GpuRenderer::new(window.clone(), &self.config)) {
             Ok(r) => r,
@@ -819,6 +832,54 @@ impl ApplicationHandler for App {
             + std::time::Duration::from_millis(BLINK_MS);
         event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(next_blink));
     }
+}
+
+/// Apply macOS-specific title bar customization to an NSWindow.
+///
+/// Activates `NSWindowStyleMaskFullSizeContentView` so the content area
+/// extends behind the title bar, makes the title bar transparent, hides
+/// the title text (traffic lights stay in their native position), and
+/// enables moving the window by dragging the background.
+///
+/// Uses `HasWindowHandle` → `AppKitWindowHandle.ns_view` → `[view window]`
+/// because winit 0.30 removed the `ns_window()` platform extension.
+#[cfg(target_os = "macos")]
+unsafe fn apply_macos_custom_titlebar(window: &Window) {
+    use objc2::msg_send;
+    use objc2::runtime::{AnyObject, Bool};
+    use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+    let handle = match window.window_handle() {
+        Ok(h) => h,
+        Err(_) => return,
+    };
+
+    let ns_view_ptr = match handle.as_raw() {
+        RawWindowHandle::AppKit(h) => h.ns_view.as_ptr(),
+        _ => return,
+    };
+
+    let ns_view: &AnyObject = &*(ns_view_ptr as *const AnyObject);
+
+    // Get the NSWindow that owns this view: [nsView window]
+    let ns_win_ptr: *mut AnyObject = msg_send![ns_view, window];
+    if ns_win_ptr.is_null() {
+        return;
+    }
+    let ns_win: &AnyObject = &*ns_win_ptr;
+
+    // Add NSWindowStyleMaskFullSizeContentView (1 << 15 = 32768).
+    let current_mask: usize = msg_send![ns_win, styleMask];
+    let () = msg_send![ns_win, setStyleMask: current_mask | (1_usize << 15)];
+
+    // Transparent title bar so our GPU background shows through.
+    let () = msg_send![ns_win, setTitlebarAppearsTransparent: Bool::YES];
+
+    // NSWindowTitleHidden = 1 — hides the title text, traffic lights remain.
+    let () = msg_send![ns_win, setTitleVisibility: 1_i64];
+
+    // Allow dragging the window from the terminal content area.
+    let () = msg_send![ns_win, setMovableByWindowBackground: Bool::YES];
 }
 
 /// Crop a glyph quad to fit within a cell rectangle `[0, cell_w] × [0, cell_h]`.
