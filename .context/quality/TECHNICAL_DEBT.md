@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-03-23
-**Total Items:** 6
-**Critical (P0):** 0 | **P1:** 2 | **P2:** 2 | **P3:** 2
+**Total Items:** 7
+**Critical (P0):** 0 | **P1:** 2 | **P2:** 3 | **P3:** 2
 
 ## Priority Definitions
 
@@ -23,21 +23,47 @@ _None_
 
 ## P1 - High Priority
 
+### TD-011: Shell `exit` does not close the terminal window
+- **File:** `src/app.rs`, `src/term/pty.rs`
+- **Issue:** When the shell process exits (`exit`, `Ctrl+D`), `PtyEvent::Exit` is
+  received and logged, but `event_loop.exit()` (or pane/tab close) is never called.
+  The window stays open with a dead PTY.
+- **Impact:** Functional — user has to force-quit the app to close after `exit`.
+- **Fix:** In `poll_pty_events`, set a flag (e.g. `needs_exit: bool`) when `Exit` is
+  received. In `about_to_wait` or `RedrawRequested`, call `event_loop.exit()` when
+  the flag is set. For multi-pane: close the pane/tab instead; only quit when the
+  last pane exits.
+
 ### TD-002: PTY placeholder event proxy on Term construction
 - **File:** `src/term/mod.rs`
 - **Issue:** `Terminal::new()` constructs `Term<PtyEventProxy>` with a disconnected placeholder channel, then `Pty::spawn()` creates a *second* `PtyEventProxy` with the real channel. The placeholder proxy's events go nowhere.
 - **Impact:** Low in practice (Term constructed once before spawn), but semantically wrong.
 - **Fix:** Create the channel first, pass the same proxy to both `Term::new` and `Pty::spawn`. Requires splitting `Pty::spawn` to accept an existing proxy.
 
-### TD-003: PTY cell_width/cell_height hardcoded at 8×16
-- **File:** `src/term/pty.rs`
-- **Issue:** PTY resize messages use `cell_width: 8, cell_height: 16` hardcoded. Should use `TextShaper::cell_width` / `cell_height` after font metrics are measured.
-- **Impact:** Programs that use pixel-based cell dimensions (image protocols, some TUI apps) may render incorrectly.
-- **Fix:** Thread actual cell pixel dimensions from the font shaper into `Terminal::resize()` and `Pty::resize()`. Scale factor must be accounted for.
+### ~~TD-003: PTY cell_width/cell_height hardcoded at 8×16~~ — RESOLVED
 
 ---
 
 ## P2 - Medium Priority
+
+### TD-012: Nerd Font / special-character glyphs overflow cell bounds
+- **File:** `src/font/shaper.rs`, `src/app.rs` (`build_instances`)
+- **Issue:** Nerd Font PUA icons (U+E000–U+F8FF, U+F0000+) such as the Apple logo,
+  git branch glyph, and Starship separator arrows render visibly taller/larger than
+  regular characters. They overflow the cell height, clipping into adjacent rows.
+- **Root cause:** Two likely causes (needs investigation):
+  1. The swash rasterizer returns a bitmap larger than `cell_height` for these glyphs
+     (their design is taller in the font metrics). `build_instances` uses the raw
+     bitmap size as `glyph_size`, so the quad expands beyond the cell.
+  2. `bearing_y` / ascent calculation pushes the glyph origin outside the cell rect.
+- **Fix options:**
+  1. Clamp `glyph_size` to `[cell_width, cell_height]` in `build_instances` so no
+     glyph quad can exceed its cell.
+  2. Scale oversized glyphs down proportionally to fit within the cell box.
+  3. Add a scissor rect per cell in the render pass (GPU-level clipping).
+- **Priority:** P2 — cosmetic but prominent with any Starship / Nerd Font theme.
+- **Observed:** Apple logo, ⎇ branch icon, Starship separator arrows are taller than
+  text rows; the prompt background segments look correct but icons bleed vertically.
 
 ### TD-004: Scrollback not verified at 100k lines
 - **File:** `src/term/mod.rs`
@@ -85,6 +111,7 @@ _None_
 
 | ID | Title | Resolved | Resolution |
 |----|-------|----------|------------|
+| TD-003 | PTY cell_width/height hardcoded | 2026-03-23 | Pty::spawn/resize now accept cell_w/h from TextShaper; Terminal::resize propagated; WindowEvent::Resized now calls terminal.resize() |
 | TD-007 | No clipboard integration | 2026-03-23 | arboard crate; Cmd+C copies selection, Cmd+V pastes (bracketed-paste aware); OSC 52 via PtyEvent::ClipboardStore/Load; PtyWrite forwarding |
 | TD-006 | No mouse event handling | 2026-03-23 | CursorMoved/MouseInput/MouseWheel handled; drag selection via alacritty Selection API; SGR+X10 mouse reporting; scrollback scroll wheel |
 | TD-001 | Cell rendering not connected | 2026-03-22 | Full pipeline wired: grid walk → shape_line → rasterize → CellVertex → bg+glyph draw passes |

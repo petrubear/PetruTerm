@@ -1,50 +1,51 @@
 # Session State
 
 **Last Updated:** 2026-03-23
-**Session Focus:** Phase 1 — Mouse handling, clipboard, cursor rendering
+**Session Focus:** Phase 1 — TD-003 PTY cell dimensions from shaper
 
 ## Session Summary
-Mouse handling implemented. Full scroll wheel, drag selection, SGR/X10 mouse
-reporting for tmux/nvim all wired. Terminal + PTY layer extended with
-selection/scroll APIs.
+Mouse handling, clipboard, and cursor rendering all completed and committed
+(commit 67de8b6). Build passes 0 errors. Runtime verified on M4 Max / Metal.
+Two new debt items logged from visual inspection (TD-011, TD-012).
 
 ## Completed This Session
-- [x] `src/term/mod.rs` — added `start_selection`, `update_selection`,
-      `selection_text`, `clear_selection`, `scroll_display`, `mouse_mode_flags`,
-      `bracketed_paste_mode`, `cursor_info`, `CursorInfo`, `CursorShape` re-export
-- [x] `src/term/pty.rs` — extended `PtyEvent` with `ClipboardStore`, `ClipboardLoad`,
-      `PtyWrite`; `send_event` now routes OSC 52 + PtyWrite events
-- [x] `src/renderer/cell.rs` — added `FLAG_CURSOR = 0x08` constant
-- [x] `src/renderer/pipeline.rs` — `vs_bg` extended: uses `glyph_offset`/`glyph_size`
-      for cursor rect when `FLAG_CURSOR` bit is set
-- [x] `src/app.rs` — cursor blink fields + 530ms toggle in `about_to_wait`;
-      `WaitUntil` control flow for efficient blinking; cursor instance emitted in
-      `build_instances` (block/underline/beam shapes); blink reset on keypress;
-      mouse handling, clipboard (Cmd+C/V, OSC 52)
+- [x] Mouse handling (TD-006) — CursorMoved/MouseInput/MouseWheel; drag selection
+      via alacritty Selection API; SGR + X10 mouse reporting; scrollback scroll wheel
+- [x] Clipboard (TD-007) — arboard; Cmd+C/V; OSC 52 via PtyEvent channel;
+      bracketed paste wrapping; PtyWrite forwarding
+- [x] Cursor rendering — CursorInfo + cursor_info(); FLAG_CURSOR bit in vs_bg shader;
+      block/underline/beam shapes; 530ms blink via ControlFlow::WaitUntil; reset on keypress
+- [x] TD-011 logged — `exit` command doesn't close window
+- [x] TD-012 logged — Nerd Font icons overflow cell bounds (visual, from screenshot)
 
 ## Build Status
 - **cargo build:** PASS — 0 errors, 22 warnings (dead code stubs only)
-- **Runtime smoke test:** PASS — config loads, Metal GPU, 18×36px cell, PTY spawns
+- **Runtime:** PASS — Metal GPU, 18×36px cell, PTY spawns, cursor visible, Starship renders
 
 ## In Progress
-- [ ] None — stopping here for the session
+- [ ] TD-003 — PTY cell dimensions from shaper (started this session)
 
 ## Next Session Priorities (in order)
-1. PTY cell dimensions from shaper — fix cell_width/cell_height in resize (TD-003)
-2. Cursor rendering — block/underline/beam shapes, blinking
-3. PTY cell dimensions from shaper — fix cell_width/cell_height in resize (TD-003)
-4. Custom title bar — borderless + traffic lights via objc2
-5. `.app` bundle script — `scripts/bundle.sh`
-6. 100k scrollback verification (TD-004)
+1. Custom title bar — borderless + traffic lights via objc2
+2. `.app` bundle script — `scripts/bundle.sh`
+3. TD-011 — `exit` doesn't close window
+4. TD-012 — Nerd Font icons overflow cell bounds
+5. 100k scrollback verification (TD-004)
+6. Ligatures verify (`->` `=>` etc.)
 
 ## Key Technical Decisions
-- Mouse scroll: `Scroll::Delta(-lines)` where `lines` = LineDelta y (positive = wheel up = show history)
-- SGR mouse report: `\x1b[<{btn};{col1};{row1}M/m` (1-indexed, M=press m=release)
-- X10 encoding: `\x1b[M{btn+32}{x+32}{y+32}` clamped to 255, press-only
-- Scroll wheel buttons: 64=up, 65=down (standard SGR encoding)
-- Motion drag: button 32 = left-button held (SGR drag report)
-- `active_terminal()` helper avoids repeated pane/tab lookup boilerplate
+- Cursor: FLAG_CURSOR (0x08) in CellVertex.flags; vs_bg uses glyph_offset/glyph_size
+  as partial-cell rect when flag is set — no extra GPU pass needed
+- Cursor blink: ControlFlow::WaitUntil(now + 530ms) in about_to_wait; resets on keypress
+- Mouse scroll: Scroll::Delta(-lines), positive LineDelta y = wheel up = show history
+- SGR mouse: \x1b[<btn;col;rowM/m (1-indexed); X10: \x1b[Mbxy press-only
+- Clipboard: arboard::Clipboard created per-call on main thread (not stored in App)
+- OSC 52: PtyEvent::ClipboardStore/Load routed via channel to main thread
 
 ## Files Modified This Session
-- `src/term/mod.rs`
 - `src/app.rs`
+- `src/term/mod.rs`
+- `src/term/pty.rs`
+- `src/renderer/cell.rs`
+- `src/renderer/pipeline.rs`
+- `Cargo.toml` (added arboard = "3")

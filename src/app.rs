@@ -95,7 +95,8 @@ impl App {
     /// Allocate a new terminal pane within the current tab.
     fn open_terminal(&mut self, viewport: Option<Rect>) -> Result<usize> {
         let (cols, rows) = self.default_grid_size();
-        let terminal = Terminal::new(&self.config, cols, rows)?;
+        let (cell_w, cell_h) = self.cell_dims();
+        let terminal = Terminal::new(&self.config, cols, rows, cell_w, cell_h)?;
         let id = self.next_terminal_id;
         self.next_terminal_id += 1;
 
@@ -109,15 +110,21 @@ impl App {
     fn default_grid_size(&self) -> (u16, u16) {
         if let Some(renderer) = &self.renderer {
             let (w, h) = renderer.size();
-            let cell_w = 8.0f32;   // placeholder until font metrics are ready
-            let cell_h = 16.0f32;
+            let (cell_w, cell_h) = self.cell_dims();
             let pad = &self.config.window.padding;
-            let cols = ((w as f32 - pad.left as f32 - pad.right as f32) / cell_w).max(1.0) as u16;
-            let rows = ((h as f32 - pad.top as f32 - pad.bottom as f32) / cell_h).max(1.0) as u16;
+            let cols = ((w as f32 - pad.left as f32 - pad.right as f32) / cell_w as f32).max(1.0) as u16;
+            let rows = ((h as f32 - pad.top as f32 - pad.bottom as f32) / cell_h as f32).max(1.0) as u16;
             (cols, rows)
         } else {
             (120, 40)
         }
+    }
+
+    /// Physical pixel dimensions of one terminal cell, sourced from the font shaper.
+    fn cell_dims(&self) -> (u16, u16) {
+        self.shaper.as_ref()
+            .map(|s| (s.cell_width as u16, s.cell_height as u16))
+            .unwrap_or((8, 16))
     }
 
     /// Open the first tab after the window has been created.
@@ -224,8 +231,9 @@ impl App {
         let active = self.tabs.active_index();
         if let Some(pane_mgr) = self.panes.get_mut(active) {
             let new_id = pane_mgr.split(dir);
-            let viewport = self.viewport_rect();
-            match Terminal::new(&self.config, 80, 24) {
+            let (split_cols, split_rows) = self.default_grid_size();
+            let (cell_w, cell_h) = self.cell_dims();
+            match Terminal::new(&self.config, split_cols, split_rows, cell_w, cell_h) {
                 Ok(terminal) => {
                     if self.terminals.len() <= new_id {
                         self.terminals.resize_with(new_id + 1, || None);
@@ -665,6 +673,14 @@ impl ApplicationHandler for App {
                 for pane_mgr in &mut self.panes {
                     pane_mgr.resize(viewport);
                 }
+                // Propagate new grid dimensions to every terminal + PTY.
+                let (cols, rows) = self.default_grid_size();
+                let (cell_w, cell_h) = self.cell_dims();
+                let scrollback = self.config.scrollback_lines as usize;
+                for terminal in self.terminals.iter_mut().flatten() {
+                    terminal.resize(cols, rows, scrollback, cell_w, cell_h);
+                }
+                log::debug!("Resized: {}×{} cells, {}×{}px each", cols, rows, cell_w, cell_h);
                 if let Some(window) = &self.window {
                     window.request_redraw();
                 }

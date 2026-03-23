@@ -70,6 +70,10 @@ impl Pty {
     pub fn spawn(
         config: &Config,
         term: Arc<FairMutex<Term<PtyEventProxy>>>,
+        cols: u16,
+        rows: u16,
+        cell_width: u16,
+        cell_height: u16,
     ) -> Result<Self> {
         let (tx, rx) = crossbeam_channel::unbounded::<PtyEvent>();
         let proxy = PtyEventProxy { tx };
@@ -82,10 +86,10 @@ impl Pty {
         };
 
         let window_size = WindowSize {
-            num_cols:    80,
-            num_lines:   24,
-            cell_width:  8,
-            cell_height: 16,
+            num_cols:    cols,
+            num_lines:   rows,
+            cell_width,
+            cell_height,
         };
 
         let pty = tty::new(&pty_options, window_size, 0)
@@ -113,12 +117,12 @@ impl Pty {
     }
 
     /// Resize the PTY to new terminal dimensions.
-    pub fn resize(&self, cols: u16, rows: u16) {
+    pub fn resize(&self, cols: u16, rows: u16, cell_width: u16, cell_height: u16) {
         let window_size = WindowSize {
-            num_cols:    cols,
-            num_lines:   rows,
-            cell_width:  8,
-            cell_height: 16,
+            num_cols: cols,
+            num_lines: rows,
+            cell_width,
+            cell_height,
         };
         let _ = self.notifier.0.send(Msg::Resize(window_size));
     }

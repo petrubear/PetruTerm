@@ -60,7 +60,15 @@ pub struct Terminal {
 
 impl Terminal {
     /// Create a new terminal pane: initialize the grid and spawn the shell.
-    pub fn new(config: &Config, cols: u16, rows: u16) -> Result<Self> {
+    /// `cell_width` / `cell_height` are physical pixel dimensions of one cell
+    /// (used in the TIOCSWINSZ ioctl for image-protocol-aware programs).
+    pub fn new(
+        config: &Config,
+        cols: u16,
+        rows: u16,
+        cell_width: u16,
+        cell_height: u16,
+    ) -> Result<Self> {
         let (tx_placeholder, _rx) = crossbeam_channel::unbounded();
         let proxy = PtyEventProxy { tx: tx_placeholder };
 
@@ -76,21 +84,20 @@ impl Terminal {
         };
 
         let term = Arc::new(FairMutex::new(Term::new(term_config, &size, proxy)));
-        let pty = Pty::spawn(config, Arc::clone(&term))?;
+        let pty = Pty::spawn(config, Arc::clone(&term), cols, rows, cell_width, cell_height)?;
 
         Ok(Self { term, pty, cols, rows })
     }
 
     /// Resize the terminal grid and PTY.
-    pub fn resize(&mut self, cols: u16, rows: u16, scrollback: usize) {
-        use alacritty_terminal::event::WindowSize;
+    pub fn resize(&mut self, cols: u16, rows: u16, scrollback: usize, cell_width: u16, cell_height: u16) {
         self.cols = cols;
         self.rows = rows;
 
         let new_size = TermSize { cols: cols as usize, rows: rows as usize, scrollback };
         self.term.lock().resize(new_size);
 
-        self.pty.resize(cols, rows);
+        self.pty.resize(cols, rows, cell_width, cell_height);
     }
 
     /// Write keyboard input bytes to the PTY.
