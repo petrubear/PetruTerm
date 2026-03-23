@@ -55,6 +55,9 @@ serde_json = "1"
 # PTY reader thread ↔ main thread comms
 crossbeam-channel = "0.5"
 
+# System clipboard (copy/paste + OSC 52)
+arboard = "3"
+
 # Logging
 log = "0.4"
 env_logger = "0.11"

@@ -1,3 +1,7 @@
+/// Cell flag bits for the `flags` field in `CellVertex`.
+/// Used by the GPU shader to select rendering mode.
+pub const FLAG_CURSOR: u32 = 0x08;
+
 /// A single instanced vertex representing one terminal cell on the GPU.
 ///
 /// Each cell is rendered as a quad (two triangles). The vertex shader expands

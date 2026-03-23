@@ -74,12 +74,27 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     return mix(in.bg, in.fg, alpha);
 }
 
-// Background-only pass (draws flat bg color for the whole cell)
+// Background-only pass (draws flat bg color for the whole cell).
+// When FLAG_CURSOR (0x8) is set, uses glyph_offset/glyph_size to draw a
+// partial-cell rect for underline/beam cursors; full cell for block cursor.
 @vertex
 fn vs_bg(@builtin(vertex_index) vi: u32, instance: InstanceIn) -> VertexOut {
     let q = QUAD[vi];
     let cell_origin = uniforms.padding + instance.grid_pos * uniforms.cell_size;
-    let bg_pixel = cell_origin + q * uniforms.cell_size;
+
+    var rect_size:   vec2<f32>;
+    var rect_offset: vec2<f32>;
+    if (instance.flags & 0x8u) != 0u {
+        // Cursor instance: use glyph_size as rect dimensions, glyph_offset as
+        // position within the cell (e.g. bottom 2px for underline cursor).
+        rect_size   = instance.glyph_size;
+        rect_offset = instance.glyph_offset;
+    } else {
+        rect_size   = uniforms.cell_size;
+        rect_offset = vec2(0.0);
+    }
+
+    let bg_pixel = cell_origin + rect_offset + q * rect_size;
     let to_ndc   = vec2(2.0, -2.0) / uniforms.viewport_size;
     let bg_ndc   = bg_pixel * to_ndc + vec2(-1.0, 1.0);
 

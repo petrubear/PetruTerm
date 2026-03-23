@@ -42,8 +42,8 @@ Mouse handling, clipboard, cursor rendering, title bar, bundle script.
 ### Not Yet Implemented (Phase 1)
 | Feature | Debt ID | Notes |
 |---------|---------|-------|
-| Mouse handling | TD-006 | CursorMoved, MouseInput, MouseWheel, SGR/X10 |
-| Clipboard | TD-007 | Cmd+C/V, OSC 52, `arboard` crate |
+| ~~Mouse handling~~ | ~~TD-006~~ | ~~DONE~~ |
+| ~~Clipboard~~ | ~~TD-007~~ | ~~DONE~~ |
 | Cursor rendering | — | Block/underline/beam, blinking |
 | PTY cell px from shaper | TD-003 | cell_width/height hardcoded at 8×16 |
 | Custom title bar | — | Borderless + objc2 traffic lights |
@@ -67,9 +67,9 @@ Mouse handling, clipboard, cursor rendering, title bar, bundle script.
 - [x] Lua config loads and hot-reloads
 - [x] Nerd Font icons render (Starship)
 - [ ] Font ligatures verified
-- [ ] Mouse: click-focus, selection, scroll, SGR/X10
+- [x] Mouse: drag selection, scroll wheel, SGR/X10 reporting
 - [ ] Clipboard: Cmd+C/V, OSC 52
-- [ ] Cursor rendering
+- [x] Cursor rendering: block/underline/beam, 530ms blink, reset on keypress
 - [ ] Custom title bar / borderless
 - [ ] `nvim` renders correctly
 - [ ] `tmux` works

@@ -14,18 +14,23 @@ impl EventListener for PtyEventProxy {
     fn send_event(&self, event: alacritty_terminal::event::Event) {
         use alacritty_terminal::event::Event;
         let pty_event = match event {
-            Event::Wakeup            => PtyEvent::DataReady,
-            Event::Exit              => PtyEvent::Exit,
-            Event::Title(t)          => PtyEvent::TitleChanged(t),
-            Event::Bell              => PtyEvent::Bell,
-            _                        => return,
+            Event::Wakeup               => PtyEvent::DataReady,
+            Event::Exit                 => PtyEvent::Exit,
+            Event::Title(t)             => PtyEvent::TitleChanged(t),
+            Event::Bell                 => PtyEvent::Bell,
+            // OSC 52 write: app wants to store text in the system clipboard.
+            Event::ClipboardStore(_, text) => PtyEvent::ClipboardStore(text),
+            // OSC 52 read: app wants clipboard contents written back to PTY.
+            Event::ClipboardLoad(_, fmt)   => PtyEvent::ClipboardLoad(fmt),
+            // Terminal parser response (e.g. DECRQSS, DA) must be written to PTY.
+            Event::PtyWrite(text)       => PtyEvent::PtyWrite(text),
+            _                           => return,
         };
         let _ = self.tx.send(pty_event);
     }
 }
 
 /// Events emitted by the PTY reader thread to the main thread.
-#[derive(Debug)]
 pub enum PtyEvent {
     /// New data arrived; terminal grid has been updated.
     DataReady,
@@ -35,6 +40,12 @@ pub enum PtyEvent {
     TitleChanged(String),
     /// Bell character received.
     Bell,
+    /// OSC 52 write — store this text in the system clipboard.
+    ClipboardStore(String),
+    /// OSC 52 read — read clipboard, apply formatter, write result to PTY.
+    ClipboardLoad(std::sync::Arc<dyn Fn(&str) -> String + Send + Sync + 'static>),
+    /// Terminal parser response that must be forwarded to the shell process.
+    PtyWrite(String),
 }
 
 /// Bridges alacritty_terminal events to our PtyEvent channel.

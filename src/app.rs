@@ -1,22 +1,23 @@
 use anyhow::Result;
 use std::sync::Arc;
 use winit::application::ApplicationHandler;
-use winit::event::{ElementState, KeyEvent, Modifiers, WindowEvent};
+use winit::event::{ElementState, KeyEvent, Modifiers, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowAttributes, WindowId};
 
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::index::{Column, Line};
+use alacritty_terminal::selection::SelectionType;
 use alacritty_terminal::vte::ansi::Color as AnsiColor;
 
 use crate::config::{self, Config};
 use crate::config::watcher::ConfigWatcher;
 use crate::font::{build_font_system, TextShaper};
-use crate::renderer::cell::CellVertex;
+use crate::renderer::cell::{CellVertex, FLAG_CURSOR};
 use crate::renderer::GpuRenderer;
 use crate::term::color::resolve_color;
-use crate::term::Terminal;
+use crate::term::{CursorInfo, CursorShape, Terminal};
 use crate::ui::{CommandPalette, PaneManager, Rect, SplitDir, TabManager};
 
 /// Top-level application state.
@@ -49,6 +50,14 @@ pub struct App {
 
     // HiDPI scale factor (set in resumed() from window.scale_factor())
     scale_factor: f32,
+
+    // Mouse state
+    mouse_pos: (f64, f64),
+    mouse_left_pressed: bool,
+
+    // Cursor blink state
+    cursor_blink_on: bool,
+    cursor_last_blink: std::time::Instant,
 }
 
 impl App {
@@ -76,6 +85,10 @@ impl App {
             leader_timer: None,
             leader_timeout_ms,
             scale_factor: 1.0,
+            mouse_pos: (0.0, 0.0),
+            mouse_left_pressed: false,
+            cursor_blink_on: true,
+            cursor_last_blink: std::time::Instant::now(),
         }
     }
 
@@ -224,6 +237,31 @@ impl App {
         }
     }
 
+    fn cmd_copy(&self) {
+        let Some(terminal) = self.active_terminal() else { return };
+        if let Some(text) = terminal.selection_text() {
+            if let Ok(mut cb) = arboard::Clipboard::new() {
+                let _ = cb.set_text(text);
+            }
+        }
+    }
+
+    fn cmd_paste(&self) {
+        let Some(terminal) = self.active_terminal() else { return };
+        let text = match arboard::Clipboard::new().and_then(|mut cb| cb.get_text()) {
+            Ok(t) => t,
+            Err(_) => return,
+        };
+        if terminal.bracketed_paste_mode() {
+            let mut data = b"\x1b[200~".to_vec();
+            data.extend_from_slice(text.as_bytes());
+            data.extend_from_slice(b"\x1b[201~");
+            terminal.write_input(&data);
+        } else {
+            terminal.write_input(text.as_bytes());
+        }
+    }
+
     fn cmd_close_pane(&mut self) {
         let active = self.tabs.active_index();
         if let Some(pane_mgr) = self.panes.get_mut(active) {
@@ -239,6 +277,10 @@ impl App {
         if event.state != ElementState::Pressed {
             return;
         }
+
+        // Reset blink phase so the cursor is always visible immediately after a keypress.
+        self.cursor_blink_on = true;
+        self.cursor_last_blink = std::time::Instant::now();
 
         // Check for leader key timeout.
         if self.leader_active {
@@ -293,6 +335,8 @@ impl App {
                     "t" => { self.cmd_new_tab(); return; }
                     "w" => { self.cmd_close_tab(); return; }
                     "q" => { event_loop.exit(); return; }
+                    "c" => { self.cmd_copy(); return; }
+                    "v" => { self.cmd_paste(); return; }
                     _ => {}
                 }
             }
@@ -382,6 +426,22 @@ impl App {
                         log::info!("PTY shell exited.");
                     }
                     PtyEvent::Bell => {}
+                    PtyEvent::ClipboardStore(text) => {
+                        if let Ok(mut cb) = arboard::Clipboard::new() {
+                            let _ = cb.set_text(text);
+                        }
+                    }
+                    PtyEvent::ClipboardLoad(fmt) => {
+                        let text = arboard::Clipboard::new()
+                            .ok()
+                            .and_then(|mut cb| cb.get_text().ok())
+                            .unwrap_or_default();
+                        let response = fmt(&text);
+                        terminal.write_input(response.as_bytes());
+                    }
+                    PtyEvent::PtyWrite(text) => {
+                        terminal.write_input(text.as_bytes());
+                    }
                 }
             }
         }
@@ -421,6 +481,57 @@ impl App {
             }
             result
         })
+    }
+
+    /// Convert a physical pixel position to a (col, row) terminal cell coordinate.
+    fn pixel_to_cell(&self, x: f64, y: f64) -> (usize, usize) {
+        let pad = &self.config.window.padding;
+        let (cw, ch) = self.shaper.as_ref()
+            .map(|s| (s.cell_width as f64, s.cell_height as f64))
+            .unwrap_or((8.0, 16.0));
+        let col = ((x - pad.left as f64) / cw).floor().max(0.0) as usize;
+        let row = ((y - pad.top as f64) / ch).floor().max(0.0) as usize;
+        let (term_cols, term_rows) = self.active_terminal_size();
+        (col.min(term_cols.saturating_sub(1)), row.min(term_rows.saturating_sub(1)))
+    }
+
+    fn active_terminal_size(&self) -> (usize, usize) {
+        let idx = self.tabs.active_index();
+        if let Some(pane_mgr) = self.panes.get(idx) {
+            if let Some(Some(t)) = self.terminals.get(pane_mgr.focused_terminal) {
+                return (t.cols as usize, t.rows as usize);
+            }
+        }
+        (80, 24)
+    }
+
+    fn active_terminal(&self) -> Option<&crate::term::Terminal> {
+        let idx = self.tabs.active_index();
+        let pane_mgr = self.panes.get(idx)?;
+        self.terminals.get(pane_mgr.focused_terminal)?.as_ref()
+    }
+
+    /// Build and write an SGR or X10 mouse report to the active PTY.
+    /// `button`: 0=left, 1=middle, 2=right, 64=wheel-up, 65=wheel-down.
+    fn send_mouse_report(&self, button: u8, col: usize, row: usize, pressed: bool) {
+        let Some(terminal) = self.active_terminal() else { return };
+        let (any_mouse, sgr, _motion) = terminal.mouse_mode_flags();
+        if !any_mouse { return; }
+
+        let col1 = col + 1; // 1-indexed
+        let row1 = row + 1;
+
+        if sgr {
+            let c = if pressed { 'M' } else { 'm' };
+            let seq = format!("\x1b[<{button};{col1};{row1}{c}");
+            terminal.write_input(seq.as_bytes());
+        } else if pressed {
+            // X10 encoding — only sent on press, coordinates clamped to 223.
+            let b = button.saturating_add(32);
+            let x = (col1 as u8).saturating_add(32).min(255);
+            let y = (row1 as u8).saturating_add(32).min(255);
+            terminal.write_input(&[0x1b, b'[', b'M', b, x, y]);
+        }
     }
 
     fn check_config_reload(&mut self) {
@@ -524,6 +635,8 @@ impl ApplicationHandler for App {
                 let cell_data = self.collect_grid_cells();
                 let scaled_font = self.scaled_font_config();
 
+                let cursor = self.active_terminal().map(|t| t.cursor_info());
+
                 if let (Some(renderer), Some(shaper)) =
                     (&mut self.renderer, &mut self.shaper)
                 {
@@ -533,6 +646,8 @@ impl ApplicationHandler for App {
                         renderer,
                         &self.config,
                         &scaled_font,
+                        cursor.as_ref(),
+                        self.cursor_blink_on,
                     );
                     renderer.upload_instances(&instances);
                     if let Err(e) = renderer.render() {
@@ -569,31 +684,126 @@ impl ApplicationHandler for App {
                 }
             }
 
+            WindowEvent::CursorMoved { position, .. } => {
+                self.mouse_pos = (position.x, position.y);
+                if self.mouse_left_pressed {
+                    let (col, row) = self.pixel_to_cell(position.x, position.y);
+                    if let Some(terminal) = self.active_terminal() {
+                        terminal.update_selection(col, row);
+                        let (any_mouse, _sgr, motion) = terminal.mouse_mode_flags();
+                        if any_mouse && motion {
+                            // Button 32 = left button held during motion (SGR drag)
+                            self.send_mouse_report(32, col, row, true);
+                        }
+                    }
+                    if let Some(window) = &self.window {
+                        window.request_redraw();
+                    }
+                }
+            }
+
+            WindowEvent::MouseInput { state, button, .. } => {
+                let (col, row) = self.pixel_to_cell(self.mouse_pos.0, self.mouse_pos.1);
+                match (button, state) {
+                    (MouseButton::Left, ElementState::Pressed) => {
+                        self.mouse_left_pressed = true;
+                        if let Some(terminal) = self.active_terminal() {
+                            terminal.start_selection(col, row, SelectionType::Simple);
+                        }
+                        self.send_mouse_report(0, col, row, true);
+                    }
+                    (MouseButton::Left, ElementState::Released) => {
+                        self.mouse_left_pressed = false;
+                        self.send_mouse_report(0, col, row, false);
+                    }
+                    (MouseButton::Right, ElementState::Pressed) => {
+                        self.send_mouse_report(2, col, row, true);
+                    }
+                    (MouseButton::Right, ElementState::Released) => {
+                        self.send_mouse_report(2, col, row, false);
+                    }
+                    _ => {}
+                }
+                if let Some(window) = &self.window {
+                    window.request_redraw();
+                }
+            }
+
+            WindowEvent::MouseWheel { delta, .. } => {
+                let lines = match delta {
+                    MouseScrollDelta::LineDelta(_x, y) => y as i32,
+                    MouseScrollDelta::PixelDelta(pos) => {
+                        let ch = self.shaper.as_ref()
+                            .map(|s| s.cell_height as f64)
+                            .unwrap_or(16.0);
+                        (pos.y / ch).round() as i32
+                    }
+                };
+                if lines == 0 { return; }
+
+                let (col, row) = self.pixel_to_cell(self.mouse_pos.0, self.mouse_pos.1);
+                let (any_mouse, _sgr, _motion) = self.active_terminal()
+                    .map(|t| t.mouse_mode_flags())
+                    .unwrap_or((false, false, false));
+
+                if any_mouse {
+                    // Forward as scroll wheel buttons (64=up, 65=down) for tmux/nvim.
+                    let btn = if lines > 0 { 64u8 } else { 65u8 };
+                    for _ in 0..lines.abs() {
+                        self.send_mouse_report(btn, col, row, true);
+                    }
+                } else if let Some(terminal) = self.active_terminal() {
+                    // Scroll the local scrollback buffer.
+                    // Positive wheel delta = scroll up = show older history = Delta(-lines).
+                    terminal.scroll_display(-lines);
+                    if let Some(window) = &self.window {
+                        window.request_redraw();
+                    }
+                }
+            }
+
             _ => {}
         }
     }
 
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         let has_data = self.poll_pty_events();
         if has_data {
             if let Some(window) = &self.window {
                 window.request_redraw();
             }
         }
+
+        // Toggle cursor blink every 530 ms.
+        const BLINK_MS: u64 = 530;
+        if self.cursor_last_blink.elapsed() >= std::time::Duration::from_millis(BLINK_MS) {
+            self.cursor_blink_on = !self.cursor_blink_on;
+            self.cursor_last_blink = std::time::Instant::now();
+            if let Some(window) = &self.window {
+                window.request_redraw();
+            }
+        }
+
+        // Schedule next wakeup for the next blink toggle.
+        let next_blink = self.cursor_last_blink
+            + std::time::Duration::from_millis(BLINK_MS);
+        event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(next_blink));
     }
 }
 
 /// Build the GPU instance list from raw terminal cell data.
 ///
 /// Shapes each row with cosmic-text, rasterizes glyphs into the atlas,
-/// and emits one `CellVertex` per glyph. Cells with no visible glyph
-/// (space, control chars) still get a background vertex so bg colors render.
+/// and emits one `CellVertex` per glyph. A cursor vertex is appended at
+/// the end when the cursor is visible and blink is on.
 fn build_instances(
     cell_data: &[(String, Vec<(AnsiColor, AnsiColor)>)],
     shaper: &mut TextShaper,
     renderer: &mut GpuRenderer,
     config: &Config,
     font: &crate::config::schema::FontConfig,
+    cursor: Option<&CursorInfo>,
+    cursor_blink_on: bool,
 ) -> Vec<CellVertex> {
     let mut instances = Vec::with_capacity(cell_data.len() * 80);
 
@@ -633,6 +843,38 @@ fn build_instances(
                 glyph_size,
                 flags: 0,
                 _pad: 0,
+            });
+        }
+    }
+
+    // Cursor instance — appended to the bg pass so it draws on top of cell backgrounds.
+    if let Some(info) = cursor {
+        if info.visible && cursor_blink_on {
+            let cw = shaper.cell_width;
+            let ch = shaper.cell_height;
+
+            let (glyph_offset, glyph_size) = match info.shape {
+                CursorShape::Block | CursorShape::HollowBlock => {
+                    ([0.0f32, 0.0], [cw, ch])
+                }
+                CursorShape::Underline => {
+                    ([0.0, (ch - 2.0).max(0.0)], [cw, 2.0])
+                }
+                CursorShape::Beam => {
+                    ([0.0, 0.0], [2.0, ch])
+                }
+                CursorShape::Hidden => ([0.0; 2], [0.0; 2]),
+            };
+
+            instances.push(CellVertex {
+                grid_pos:     [info.col as f32, info.row as f32],
+                atlas_uv:     [0.0; 4],
+                fg:           config.colors.cursor_fg,
+                bg:           config.colors.cursor_bg,
+                glyph_offset,
+                glyph_size,
+                flags:        FLAG_CURSOR,
+                _pad:         0,
             });
         }
     }

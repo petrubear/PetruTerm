@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-03-22
-**Total Items:** 8
-**Critical (P0):** 0 | **P1:** 2 | **P2:** 4 | **P3:** 2
+**Last Updated:** 2026-03-23
+**Total Items:** 6
+**Critical (P0):** 0 | **P1:** 2 | **P2:** 2 | **P3:** 2
 
 ## Priority Definitions
 
@@ -49,15 +49,9 @@ _None_
 - **Issue:** `EventLoop::spawn()` return value is boxed as `Box<dyn Any + Send>`. Thread can't be joined or inspected on exit.
 - **Fix:** Add a `shutdown()` method that sends quit via notifier and waits.
 
-### TD-006: No mouse event handling
-- **File:** `src/app.rs`
-- **Issue:** `WindowEvent::CursorMoved`, `MouseInput`, `MouseWheel` events not handled. Phase 1 requires click-to-focus, drag selection, scroll wheel, SGR/X10 reporting for tmux/nvim.
-- **Fix:** Add event arms in `window_event()` and forward to alacritty_terminal's mouse input processor.
+### ~~TD-006: No mouse event handling~~ — RESOLVED
 
-### TD-007: No clipboard integration
-- **File:** `src/app.rs`
-- **Issue:** Cmd+C / Cmd+V and OSC 52 clipboard support not implemented.
-- **Fix:** Use `arboard` crate for system clipboard. Handle OSC 52 in the PTY event proxy.
+### ~~TD-007: No clipboard integration~~ — RESOLVED
 
 ### ~~TD-010: Nerd Font icons render as CJK fallback glyphs~~ — RESOLVED
 - **File:** `src/font/loader.rs`, `src/font/shaper.rs`
@@ -91,6 +85,8 @@ _None_
 
 | ID | Title | Resolved | Resolution |
 |----|-------|----------|------------|
+| TD-007 | No clipboard integration | 2026-03-23 | arboard crate; Cmd+C copies selection, Cmd+V pastes (bracketed-paste aware); OSC 52 via PtyEvent::ClipboardStore/Load; PtyWrite forwarding |
+| TD-006 | No mouse event handling | 2026-03-23 | CursorMoved/MouseInput/MouseWheel handled; drag selection via alacritty Selection API; SGR+X10 mouse reporting; scrollback scroll wheel |
 | TD-001 | Cell rendering not connected | 2026-03-22 | Full pipeline wired: grid walk → shape_line → rasterize → CellVertex → bg+glyph draw passes |
 | TD-010 | Nerd Font icons render as CJK | 2026-03-22 | Replaced bundled JetBrains Mono with JetBrains Mono Nerd Font Mono v3.3.0 |
 | — | wgpu 29 API breaks | 2026-03-22 | `CurrentSurfaceTexture`, `TexelCopyTextureInfo`, `TexelCopyBufferLayout`, `immediate_size`, `multiview_mask`, `depth_slice` |

@@ -2,15 +2,27 @@ pub mod pty;
 pub mod color;
 
 pub use pty::{Pty, PtyEvent, PtyEventProxy};
+pub use alacritty_terminal::vte::ansi::CursorShape;
 
 use anyhow::Result;
-use alacritty_terminal::grid::Dimensions;
-use alacritty_terminal::term::Config as TermConfig;
+use alacritty_terminal::grid::{Dimensions, Scroll};
+use alacritty_terminal::index::{Column, Direction, Line, Point};
+use alacritty_terminal::selection::{Selection, SelectionType};
+use alacritty_terminal::term::{Config as TermConfig, TermMode};
 use alacritty_terminal::Term;
 use alacritty_terminal::sync::FairMutex;
 use std::sync::Arc;
 
 use crate::config::Config;
+
+/// Cursor rendering info extracted from the terminal for one frame.
+#[derive(Debug, Clone, Copy)]
+pub struct CursorInfo {
+    pub col: usize,
+    pub row: usize,
+    pub shape: CursorShape,
+    pub visible: bool,
+}
 
 /// Minimal struct implementing `alacritty_terminal::grid::Dimensions`
 /// so we can construct a `Term` without needing a full SizeInfo.
@@ -84,6 +96,65 @@ impl Terminal {
     /// Write keyboard input bytes to the PTY.
     pub fn write_input(&self, data: &[u8]) {
         self.pty.write(data);
+    }
+
+    /// Start a new text selection at the given cell coordinate.
+    pub fn start_selection(&self, col: usize, row: usize, ty: SelectionType) {
+        let point = Point::new(Line(row as i32), Column(col));
+        self.term.lock().selection = Some(Selection::new(ty, point, Direction::Left));
+    }
+
+    /// Extend the active selection to the given cell coordinate.
+    pub fn update_selection(&self, col: usize, row: usize) {
+        let point = Point::new(Line(row as i32), Column(col));
+        if let Some(sel) = &mut self.term.lock().selection {
+            sel.update(point, Direction::Right);
+        }
+    }
+
+    /// Return the currently selected text, if any.
+    pub fn selection_text(&self) -> Option<String> {
+        self.term.lock().selection_to_string()
+    }
+
+    /// Clear any active selection.
+    pub fn clear_selection(&self) {
+        self.term.lock().selection = None;
+    }
+
+    /// Scroll the viewport by `delta` lines (positive = toward bottom, negative = toward history).
+    pub fn scroll_display(&self, delta: i32) {
+        self.term.lock().scroll_display(Scroll::Delta(delta));
+    }
+
+    /// Cursor position and shape for the current frame.
+    pub fn cursor_info(&self) -> CursorInfo {
+        self.with_term(|term| {
+            let content = term.renderable_content();
+            CursorInfo {
+                col: content.cursor.point.column.0,
+                row: content.cursor.point.line.0.max(0) as usize,
+                shape: content.cursor.shape,
+                visible: content.display_offset == 0
+                    && content.cursor.shape != CursorShape::Hidden,
+            }
+        })
+    }
+
+    /// Return whether bracketed paste mode is active.
+    pub fn bracketed_paste_mode(&self) -> bool {
+        self.term.lock().mode().contains(TermMode::BRACKETED_PASTE)
+    }
+
+    /// Return the active mouse mode flags: (any_reporting, sgr, motion).
+    pub fn mouse_mode_flags(&self) -> (bool, bool, bool) {
+        let mode = *self.term.lock().mode();
+        let any = mode.intersects(
+            TermMode::MOUSE_REPORT_CLICK | TermMode::MOUSE_MOTION | TermMode::MOUSE_DRAG,
+        );
+        let sgr = mode.contains(TermMode::SGR_MOUSE);
+        let motion = mode.intersects(TermMode::MOUSE_MOTION | TermMode::MOUSE_DRAG);
+        (any, sgr, motion)
     }
 
     /// Lock and inspect the terminal grid. The closure receives a reference
