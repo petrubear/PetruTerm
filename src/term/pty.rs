@@ -89,11 +89,16 @@ impl Pty {
         let (tx, rx) = crossbeam_channel::unbounded::<PtyEvent>();
         let proxy = PtyEventProxy { tx, wakeup };
 
+        let mut env = std::collections::HashMap::new();
+        env.insert("TERM".into(),          "xterm-256color".into());
+        env.insert("COLORTERM".into(),     "truecolor".into());
+        env.insert("TERM_PROGRAM".into(),  "PetruTerm".into());
+
         let pty_options = PtyOptions {
             shell: Some(Shell::new(config.shell.clone(), vec!["-l".into()])),
             working_directory: dirs::home_dir(),
             drain_on_exit: false,
-            env: Default::default(),
+            env,
         };
 
         let window_size = WindowSize {

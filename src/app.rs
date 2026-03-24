@@ -414,6 +414,7 @@ impl App {
             Key::Named(NamedKey::Backspace)=> Some(b"\x7f".to_vec()),
             Key::Named(NamedKey::Escape)   => Some(b"\x1b".to_vec()),
             Key::Named(NamedKey::Tab)      => Some(b"\t".to_vec()),
+            Key::Named(NamedKey::Space)      => Some(b" ".to_vec()),
             Key::Named(NamedKey::ArrowUp)   => Some(if app_cursor { b"\x1bOA".to_vec() } else { b"\x1b[A".to_vec() }),
             Key::Named(NamedKey::ArrowDown) => Some(if app_cursor { b"\x1bOB".to_vec() } else { b"\x1b[B".to_vec() }),
             Key::Named(NamedKey::ArrowRight)=> Some(if app_cursor { b"\x1bOC".to_vec() } else { b"\x1b[C".to_vec() }),
