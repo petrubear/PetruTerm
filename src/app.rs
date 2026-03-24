@@ -9,6 +9,7 @@ use winit::window::{Window, WindowAttributes, WindowId};
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::index::{Column, Line};
 use alacritty_terminal::selection::SelectionType;
+use alacritty_terminal::term::TermMode;
 use alacritty_terminal::vte::ansi::Color as AnsiColor;
 
 use winit::event_loop::EventLoopProxy;
@@ -397,17 +398,26 @@ impl App {
     }
 
     fn send_key_to_active_terminal(&self, event: &KeyEvent) {
+        // Check terminal mode flags that affect key encoding.
+        let mode = self.active_terminal()
+            .map(|t| *t.term.lock().mode())
+            .unwrap_or(TermMode::empty());
+        let app_cursor = mode.contains(TermMode::APP_CURSOR);
+
         // Convert the logical key to bytes and write to the active PTY.
+        // Arrow keys send application sequences (\x1bO_) when APP_CURSOR is set,
+        // otherwise normal ANSI sequences (\x1b[_). This is required for atuin,
+        // nvim, tmux, and any readline/ZLE widget that activates DECCKM.
         let bytes: Option<Vec<u8>> = match &event.logical_key {
             Key::Character(s)              => Some(s.as_bytes().to_vec()),
             Key::Named(NamedKey::Enter)    => Some(b"\r".to_vec()),
             Key::Named(NamedKey::Backspace)=> Some(b"\x7f".to_vec()),
             Key::Named(NamedKey::Escape)   => Some(b"\x1b".to_vec()),
             Key::Named(NamedKey::Tab)      => Some(b"\t".to_vec()),
-            Key::Named(NamedKey::ArrowUp)  => Some(b"\x1b[A".to_vec()),
-            Key::Named(NamedKey::ArrowDown)=> Some(b"\x1b[B".to_vec()),
-            Key::Named(NamedKey::ArrowRight)=>Some(b"\x1b[C".to_vec()),
-            Key::Named(NamedKey::ArrowLeft)=> Some(b"\x1b[D".to_vec()),
+            Key::Named(NamedKey::ArrowUp)   => Some(if app_cursor { b"\x1bOA".to_vec() } else { b"\x1b[A".to_vec() }),
+            Key::Named(NamedKey::ArrowDown) => Some(if app_cursor { b"\x1bOB".to_vec() } else { b"\x1b[B".to_vec() }),
+            Key::Named(NamedKey::ArrowRight)=> Some(if app_cursor { b"\x1bOC".to_vec() } else { b"\x1b[C".to_vec() }),
+            Key::Named(NamedKey::ArrowLeft) => Some(if app_cursor { b"\x1bOD".to_vec() } else { b"\x1b[D".to_vec() }),
             Key::Named(NamedKey::Home)     => Some(b"\x1b[H".to_vec()),
             Key::Named(NamedKey::End)      => Some(b"\x1b[F".to_vec()),
             Key::Named(NamedKey::Delete)   => Some(b"\x1b[3~".to_vec()),

@@ -46,6 +46,7 @@
 ### Not Yet Verified (Phase 1)
 | Feature | Debt ID | Notes |
 |---------|---------|-------|
+| Arrow keys APP_CURSOR mode | TD-013 | Fix needed: atuin/nvim/tmux break — send `\x1bOA/B/C/D` when `TermMode::APP_CURSOR` set |
 | 100k scrollback | TD-004 | `printf '%s\n' {1..110000}` |
 | Font ligatures | — | `->` `=>` `!=` `>=` `\|>` — not confirmed |
 | `nvim` smoke test | — | colors, cursor, input, scroll |
@@ -75,6 +76,7 @@
 - [x] Custom title bar / borderless
 - [x] Launches in home directory (~)
 - [x] .app bundle + icon
+- [ ] Arrow keys correct in APP_CURSOR mode (atuin / nvim / tmux)
 - [ ] Font ligatures verified
 - [ ] `nvim` renders correctly
 - [ ] `tmux` works

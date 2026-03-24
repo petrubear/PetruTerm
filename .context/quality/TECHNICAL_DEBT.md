@@ -1,6 +1,6 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-03-23
+**Last Updated:** 2026-03-24
 **Total Items:** 5
 **Critical (P0):** 0 | **P1:** 1 | **P2:** 2 | **P3:** 2
 
@@ -24,6 +24,8 @@ _None_
 ## P1 - High Priority
 
 ### ~~TD-011: Shell `exit` does not close the terminal window~~ — RESOLVED
+
+### ~~TD-013: Arrow keys ignore APP_CURSOR mode (DECCKM)~~ — RESOLVED
 
 ### TD-002: PTY placeholder event proxy on Term construction
 - **File:** `src/term/mod.rs`
@@ -104,6 +106,7 @@ _None_
 
 | ID | Title | Resolved | Resolution |
 |----|-------|----------|------------|
+| TD-013 | Arrow keys ignore APP_CURSOR (DECCKM) | 2026-03-24 | `send_key_to_active_terminal` now reads `TermMode::APP_CURSOR`; sends `\x1bO_` vs `\x1b[_` accordingly |
 | TD-012 | Nerd Font icons overflow cell | 2026-03-23 | clamp_glyph_to_cell() crops glyph_size + atlas_uv to cell bounds before emitting CellVertex |
 | TD-011 | exit doesn't close window | 2026-03-23 | poll_pty_events returns (has_data, shell_exited); both about_to_wait and RedrawRequested call event_loop.exit() on exit |
 | TD-003 | PTY cell_width/height hardcoded | 2026-03-23 | Pty::spawn/resize now accept cell_w/h from TextShaper; Terminal::resize propagated; WindowEvent::Resized now calls terminal.resize() |

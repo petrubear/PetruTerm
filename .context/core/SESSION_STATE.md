@@ -26,11 +26,12 @@ Build: 0 errors, 19 warnings (dead code stubs only). Runtime verified on M4 Max.
 - [ ] None — clean handoff
 
 ## Next Session Priorities (in order)
-1. TD-004 — 100k scrollback (`printf '%s\n' {1..110000}`)
-2. Ligatures verify — `->` `=>` `!=` `>=` `|>` in nvim or shell
-3. `nvim` smoke test — colors, cursor, input, scroll
-4. `tmux` smoke test — attach, split, scroll
-5. Top padding minor fix — `padding.top` to ~44 so row 0 clears traffic lights
+1. TD-013 — Fix arrow keys in APP_CURSOR mode (breaks atuin, nvim, tmux)
+2. TD-004 — 100k scrollback (`printf '%s\n' {1..110000}`)
+3. Ligatures verify — `->` `=>` `!=` `>=` `|>` in nvim or shell
+4. `nvim` smoke test — colors, cursor, input, scroll
+5. `tmux` smoke test — attach, split, scroll
+6. Top padding minor fix — `padding.top` to ~44 so row 0 clears traffic lights
 
 ## Key Technical Decisions (stable)
 - Surface: non-sRGB `Bgra8Unorm` on Metal — hex colors stored as sRGB, no double-gamma
