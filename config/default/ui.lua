@@ -30,12 +30,12 @@ function module.apply_to_config(config)
 	--   content extends behind bar, window draggable from content area (macOS only).
 	-- title_bar_style = "native": standard OS title bar.
 	-- title_bar_style = "none": no chrome at all (fully borderless).
-	-- top padding should be >= 30 when using "custom" to leave room for traffic lights.
+	-- top padding should be >= 44 when using "custom" to leave room for traffic lights.
 	config.window = {
 		borderless = false,
 		start_maximized = true,
 		title_bar_style = "custom",
-		padding = { left = 20, right = 20, top = 30, bottom = 10 },
+		padding = { left = 20, right = 20, top = 44, bottom = 10 },
 		opacity = 1.0,
 	}
 

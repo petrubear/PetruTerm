@@ -58,6 +58,7 @@ pub struct App {
     // Mouse state
     mouse_pos: (f64, f64),
     mouse_left_pressed: bool,
+    scroll_pixel_accum: f64,
 
     // Cursor blink state
     cursor_blink_on: bool,
@@ -94,6 +95,7 @@ impl App {
             scale_factor: 1.0,
             mouse_pos: (0.0, 0.0),
             mouse_left_pressed: false,
+            scroll_pixel_accum: 0.0,
             cursor_blink_on: true,
             cursor_last_blink: std::time::Instant::now(),
             wakeup_proxy,
@@ -818,10 +820,16 @@ impl ApplicationHandler<()> for App {
                 let lines = match delta {
                     MouseScrollDelta::LineDelta(_x, y) => y as i32,
                     MouseScrollDelta::PixelDelta(pos) => {
+                        // Trackpad sends many small PixelDelta events (3-10px each).
+                        // Accumulate until a full cell boundary is crossed to avoid
+                        // all events rounding to 0 (cell_height=36px on Retina).
                         let ch = self.shaper.as_ref()
                             .map(|s| s.cell_height as f64)
                             .unwrap_or(16.0);
-                        (pos.y / ch).round() as i32
+                        self.scroll_pixel_accum += pos.y;
+                        let lines = (self.scroll_pixel_accum / ch).trunc() as i32;
+                        self.scroll_pixel_accum -= lines as f64 * ch;
+                        lines
                     }
                 };
                 if lines == 0 { return; }
