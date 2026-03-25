@@ -71,17 +71,21 @@ impl Terminal {
         cell_height: u16,
         wakeup: EventLoopProxy<()>,
     ) -> Result<Self> {
-        // TD-002: Term requires an EventListener at construction, but the real
-        // PTY channel is created inside Pty::spawn.  We give Term a placeholder
-        // whose tx sends to a dead receiver (_rx is immediately dropped).
-        // Events routed through this placeholder (Bell, Title from VTE) are
-        // silently dropped; PTY-level events (DataReady, Exit) go through the
-        // real proxy created in Pty::spawn.
+        // TD-002 (partial fix): Term requires an EventListener at construction,
+        // but the Notifier is only available after PtyEventLoop is created in
+        // Pty::spawn. We create the shared Arc<OnceLock<Notifier>> here and
+        // pass it to BOTH the placeholder proxy (stored inside Term) and to
+        // Pty::spawn, which sets the OnceLock once the Notifier is ready.
+        // This ensures that PtyWrite events from term.process() — which go
+        // through Term's internal proxy — can forward responses immediately.
+        let direct_notifier: Arc<std::sync::OnceLock<alacritty_terminal::event_loop::Notifier>> =
+            Arc::new(std::sync::OnceLock::new());
+
         let (tx_placeholder, _rx) = crossbeam_channel::unbounded();
         let proxy = PtyEventProxy {
             tx: tx_placeholder,
             wakeup: wakeup.clone(),
-            direct_notifier: std::sync::Arc::new(std::sync::OnceLock::new()),
+            direct_notifier: Arc::clone(&direct_notifier),
         };
 
         let term_config = TermConfig {
@@ -96,7 +100,7 @@ impl Terminal {
         };
 
         let term = Arc::new(FairMutex::new(Term::new(term_config, &size, proxy)));
-        let pty = Pty::spawn(config, Arc::clone(&term), cols, rows, cell_width, cell_height, wakeup)?;
+        let pty = Pty::spawn(config, Arc::clone(&term), cols, rows, cell_width, cell_height, wakeup, direct_notifier)?;
 
         Ok(Self { term, pty, cols, rows })
     }
