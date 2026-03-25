@@ -9,6 +9,7 @@ use winit::window::{Window, WindowAttributes, WindowId};
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::index::{Column, Line};
 use alacritty_terminal::selection::SelectionType;
+use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::vte::ansi::Color as AnsiColor;
 
@@ -405,13 +406,30 @@ impl App {
             .map(|t| *t.term.lock().mode())
             .unwrap_or(TermMode::empty());
         let app_cursor = mode.contains(TermMode::APP_CURSOR);
+        let ctrl = self.modifiers.state().control_key();
 
         // Convert the logical key to bytes and write to the active PTY.
         // Arrow keys send application sequences (\x1bO_) when APP_CURSOR is set,
         // otherwise normal ANSI sequences (\x1b[_). This is required for atuin,
         // nvim, tmux, and any readline/ZLE widget that activates DECCKM.
         let bytes: Option<Vec<u8>> = match &event.logical_key {
-            Key::Character(s)              => Some(s.as_bytes().to_vec()),
+            Key::Character(s) => {
+                // When Ctrl is held, convert single ASCII printable chars to control bytes.
+                // Ctrl+A=0x01 .. Ctrl+Z=0x1A; also Ctrl+[=0x1B, Ctrl+\=0x1C, etc.
+                if ctrl {
+                    let ch = s.chars().next().unwrap_or('\0');
+                    let byte = ch as u8;
+                    if byte.is_ascii_alphabetic() {
+                        Some(vec![byte.to_ascii_lowercase() & 0x1F])
+                    } else if matches!(byte, b'[' | b'\\' | b']' | b'^' | b'_' | b' ') {
+                        Some(vec![byte & 0x1F])
+                    } else {
+                        Some(s.as_bytes().to_vec())
+                    }
+                } else {
+                    Some(s.as_bytes().to_vec())
+                }
+            }
             Key::Named(NamedKey::Enter)    => Some(b"\r".to_vec()),
             Key::Named(NamedKey::Backspace)=> Some(b"\x7f".to_vec()),
             Key::Named(NamedKey::Escape)   => Some(b"\x1b".to_vec()),
@@ -526,7 +544,12 @@ impl App {
                     let cell = &term.grid()[Line(row as i32 - display_offset)][Column(col)];
                     let ch = if cell.c == '\0' { ' ' } else { cell.c };
                     text.push(ch);
-                    colors.push((cell.fg, cell.bg));
+                    let (fg, bg) = if cell.flags.contains(Flags::INVERSE) {
+                        (cell.bg, cell.fg)
+                    } else {
+                        (cell.fg, cell.bg)
+                    };
+                    colors.push((fg, bg));
                 }
                 result.push((text, colors));
             }
