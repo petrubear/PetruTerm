@@ -78,7 +78,11 @@ impl Terminal {
         // silently dropped; PTY-level events (DataReady, Exit) go through the
         // real proxy created in Pty::spawn.
         let (tx_placeholder, _rx) = crossbeam_channel::unbounded();
-        let proxy = PtyEventProxy { tx: tx_placeholder, wakeup: wakeup.clone() };
+        let proxy = PtyEventProxy {
+            tx: tx_placeholder,
+            wakeup: wakeup.clone(),
+            direct_notifier: std::sync::Arc::new(std::sync::OnceLock::new()),
+        };
 
         let term_config = TermConfig {
             scrolling_history: config.scrollback_lines as usize,
