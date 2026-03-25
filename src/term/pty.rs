@@ -22,35 +22,8 @@ impl EventListener for PtyEventProxy {
         // to queries like CSI 6 n. Routing through the main thread adds up to 530 ms
         // of latency (blink timer), which causes those timeouts.
         if let Event::PtyWrite(text) = event {
-            // Write to /tmp/petruterm.log so we can diagnose from .app bundle
-            // (stdout/stderr are /dev/null when launched from Finder).
-            {
-                use std::io::Write;
-                if let Ok(mut f) = std::fs::OpenOptions::new()
-                    .create(true).append(true).open("/tmp/petruterm.log")
-                {
-                    let _ = writeln!(f, "PtyWrite: {:?}", text);
-                }
-            }
-            match self.direct_notifier.get() {
-                Some(notifier) => {
-                    if let Err(e) = notifier.0.send(Msg::Input(text.into_bytes().into())) {
-                        use std::io::Write;
-                        if let Ok(mut f) = std::fs::OpenOptions::new()
-                            .create(true).append(true).open("/tmp/petruterm.log")
-                        {
-                            let _ = writeln!(f, "PtyWrite send FAILED: {e}");
-                        }
-                    }
-                }
-                None => {
-                    use std::io::Write;
-                    if let Ok(mut f) = std::fs::OpenOptions::new()
-                        .create(true).append(true).open("/tmp/petruterm.log")
-                    {
-                        let _ = writeln!(f, "PtyWrite: direct_notifier not ready — DROPPED");
-                    }
-                }
+            if let Some(notifier) = self.direct_notifier.get() {
+                let _ = notifier.0.send(Msg::Input(text.into_bytes().into()));
             }
             return;
         }
