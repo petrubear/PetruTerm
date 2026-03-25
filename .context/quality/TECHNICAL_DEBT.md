@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-03-24
-**Total Items:** 6
-**Critical (P0):** 0 | **P1:** 2 | **P2:** 2 | **P3:** 2
+**Total Items:** 4
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 2 | **P3:** 2
 
 ## Priority Definitions
 
@@ -22,6 +22,10 @@ _None_
 ---
 
 ## P1 - High Priority
+
+### ~~TD-016: Ctrl key modifier not forwarded to PTY~~ — RESOLVED
+
+### ~~TD-017: Reverse-video (SGR 7 / Flags::INVERSE) not applied in cell rendering~~ — RESOLVED
 
 ### TD-016: Ctrl key modifier not forwarded to PTY
 - **File:** `src/app.rs` (`send_key_to_active_terminal`)

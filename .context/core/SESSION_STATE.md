@@ -32,9 +32,10 @@ Build: 0 errors. Runtime verified on M4 Max.
 - [ ] None — clean handoff
 
 ## Next Session Priorities (in order)
-1. Ligatures verify — `->` `=>` `!=` `>=` `|>` in nvim or shell
-2. `nvim` smoke test — colors, cursor, input, scroll
-3. `tmux` smoke test — attach, split, scroll
+1. Verify Ctrl key works (Ctrl+U, Ctrl+A, Ctrl+C in shell; Ctrl+B prefix in tmux)
+2. `nvim` smoke test — colors (reverse-video now fixed), cursor, input, scroll
+3. `tmux` smoke test — catppuccin separators (INVERSE fixed), split, scroll
+4. Ligatures verify — `->` `=>` `!=` `>=` `|>` in nvim
 
 ## Key Technical Decisions (stable)
 - Surface: non-sRGB `Bgra8Unorm` on Metal — hex colors stored as sRGB, no double-gamma
