@@ -512,6 +512,10 @@ impl App {
         terminal.with_term(|term| {
             let rows = term.screen_lines();
             let cols = term.columns();
+            // grid()[Line(row)] does NOT account for display_offset — it always
+            // returns viewport-relative rows from the bottom of history. Subtract
+            // display_offset so scrolled content is read from the correct position.
+            let display_offset = term.grid().display_offset() as i32;
             let mut result = Vec::with_capacity(rows);
 
             for row in 0..rows {
@@ -519,7 +523,7 @@ impl App {
                 let mut colors: Vec<(AnsiColor, AnsiColor)> = Vec::with_capacity(cols);
 
                 for col in 0..cols {
-                    let cell = &term.grid()[Line(row as i32)][Column(col)];
+                    let cell = &term.grid()[Line(row as i32 - display_offset)][Column(col)];
                     let ch = if cell.c == '\0' { ' ' } else { cell.c };
                     text.push(ch);
                     colors.push((cell.fg, cell.bg));
