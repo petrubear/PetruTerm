@@ -817,21 +817,21 @@ impl ApplicationHandler<()> for App {
             }
 
             WindowEvent::MouseWheel { delta, .. } => {
-                let lines = match delta {
-                    MouseScrollDelta::LineDelta(_x, y) => y as i32,
+                // Normalize both delta types to fractional lines and accumulate.
+                // PixelDelta.y is in LOGICAL points (not physical px), so divide
+                // by cell_height_logical = cell_height / scale_factor.
+                let delta_lines = match delta {
+                    MouseScrollDelta::LineDelta(_x, y) => y as f64,
                     MouseScrollDelta::PixelDelta(pos) => {
-                        // Trackpad sends many small PixelDelta events (3-10px each).
-                        // Accumulate until a full cell boundary is crossed to avoid
-                        // all events rounding to 0 (cell_height=36px on Retina).
-                        let ch = self.shaper.as_ref()
-                            .map(|s| s.cell_height as f64)
-                            .unwrap_or(16.0);
-                        self.scroll_pixel_accum += pos.y;
-                        let lines = (self.scroll_pixel_accum / ch).trunc() as i32;
-                        self.scroll_pixel_accum -= lines as f64 * ch;
-                        lines
+                        let ch_logical = self.shaper.as_ref()
+                            .map(|s| s.cell_height as f64 / self.scale_factor as f64)
+                            .unwrap_or(8.0);
+                        pos.y / ch_logical
                     }
                 };
+                self.scroll_pixel_accum += delta_lines;
+                let lines = self.scroll_pixel_accum.trunc() as i32;
+                self.scroll_pixel_accum -= lines as f64;
                 if lines == 0 { return; }
 
                 let (col, row) = self.pixel_to_cell(self.mouse_pos.0, self.mouse_pos.1);
