@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-03-24
-**Total Items:** 5
-**Critical (P0):** 0 | **P1:** 1 | **P2:** 2 | **P3:** 2
+**Total Items:** 3
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 1 | **P3:** 2
 
 ## Priority Definitions
 
@@ -27,11 +27,7 @@ _None_
 
 ### ~~TD-013: Arrow keys ignore APP_CURSOR mode (DECCKM)~~ — RESOLVED
 
-### TD-002: PTY placeholder event proxy on Term construction
-- **File:** `src/term/mod.rs`
-- **Issue:** `Terminal::new()` constructs `Term<PtyEventProxy>` with a disconnected placeholder channel, then `Pty::spawn()` creates a *second* `PtyEventProxy` with the real channel. The placeholder proxy's events go nowhere.
-- **Impact:** Low in practice (Term constructed once before spawn), but semantically wrong.
-- **Fix:** Create the channel first, pass the same proxy to both `Term::new` and `Pty::spawn`. Requires splitting `Pty::spawn` to accept an existing proxy.
+### ~~TD-002: PTY placeholder event proxy on Term construction~~ — RESOLVED
 
 ### ~~TD-003: PTY cell_width/cell_height hardcoded at 8×16~~ — RESOLVED
 
@@ -60,10 +56,8 @@ _None_
   text rows; the prompt background segments look correct but icons bleed vertically.
 -->
 
-### TD-004: Scrollback not verified at 100k lines
-- **File:** `src/term/mod.rs`
-- **Issue:** `scrolling_history: config.scrollback_lines` is set but not verified against the 100k line requirement.
-- **Fix:** Test with `printf '%s\n' {1..110000}` and verify retention.
+### ~~TD-004: Scrollback not verified at 100k lines~~ — RESOLVED
+- Scrollback rendering fixed (display_offset applied); 110k lines confirmed scrollable.
 
 ### TD-005: PTY thread JoinHandle type-erased
 - **File:** `src/term/pty.rs`
@@ -106,7 +100,9 @@ _None_
 
 | ID | Title | Resolved | Resolution |
 |----|-------|----------|------------|
-| TD-013 | Arrow keys ignore APP_CURSOR (DECCKM) | 2026-03-24 | `send_key_to_active_terminal` now reads `TermMode::APP_CURSOR`; sends `\x1bO_` vs `\x1b[_` accordingly |
+| TD-004 | Scrollback rendering broken (display_offset ignored) | 2026-03-24 | `collect_grid_cells` uses `Line(row - display_offset)`; trackpad PixelDelta divisor fixed (logical pts) |
+| TD-013 | Arrow keys ignore APP_CURSOR (DECCKM) | 2026-03-24 | `send_key_to_active_terminal` reads `TermMode::APP_CURSOR`; sends `\x1bO_` vs `\x1b[_` |
+| TD-002 | PTY placeholder proxy drops PtyWrite | 2026-03-24 | `Arc<OnceLock<Notifier>>` shared between Term proxy and Pty::spawn; atuin/TUI cursor queries now work |
 | TD-012 | Nerd Font icons overflow cell | 2026-03-23 | clamp_glyph_to_cell() crops glyph_size + atlas_uv to cell bounds before emitting CellVertex |
 | TD-011 | exit doesn't close window | 2026-03-23 | poll_pty_events returns (has_data, shell_exited); both about_to_wait and RedrawRequested call event_loop.exit() on exit |
 | TD-003 | PTY cell_width/height hardcoded | 2026-03-23 | Pty::spawn/resize now accept cell_w/h from TextShaper; Terminal::resize propagated; WindowEvent::Resized now calls terminal.resize() |

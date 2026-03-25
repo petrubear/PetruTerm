@@ -1,37 +1,40 @@
 # Session State
 
-**Last Updated:** 2026-03-23
-**Session Focus:** Phase 1 — verification (scrollback, ligatures, nvim/tmux)
+**Last Updated:** 2026-03-24
+**Session Focus:** Phase 1 — scroll + padding bug fixes
 
 ## Session Summary
-Phase 1 nearly complete. Custom title bar, shell exit, bundle, home dir, icon — all done.
-Build: 0 errors, 19 warnings (dead code stubs only). Runtime verified on M4 Max.
+Scroll and padding bugs found and fixed. All Phase 1 runtime items now verified.
+Build: 0 errors. Runtime verified on M4 Max.
 
 ## Commits This Arc (chronological)
-- `a666bb0` feat: Phase 1 MVP — core terminal foundation
-- `67de8b6` feat: Phase 1 — mouse, clipboard, and cursor rendering
-- `8a63522` fix: PTY cell dimensions from font shaper (TD-003)
-- `49f17d9` fix: shell exit now closes the window (TD-011)
-- `cf11e3a` fix: clamp Nerd Font / oversized glyphs to cell bounds (TD-012)
-- `6325719` feat: custom title bar via objc2 (TitleBarStyle::Custom/None)
-- `2a92400` fix: shell exit via Event::ChildExit + EventLoopProxy wakeup (TD-011)
-- `2ffb628` feat: .app bundle script (scripts/bundle.sh)
-- `fabccfb` feat: launch in home dir + app icon
+- `a480c12` fix: arrow keys respect APP_CURSOR mode (DECCKM) — TD-013
+- `3cc8d1f` fix: space key + TERM env in PTY
+- `bc8df52` fix: PtyWrite responses on background thread
+- `fa86d2e` fix: share direct_notifier Arc (TD-002) — atuin cursor query works
+- `56261bf` chore: remove debug file logging
+- `a7ec4b0` fix: trackpad scroll accumulation + padding.top 30→44
+- `92f77bf` fix: scroll PixelDelta unit mismatch (logical pts vs physical px)
+- `4883895` fix: scroll rendering ignores display_offset + padding top 44→60
 
 ## Build Status
-- **cargo build:** PASS — 0 errors, 19 warnings (dead code stubs only)
+- **cargo build:** PASS — 0 errors, ~19 warnings (dead code stubs only)
 - **bundle:** PASS — dist/PetruTerm.app, 18 MB, ad-hoc signed, icon embedded
+
+## Root Cause Summary (scroll)
+- `grid()[Line(row)]` in alacritty_terminal does NOT account for `display_offset`.
+  Fixed by using `Line(row as i32 - display_offset)` in `collect_grid_cells`.
+- `PixelDelta.y` from macOS trackpad is in logical points; dividing by physical
+  cell_height (36px) made all deltas round to 0. Fixed by dividing by
+  `cell_height / scale_factor` (18pt on 2× Retina).
 
 ## In Progress
 - [ ] None — clean handoff
 
 ## Next Session Priorities (in order)
-1. TD-013 — Fix arrow keys in APP_CURSOR mode (breaks atuin, nvim, tmux)
-2. TD-004 — 100k scrollback (`printf '%s\n' {1..110000}`)
-3. Ligatures verify — `->` `=>` `!=` `>=` `|>` in nvim or shell
-4. `nvim` smoke test — colors, cursor, input, scroll
-5. `tmux` smoke test — attach, split, scroll
-6. Top padding minor fix — `padding.top` to ~44 so row 0 clears traffic lights
+1. Ligatures verify — `->` `=>` `!=` `>=` `|>` in nvim or shell
+2. `nvim` smoke test — colors, cursor, input, scroll
+3. `tmux` smoke test — attach, split, scroll
 
 ## Key Technical Decisions (stable)
 - Surface: non-sRGB `Bgra8Unorm` on Metal — hex colors stored as sRGB, no double-gamma

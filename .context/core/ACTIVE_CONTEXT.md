@@ -1,17 +1,17 @@
 # Active Context
 
-**Current Focus:** Phase 1 — verification pass (scrollback / ligatures / nvim / tmux)
-**Last Active:** 2026-03-23
+**Current Focus:** Phase 1 — verification pass (ligatures / nvim / tmux)
+**Last Active:** 2026-03-24
 **Target Completion:** Phase 1 MVP
 **Priority:** P0
 
 ## Current State
 
-**Working terminal as of commit fabccfb:**
+**Working terminal as of commit 4883895:**
 - Dracula Pro background `#22212c` ✓
 - JetBrains Mono Nerd Font Mono 15pt, 18×36px at 2× Retina ✓
 - zsh + Starship prompt, keyboard input, `ls` output ✓
-- Mouse: drag selection, scroll wheel, SGR/X10 reporting ✓
+- Mouse: drag selection, scroll wheel (trackpad+mouse), SGR/X10 reporting ✓
 - Clipboard: Cmd+C/V, OSC 52, bracketed paste ✓
 - Cursor: block/underline/beam, 530ms blink, resets on keypress ✓
 - PTY resize: uses actual cell px from TextShaper ✓
@@ -22,6 +22,8 @@
 - Launch directory: opens in `~` ✓
 - .app bundle: `dist/PetruTerm.app` (18 MB, ad-hoc signed) ✓
 - App icon: Dracula purple chevron + cursor, macOS rounded rect ✓
+- Scrollback: rendering accounts for display_offset (scroll history visible) ✓
+- Top padding: 60px physical (30pt) clears traffic lights ✓
 
 ## Scope
 
@@ -46,12 +48,13 @@
 ### Not Yet Verified (Phase 1)
 | Feature | Debt ID | Notes |
 |---------|---------|-------|
-| Arrow keys APP_CURSOR mode | TD-013 | Fix needed: atuin/nvim/tmux break — send `\x1bOA/B/C/D` when `TermMode::APP_CURSOR` set |
-| 100k scrollback | TD-004 | `printf '%s\n' {1..110000}` |
+| ~~Arrow keys APP_CURSOR mode~~ | TD-013 | RESOLVED |
+| ~~100k scrollback~~ | TD-004 | RESOLVED — scrollback rendering fixed; 110k lines confirmed visible |
+| ~~Top padding~~ | — | RESOLVED — `padding.top=60` clears traffic lights |
+| ~~Trackpad/mouse scroll~~ | — | RESOLVED — display_offset rendering fix + logical px divisor |
 | Font ligatures | — | `->` `=>` `!=` `>=` `\|>` — not confirmed |
 | `nvim` smoke test | — | colors, cursor, input, scroll |
 | `tmux` smoke test | — | attach, split, scroll |
-| Top padding | — | `padding.top=30` slightly overlaps traffic lights; suggest ~44 |
 
 ### Out of Scope (Phase 2+)
 - `src/llm/` — Phase 2
@@ -76,11 +79,16 @@
 - [x] Custom title bar / borderless
 - [x] Launches in home directory (~)
 - [x] .app bundle + icon
-- [ ] Arrow keys correct in APP_CURSOR mode (atuin / nvim / tmux)
+- [x] Arrow keys correct in APP_CURSOR mode (atuin / nvim / tmux)
+- [x] Space bar works
+- [x] atuin inline search works (cursor position query fixed)
+- [x] Scrollback rendering correct (display_offset applied in collect_grid_cells)
+- [x] Trackpad/mouse scroll works
+- [x] Top padding clears traffic lights (60px physical)
+- [x] 100k scrollback — 110k lines confirmed scrollable
 - [ ] Font ligatures verified
 - [ ] `nvim` renders correctly
 - [ ] `tmux` works
-- [ ] 100k scrollback
 
 ## Technical Reference
 - Shell exit: `Event::ChildExit(i32)` — alacritty_terminal 0.25.1
