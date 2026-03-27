@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-03-24
-**Total Items:** 4
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 2 | **P3:** 2
+**Last Updated:** 2026-03-27
+**Total Items:** 3
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 2 | **P3:** 1
 
 ## Priority Definitions
 
@@ -23,40 +23,9 @@ _None_
 
 ## P1 - High Priority
 
-### ~~TD-016: Ctrl key modifier not forwarded to PTY~~ — RESOLVED
+### ~~TD-016: Ctrl key modifier not forwarded to PTY~~ — RESOLVED (commit d70c00d)
 
-### ~~TD-017: Reverse-video (SGR 7 / Flags::INVERSE) not applied in cell rendering~~ — RESOLVED
-
-### TD-016: Ctrl key modifier not forwarded to PTY
-- **File:** `src/app.rs` (`send_key_to_active_terminal`)
-- **Issue:** Ctrl+letter combinations (Ctrl+U=erase line, Ctrl+A=go to start, Ctrl+C=interrupt,
-  Ctrl+L=clear, etc.) are silently dropped. The key match arm `Key::Character(s)` sends the raw
-  character `s` without checking `ctrl` modifier. On macOS, Ctrl+A generates `Key::Character("a")`
-  with modifier state `ctrl=true`, not a control byte.
-- **Root cause:** `send_key_to_active_terminal` reads `self.modifiers.state().control_key()` only
-  to detect the tmux leader key (Ctrl+B). Printable keys always send the literal character.
-- **Fix:** When `ctrl=true` and key is an ASCII letter/`[`, `\`, `]`, `^`, `_`, encode as
-  control byte: `(char as u8) & 0x1F`. E.g. `Ctrl+A` → `\x01`, `Ctrl+U` → `\x15`.
-  Also forward `Ctrl+2`=`\x00`, `Ctrl+3`=`\x1b`, `Ctrl+4`=`\x1c`, etc.
-- **Priority:** P1 — blocks core terminal usage (line editing, tmux prefix, vim commands).
-
-### TD-017: Reverse-video (SGR 7 / Flags::INVERSE) not applied in cell rendering
-- **File:** `src/app.rs` (`collect_grid_cells`)
-- **Issue:** Cells with `Flags::INVERSE` set (reverse-video attribute, SGR 7) render with
-  declared fg/bg rather than swapped colors. `collect_grid_cells` uses `(cell.fg, cell.bg)`
-  directly without checking `cell.flags.contains(Flags::INVERSE)`.
-- **Context:** This was identified and fixed in a stale branch commit (`de62cae`) that was
-  lost during a git rebase. The fix is one-liner in `collect_grid_cells`:
-  ```rust
-  let (fg, bg) = if cell.flags.contains(Flags::INVERSE) {
-      (cell.bg, cell.fg)
-  } else {
-      (cell.fg, cell.bg)
-  };
-  ```
-- **Impact:** All programs using reverse-video show wrong colors: `less`, `man`, vim status bar,
-  tmux status line, and catppuccin theme separators. This is blocking the tmux/nvim smoke tests.
-- **Priority:** P1 — visually broken for any TUI app using reverse-video.
+### ~~TD-017: Reverse-video (SGR 7 / Flags::INVERSE) not applied in cell rendering~~ — RESOLVED (commit d70c00d)
 
 ### ~~TD-011: Shell `exit` does not close the terminal window~~ — RESOLVED
 
@@ -153,6 +122,7 @@ _None_
 
 | ID | Title | Resolved | Resolution |
 |----|-------|----------|------------|
+| — | Ligature rendering (negative bearing_x clipped) | 2026-03-27 | Removed X-axis clamping in build_instances; bearing_x passed raw to shader |
 | TD-004 | Scrollback rendering broken (display_offset ignored) | 2026-03-24 | `collect_grid_cells` uses `Line(row - display_offset)`; trackpad PixelDelta divisor fixed (logical pts) |
 | TD-013 | Arrow keys ignore APP_CURSOR (DECCKM) | 2026-03-24 | `send_key_to_active_terminal` reads `TermMode::APP_CURSOR`; sends `\x1bO_` vs `\x1b[_` |
 | TD-002 | PTY placeholder proxy drops PtyWrite | 2026-03-24 | `Arc<OnceLock<Notifier>>` shared between Term proxy and Pty::spawn; atuin/TUI cursor queries now work |
