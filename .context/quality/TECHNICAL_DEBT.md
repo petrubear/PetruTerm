@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-03-27
-**Total Items:** 3
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 2 | **P3:** 1
+**Total Items:** 5
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 3 | **P3:** 2
 
 ## Priority Definitions
 
@@ -22,6 +22,17 @@ _None_
 ---
 
 ## P1 - High Priority
+
+_None_
+
+### ~~TD-021: Drag-and-drop file path not inserted~~ — RESOLVED
+- `WindowEvent::DroppedFile`: panel focused → append to chat input; terminal focused → write path to PTY.
+
+### ~~TD-019: Space key not forwarded in AI block input~~ — RESOLVED
+- Explicit `Key::Named(NamedKey::Space)` handler in panel input routing.
+
+### ~~TD-020: AI block response not rendered~~ — RESOLVED
+- `build_chat_panel_instances` rewritten from scratch; `push_shaped_row` helper; panel rendered to the right of terminal at `col_offset = term_cols`.
 
 ### ~~TD-016: Ctrl key modifier not forwarded to PTY~~ — RESOLVED (commit d70c00d)
 
@@ -105,6 +116,13 @@ _None_
 ---
 
 ## P3 - Low Priority
+
+### TD-022: Chat panel has no access to current working directory or project files
+- **File:** `src/llm/` (new), `src/app.rs`
+- **Issue:** The chat panel sends user messages to the LLM with only a static system prompt. It has no awareness of the current working directory, open files, shell history, or directory listing. This limits the AI's usefulness for project-specific questions ("explain this file", "what's in this directory", "why did that command fail").
+- **Vision:** Implement a lightweight local agent that runs when the chat panel is open. The agent would: (1) capture CWD from the PTY via OSC sequences or shell integration hooks; (2) on user query, attach relevant context (CWD, `ls` output, relevant file snippets) to the system prompt; (3) support tool calls: `read_file`, `list_dir`, `run_command` — executed locally in a sandboxed manner; (4) multi-turn with tool results fed back to the model.
+- **Scope:** Substantial — requires shell integration script (TD roadmap item), a tool-call loop in the tokio task, and a context-assembly step before each LLM call. Warrants its own design doc before implementation.
+- **Priority:** P3 — chat works for general questions; agent mode is a Phase 3 feature.
 
 ### TD-008: Dead code / unused import warnings
 - **Files:** `src/font/`, `src/renderer/`, `src/term/`, `src/ui/`
