@@ -18,6 +18,8 @@ pub struct ShapedRun {
 pub struct ShapedGlyph {
     /// Column index in the terminal grid.
     pub col: usize,
+    /// Number of terminal columns this glyph covers (>1 for ligatures / wide chars).
+    pub span: usize,
     /// cosmic-text cache key for atlas lookup / rasterization.
     pub cache_key: CacheKey,
     /// X advance in pixels.
@@ -120,7 +122,16 @@ impl TextShaper {
             line_height = run.line_height;
 
             for glyph in run.glyphs {
-                let col = (glyph.x / self.cell_width).round() as usize;
+                // Use the cluster's start byte index to determine the correct column.
+                // glyph.x / cell_width can be unreliable for ligatures because
+                // cosmic-text may report the position at the last char of the cluster.
+                let tlen = text.len();
+                let start = glyph.start.min(tlen);
+                let end   = glyph.end.min(tlen);
+                let col   = text[..start].chars().count();
+                // span = number of terminal columns the cluster occupies (>=1).
+                let span  = text[start..end].chars().count().max(1);
+
                 let (fg, bg) = colors
                     .get(col)
                     .copied()
@@ -130,6 +141,7 @@ impl TextShaper {
 
                 glyphs.push(ShapedGlyph {
                     col,
+                    span,
                     cache_key,
                     advance: glyph.w,
                     bearing_x: glyph.x - (col as f32 * self.cell_width),
