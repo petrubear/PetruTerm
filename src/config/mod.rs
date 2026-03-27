@@ -9,6 +9,7 @@ use std::path::PathBuf;
 
 /// Default config source embedded in the binary.
 const DEFAULT_CONFIG: &str = include_str!("../../config/default/config.lua");
+const SHELL_INTEGRATION_ZSH: &str = include_str!("../../scripts/shell-integration.zsh");
 
 /// Resolve the user config directory: ~/.config/petruterm/
 ///
@@ -43,6 +44,7 @@ pub fn load() -> Result<Config> {
         std::fs::create_dir_all(&dir)?;
         copy_default_configs(&dir)?;
     }
+    install_shell_integration(&dir)?;
 
     if path.exists() {
         log::info!("Loading config: {}", path.display());
@@ -80,4 +82,32 @@ fn copy_default_configs(dir: &std::path::Path) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Write shell-integration.zsh to the config dir if it doesn't exist or is outdated.
+/// Uses a version comment at the top of the file to detect when to update.
+fn install_shell_integration(dir: &std::path::Path) -> Result<()> {
+    let dest = dir.join("shell-integration.zsh");
+    let current_version = extract_version(SHELL_INTEGRATION_ZSH);
+
+    let needs_install = if dest.exists() {
+        let existing = std::fs::read_to_string(&dest).unwrap_or_default();
+        extract_version(&existing) != current_version
+    } else {
+        true
+    };
+
+    if needs_install {
+        std::fs::write(&dest, SHELL_INTEGRATION_ZSH)?;
+        log::info!("Installed shell integration: {}", dest.display());
+    }
+
+    Ok(())
+}
+
+/// Extract the `# version: X` comment from a shell script, if present.
+fn extract_version(content: &str) -> Option<&str> {
+    content.lines()
+        .find(|l| l.trim_start().starts_with("# version:"))
+        .map(|l| l.trim())
 }

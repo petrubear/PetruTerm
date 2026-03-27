@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-03-27
-**Total Items:** 5
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 3 | **P3:** 2
+**Total Items:** 6
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 4 | **P3:** 2
 
 ## Priority Definitions
 
@@ -73,6 +73,11 @@ _None_
 
 ### ~~TD-004: Scrollback not verified at 100k lines~~ — RESOLVED
 - Scrollback rendering fixed (display_offset applied); 110k lines confirmed scrollable.
+
+### ~~TD-024: Mouse text selection not working~~ — RESOLVED
+- `cell_in_selection()` checks `SelectionRange` per cell; selected cells rendered with inverted fg/bg.
+- `start_selection` guarded by `!any_mouse` (no conflict with nvim/tmux mouse reporting).
+- Window drag: `setMovableByWindowBackground: NO`; clicks in pad_top zone → `window.drag_window()`.
 
 ### TD-018: catppuccin tmux separators don't blend with adjacent cells
 - **File:** `src/app.rs` (`collect_grid_cells`, `build_instances`)

@@ -7,8 +7,8 @@ use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowAttributes, WindowId};
 
 use alacritty_terminal::grid::Dimensions;
-use alacritty_terminal::index::{Column, Line};
-use alacritty_terminal::selection::SelectionType;
+use alacritty_terminal::index::{Column, Line, Point};
+use alacritty_terminal::selection::{SelectionRange, SelectionType};
 use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::vte::ansi::Color as AnsiColor;
@@ -20,6 +20,7 @@ use crate::config::schema::TitleBarStyle;
 use crate::config::watcher::ConfigWatcher;
 use crate::font::{build_font_system, TextShaper};
 use crate::llm::chat_panel::{AiEvent, ChatPanel, PanelState};
+use crate::llm::shell_context::ShellContext;
 use crate::renderer::cell::{CellVertex, FLAG_CURSOR};
 use crate::renderer::GpuRenderer;
 use crate::term::color::resolve_color;
@@ -246,11 +247,19 @@ impl App {
 
         // Build multi-turn message history including the new user message
         // (already pushed into chat_panel.messages by submit_input).
-        let mut messages = vec![crate::llm::ChatMessage::system(
+        let mut system_text = String::from(
             "You are a helpful terminal assistant. When asked for a shell command, \
              respond with ONLY the command — no explanation, no markdown fences. \
              For general questions, respond concisely.",
-        )];
+        );
+        if let Some(ctx) = ShellContext::load() {
+            let ctx_str = ctx.format_for_system_message();
+            if !ctx_str.is_empty() {
+                system_text.push_str("\n\nShell context:\n");
+                system_text.push_str(&ctx_str);
+            }
+        }
+        let mut messages = vec![crate::llm::ChatMessage::system(system_text)];
         messages.extend(self.chat_panel.messages.iter().cloned());
 
         let tx     = self.ai_tx.clone();
@@ -280,6 +289,81 @@ impl App {
                 }
             }
         });
+    }
+
+    /// Return the last `n` lines of the active terminal viewport as plain text.
+    /// Reads the bottom of the current screen (no scrollback history).
+    fn last_terminal_lines(&self, n: usize) -> String {
+        let active = self.tabs.active_index();
+        let pane_mgr = match self.panes.get(active) {
+            Some(p) => p,
+            None => return String::new(),
+        };
+        let terminal = match self.terminals.get(pane_mgr.focused_terminal).and_then(|t| t.as_ref()) {
+            Some(t) => t,
+            None => return String::new(),
+        };
+
+        terminal.with_term(|term| {
+            let rows = term.screen_lines();
+            let cols = term.columns();
+            let start = rows.saturating_sub(n);
+            let mut lines = Vec::with_capacity(rows - start);
+            for row in start..rows {
+                let mut text = String::with_capacity(cols);
+                for col in 0..cols {
+                    let cell = &term.grid()[alacritty_terminal::index::Line(row as i32)][alacritty_terminal::index::Column(col)];
+                    text.push(if cell.c == '\0' { ' ' } else { cell.c });
+                }
+                let trimmed = text.trim_end().to_string();
+                if !trimmed.is_empty() {
+                    lines.push(trimmed);
+                }
+            }
+            lines.join("\n")
+        })
+    }
+
+    /// Open the panel and submit "Explain this terminal output" with the last 30
+    /// lines of the current viewport as context.
+    fn explain_last_output(&mut self) {
+        let output = self.last_terminal_lines(30);
+        if output.is_empty() {
+            return;
+        }
+        if !self.chat_panel.is_visible() {
+            self.chat_panel.open();
+            self.resize_terminals_for_panel();
+        }
+        self.panel_focused = true;
+        self.chat_panel.input = format!("Explain this terminal output:\n```\n{}\n```", output);
+        self.submit_ai_query();
+    }
+
+    /// Open the panel and submit a "fix this error" query using the last 30 lines
+    /// of the current viewport plus shell context (exit code, last command).
+    fn fix_last_error(&mut self) {
+        let output = self.last_terminal_lines(30);
+        let ctx = ShellContext::load();
+
+        let query = match &ctx {
+            Some(c) if !c.last_command.is_empty() => format!(
+                "The command `{}` failed (exit code {}). Here's the output:\n```\n{}\n```\nHow do I fix this?",
+                c.last_command, c.last_exit_code, output
+            ),
+            _ => format!(
+                "This command failed. Here's the output:\n```\n{}\n```\nHow do I fix this?",
+                output
+            ),
+        };
+
+        if !self.chat_panel.is_visible() {
+            self.chat_panel.open();
+            self.resize_terminals_for_panel();
+        }
+        self.panel_focused = true;
+        self.chat_panel.input = query;
+        self.submit_ai_query();
     }
 
     /// Write the last AI-suggested command to the active PTY and close the panel.
@@ -480,6 +564,18 @@ impl App {
                 if s.as_str().eq_ignore_ascii_case("p") {
                     self.palette.open();
                     return;
+                }
+            }
+        }
+
+        // Ctrl+Shift+E — Explain Last Output (open panel + auto-submit).
+        // Ctrl+Shift+F — Fix Last Error   (open panel + auto-submit with context).
+        if ctrl && shift {
+            if let Key::Character(s) = &event.logical_key {
+                match s.as_str().to_ascii_lowercase().as_str() {
+                    "e" => { self.explain_last_output(); return; }
+                    "f" => { self.fix_last_error();       return; }
+                    _ => {}
                 }
             }
         }
@@ -766,21 +862,36 @@ impl App {
             // returns viewport-relative rows from the bottom of history. Subtract
             // display_offset so scrolled content is read from the correct position.
             let display_offset = term.grid().display_offset() as i32;
+
+            // Pre-compute the selection range once per frame.
+            let sel_range: Option<SelectionRange> =
+                term.selection.as_ref().and_then(|s| s.to_range(term));
+
             let mut result = Vec::with_capacity(rows);
 
             for row in 0..rows {
                 let mut text = String::with_capacity(cols);
                 let mut colors: Vec<(AnsiColor, AnsiColor)> = Vec::with_capacity(cols);
+                let grid_line = Line(row as i32 - display_offset);
 
                 for col in 0..cols {
-                    let cell = &term.grid()[Line(row as i32 - display_offset)][Column(col)];
+                    let cell = &term.grid()[grid_line][Column(col)];
                     let ch = if cell.c == '\0' { ' ' } else { cell.c };
                     text.push(ch);
+
                     let (fg, bg) = if cell.flags.contains(Flags::INVERSE) {
                         (cell.bg, cell.fg)
                     } else {
                         (cell.fg, cell.bg)
                     };
+
+                    // Invert colors for selected cells.
+                    let (fg, bg) = if cell_in_selection(grid_line, Column(col), &sel_range) {
+                        (bg, fg)
+                    } else {
+                        (fg, bg)
+                    };
+
                     colors.push((fg, bg));
                 }
                 result.push((text, colors));
@@ -866,6 +977,19 @@ impl App {
                 }
             }
         }
+    }
+}
+
+/// Returns true if `(line, col)` falls within `sel_range`.
+/// Uses lexicographic ordering for simple selections and bounding-box for block selections.
+fn cell_in_selection(line: Line, col: Column, sel_range: &Option<SelectionRange>) -> bool {
+    let Some(range) = sel_range else { return false };
+    if range.is_block {
+        line >= range.start.line && line <= range.end.line
+            && col >= range.start.column && col <= range.end.column
+    } else {
+        let pt = Point::new(line, col);
+        pt >= range.start && pt <= range.end
     }
 }
 
@@ -1078,9 +1202,23 @@ impl ApplicationHandler<()> for App {
                 let (col, row) = self.pixel_to_cell(self.mouse_pos.0, self.mouse_pos.1);
                 match (button, state) {
                     (MouseButton::Left, ElementState::Pressed) => {
+                        let pad_top = self.config.window.padding.top as f64;
+                        if self.mouse_pos.1 < pad_top {
+                            // Click in the title bar zone — move the window.
+                            if let Some(window) = &self.window {
+                                let _ = window.drag_window();
+                            }
+                            return;
+                        }
                         self.mouse_left_pressed = true;
-                        if let Some(terminal) = self.active_terminal() {
-                            terminal.start_selection(col, row, SelectionType::Simple);
+                        let any_mouse = self.active_terminal()
+                            .map(|t| t.mouse_mode_flags().0)
+                            .unwrap_or(false);
+                        if !any_mouse {
+                            // Local selection — only when the app (not the PTY process) owns mouse.
+                            if let Some(terminal) = self.active_terminal() {
+                                terminal.start_selection(col, row, SelectionType::Simple);
+                            }
                         }
                         self.send_mouse_report(0, col, row, true);
                     }
@@ -1123,11 +1261,12 @@ impl ApplicationHandler<()> for App {
                 if lines == 0 { return; }
 
                 // If the mouse is over the chat panel, scroll the panel history.
+                // Convention matches the terminal: lines > 0 (swipe up) = older content.
                 if self.mouse_in_panel() {
                     if lines > 0 {
-                        self.chat_panel.scroll_up(lines as usize);
+                        self.chat_panel.scroll_down(lines as usize);
                     } else {
-                        self.chat_panel.scroll_down((-lines) as usize);
+                        self.chat_panel.scroll_up((-lines) as usize);
                     }
                     if let Some(window) = &self.window {
                         window.request_redraw();
@@ -1492,8 +1631,9 @@ unsafe fn apply_macos_custom_titlebar(window: &Window) {
     // NSWindowTitleHidden = 1 — hides the title text, traffic lights remain.
     let () = msg_send![ns_win, setTitleVisibility: 1_i64];
 
-    // Allow dragging the window from the terminal content area.
-    let () = msg_send![ns_win, setMovableByWindowBackground: Bool::YES];
+    // Disable window drag from content area — dragging is handled explicitly
+    // via Window::drag_window() only when the click is in the title bar zone.
+    let () = msg_send![ns_win, setMovableByWindowBackground: Bool::NO];
 }
 
 

@@ -12,9 +12,9 @@ function module.apply_to_config(config)
     api_key  = os.getenv("OPENROUTER_API_KEY"),       -- Or paste key directly (not recommended)
     base_url = nil,                                   -- nil = use provider default
 
-    -- Local provider examples:
-    -- provider = "ollama",   base_url = "http://localhost:11434",  model = "llama3"
-    -- provider = "lmstudio", base_url = "http://localhost:1234/v1", model = "..."
+    -- Local provider examples (no api_key needed):
+    -- provider = "ollama",   model = "llama3.2"   -- base_url defaults to http://localhost:11434/v1
+    -- provider = "lmstudio", model = "..."         -- base_url defaults to http://localhost:1234/v1
 
     features = {
       nl_to_command  = true,   -- Natural language → shell command

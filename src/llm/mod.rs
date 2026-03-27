@@ -1,6 +1,8 @@
 pub mod ai_block;
 pub mod chat_panel;
+pub mod openai_compat;
 pub mod openrouter;
+pub mod shell_context;
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -66,6 +68,8 @@ pub trait LlmProvider: Send + Sync {
 pub fn build_provider(config: &LlmConfig) -> Result<Arc<dyn LlmProvider>> {
     match config.provider.as_str() {
         "openrouter" => Ok(Arc::new(openrouter::OpenRouterProvider::from_config(config)?)),
-        other => anyhow::bail!("Unknown LLM provider: '{other}'"),
+        "ollama"     => Ok(Arc::new(openai_compat::OpenAICompatProvider::ollama(config))),
+        "lmstudio"   => Ok(Arc::new(openai_compat::OpenAICompatProvider::lmstudio(config))),
+        other => anyhow::bail!("Unknown LLM provider: '{other}'. Valid options: openrouter, ollama, lmstudio"),
     }
 }

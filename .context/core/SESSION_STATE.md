@@ -65,11 +65,22 @@ Bundle: dist/PetruTerm.app, 18 MB, ad-hoc signed, icon embedded.
   terminal focused → write path bytes to PTY
 
 ### Remaining Phase 2
-- [ ] Shell integration (`shell-integration.zsh`) — CWD, exit codes, command boundaries
-- [ ] Ctrl+Shift+E / Ctrl+Shift+F (explain last output / fix last error)
-- [ ] Ollama + LMStudio providers
+- [x] Shell integration (`scripts/shell-integration.zsh`) — CWD, exit codes written to
+  `~/.cache/petruterm/shell-context.json` via preexec/precmd hooks
+- [x] `src/llm/shell_context.rs` — `ShellContext::load()` reads JSON; injected into system
+  message on every query; `explain_last_output()` + `fix_last_error()` helpers
+- [x] Ctrl+Shift+E / Ctrl+Shift+F — wired in `handle_key_input`; auto-opens panel + submits
+- [x] Ollama + LMStudio providers — `src/llm/openai_compat.rs` (`OpenAICompatProvider`);
+  `ollama` defaults to `http://localhost:11434/v1`, `lmstudio` to `http://localhost:1234/v1`
+- [x] TD-024: Mouse text selection — `cell_in_selection()` helper; `collect_grid_cells` inverts
+  fg/bg for selected cells; `start_selection` guarded behind `!any_mouse`; window drag moved
+  to `window.drag_window()` on clicks in pad_top zone; `setMovableByWindowBackground: NO`
 - [ ] TD-022: Agent mode (chat with CWD/file context) — P3, needs design doc first
 - [ ] TD-023: Leader key for panel actions — P3, replaces Ctrl+C/V with prefix system
+
+## Phase 2 Status: COMPLETE ✓ (2026-03-27)
+All deliverables implemented. Verified: OpenRouter, LMStudio streaming; shell integration;
+Ctrl+Shift+E/F; mouse text selection with visual highlight.
 
 ## Key Technical Decisions (stable)
 
@@ -92,3 +103,8 @@ Bundle: dist/PetruTerm.app, 18 MB, ad-hoc signed, icon embedded.
 - Multi-turn context: full `Vec<ChatMessage>` history sent to LLM on every submit
 - Async streaming: tokio task → crossbeam channel → `poll_ai_events()` in `about_to_wait`
 - Focus model: `panel_focused: bool` on `App`; Ctrl+C/V cycle focus without closing panel
+- Shell context: `ShellContext::load()` reads `~/.cache/petruterm/shell-context.json`; injected
+  into system message on every query; script auto-installed to `~/.config/petruterm/` on launch
+- Mouse selection: `SelectionRange::to_range(term)` per frame; fg/bg inverted for selected cells;
+  title bar drag via `window.drag_window()` when click y < pad_top; content drag = selection
+- Providers: OpenRouter (SSE + auth), Ollama + LMStudio via `OpenAICompatProvider` (no auth)
