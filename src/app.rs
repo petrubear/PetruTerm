@@ -484,21 +484,44 @@ impl App {
             }
         }
 
-        // Ctrl+Space — open panel / toggle focus between terminal and panel.
-        // - Panel closed            → open panel, give focus to panel.
-        // - Panel open, panel focus → move focus to terminal (panel stays open).
-        // - Panel open, term focus  → move focus back to panel.
-        // Esc (below) is the only way to close the panel entirely.
+        // Ctrl+C — open or close the AI panel.
+        //
+        // Behaviour by state:
+        //   Panel closed                → open panel + focus it.
+        //                                 NOTE: this intercepts Ctrl+C before it reaches
+        //                                 the PTY. If a process is running, prefer using
+        //                                 the leader key (TD-023) instead.
+        //   Panel open + panel focused  → close panel.
+        //   Panel open + term focused   → fall through; PTY receives Ctrl+C (SIGINT).
+        //
+        // Ctrl+V — switch focus between terminal and panel (when panel is open).
+        //   Panel not visible           → fall through; PTY receives Ctrl+V.
         if ctrl {
-            if let Key::Named(NamedKey::Space) = &event.logical_key {
-                if !self.chat_panel.is_visible() {
-                    self.chat_panel.open();
-                    self.panel_focused = true;
-                    self.resize_terminals_for_panel();
-                } else {
-                    self.panel_focused = !self.panel_focused;
+            if let Key::Character(s) = &event.logical_key {
+                match s.as_str() {
+                    "c" | "C" => {
+                        if !self.chat_panel.is_visible() {
+                            self.chat_panel.open();
+                            self.panel_focused = true;
+                            self.resize_terminals_for_panel();
+                            return;
+                        } else if self.panel_focused {
+                            self.chat_panel.close();
+                            self.panel_focused = false;
+                            self.resize_terminals_for_panel();
+                            return;
+                        }
+                        // terminal focused + panel open → fall through as SIGINT
+                    }
+                    "v" | "V" => {
+                        if self.chat_panel.is_visible() {
+                            self.panel_focused = !self.panel_focused;
+                            return;
+                        }
+                        // panel not visible → fall through
+                    }
+                    _ => {}
                 }
-                return;
             }
         }
 
@@ -786,6 +809,16 @@ impl App {
             }
         }
         (80, 24)
+    }
+
+    /// Returns true when the mouse cursor is positioned over the chat panel area.
+    fn mouse_in_panel(&self) -> bool {
+        if !self.chat_panel.is_visible() { return false; }
+        let (cw, _) = self.cell_dims();
+        let pad_left = self.config.window.padding.left as f64;
+        let (term_cols, _) = self.active_terminal_size();
+        let term_right_px = pad_left + term_cols as f64 * cw as f64;
+        self.mouse_pos.0 >= term_right_px
     }
 
     fn active_terminal(&self) -> Option<&crate::term::Terminal> {
@@ -1089,6 +1122,19 @@ impl ApplicationHandler<()> for App {
                 self.scroll_pixel_accum -= lines as f64;
                 if lines == 0 { return; }
 
+                // If the mouse is over the chat panel, scroll the panel history.
+                if self.mouse_in_panel() {
+                    if lines > 0 {
+                        self.chat_panel.scroll_up(lines as usize);
+                    } else {
+                        self.chat_panel.scroll_down((-lines) as usize);
+                    }
+                    if let Some(window) = &self.window {
+                        window.request_redraw();
+                    }
+                    return;
+                }
+
                 let (col, row) = self.pixel_to_cell(self.mouse_pos.0, self.mouse_pos.1);
                 let (any_mouse, _sgr, _motion) = self.active_terminal()
                     .map(|t| t.mouse_mode_flags())
@@ -1363,7 +1409,7 @@ fn build_chat_panel_instances(
     };
 
     // Row 0: header (bright when focused, dim when terminal has focus)
-    push(&titled_separator("⚡ AI Chat", panel_cols), header_fg, 0, &mut instances);
+    push(&titled_separator("⚡ Petrubot", panel_cols), header_fg, 0, &mut instances);
 
     // History rows
     for i in 0..history_rows {
@@ -1384,15 +1430,15 @@ fn build_chat_panel_instances(
 
     // Hints
     let hints = if !panel_focused {
-        " [Ctrl+Space] focus chat"
+        " [Ctrl+V] focus chat  [Ctrl+C] close"
     } else {
         match &panel.state {
             PanelState::Idle if panel.input.trim().is_empty()
                 && panel.messages.iter().any(|m| matches!(m.role, ChatRole::Assistant))
-                => " [Enter] run last  [Esc] close",
-            PanelState::Idle      => " [Enter] send  [Esc] close",
+                => " [Enter] run last  [Ctrl+C] close",
+            PanelState::Idle      => " [Enter] send  [Ctrl+C] close",
             PanelState::Streaming |
-            PanelState::Loading   => " [Esc] close",
+            PanelState::Loading   => " [Ctrl+C] close",
             PanelState::Error(_)  => " [Esc] dismiss",
             PanelState::Hidden    => "",
         }

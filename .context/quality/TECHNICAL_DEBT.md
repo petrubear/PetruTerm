@@ -124,6 +124,19 @@ _None_
 - **Scope:** Substantial — requires shell integration script (TD roadmap item), a tool-call loop in the tokio task, and a context-assembly step before each LLM call. Warrants its own design doc before implementation.
 - **Priority:** P3 — chat works for general questions; agent mode is a Phase 3 feature.
 
+### TD-023: Leader key for panel and pane actions
+- **Files:** `src/app.rs`, `src/config/schema.rs`
+- **Issue:** Panel toggle (Ctrl+C) and focus switch (Ctrl+V) conflict with standard terminal shortcuts (SIGINT, literal-next). As more panel actions are added (explain output, fix error, run last command), each will need a dedicated keybind — and the available Ctrl+key space is nearly exhausted by terminal conventions.
+- **Vision:** Implement a second leader key (separate from the tmux leader used for pane splits) dedicated to AI/panel actions. Example: `Ctrl+A` as default. Sequence: `Ctrl+A` → panel opens if closed, then next key selects action:
+  - `Ctrl+A` again → close panel
+  - `Tab` / `Ctrl+V` → switch focus
+  - `e` → explain last output (Ctrl+Shift+E)
+  - `f` → fix last error (Ctrl+Shift+F)
+  - `r` → run last AI command
+  This mirrors how tmux solves the same conflict — all multiplexer actions live behind a prefix, leaving the raw key space to the running process.
+- **Migration:** Once implemented, Ctrl+C/Ctrl+V panel bindings become aliases or are removed.
+- **Priority:** P3 — current bindings work; this is a polish/extensibility improvement.
+
 ### TD-008: Dead code / unused import warnings
 - **Files:** `src/font/`, `src/renderer/`, `src/term/`, `src/ui/`
 - **Issue:** ~23 warnings for unused stubs. Render loop being wired up has cleared most original offenders.

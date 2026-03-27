@@ -133,6 +133,16 @@ impl ChatPanel {
         }
     }
 
+    /// Scroll history toward older messages (up).
+    pub fn scroll_up(&mut self, lines: usize) {
+        self.scroll_offset = self.scroll_offset.saturating_add(lines);
+    }
+
+    /// Scroll history toward newer messages (down).
+    pub fn scroll_down(&mut self, lines: usize) {
+        self.scroll_offset = self.scroll_offset.saturating_sub(lines);
+    }
+
     /// Returns the last assistant message stripped of markdown fences,
     /// suitable for writing directly to the PTY.
     pub fn last_assistant_command(&self) -> Option<String> {
