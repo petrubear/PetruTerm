@@ -1,7 +1,7 @@
 # Session State
 
 **Last Updated:** 2026-03-27
-**Session Focus:** Phase 2 — AI Layer (starting)
+**Session Focus:** Phase 2 — AI Layer (in progress)
 
 ## Phase 1 Status: COMPLETE ✓
 
@@ -26,8 +26,25 @@ Bundle: dist/PetruTerm.app, 18 MB, ad-hoc signed, icon embedded.
 - **cargo build:** PASS — 0 errors
 - **bundle:** PASS — dist/PetruTerm.app
 
-## In Progress
-- [ ] None — clean handoff, ready for Phase 2
+## Phase 2 Progress
+- [x] `LlmProvider` trait (`src/llm/mod.rs`) — `complete()` + `stream()` async, Arc-based
+- [x] OpenRouter provider (`src/llm/openrouter.rs`) — SSE streaming, OPENROUTER_API_KEY env
+- [x] Default model: `openrouter/auto:free` (schema.rs + llm.lua)
+- [x] `ChatPanel` state machine (`src/llm/chat_panel.rs`) — replaces AiBlock; multi-turn history, streaming_buf, scroll_offset
+- [x] `Ctrl+Space` toggle keybind (app.rs)
+- [x] Keyboard routing to chat panel when active — Space explicitly handled (TD-019 fixed)
+- [x] tokio Runtime + crossbeam channel for async streaming (App struct)
+- [x] `submit_ai_query` — multi-turn: builds full message history, streams via channel
+- [x] `chat_panel_run_command` — writes last assistant command to PTY, closes panel
+- [x] `poll_ai_events` — drains channel in `about_to_wait`
+- [x] `build_chat_panel_instances` — right-side panel; `push_shaped_row` helper; header + scrollable history + input + hints (TD-020 rewritten clean)
+- [x] **TD-021:** `WindowEvent::DroppedFile` — panel open → append to input; panel closed → paste to PTY
+- [x] **TD-019:** Space key in panel input — explicit `NamedKey::Space` match
+- [x] **TD-020:** Render rewritten from scratch — panel at col `term_cols..term_cols+panel_cols`, no overlay hack
+- [x] Panel layout split — `default_grid_size()` and `viewport_rect()` subtract `panel_cols * cell_w` when panel is open; `resize_terminals_for_panel()` called on open/close
+- [ ] Shell integration (`shell-integration.zsh`)
+- [ ] Ctrl+Shift+E / Ctrl+Shift+F (explain/fix)
+- [ ] Ollama + LMStudio providers
 
 ## Phase 2 Kickoff: AI Layer
 

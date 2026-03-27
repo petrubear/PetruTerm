@@ -19,6 +19,7 @@ use crate::config::{self, Config};
 use crate::config::schema::TitleBarStyle;
 use crate::config::watcher::ConfigWatcher;
 use crate::font::{build_font_system, TextShaper};
+use crate::llm::chat_panel::{AiEvent, ChatPanel, PanelState};
 use crate::renderer::cell::{CellVertex, FLAG_CURSOR};
 use crate::renderer::GpuRenderer;
 use crate::term::color::resolve_color;
@@ -46,6 +47,13 @@ pub struct App {
 
     // UI overlays
     palette: CommandPalette,
+
+    // AI layer
+    chat_panel: ChatPanel,
+    llm_provider: Option<Arc<dyn crate::llm::LlmProvider>>,
+    tokio_rt: tokio::runtime::Runtime,
+    ai_tx: crossbeam_channel::Sender<AiEvent>,
+    ai_rx: crossbeam_channel::Receiver<AiEvent>,
 
     // Input state
     modifiers: Modifiers,
@@ -78,6 +86,24 @@ impl App {
 
         let leader_timeout_ms = config.leader.timeout_ms;
 
+        let (ai_tx, ai_rx) = crossbeam_channel::unbounded::<AiEvent>();
+        let tokio_rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+
+        let llm_provider: Option<Arc<dyn crate::llm::LlmProvider>> = if config.llm.enabled {
+            match crate::llm::build_provider(&config.llm) {
+                Ok(p) => {
+                    log::info!("LLM provider '{}' ready (model: {}).", config.llm.provider, config.llm.model);
+                    Some(p)
+                }
+                Err(e) => {
+                    log::warn!("LLM init failed: {e}");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         Self {
             config,
             config_watcher,
@@ -89,6 +115,11 @@ impl App {
             terminals: Vec::new(),
             next_terminal_id: 0,
             palette: CommandPalette::new(),
+            chat_panel: ChatPanel::new(),
+            llm_provider,
+            tokio_rt,
+            ai_tx,
+            ai_rx,
             modifiers: Modifiers::default(),
             leader_active: false,
             leader_timer: None,
@@ -123,7 +154,12 @@ impl App {
             let (w, h) = renderer.size();
             let (cell_w, cell_h) = self.cell_dims();
             let pad = &self.config.window.padding;
-            let cols = ((w as f32 - pad.left as f32 - pad.right as f32) / cell_w as f32).max(1.0) as u16;
+            let panel_px = if self.chat_panel.is_visible() {
+                self.chat_panel.width_cols as f32 * cell_w as f32
+            } else {
+                0.0
+            };
+            let cols = ((w as f32 - pad.left as f32 - pad.right as f32 - panel_px) / cell_w as f32).max(1.0) as u16;
             let rows = ((h as f32 - pad.top as f32 - pad.bottom as f32) / cell_h as f32).max(1.0) as u16;
             (cols, rows)
         } else {
@@ -160,15 +196,125 @@ impl App {
         let pad = &self.config.window.padding;
         if let Some(renderer) = &self.renderer {
             let (w, h) = renderer.size();
+            let (cell_w, _) = self.cell_dims();
+            let panel_px = if self.chat_panel.is_visible() {
+                self.chat_panel.width_cols as f32 * cell_w as f32
+            } else {
+                0.0
+            };
             Rect {
                 x: pad.left as f32,
                 y: pad.top as f32,
-                w: (w as f32 - pad.left as f32 - pad.right as f32).max(0.0),
+                w: (w as f32 - pad.left as f32 - pad.right as f32 - panel_px).max(0.0),
                 h: (h as f32 - pad.top as f32 - pad.bottom as f32).max(0.0),
             }
         } else {
             Rect { x: pad.left as f32, y: pad.top as f32, w: 800.0, h: 600.0 }
         }
+    }
+
+    // ── Chat panel ───────────────────────────────────────────────────────────
+
+    /// Resize all terminals to account for the current panel state.
+    ///
+    /// Must be called whenever the panel opens or closes.
+    fn resize_terminals_for_panel(&mut self) {
+        let viewport = self.viewport_rect();
+        for pane_mgr in &mut self.panes {
+            pane_mgr.resize(viewport);
+        }
+        let (cols, rows) = self.default_grid_size();
+        let (cell_w, cell_h) = self.cell_dims();
+        let scrollback = self.config.scrollback_lines as usize;
+        for terminal in self.terminals.iter_mut().flatten() {
+            terminal.resize(cols, rows, scrollback, cell_w, cell_h);
+        }
+    }
+
+    /// Submit the current panel input to the LLM provider via a tokio task.
+    fn submit_ai_query(&mut self) {
+        let Some(user_content) = self.chat_panel.submit_input() else { return };
+
+        let Some(provider) = self.llm_provider.clone() else {
+            self.chat_panel.mark_error(
+                "LLM not configured — set llm.enabled = true in llm.lua".into(),
+            );
+            return;
+        };
+
+        // Build multi-turn message history including the new user message
+        // (already pushed into chat_panel.messages by submit_input).
+        let mut messages = vec![crate::llm::ChatMessage::system(
+            "You are a helpful terminal assistant. When asked for a shell command, \
+             respond with ONLY the command — no explanation, no markdown fences. \
+             For general questions, respond concisely.",
+        )];
+        messages.extend(self.chat_panel.messages.iter().cloned());
+
+        let tx     = self.ai_tx.clone();
+        let wakeup = self.wakeup_proxy.clone();
+
+        self.tokio_rt.spawn(async move {
+            use futures_util::StreamExt;
+            match provider.stream(messages).await {
+                Err(e) => {
+                    let _ = tx.send(AiEvent::Error(e.to_string()));
+                    let _ = wakeup.send_event(());
+                }
+                Ok(mut stream) => {
+                    while let Some(result) = stream.next().await {
+                        match result {
+                            Ok(tok) => { let _ = tx.send(AiEvent::Token(tok)); }
+                            Err(e)  => {
+                                let _ = tx.send(AiEvent::Error(e.to_string()));
+                                let _ = wakeup.send_event(());
+                                return;
+                            }
+                        }
+                        let _ = wakeup.send_event(());
+                    }
+                    let _ = tx.send(AiEvent::Done);
+                    let _ = wakeup.send_event(());
+                }
+            }
+        });
+    }
+
+    /// Write the last AI-suggested command to the active PTY and close the panel.
+    fn chat_panel_run_command(&mut self) {
+        if let Some(cmd) = self.chat_panel.last_assistant_command() {
+            let mut data = cmd.into_bytes();
+            data.push(b'\r');
+            if let Some(terminal) = self.active_terminal() {
+                terminal.write_input(&data);
+            }
+            self.chat_panel.close();
+            self.resize_terminals_for_panel();
+        }
+    }
+
+    /// Drain the AI event channel and update the panel state.
+    /// Returns true if anything changed (caller should request a redraw).
+    fn poll_ai_events(&mut self) -> bool {
+        use crossbeam_channel::TryRecvError;
+        let mut changed = false;
+        loop {
+            match self.ai_rx.try_recv() {
+                Ok(event) => {
+                    changed = true;
+                    match event {
+                        AiEvent::Token(tok) => self.chat_panel.append_token(&tok),
+                        AiEvent::Done       => self.chat_panel.mark_done(),
+                        AiEvent::Error(e)   => {
+                            log::error!("LLM error: {e}");
+                            self.chat_panel.mark_error(e);
+                        }
+                    }
+                }
+                Err(TryRecvError::Empty | TryRecvError::Disconnected) => break,
+            }
+        }
+        changed
     }
 
     fn handle_palette_action(&mut self, action: crate::ui::palette::Action) {
@@ -208,13 +354,19 @@ impl App {
                     let _ = window.request_inner_size(winit::dpi::PhysicalSize::new(0u32, 0u32));
                 }
             }
-            // Phase 2 stubs — no-op for now.
-            Action::ToggleAiMode
-            | Action::EnableAiFeatures
-            | Action::DisableAiFeatures
-            | Action::ExplainLastOutput
-            | Action::FixLastError => {
-                log::info!("AI features available in Phase 2.");
+            Action::ToggleAiMode | Action::EnableAiFeatures => {
+                if !self.chat_panel.is_visible() {
+                    self.chat_panel.open();
+                    self.resize_terminals_for_panel();
+                }
+            }
+            Action::DisableAiFeatures => {
+                self.chat_panel.close();
+                self.resize_terminals_for_panel();
+            }
+            // TODO Phase 2 steps 8-9
+            Action::ExplainLastOutput | Action::FixLastError => {
+                log::info!("Explain/Fix not yet implemented.");
             }
         }
     }
@@ -323,6 +475,50 @@ impl App {
                     return;
                 }
             }
+        }
+
+        // Ctrl+Space — toggle chat panel
+        if ctrl {
+            if let Key::Named(NamedKey::Space) = &event.logical_key {
+                if self.chat_panel.is_visible() {
+                    self.chat_panel.close();
+                } else {
+                    self.chat_panel.open();
+                }
+                self.resize_terminals_for_panel();
+                return;
+            }
+        }
+
+        // Chat panel active — route input to it (Cmd shortcuts still pass through).
+        if self.chat_panel.is_visible() && !cmd {
+            match &event.logical_key {
+                Key::Named(NamedKey::Escape) => {
+                    if matches!(self.chat_panel.state, PanelState::Error(_)) {
+                        self.chat_panel.dismiss_error();
+                    } else if !self.chat_panel.is_streaming() {
+                        self.chat_panel.close();
+                        self.resize_terminals_for_panel();
+                    }
+                }
+                Key::Named(NamedKey::Enter) => {
+                    if self.chat_panel.is_idle() {
+                        if self.chat_panel.input.trim().is_empty() {
+                            // Empty input + Enter → run last assistant command
+                            self.chat_panel_run_command();
+                        } else {
+                            self.submit_ai_query();
+                        }
+                    }
+                }
+                Key::Named(NamedKey::Backspace) => self.chat_panel.backspace(),
+                Key::Named(NamedKey::Space)     => self.chat_panel.type_char(' '),
+                Key::Character(s) => {
+                    for c in s.chars() { self.chat_panel.type_char(c); }
+                }
+                _ => {}
+            }
+            return;
         }
 
         // Palette active — route all input to it.
@@ -637,7 +833,8 @@ impl ApplicationHandler<()> for App {
             event_loop.exit();
             return;
         }
-        if has_data {
+        let ai_changed = self.poll_ai_events();
+        if has_data || ai_changed {
             if let Some(window) = &self.window {
                 window.request_redraw();
             }
@@ -740,13 +937,14 @@ impl ApplicationHandler<()> for App {
                 // Collect cells (releases term lock immediately).
                 let cell_data = self.collect_grid_cells();
                 let scaled_font = self.scaled_font_config();
-
                 let cursor = self.active_terminal().map(|t| t.cursor_info());
+                let (term_cols, term_rows) = self.active_terminal_size();
+                let panel_visible = self.chat_panel.is_visible();
 
                 if let (Some(renderer), Some(shaper)) =
                     (&mut self.renderer, &mut self.shaper)
                 {
-                    let instances = build_instances(
+                    let mut instances = build_instances(
                         &cell_data,
                         shaper,
                         renderer,
@@ -755,6 +953,19 @@ impl ApplicationHandler<()> for App {
                         cursor.as_ref(),
                         self.cursor_blink_on,
                     );
+
+                    if panel_visible {
+                        let panel_instances = build_chat_panel_instances(
+                            &self.chat_panel,
+                            shaper,
+                            renderer,
+                            &scaled_font,
+                            term_cols,
+                            term_rows,
+                        );
+                        instances.extend(panel_instances);
+                    }
+
                     renderer.upload_instances(&instances);
                     if let Err(e) = renderer.render() {
                         log::error!("Render error: {e}");
@@ -853,7 +1064,10 @@ impl ApplicationHandler<()> for App {
                         let ch_logical = self.shaper.as_ref()
                             .map(|s| s.cell_height as f64 / self.scale_factor as f64)
                             .unwrap_or(8.0);
-                        pos.y / ch_logical
+                        // On macOS, PixelDelta.y is NEGATIVE when swiping up (natural
+                        // scrolling). Negate so the sign matches LineDelta convention:
+                        // positive = scroll up = show older history.
+                        -pos.y / ch_logical
                     }
                 };
                 self.scroll_pixel_accum += delta_lines;
@@ -882,6 +1096,22 @@ impl ApplicationHandler<()> for App {
                 }
             }
 
+            WindowEvent::DroppedFile(path) => {
+                let path_str = path.to_string_lossy().into_owned();
+                if self.chat_panel.is_visible() {
+                    // Append path to chat input (panel has focus)
+                    self.chat_panel.append_path(&path_str);
+                } else {
+                    // Paste path directly to the active PTY
+                    if let Some(terminal) = self.active_terminal() {
+                        terminal.write_input(path_str.as_bytes());
+                    }
+                }
+                if let Some(window) = &self.window {
+                    window.request_redraw();
+                }
+            }
+
             _ => {}
         }
     }
@@ -892,7 +1122,8 @@ impl ApplicationHandler<()> for App {
             event_loop.exit();
             return;
         }
-        if has_data {
+        let ai_changed = self.poll_ai_events();
+        if has_data || ai_changed {
             if let Some(window) = &self.window {
                 window.request_redraw();
             }
@@ -913,6 +1144,200 @@ impl ApplicationHandler<()> for App {
             + std::time::Duration::from_millis(BLINK_MS);
         event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(next_blink));
     }
+}
+
+/// Rasterize a single text row into `CellVertex` instances.
+///
+/// `col_offset` shifts every glyph's grid column by that amount, which places
+/// panel rows to the right of the terminal without any shader changes.
+fn push_shaped_row(
+    text: &str,
+    fg: [f32; 4],
+    bg: [f32; 4],
+    row: usize,
+    col_offset: usize,
+    width: usize,
+    shaper: &mut TextShaper,
+    renderer: &mut GpuRenderer,
+    font: &crate::config::schema::FontConfig,
+    instances: &mut Vec<CellVertex>,
+) {
+    if width == 0 { return; }
+
+    // Pad / truncate to exactly `width` chars so every column gets a BG rect.
+    let chars: Vec<char> = text.chars().take(width).collect();
+    let len = chars.len();
+    let padded: String = chars
+        .into_iter()
+        .chain(std::iter::repeat(' ').take(width.saturating_sub(len)))
+        .collect();
+
+    let colors: Vec<([f32; 4], [f32; 4])> = (0..width).map(|_| (fg, bg)).collect();
+    let shaped = shaper.shape_line(&padded, &colors, font);
+
+    for glyph in &shaped.glyphs {
+        let (atlas, queue) = renderer.atlas_and_queue();
+        let entry = shaper.rasterize_to_atlas(glyph.cache_key, atlas, queue);
+
+        let (atlas_uv, glyph_offset, glyph_size) = match entry {
+            Some(e) => {
+                let ox = e.bearing_x as f32;
+                let oy = shaped.ascent - e.bearing_y as f32;
+                let gw = e.width as f32;
+                let gh = e.height as f32;
+                let y0 = oy.max(0.0);
+                let y1 = (oy + gh).min(shaper.cell_height);
+                if y1 <= y0 || gw == 0.0 || gh == 0.0 {
+                    ([0.0f32; 4], [0.0; 2], [0.0; 2])
+                } else {
+                    let fy0 = (y0 - oy) / gh;
+                    let fy1 = (y1 - oy) / gh;
+                    let [u0, v0, u1, v1] = e.uv;
+                    ([u0, v0 + fy0*(v1-v0), u1, v0 + fy1*(v1-v0)], [ox, y0], [gw, y1-y0])
+                }
+            }
+            None => ([0.0f32; 4], [0.0; 2], [0.0; 2]),
+        };
+
+        instances.push(CellVertex {
+            grid_pos:     [(col_offset + glyph.col) as f32, row as f32],
+            atlas_uv,
+            fg:           glyph.fg,
+            bg:           glyph.bg,
+            glyph_offset,
+            glyph_size,
+            flags:        0,
+            _pad:         0,
+        });
+    }
+}
+
+/// Build GPU instances for the right-side chat panel.
+///
+/// The panel occupies columns `[term_cols .. term_cols + panel.width_cols]`
+/// using the same `CellVertex` pipeline as the terminal — no shader changes.
+/// The terminal must have already been resized to `term_cols` columns so its
+/// cells don't overlap with the panel area.
+fn build_chat_panel_instances(
+    panel: &ChatPanel,
+    shaper: &mut TextShaper,
+    renderer: &mut GpuRenderer,
+    font: &crate::config::schema::FontConfig,
+    term_cols: usize,
+    screen_rows: usize,
+) -> Vec<CellVertex> {
+    use crate::llm::chat_panel::{PanelState, titled_separator, word_wrap};
+    use crate::llm::ChatRole;
+
+    let panel_cols = panel.width_cols as usize;
+    if panel_cols == 0 || screen_rows < 4 { return vec![]; }
+
+    const PANEL_BG:  [f32; 4] = [0.10, 0.09, 0.16, 1.0];
+    const SEP_FG:    [f32; 4] = [0.35, 0.30, 0.52, 1.0];
+    const HEADER_FG: [f32; 4] = [0.75, 0.65, 1.00, 1.0];
+    const USER_FG:   [f32; 4] = [0.75, 0.90, 1.00, 1.0];
+    const ASST_FG:   [f32; 4] = [0.55, 1.00, 0.53, 1.0];
+    const STREAM_FG: [f32; 4] = [0.95, 0.88, 0.45, 1.0];
+    const INPUT_FG:  [f32; 4] = [1.00, 1.00, 1.00, 1.0];
+    const HINT_FG:   [f32; 4] = [0.42, 0.40, 0.52, 1.0];
+    const ERR_FG:    [f32; 4] = [1.00, 0.55, 0.45, 1.0];
+
+    // Fixed rows: header (0), sep-before-input (screen_rows-3),
+    // input (screen_rows-2), hints (screen_rows-1).
+    let history_start = 1_usize;
+    let history_end   = screen_rows.saturating_sub(3);
+    let history_rows  = history_end.saturating_sub(history_start);
+
+    // ── Build rendered history lines ─────────────────────────────────────────
+    let inner_w = panel_cols.saturating_sub(6); // leave room for "You: " prefix
+    let mut all_lines: Vec<(String, [f32; 4])> = Vec::new();
+
+    for msg in &panel.messages {
+        let (prefix, cont, fg) = match msg.role {
+            ChatRole::User      => (" You  ", "      ", USER_FG),
+            ChatRole::Assistant => ("  AI  ", "      ", ASST_FG),
+            ChatRole::System    => continue,
+        };
+        let wrapped = word_wrap(&msg.content, inner_w);
+        for (i, line) in wrapped.iter().enumerate() {
+            let p = if i == 0 { prefix } else { cont };
+            all_lines.push((format!("{p}{line}"), fg));
+        }
+        all_lines.push((String::new(), HINT_FG)); // blank line between messages
+    }
+
+    // In-flight streaming response
+    if matches!(panel.state, PanelState::Streaming) {
+        if panel.streaming_buf.is_empty() {
+            all_lines.push(("  AI  …".to_string(), STREAM_FG));
+        } else {
+            let wrapped = word_wrap(&panel.streaming_buf, inner_w);
+            for (i, line) in wrapped.iter().enumerate() {
+                let p = if i == 0 { "  AI  " } else { "      " };
+                all_lines.push((format!("{p}{line}"), STREAM_FG));
+            }
+        }
+    } else if matches!(panel.state, PanelState::Loading) {
+        all_lines.push(("  AI  waiting…".to_string(), STREAM_FG));
+    }
+
+    // Determine which slice of history lines to show (scroll_offset=0 → bottom)
+    let total = all_lines.len();
+    let visible_start = if total > history_rows {
+        (total - history_rows).saturating_sub(panel.scroll_offset)
+    } else {
+        0
+    };
+
+    // ── Assemble rows ────────────────────────────────────────────────────────
+    let mut instances = Vec::new();
+    let co = term_cols; // column offset shorthand
+
+    let mut push = |text: &str, fg, row, instances: &mut Vec<CellVertex>| {
+        push_shaped_row(text, fg, PANEL_BG, row, co, panel_cols, shaper, renderer, font, instances);
+    };
+
+    // Row 0: header
+    push(&titled_separator("⚡ AI Chat", panel_cols), HEADER_FG, 0, &mut instances);
+
+    // History rows
+    for i in 0..history_rows {
+        let row = history_start + i;
+        let (text, fg) = all_lines
+            .get(visible_start + i)
+            .map(|(t, f)| (t.as_str(), *f))
+            .unwrap_or(("", PANEL_BG));
+        push(text, fg, row, &mut instances);
+    }
+
+    // Separator before input
+    push(&"─".repeat(panel_cols), SEP_FG, history_end, &mut instances);
+
+    // Input row
+    let (input_text, input_fg) = match &panel.state {
+        PanelState::Error(e) => {
+            let msg: String = e.chars().take(panel_cols.saturating_sub(4)).collect();
+            (format!(" ! {msg}"), ERR_FG)
+        }
+        PanelState::Idle => (format!(" > {}▋", panel.input), INPUT_FG),
+        _ => (format!(" > {}", panel.input), INPUT_FG),
+    };
+    push(&input_text, input_fg, screen_rows - 2, &mut instances);
+
+    // Hints row
+    let hints = match &panel.state {
+        PanelState::Idle if panel.input.trim().is_empty()
+            && panel.messages.iter().any(|m| matches!(m.role, ChatRole::Assistant))
+            => " [Enter] run last  [Esc] close",
+        PanelState::Idle      => " [Enter] send  [Esc] close",
+        PanelState::Streaming |
+        PanelState::Loading   => " [Esc] close",
+        PanelState::Error(_)  => " [Esc] dismiss",
+        PanelState::Hidden    => "",
+    };
+    push(hints, HINT_FG, screen_rows - 1, &mut instances);
+
+    instances
 }
 
 /// Apply macOS-specific title bar customization to an NSWindow.
