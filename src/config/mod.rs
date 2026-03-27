@@ -11,9 +11,18 @@ use std::path::PathBuf;
 const DEFAULT_CONFIG: &str = include_str!("../../config/default/config.lua");
 
 /// Resolve the user config directory: ~/.config/petruterm/
+///
+/// Follows XDG: respects $XDG_CONFIG_HOME, falls back to ~/.config.
+/// Uses this path on all platforms (including macOS) instead of
+/// ~/Library/Application Support/ so the config is shell-accessible.
 pub fn config_dir() -> PathBuf {
-    dirs::config_dir()
-        .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from("~")))
+    std::env::var("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("~"))
+                .join(".config")
+        })
         .join("petruterm")
 }
 

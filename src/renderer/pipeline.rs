@@ -68,10 +68,26 @@ fn vs_main(@builtin(vertex_index) vi: u32, instance: InstanceIn) -> VertexOut {
     return out;
 }
 
+// sRGB ↔ linear helpers for gamma-correct blending.
+// Our surface is Bgra8Unorm so colors are stored as sRGB bytes.
+// Blending must happen in linear light to match WezTerm / correct antialiasing.
+fn srgb_to_lin(c: f32) -> f32 {
+    if c <= 0.04045 { return c / 12.92; }
+    return pow((c + 0.055) / 1.055, 2.4);
+}
+fn lin_to_srgb(c: f32) -> f32 {
+    if c <= 0.0031308 { return c * 12.92; }
+    return 1.055 * pow(c, 1.0 / 2.4) - 0.055;
+}
+
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     let alpha = textureSample(t_atlas, s_atlas, in.uv).r;
-    return mix(in.bg, in.fg, alpha);
+    // Linearise → blend → back to sRGB so antialiased edges render correctly.
+    let bg_lin = vec4(srgb_to_lin(in.bg.r), srgb_to_lin(in.bg.g), srgb_to_lin(in.bg.b), in.bg.a);
+    let fg_lin = vec4(srgb_to_lin(in.fg.r), srgb_to_lin(in.fg.g), srgb_to_lin(in.fg.b), in.fg.a);
+    let m = mix(bg_lin, fg_lin, alpha);
+    return vec4(lin_to_srgb(m.r), lin_to_srgb(m.g), lin_to_srgb(m.b), m.a);
 }
 
 // Background-only pass (draws flat bg color for the whole cell).

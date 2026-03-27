@@ -1,6 +1,7 @@
 mod app;
 mod config;
 mod font;
+mod llm;
 mod renderer;
 mod term;
 mod ui;

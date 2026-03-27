@@ -191,7 +191,7 @@ impl Default for LlmConfig {
         Self {
             enabled: false,
             provider: "openrouter".into(),
-            model: "anthropic/claude-sonnet-4-6".into(),
+            model: "meta-llama/llama-3.1-8b-instruct:free".into(),
             api_key: None,
             base_url: None,
             context_lines: 50,

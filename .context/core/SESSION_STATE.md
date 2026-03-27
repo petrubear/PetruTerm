@@ -6,7 +6,7 @@
 ## Phase 1 Status: COMPLETE ✓
 
 All acceptance criteria verified on M4 Max, 2026-03-27.
-Build: 0 errors, ~19 warnings (dead code stubs only).
+Build: 0 errors, ~24 warnings (dead code stubs only).
 Bundle: dist/PetruTerm.app, 18 MB, ad-hoc signed, icon embedded.
 
 ### Phase 1 Final Commits
@@ -27,46 +27,53 @@ Bundle: dist/PetruTerm.app, 18 MB, ad-hoc signed, icon embedded.
 - **bundle:** PASS — dist/PetruTerm.app
 
 ## Phase 2 Progress
+
+### Infrastructure (complete)
+- [x] `mod llm` wired in `main.rs`; `async-trait`, `futures-util` added to Cargo.toml
 - [x] `LlmProvider` trait (`src/llm/mod.rs`) — `complete()` + `stream()` async, Arc-based
+- [x] `ChatMessage` / `ChatRole` types in `src/llm/mod.rs`
 - [x] OpenRouter provider (`src/llm/openrouter.rs`) — SSE streaming, OPENROUTER_API_KEY env
-- [x] Default model: `openrouter/auto:free` (schema.rs + llm.lua)
-- [x] `ChatPanel` state machine (`src/llm/chat_panel.rs`) — replaces AiBlock; multi-turn history, streaming_buf, scroll_offset
-- [x] `Ctrl+Space` toggle keybind (app.rs)
-- [x] Keyboard routing to chat panel when active — Space explicitly handled (TD-019 fixed)
-- [x] tokio Runtime + crossbeam channel for async streaming (App struct)
-- [x] `submit_ai_query` — multi-turn: builds full message history, streams via channel
-- [x] `chat_panel_run_command` — writes last assistant command to PTY, closes panel
-- [x] `poll_ai_events` — drains channel in `about_to_wait`
-- [x] `build_chat_panel_instances` — right-side panel; `push_shaped_row` helper; header + scrollable history + input + hints (TD-020 rewritten clean)
-- [x] **TD-021:** `WindowEvent::DroppedFile` — panel open → append to input; panel closed → paste to PTY
-- [x] **TD-019:** Space key in panel input — explicit `NamedKey::Space` match
-- [x] **TD-020:** Render rewritten from scratch — panel at col `term_cols..term_cols+panel_cols`, no overlay hack
-- [x] Panel layout split — `default_grid_size()` and `viewport_rect()` subtract `panel_cols * cell_w` when panel is open; `resize_terminals_for_panel()` called on open/close
-- [ ] Shell integration (`shell-integration.zsh`)
-- [ ] Ctrl+Shift+E / Ctrl+Shift+F (explain/fix)
+- [x] Default model: `meta-llama/llama-3.1-8b-instruct:free` (free tier for testing)
+- [x] tokio Runtime + crossbeam channel for async streaming (`App` struct)
+
+### Chat panel UI (complete)
+- [x] `ChatPanel` state machine (`src/llm/chat_panel.rs`) — multi-turn `Vec<ChatMessage>`
+  history, `streaming_buf`, `scroll_offset`, `word_wrap`, `wrap_input`, `titled_separator`
+- [x] `panel_focused: bool` in `App` — independent focus for terminal and panel
+- [x] Right-side layout split — `default_grid_size()` and `viewport_rect()` subtract
+  `panel_cols * cell_w` when panel is open; `resize_terminals_for_panel()` on toggle
+- [x] `push_shaped_row` helper + `build_chat_panel_instances` — panel rendered at
+  `col_offset = term_cols`, same `CellVertex` pipeline, zero shader changes
+- [x] Header: `"⚡ Petrubot"` — dims when terminal has focus, bright when panel focused
+- [x] History area: scrollable `Vec<ChatMessage>`, word-wrapped, User/AI color-coded
+- [x] Streaming in-progress tokens shown in history area in amber
+- [x] Input area: 2 rows, character-based wrap (`wrap_input`), cursor `▋` at end
+- [x] Hints row: context-sensitive keybind hints
+
+### Keybinds (current)
+- [x] `Ctrl+C` — open panel (panel closed) / close panel (panel focused) /
+  SIGINT to PTY (panel open, terminal focused — no conflict)
+- [x] `Ctrl+V` — switch focus terminal ↔ panel (when panel open); falls through to PTY otherwise
+- [x] `Esc` — dismiss error state in panel
+- [x] `Enter` in panel — submit query (input non-empty) / run last AI command (input empty)
+- [x] Mouse wheel over panel — scrolls chat history; over terminal — scrolls scrollback
+
+### Bug fixes (this session)
+- [x] TD-019: Space key in panel input — explicit `NamedKey::Space` match
+- [x] TD-020: Render rewritten from scratch — panel at right of terminal, not overlay
+- [x] TD-021: `WindowEvent::DroppedFile` — panel focused → append path to input;
+  terminal focused → write path bytes to PTY
+
+### Remaining Phase 2
+- [ ] Shell integration (`shell-integration.zsh`) — CWD, exit codes, command boundaries
+- [ ] Ctrl+Shift+E / Ctrl+Shift+F (explain last output / fix last error)
 - [ ] Ollama + LMStudio providers
+- [ ] TD-022: Agent mode (chat with CWD/file context) — P3, needs design doc first
+- [ ] TD-023: Leader key for panel actions — P3, replaces Ctrl+C/V with prefix system
 
-## Phase 2 Kickoff: AI Layer
+## Key Technical Decisions (stable)
 
-### Implementation Order
-1. **`LlmProvider` trait** — `complete()` + `stream()` async (tokio + reqwest)
-2. **Providers** — OpenRouter, Ollama, LMStudio (all OpenAI-compat)
-3. **`llm.lua` config** — `provider`, `model`, `api_key`, `base_url`, `features`, `enabled`
-4. **Shell integration** (`shell-integration.zsh`) — CWD, exit codes, command boundaries
-5. **Inline AI block UI** — overlay `⚡ AI >`, streaming token-by-token render
-6. **Toggle** — `Ctrl+Space` keybind + palette "Enable/Disable AI Features"
-7. **Feature 1: NL → Shell Command** — natural language → command + `[⏎ Run]` `[Edit]` `[Explain]`
-8. **Feature 2: Explain Last Output** — `Ctrl+Shift+E`
-9. **Feature 3: Fix Last Error** — exit-code indicator + `Ctrl+Shift+F`
-10. **Feature 4: Context-Aware Chat** — multi-turn, CWD + shell history context, per-pane
-
-### Key Technical Constraints
-- LLM requests: async tokio tasks, never block main thread
-- Streaming: reqwest SSE → channel → render loop inserts tokens into AI block
-- `config.llm.enabled = false` must disable all AI features cleanly
-- Shell integration hooks into PTY via OSC sequences or sidecar file
-
-## Key Technical Decisions (stable, Phase 1)
+### Phase 1
 - Surface: non-sRGB `Bgra8Unorm` on Metal
 - Atlas: `Rgba8Unorm`, mask as `[a,a,a,255]`, shader samples `.r`
 - Scale: `window.scale_factor()` = 2.0 on M4 Max; 15pt → 30pt → 18×36px cell
@@ -77,3 +84,11 @@ Bundle: dist/PetruTerm.app, 18 MB, ad-hoc signed, icon embedded.
 - Custom title bar: `HasWindowHandle → ns_view → [view window]` + FullSizeContentView
 - Working dir: `dirs::home_dir()` → PtyOptions
 - Ligature rendering: bearing_x passed raw (no X clamp); Y clamped to cell_height only
+
+### Phase 2
+- Chat panel width: `PANEL_COLS = 55` terminal cell columns (configurable via `ChatPanel.width_cols`)
+- Panel rendering: `col_offset = term_cols` — panel cells placed in grid column space beyond
+  the terminal; same shader, same `CellVertex` pipeline, no scissor rects needed
+- Multi-turn context: full `Vec<ChatMessage>` history sent to LLM on every submit
+- Async streaming: tokio task → crossbeam channel → `poll_ai_events()` in `about_to_wait`
+- Focus model: `panel_focused: bool` on `App`; Ctrl+C/V cycle focus without closing panel

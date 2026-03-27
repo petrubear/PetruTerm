@@ -8,7 +8,7 @@ function module.apply_to_config(config)
     enabled  = false,    -- Set to true to enable AI features
 
     provider = "openrouter",                          -- "openrouter" | "ollama" | "lmstudio"
-    model    = "anthropic/claude-sonnet-4-6",
+    model    = "meta-llama/llama-3.1-8b-instruct:free",  -- Free model for testing
     api_key  = os.getenv("OPENROUTER_API_KEY"),       -- Or paste key directly (not recommended)
     base_url = nil,                                   -- nil = use provider default
 
