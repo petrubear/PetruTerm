@@ -1,10 +1,12 @@
 # Session State
 
-**Last Updated:** 2026-03-24
-**Session Focus:** Phase 1 — scroll + padding bug fixes
+**Last Updated:** 2026-03-27
+**Session Focus:** Phase 1 — ligature fix + full smoke test pass
 
 ## Session Summary
-Scroll and padding bugs found and fixed. All Phase 1 runtime items now verified.
+All Phase 1 acceptance criteria now verified. Ligature rendering fixed (negative
+bearing_x was being clamped to 0). nvim, tmux, Ctrl keys all verified earlier
+this session. Phase 1 MVP is complete.
 Build: 0 errors. Runtime verified on M4 Max.
 
 ## Commits This Arc (chronological)
@@ -32,10 +34,9 @@ Build: 0 errors. Runtime verified on M4 Max.
 - [ ] None — clean handoff
 
 ## Next Session Priorities (in order)
-1. Verify Ctrl key works (Ctrl+U, Ctrl+A, Ctrl+C in shell; Ctrl+B prefix in tmux)
-2. `nvim` smoke test — colors (reverse-video now fixed), cursor, input, scroll
-3. `tmux` smoke test — catppuccin separators (INVERSE fixed), split, scroll
-4. Ligatures verify — `->` `=>` `!=` `>=` `|>` in nvim
+1. **Phase 1 complete** — begin Phase 2 (AI Layer) planning
+2. TD-018: catppuccin-tmux separators blend check (P2, cosmetic)
+3. TD-005: PTY thread shutdown (P2)
 
 ## Key Technical Decisions (stable)
 - Surface: non-sRGB `Bgra8Unorm` on Metal — hex colors stored as sRGB, no double-gamma

@@ -52,9 +52,9 @@
 | ~~100k scrollback~~ | TD-004 | RESOLVED — scrollback rendering fixed; 110k lines confirmed visible |
 | ~~Top padding~~ | — | RESOLVED — `padding.top=60` clears traffic lights |
 | ~~Trackpad/mouse scroll~~ | — | RESOLVED — display_offset rendering fix + logical px divisor |
-| Font ligatures | — | `->` `=>` `!=` `>=` `\|>` — not confirmed |
-| `nvim` smoke test | — | colors, cursor, input, scroll |
-| `tmux` smoke test | — | attach, split, scroll |
+| ~~Font ligatures~~ | — | RESOLVED — negative bearing_x fix (commit 7bee09b) |
+| ~~`nvim` smoke test~~ | — | RESOLVED — colors, cursor, input, scroll verified |
+| ~~`tmux` smoke test~~ | — | RESOLVED — attach, split, scroll, Ctrl+B verified |
 
 ### Out of Scope (Phase 2+)
 - `src/llm/` — Phase 2
@@ -86,9 +86,9 @@
 - [x] Trackpad/mouse scroll works
 - [x] Top padding clears traffic lights (60px physical)
 - [x] 100k scrollback — 110k lines confirmed scrollable
-- [ ] Font ligatures verified
-- [ ] `nvim` renders correctly
-- [ ] `tmux` works
+- [x] Font ligatures verified — `->` `=>` `==` `===` `!=` confirmed
+- [x] `nvim` renders correctly
+- [x] `tmux` works
 
 ## Technical Reference
 - Shell exit: `Event::ChildExit(i32)` — alacritty_terminal 0.25.1
