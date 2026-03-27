@@ -158,6 +158,19 @@ impl ChatPanel {
 // ── Text utilities ────────────────────────────────────────────────────────────
 
 /// Word-wrap `text` to at most `width` characters per line.
+/// Wrap an input string by characters (not words) into lines of `width` chars.
+/// Used for the input field so the user can always see what they're typing.
+pub fn wrap_input(text: &str, width: usize) -> Vec<String> {
+    if width == 0 {
+        return vec![text.to_string()];
+    }
+    let chars: Vec<char> = text.chars().collect();
+    if chars.is_empty() {
+        return vec![String::new()];
+    }
+    chars.chunks(width).map(|c| c.iter().collect()).collect()
+}
+
 pub fn word_wrap(text: &str, width: usize) -> Vec<String> {
     if width == 0 {
         return vec![text.to_string()];

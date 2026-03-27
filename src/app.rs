@@ -50,6 +50,7 @@ pub struct App {
 
     // AI layer
     chat_panel: ChatPanel,
+    panel_focused: bool,
     llm_provider: Option<Arc<dyn crate::llm::LlmProvider>>,
     tokio_rt: tokio::runtime::Runtime,
     ai_tx: crossbeam_channel::Sender<AiEvent>,
@@ -116,6 +117,7 @@ impl App {
             next_terminal_id: 0,
             palette: CommandPalette::new(),
             chat_panel: ChatPanel::new(),
+            panel_focused: false,
             llm_provider,
             tokio_rt,
             ai_tx,
@@ -289,6 +291,7 @@ impl App {
                 terminal.write_input(&data);
             }
             self.chat_panel.close();
+            self.panel_focused = false;
             self.resize_terminals_for_panel();
         }
     }
@@ -357,11 +360,15 @@ impl App {
             Action::ToggleAiMode | Action::EnableAiFeatures => {
                 if !self.chat_panel.is_visible() {
                     self.chat_panel.open();
+                    self.panel_focused = true;
                     self.resize_terminals_for_panel();
+                } else {
+                    self.panel_focused = true;
                 }
             }
             Action::DisableAiFeatures => {
                 self.chat_panel.close();
+                self.panel_focused = false;
                 self.resize_terminals_for_panel();
             }
             // TODO Phase 2 steps 8-9
@@ -477,27 +484,33 @@ impl App {
             }
         }
 
-        // Ctrl+Space — toggle chat panel
+        // Ctrl+Space — open panel / toggle focus between terminal and panel.
+        // - Panel closed            → open panel, give focus to panel.
+        // - Panel open, panel focus → move focus to terminal (panel stays open).
+        // - Panel open, term focus  → move focus back to panel.
+        // Esc (below) is the only way to close the panel entirely.
         if ctrl {
             if let Key::Named(NamedKey::Space) = &event.logical_key {
-                if self.chat_panel.is_visible() {
-                    self.chat_panel.close();
-                } else {
+                if !self.chat_panel.is_visible() {
                     self.chat_panel.open();
+                    self.panel_focused = true;
+                    self.resize_terminals_for_panel();
+                } else {
+                    self.panel_focused = !self.panel_focused;
                 }
-                self.resize_terminals_for_panel();
                 return;
             }
         }
 
-        // Chat panel active — route input to it (Cmd shortcuts still pass through).
-        if self.chat_panel.is_visible() && !cmd {
+        // Chat panel focused — route input to it (Cmd shortcuts still pass through).
+        if self.chat_panel.is_visible() && self.panel_focused && !cmd {
             match &event.logical_key {
                 Key::Named(NamedKey::Escape) => {
                     if matches!(self.chat_panel.state, PanelState::Error(_)) {
                         self.chat_panel.dismiss_error();
                     } else if !self.chat_panel.is_streaming() {
                         self.chat_panel.close();
+                        self.panel_focused = false;
                         self.resize_terminals_for_panel();
                     }
                 }
@@ -957,6 +970,7 @@ impl ApplicationHandler<()> for App {
                     if panel_visible {
                         let panel_instances = build_chat_panel_instances(
                             &self.chat_panel,
+                            self.panel_focused,
                             shaper,
                             renderer,
                             &scaled_font,
@@ -1216,40 +1230,54 @@ fn push_shaped_row(
 ///
 /// The panel occupies columns `[term_cols .. term_cols + panel.width_cols]`
 /// using the same `CellVertex` pipeline as the terminal — no shader changes.
-/// The terminal must have already been resized to `term_cols` columns so its
-/// cells don't overlap with the panel area.
+/// The terminal must have already been resized to `term_cols` columns.
+///
+/// Layout (bottom-up):
+/// - Row N-1 : hints
+/// - Row N-2 : input line 2 (continuation / blank)
+/// - Row N-3 : input line 1 (" > …")
+/// - Row N-4 : separator
+/// - Rows 1..N-5 : scrollable message history
+/// - Row 0  : header
 fn build_chat_panel_instances(
     panel: &ChatPanel,
+    panel_focused: bool,
     shaper: &mut TextShaper,
     renderer: &mut GpuRenderer,
     font: &crate::config::schema::FontConfig,
     term_cols: usize,
     screen_rows: usize,
 ) -> Vec<CellVertex> {
-    use crate::llm::chat_panel::{PanelState, titled_separator, word_wrap};
+    use crate::llm::chat_panel::{PanelState, titled_separator, word_wrap, wrap_input};
     use crate::llm::ChatRole;
 
     let panel_cols = panel.width_cols as usize;
-    if panel_cols == 0 || screen_rows < 4 { return vec![]; }
+    // Need at least: header + separator + 2 input rows + hints = 5
+    if panel_cols == 0 || screen_rows < 5 { return vec![]; }
 
-    const PANEL_BG:  [f32; 4] = [0.10, 0.09, 0.16, 1.0];
-    const SEP_FG:    [f32; 4] = [0.35, 0.30, 0.52, 1.0];
-    const HEADER_FG: [f32; 4] = [0.75, 0.65, 1.00, 1.0];
-    const USER_FG:   [f32; 4] = [0.75, 0.90, 1.00, 1.0];
-    const ASST_FG:   [f32; 4] = [0.55, 1.00, 0.53, 1.0];
-    const STREAM_FG: [f32; 4] = [0.95, 0.88, 0.45, 1.0];
-    const INPUT_FG:  [f32; 4] = [1.00, 1.00, 1.00, 1.0];
-    const HINT_FG:   [f32; 4] = [0.42, 0.40, 0.52, 1.0];
-    const ERR_FG:    [f32; 4] = [1.00, 0.55, 0.45, 1.0];
+    const PANEL_BG:       [f32; 4] = [0.10, 0.09, 0.16, 1.0];
+    const SEP_FG:         [f32; 4] = [0.35, 0.30, 0.52, 1.0];
+    const HEADER_FOCUS:   [f32; 4] = [0.75, 0.65, 1.00, 1.0];
+    const HEADER_UNFOCUS: [f32; 4] = [0.42, 0.38, 0.58, 1.0]; // dim when terminal has focus
+    const USER_FG:        [f32; 4] = [0.75, 0.90, 1.00, 1.0];
+    const ASST_FG:        [f32; 4] = [0.55, 1.00, 0.53, 1.0];
+    const STREAM_FG:      [f32; 4] = [0.95, 0.88, 0.45, 1.0];
+    const INPUT_FG:       [f32; 4] = [1.00, 1.00, 1.00, 1.0];
+    const INPUT_DIM:      [f32; 4] = [0.55, 0.52, 0.65, 1.0]; // dim when not focused
+    const HINT_FG:        [f32; 4] = [0.42, 0.40, 0.52, 1.0];
+    const ERR_FG:         [f32; 4] = [1.00, 0.55, 0.45, 1.0];
 
-    // Fixed rows: header (0), sep-before-input (screen_rows-3),
-    // input (screen_rows-2), hints (screen_rows-1).
+    // Fixed row indices (2 input rows)
+    let hints_row  = screen_rows - 1;
+    let input_row2 = screen_rows - 2;
+    let input_row1 = screen_rows - 3;
+    let sep_row    = screen_rows - 4;
     let history_start = 1_usize;
-    let history_end   = screen_rows.saturating_sub(3);
+    let history_end   = sep_row;
     let history_rows  = history_end.saturating_sub(history_start);
 
     // ── Build rendered history lines ─────────────────────────────────────────
-    let inner_w = panel_cols.saturating_sub(6); // leave room for "You: " prefix
+    let inner_w = panel_cols.saturating_sub(6);
     let mut all_lines: Vec<(String, [f32; 4])> = Vec::new();
 
     for msg in &panel.messages {
@@ -1263,10 +1291,9 @@ fn build_chat_panel_instances(
             let p = if i == 0 { prefix } else { cont };
             all_lines.push((format!("{p}{line}"), fg));
         }
-        all_lines.push((String::new(), HINT_FG)); // blank line between messages
+        all_lines.push((String::new(), HINT_FG));
     }
 
-    // In-flight streaming response
     if matches!(panel.state, PanelState::Streaming) {
         if panel.streaming_buf.is_empty() {
             all_lines.push(("  AI  …".to_string(), STREAM_FG));
@@ -1281,7 +1308,6 @@ fn build_chat_panel_instances(
         all_lines.push(("  AI  waiting…".to_string(), STREAM_FG));
     }
 
-    // Determine which slice of history lines to show (scroll_offset=0 → bottom)
     let total = all_lines.len();
     let visible_start = if total > history_rows {
         (total - history_rows).saturating_sub(panel.scroll_offset)
@@ -1289,16 +1315,55 @@ fn build_chat_panel_instances(
         0
     };
 
+    // ── Build wrapped input lines ────────────────────────────────────────────
+    // Input area is 2 rows. We wrap by characters and show the last 2 lines,
+    // appending the cursor block to the very last character.
+    let input_prefix = " > ";
+    let prefix_len = input_prefix.chars().count();
+    let input_inner_w = panel_cols.saturating_sub(prefix_len);
+
+    let (input_line1, input_line2, input_fg) = match &panel.state {
+        PanelState::Error(e) => {
+            let msg: String = e.chars().take(panel_cols.saturating_sub(4)).collect();
+            (format!(" ! {msg}"), String::new(), ERR_FG)
+        }
+        _ => {
+            let fg = if panel_focused { INPUT_FG } else { INPUT_DIM };
+            let raw = if panel_focused && panel.is_idle() {
+                format!("{}▋", panel.input)
+            } else {
+                panel.input.clone()
+            };
+            let lines = wrap_input(&raw, input_inner_w);
+            let total_lines = lines.len();
+            // Always show 2 rows; take the last 2 wrapped lines
+            let l1 = if total_lines >= 2 {
+                format!("{}{}", if total_lines == 2 { input_prefix } else { "   " },
+                        lines[total_lines - 2])
+            } else {
+                // Only 1 line — show on row1 with prefix
+                lines.first().map(|l| format!("{input_prefix}{l}")).unwrap_or_default()
+            };
+            let l2 = if total_lines >= 2 {
+                format!("   {}", lines[total_lines - 1])
+            } else {
+                String::new()
+            };
+            (l1, l2, fg)
+        }
+    };
+
     // ── Assemble rows ────────────────────────────────────────────────────────
     let mut instances = Vec::new();
-    let co = term_cols; // column offset shorthand
+    let co = term_cols;
+    let header_fg = if panel_focused { HEADER_FOCUS } else { HEADER_UNFOCUS };
 
     let mut push = |text: &str, fg, row, instances: &mut Vec<CellVertex>| {
         push_shaped_row(text, fg, PANEL_BG, row, co, panel_cols, shaper, renderer, font, instances);
     };
 
-    // Row 0: header
-    push(&titled_separator("⚡ AI Chat", panel_cols), HEADER_FG, 0, &mut instances);
+    // Row 0: header (bright when focused, dim when terminal has focus)
+    push(&titled_separator("⚡ AI Chat", panel_cols), header_fg, 0, &mut instances);
 
     // History rows
     for i in 0..history_rows {
@@ -1310,32 +1375,29 @@ fn build_chat_panel_instances(
         push(text, fg, row, &mut instances);
     }
 
-    // Separator before input
-    push(&"─".repeat(panel_cols), SEP_FG, history_end, &mut instances);
+    // Separator
+    push(&"─".repeat(panel_cols), SEP_FG, sep_row, &mut instances);
 
-    // Input row
-    let (input_text, input_fg) = match &panel.state {
-        PanelState::Error(e) => {
-            let msg: String = e.chars().take(panel_cols.saturating_sub(4)).collect();
-            (format!(" ! {msg}"), ERR_FG)
+    // Input rows (wrapped, 2 lines)
+    push(&input_line1, input_fg, input_row1, &mut instances);
+    push(&input_line2, input_fg, input_row2, &mut instances);
+
+    // Hints
+    let hints = if !panel_focused {
+        " [Ctrl+Space] focus chat"
+    } else {
+        match &panel.state {
+            PanelState::Idle if panel.input.trim().is_empty()
+                && panel.messages.iter().any(|m| matches!(m.role, ChatRole::Assistant))
+                => " [Enter] run last  [Esc] close",
+            PanelState::Idle      => " [Enter] send  [Esc] close",
+            PanelState::Streaming |
+            PanelState::Loading   => " [Esc] close",
+            PanelState::Error(_)  => " [Esc] dismiss",
+            PanelState::Hidden    => "",
         }
-        PanelState::Idle => (format!(" > {}▋", panel.input), INPUT_FG),
-        _ => (format!(" > {}", panel.input), INPUT_FG),
     };
-    push(&input_text, input_fg, screen_rows - 2, &mut instances);
-
-    // Hints row
-    let hints = match &panel.state {
-        PanelState::Idle if panel.input.trim().is_empty()
-            && panel.messages.iter().any(|m| matches!(m.role, ChatRole::Assistant))
-            => " [Enter] run last  [Esc] close",
-        PanelState::Idle      => " [Enter] send  [Esc] close",
-        PanelState::Streaming |
-        PanelState::Loading   => " [Esc] close",
-        PanelState::Error(_)  => " [Esc] dismiss",
-        PanelState::Hidden    => "",
-    };
-    push(hints, HINT_FG, screen_rows - 1, &mut instances);
+    push(hints, HINT_FG, hints_row, &mut instances);
 
     instances
 }
