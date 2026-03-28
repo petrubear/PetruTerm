@@ -19,8 +19,7 @@ pub fn load_config(path: &Path) -> Result<Config> {
         .eval()
         .map_err(|e| anyhow::anyhow!("Lua eval error in {}: {e}", path.display()))?;
 
-    table_to_config(config_table)
-        .map_err(|e| anyhow::anyhow!("Config parse error: {e}"))
+    table_to_config(config_table).map_err(|e| anyhow::anyhow!("Config parse error: {e}"))
 }
 
 /// Evaluate a Lua config from embedded source (used for defaults).
@@ -34,8 +33,7 @@ pub fn load_config_str(src: &str, name: &str) -> Result<Config> {
         .eval()
         .map_err(|e| anyhow::anyhow!("Lua eval error in {name}: {e}"))?;
 
-    table_to_config(config_table)
-        .map_err(|e| anyhow::anyhow!("Config parse error in {name}: {e}"))
+    table_to_config(config_table).map_err(|e| anyhow::anyhow!("Config parse error in {name}: {e}"))
 }
 
 /// Inject the `petruterm` global table into the Lua VM.
@@ -49,10 +47,17 @@ fn inject_petruterm_global(lua: &Lua) -> LuaResult<()> {
     // petruterm.action — table of action name strings
     let action = lua.create_table()?;
     for name in &[
-        "CommandPalette", "ToggleAiMode", "ExplainOutput", "FixLastError",
-        "SplitHorizontal", "SplitVertical",
-        "ActivatePane", "ClosePane",
-        "NewTab", "CloseTab", "ToggleFullscreen",
+        "CommandPalette",
+        "ToggleAiMode",
+        "ExplainOutput",
+        "FixLastError",
+        "SplitHorizontal",
+        "SplitVertical",
+        "ActivatePane",
+        "ClosePane",
+        "NewTab",
+        "CloseTab",
+        "ToggleFullscreen",
     ] {
         action.set(*name, *name)?;
     }
@@ -97,12 +102,19 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
         if let Ok(size) = font.get::<f32>("size") {
             config.font.size = size;
         }
+        if let Ok(lh) = font.get::<f32>("line_height") {
+            config.font.line_height = lh;
+        }
     } else if let Ok(family) = table.get::<String>("font") {
         config.font.family = family;
     }
 
     if let Ok(size) = table.get::<f32>("font_size") {
         config.font.size = size;
+    }
+
+    if let Ok(lh) = table.get::<f32>("font_line_height") {
+        config.font.line_height = lh;
     }
 
     if let Ok(features) = table.get::<LuaTable>("font_features") {
@@ -134,26 +146,56 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
     }
 
     if let Ok(win) = table.get::<LuaTable>("window") {
-        if let Ok(b) = win.get::<bool>("borderless")     { config.window.borderless = b; }
-        if let Ok(m) = win.get::<bool>("start_maximized"){ config.window.start_maximized = m; }
-        if let Ok(o) = win.get::<f32>("opacity")         { config.window.opacity = o; }
-        if let Ok(w) = win.get::<u32>("initial_width")   { config.window.initial_width = Some(w); }
-        if let Ok(h) = win.get::<u32>("initial_height")  { config.window.initial_height = Some(h); }
+        if let Ok(b) = win.get::<bool>("borderless") {
+            config.window.borderless = b;
+        }
+        if let Ok(m) = win.get::<bool>("start_maximized") {
+            config.window.start_maximized = m;
+        }
+        if let Ok(o) = win.get::<f32>("opacity") {
+            config.window.opacity = o;
+        }
+        if let Ok(w) = win.get::<u32>("initial_width") {
+            config.window.initial_width = Some(w);
+        }
+        if let Ok(h) = win.get::<u32>("initial_height") {
+            config.window.initial_height = Some(h);
+        }
         if let Ok(pad) = win.get::<LuaTable>("padding") {
-            if let Ok(l) = pad.get::<u32>("left")   { config.window.padding.left   = l; }
-            if let Ok(r) = pad.get::<u32>("right")  { config.window.padding.right  = r; }
-            if let Ok(t) = pad.get::<u32>("top")    { config.window.padding.top    = t; }
-            if let Ok(b) = pad.get::<u32>("bottom") { config.window.padding.bottom = b; }
+            if let Ok(l) = pad.get::<u32>("left") {
+                config.window.padding.left = l;
+            }
+            if let Ok(r) = pad.get::<u32>("right") {
+                config.window.padding.right = r;
+            }
+            if let Ok(t) = pad.get::<u32>("top") {
+                config.window.padding.top = t;
+            }
+            if let Ok(b) = pad.get::<u32>("bottom") {
+                config.window.padding.bottom = b;
+            }
         }
     }
 
     if let Ok(llm_table) = table.get::<LuaTable>("llm") {
-        if let Ok(e) = llm_table.get::<bool>("enabled")      { config.llm.enabled = e; }
-        if let Ok(p) = llm_table.get::<String>("provider")   { config.llm.provider = p; }
-        if let Ok(m) = llm_table.get::<String>("model")      { config.llm.model = m; }
-        if let Ok(k) = llm_table.get::<String>("api_key")    { config.llm.api_key = Some(k); }
-        if let Ok(u) = llm_table.get::<String>("base_url")   { config.llm.base_url = Some(u); }
-        if let Ok(c) = llm_table.get::<u32>("context_lines") { config.llm.context_lines = c; }
+        if let Ok(e) = llm_table.get::<bool>("enabled") {
+            config.llm.enabled = e;
+        }
+        if let Ok(p) = llm_table.get::<String>("provider") {
+            config.llm.provider = p;
+        }
+        if let Ok(m) = llm_table.get::<String>("model") {
+            config.llm.model = m;
+        }
+        if let Ok(k) = llm_table.get::<String>("api_key") {
+            config.llm.api_key = Some(k);
+        }
+        if let Ok(u) = llm_table.get::<String>("base_url") {
+            config.llm.base_url = Some(u);
+        }
+        if let Ok(c) = llm_table.get::<u32>("context_lines") {
+            config.llm.context_lines = c;
+        }
     }
 
     Ok(config)

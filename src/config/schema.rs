@@ -38,6 +38,8 @@ pub struct FontConfig {
     pub family: String,
     /// Font size in points.
     pub size: f32,
+    /// Line height multiplier (1.0 = no extra leading, 1.2 = 20% extra).
+    pub line_height: f32,
     /// HarfBuzz OpenType feature tags, e.g. ["calt=1", "liga=1", "dlig=1"].
     pub features: Vec<String>,
     /// Fallback font families tried in order when a glyph is not found.
@@ -47,9 +49,9 @@ pub struct FontConfig {
 impl Default for FontConfig {
     fn default() -> Self {
         Self {
-            // Monolisa is paid; JetBrains Mono is the CI/default fallback.
             family: "JetBrainsMono Nerd Font Mono".into(),
             size: 15.0,
+            line_height: 1.2,
             features: vec!["calt=1".into(), "liga=1".into(), "dlig=1".into()],
             fallbacks: vec!["Noto Color Emoji".into()],
         }
@@ -75,7 +77,12 @@ impl Default for WindowConfig {
             initial_height: None,
             start_maximized: true,
             title_bar_style: TitleBarStyle::Custom,
-            padding: Padding { left: 20, right: 20, top: 30, bottom: 10 },
+            padding: Padding {
+                left: 20,
+                right: 20,
+                top: 30,
+                bottom: 10,
+            },
             opacity: 1.0,
         }
     }
@@ -124,20 +131,32 @@ impl ColorScheme {
             [r, g, b, 1.0]
         }
         Self {
-            foreground:    hex("#f8f8f2"),
-            background:    hex("#22212c"),
-            cursor_bg:     hex("#9580ff"),
-            cursor_fg:     hex("#f8f8f2"),
+            foreground: hex("#f8f8f2"),
+            background: hex("#22212c"),
+            cursor_bg: hex("#9580ff"),
+            cursor_fg: hex("#f8f8f2"),
             cursor_border: hex("#9580ff"),
-            selection_bg:  hex("#454158"),
-            selection_fg:  hex("#c6c6c2"),
+            selection_bg: hex("#454158"),
+            selection_fg: hex("#c6c6c2"),
             ansi: [
-                hex("#22212c"), hex("#ff9580"), hex("#8aff80"), hex("#ffff80"),
-                hex("#9580ff"), hex("#ff80bf"), hex("#80ffea"), hex("#f8f8f2"),
+                hex("#22212c"),
+                hex("#ff9580"),
+                hex("#8aff80"),
+                hex("#ffff80"),
+                hex("#9580ff"),
+                hex("#ff80bf"),
+                hex("#80ffea"),
+                hex("#f8f8f2"),
             ],
             brights: [
-                hex("#504c67"), hex("#ffaa99"), hex("#a2ff99"), hex("#ffff99"),
-                hex("#aa99ff"), hex("#ff99cc"), hex("#99ffee"), hex("#ffffff"),
+                hex("#504c67"),
+                hex("#ffaa99"),
+                hex("#a2ff99"),
+                hex("#ffff99"),
+                hex("#aa99ff"),
+                hex("#ff99cc"),
+                hex("#99ffee"),
+                hex("#ffffff"),
             ],
         }
     }
@@ -145,15 +164,20 @@ impl ColorScheme {
     /// Returns the background as a wgpu-compatible Color (linear sRGB).
     pub fn background_wgpu(&self) -> wgpu::Color {
         let [r, g, b, a] = self.background;
-        wgpu::Color { r: r as f64, g: g as f64, b: b as f64, a: a as f64 }
+        wgpu::Color {
+            r: r as f64,
+            g: g as f64,
+            b: b as f64,
+            a: a as f64,
+        }
     }
 
     /// Map a terminal color index (0-15) to RGBA.
     pub fn index_color(&self, idx: u8) -> [f32; 4] {
         match idx {
-            0..=7  => self.ansi[idx as usize],
+            0..=7 => self.ansi[idx as usize],
             8..=15 => self.brights[(idx - 8) as usize],
-            _      => self.foreground,
+            _ => self.foreground,
         }
     }
 }

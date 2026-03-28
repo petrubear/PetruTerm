@@ -1,6 +1,6 @@
 use cosmic_text::{
-    Attrs, AttrsList, Buffer, BufferLine, CacheKey, CacheKeyFlags, Family, FontSystem,
-    LayoutGlyph, Metrics, Shaping, SwashCache,
+    Attrs, AttrsList, Buffer, BufferLine, CacheKey, CacheKeyFlags, Family, FontSystem, LayoutGlyph,
+    Metrics, Shaping, SwashCache,
 };
 
 use crate::config::schema::FontConfig;
@@ -45,7 +45,7 @@ pub struct TextShaper {
 
 impl TextShaper {
     pub fn new(font_system: FontSystem, font_config: &FontConfig) -> Self {
-        let line_height = font_config.size * 1.2;
+        let line_height = font_config.size * font_config.line_height;
         let metrics = Metrics::new(font_config.size, line_height);
 
         let mut shaper = Self {
@@ -88,8 +88,10 @@ impl TextShaper {
 
         log::info!(
             "Cell size: {:.1}x{:.1}px (font: '{}' {}pt)",
-            self.cell_width, self.cell_height,
-            font_config.family, font_config.size
+            self.cell_width,
+            self.cell_height,
+            font_config.family,
+            font_config.size
         );
     }
 
@@ -130,10 +132,10 @@ impl TextShaper {
                 // cosmic-text may report the position at the last char of the cluster.
                 let tlen = text.len();
                 let start = glyph.start.min(tlen);
-                let end   = glyph.end.min(tlen);
-                let col   = text[..start].chars().count();
+                let end = glyph.end.min(tlen);
+                let col = text[..start].chars().count();
                 // span = number of terminal columns the cluster occupies (>=1).
-                let span  = text[start..end].chars().count().max(1);
+                let span = text[start..end].chars().count().max(1);
 
                 let (fg, bg) = colors
                     .get(col)
@@ -155,7 +157,11 @@ impl TextShaper {
             }
         }
 
-        ShapedRun { glyphs, ascent, line_height }
+        ShapedRun {
+            glyphs,
+            ascent,
+            line_height,
+        }
     }
 
     /// Rasterize a glyph via swash and upload it to the GPU atlas.
@@ -170,7 +176,9 @@ impl TextShaper {
             return Some(entry);
         }
 
-        let image = self.swash_cache.get_image_uncached(&mut self.font_system, cache_key)?;
+        let image = self
+            .swash_cache
+            .get_image_uncached(&mut self.font_system, cache_key)?;
 
         let width = image.placement.width;
         let height = image.placement.height;

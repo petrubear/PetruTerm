@@ -100,9 +100,13 @@ Phase 2 complete. No new code this close-out session — only debt registry upda
   Note: bg-aware blend was started and reverted (commit `2d2b7da`) due to premul conflict;
   re-evaluate once premul pipeline is stable.
 
+### Post-Phase-2 Quality Fixes (2026-03-27)
+- [x] TD-025: Line spacing — `font.line_height: f32` (default 1.2) added to `FontConfig`;
+  `TextShaper::new` uses `size * line_height` for `Metrics`; `cell_height` propagates to PTY.
+  Configurable from Lua: `font = { line_height = 1.4 }`.
+
 ### Next Session Start
-- Pick up TD-025 (line spacing) — quickest visible quality win, low risk.
-- Optionally tackle TD-026 (antialiasing) — research WezTerm sources first.
+- Tackle TD-026 (antialiasing) — research WezTerm sources first.
 
 ## Key Technical Decisions (stable)
 

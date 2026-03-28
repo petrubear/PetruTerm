@@ -36,9 +36,7 @@ All acceptance criteria verified on M4 Max.
 ## Next Session Scope — Rendering Quality
 
 ### Priority Order
-1. **TD-025** — Line spacing (`font.line_height` multiplier)
-   - Files: `src/font/shaper.rs`, `src/config/schema.rs`, `src/renderer/gpu.rs`
-   - Research: WezTerm `wezterm-font` `line_height` option and alacritty `offset.y`
+1. ~~**TD-025** — Line spacing~~ **DONE** — `font.line_height: f32` (default 1.2), propagated via Metrics → cell_height → PTY.
 2. **TD-026** — Antialiasing quality
    - Files: `src/renderer/atlas.rs`, `src/renderer/pipeline.rs`, `src/font/shaper.rs`
    - Research: WezTerm `wezterm-font/src/rasterizer/` LCD pipeline; swash subpixel support

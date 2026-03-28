@@ -152,16 +152,13 @@ to fix the fringing — overflowing transparent pixels cause no visible artifact
 - **Reference:** WezTerm `wezterm-font/src/rasterizer/freetype.rs` (LCD filter flags) and `wezterm-render/src/glyphcache.rs` (atlas format + shader).
 - **Priority:** P3 — text is readable; this is a polish/fidelity improvement for Phase 2.
 
-### TD-025: Vertical spacing between terminal lines too tight
-- **File:** `src/font/shaper.rs`, `src/renderer/gpu.rs` (`build_instances`)
-- **Issue:** Characters render visually cramped — lines sit too close together. The cell height is derived purely from font metrics (`ascent + descent` from swash), with no configurable line spacing / line gap.
-- **Investigation:** Compare WezTerm's line-height implementation (see `wezterm-font/src/shaper/` and `wezterm-render/src/lib.rs`) to understand how they expose a `line_height` multiplier and add the extra pixels to `cell_height` before passing it to the grid. Verify whether cosmic-text exposes `line_gap` from the font's `OS/2` table and whether it is already being applied.
-- **Fix options:**
-  1. Add `font.line_height: f32 = 1.2` to `FontConfig` in `config/schema.rs`; multiply `cell_height` by this factor in `TextShaper`; propagate to PTY and renderer.
-  2. Read `line_gap` from the font via swash `Metrics` and add it to `cell_height` unconditionally.
-  3. Expose a raw `extra_leading: u32` (pixels) in config for pixel-precise control.
-- **Reference:** WezTerm sources — `wezterm-font` crate `line_height` option; cross-check with how alacritty exposes `offset.y` in its font config.
-- **Priority:** P3 — cosmetic but noticeably affects readability at small font sizes.
+### ~~TD-025: Vertical spacing between terminal lines too tight~~ — RESOLVED
+<!--
+Fix: `font.line_height: f32` added to `FontConfig` (default 1.2); `TextShaper::new` passes
+`font_config.size * font_config.line_height` as line_height to `cosmic_text::Metrics`.
+`measure_cell` reads `run.line_height` which reflects the multiplier → `cell_height` propagates
+to PTY resize via `cell_dims()`. Configurable from Lua: `font.line_height = 1.4`.
+-->
 
 ### TD-008: Dead code / unused import warnings
 - **Files:** `src/font/`, `src/renderer/`, `src/term/`, `src/ui/`
@@ -179,6 +176,7 @@ to fix the fringing — overflowing transparent pixels cause no visible artifact
 
 | ID | Title | Resolved | Resolution |
 |----|-------|----------|------------|
+| TD-025 | Vertical spacing too tight | 2026-03-27 | `font.line_height: f32` (default 1.2) in FontConfig; Metrics line_height = size * multiplier; propagates to cell_height + PTY |
 | TD-018 | Powerline separator colour fringing | 2026-03-27 | Premultiplied alpha in shader + blend state (One/OneMinusSrcAlpha); glyph right-edge clamped to cell_width |
 | — | Ligature rendering (negative bearing_x clipped) | 2026-03-27 | Removed X-axis clamping in build_instances; bearing_x passed raw to shader |
 | TD-004 | Scrollback rendering broken (display_offset ignored) | 2026-03-24 | `collect_grid_cells` uses `Line(row - display_offset)`; trackpad PixelDelta divisor fixed (logical pts) |
