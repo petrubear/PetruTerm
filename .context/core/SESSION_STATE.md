@@ -89,6 +89,21 @@ Ctrl+Shift+E/F; mouse text selection with visual highlight.
   Right-edge X clamp intentionally NOT applied: double-wide Nerd Font icons (MonoLisa NF
   non-Mono) need to overflow their cell; premultiplied alpha makes the overflow invisible.
 
+## Session Close Notes (2026-03-27)
+Phase 2 complete. No new code this close-out session — only debt registry updates.
+
+### Debt Added (next session priorities)
+- **TD-025:** Line spacing too tight — investigate WezTerm `line_height` multiplier;
+  add `font.line_height: f32` to `FontConfig`; propagate to cell_height in TextShaper.
+- **TD-026:** Glyph antialiasing quality — compare WezTerm LCD subpixel pipeline
+  (`wezterm-font/src/rasterizer/`); three-tier fix: gamma → bg-aware blend → full LCD AA.
+  Note: bg-aware blend was started and reverted (commit `2d2b7da`) due to premul conflict;
+  re-evaluate once premul pipeline is stable.
+
+### Next Session Start
+- Pick up TD-025 (line spacing) — quickest visible quality win, low risk.
+- Optionally tackle TD-026 (antialiasing) — research WezTerm sources first.
+
 ## Key Technical Decisions (stable)
 
 ### Phase 1

@@ -1,13 +1,13 @@
 # Active Context
 
-**Current Focus:** Phase 2 — AI Layer
+**Current Focus:** Phase 3 — Rendering Quality
 **Last Active:** 2026-03-27
-**Target Completion:** Phase 2 MVP
-**Priority:** P0
+**Target Completion:** TD-025, TD-026
+**Priority:** P3
 
 ## Current State
 
-**Phase 1 complete as of commit 7bee09b (2026-03-27):**
+**Phase 1 & 2 complete as of 2026-03-27.**
 All acceptance criteria verified on M4 Max.
 
 ### Phase 1 Verified ✓
@@ -33,49 +33,22 @@ All acceptance criteria verified on M4 Max.
 - tmux: attach, split, scroll, Ctrl+B prefix ✓
 - Font ligatures: `->` `=>` `==` `===` `!=` `>=` `|>` ✓
 
-## Scope
+## Next Session Scope — Rendering Quality
 
-### Phase 2 — AI Layer
-New files to create:
-- `src/llm/mod.rs` — module root, re-exports
-- `src/llm/provider.rs` — `LlmProvider` trait
-- `src/llm/openrouter.rs` — OpenRouter provider
-- `src/llm/ollama.rs` — Ollama provider
-- `src/llm/lmstudio.rs` — LMStudio provider
-- `src/llm/engine.rs` — engine: manages active provider, spawns requests
-- `src/llm/context.rs` — shell context builder (CWD, history, last output)
-- `src/ui/ai_block.rs` — inline AI block UI overlay
-- `config/default/llm.lua` — default LLM config
-- `scripts/shell-integration.zsh` — PTY shell integration hooks
-
-Files to modify:
-- `src/app.rs` — AI keybinds, AI block render, feature dispatch
-- `src/ui/mod.rs` — export ai_block
-- `src/main.rs` — wire tokio runtime for LLM tasks
-- `Cargo.toml` — add reqwest (already present), serde_json
+### Priority Order
+1. **TD-025** — Line spacing (`font.line_height` multiplier)
+   - Files: `src/font/shaper.rs`, `src/config/schema.rs`, `src/renderer/gpu.rs`
+   - Research: WezTerm `wezterm-font` `line_height` option and alacritty `offset.y`
+2. **TD-026** — Antialiasing quality
+   - Files: `src/renderer/atlas.rs`, `src/renderer/pipeline.rs`, `src/font/shaper.rs`
+   - Research: WezTerm `wezterm-font/src/rasterizer/` LCD pipeline; swash subpixel support
 
 ### Out of Scope (Phase 3)
 - `src/plugins/` — Phase 3
 - `src/snippets/` — Phase 3
 - `src/ui/statusbar/` — Phase 3
-
-## Acceptance Criteria (Phase 2)
-- [ ] `cargo build` — zero errors
-- [ ] `config.llm.enabled = false` compiles and disables all AI cleanly
-- [ ] OpenRouter provider: streams a response given api_key + model
-- [ ] Ollama provider: streams a response from localhost
-- [ ] `Ctrl+Space` opens inline AI block
-- [ ] AI block renders streaming tokens in real-time
-- [ ] NL → shell command works end-to-end (type → get suggestion → run)
-- [ ] Explain Last Output: `Ctrl+Shift+E` explains terminal output
-- [ ] Fix Last Error: indicator on non-zero exit, `Ctrl+Shift+F` suggests fix
-- [ ] Context-Aware Chat: multi-turn with CWD + history context
-
-## Technical Reference
-- LLM async: `tokio::spawn` from `App` via `Arc<tokio::runtime::Handle>`
-- Streaming: reqwest `Response::bytes_stream()` → SSE parse → `mpsc::channel` → render
-- Shell context: OSC custom sequences or `~/.cache/petruterm/shell-context.json`
-- AI block position: bottom of active pane, above prompt line
+- TD-022 Agent mode — needs design doc
+- TD-023 Leader key — polish
 
 ## Files to Reference
 - `.context/specs/build_phases.md` — Phase 2 deliverables checklist

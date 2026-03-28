@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-03-27
-**Total Items:** 5
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 3 | **P3:** 2
+**Total Items:** 8
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 3 | **P3:** 5
 
 ## Priority Definitions
 
@@ -137,6 +137,31 @@ to fix the fringing — overflowing transparent pixels cause no visible artifact
   This mirrors how tmux solves the same conflict — all multiplexer actions live behind a prefix, leaving the raw key space to the running process.
 - **Migration:** Once implemented, Ctrl+C/Ctrl+V panel bindings become aliases or are removed.
 - **Priority:** P3 — current bindings work; this is a polish/extensibility improvement.
+
+### TD-026: Glyph antialiasing quality vs WezTerm
+- **File:** `src/renderer/atlas.rs`, `src/font/shaper.rs`, fragment shader in `src/renderer/pipeline.rs`
+- **Issue:** Rendered text looks rougher / less crisp than WezTerm at the same font size and DPI. WezTerm applies subpixel antialiasing (freetype LCD rendering or CoreText CG subpixel AA on macOS) and composites glyphs against the actual cell background colour, whereas PetruTerm rasterises masks in greyscale and blends in the fragment shader without background-aware correction.
+- **Investigation:** Review WezTerm's antialiasing pipeline:
+  - `wezterm-font/src/rasterizer/` — how it selects between freetype, CoreText, and DirectWrite backends per platform.
+  - `wezterm-render/` — how LCD RGB masks (3-channel) are stored in the atlas and composited against bg in the shader (separate R/G/B coverage → per-channel lerp).
+  - Check whether swash exposes subpixel/LCD output or only greyscale masks, and whether cosmic-text passes through subpixel hints.
+- **Fix options:**
+  1. **Greyscale gamma correction:** apply gamma-correct linear blending in the fragment shader (`pow(alpha, 1/2.2)`) — low effort, noticeable improvement.
+  2. **Background-aware blending:** pass cell bg colour to the fragment shader and blend in linear light (already partially explored — see revert commit `2d2b7da`). Re-evaluate with correct premultiplied alpha pipeline.
+  3. **LCD subpixel AA:** rasterise glyphs at 3× horizontal resolution via swash subpixel mode (if available), store RGB mask in atlas, composite with per-channel coverage in shader — highest quality, matches WezTerm/Alacritty on macOS.
+- **Reference:** WezTerm `wezterm-font/src/rasterizer/freetype.rs` (LCD filter flags) and `wezterm-render/src/glyphcache.rs` (atlas format + shader).
+- **Priority:** P3 — text is readable; this is a polish/fidelity improvement for Phase 2.
+
+### TD-025: Vertical spacing between terminal lines too tight
+- **File:** `src/font/shaper.rs`, `src/renderer/gpu.rs` (`build_instances`)
+- **Issue:** Characters render visually cramped — lines sit too close together. The cell height is derived purely from font metrics (`ascent + descent` from swash), with no configurable line spacing / line gap.
+- **Investigation:** Compare WezTerm's line-height implementation (see `wezterm-font/src/shaper/` and `wezterm-render/src/lib.rs`) to understand how they expose a `line_height` multiplier and add the extra pixels to `cell_height` before passing it to the grid. Verify whether cosmic-text exposes `line_gap` from the font's `OS/2` table and whether it is already being applied.
+- **Fix options:**
+  1. Add `font.line_height: f32 = 1.2` to `FontConfig` in `config/schema.rs`; multiply `cell_height` by this factor in `TextShaper`; propagate to PTY and renderer.
+  2. Read `line_gap` from the font via swash `Metrics` and add it to `cell_height` unconditionally.
+  3. Expose a raw `extra_leading: u32` (pixels) in config for pixel-precise control.
+- **Reference:** WezTerm sources — `wezterm-font` crate `line_height` option; cross-check with how alacritty exposes `offset.y` in its font config.
+- **Priority:** P3 — cosmetic but noticeably affects readability at small font sizes.
 
 ### TD-008: Dead code / unused import warnings
 - **Files:** `src/font/`, `src/renderer/`, `src/term/`, `src/ui/`
