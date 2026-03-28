@@ -83,15 +83,11 @@ fn lin_to_srgb(c: f32) -> f32 {
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     let alpha = textureSample(t_atlas, s_atlas, in.uv).r;
-    // Convert fg to sRGB then premultiply by alpha.
-    // The bg pass already drew the correct cell background; we blend on top
-    // using premultiplied alpha (blend: One / OneMinusSrcAlpha) so that
-    // alpha=0 glyph pixels are fully transparent and never overwrite adjacent
-    // cells' backgrounds — fixes powerline separator colour fringing.
-    let fg_srgb = vec3(lin_to_srgb(srgb_to_lin(in.fg.r)),
-                       lin_to_srgb(srgb_to_lin(in.fg.g)),
-                       lin_to_srgb(srgb_to_lin(in.fg.b)));
-    return vec4(fg_srgb * alpha, alpha);
+    // Premultiplied alpha blend over the bg pass (blend state: One / OneMinusSrcAlpha).
+    // fg is already sRGB-encoded (same space as the bg pass output), so premultiply
+    // directly. Alpha-0 pixels output vec4(0) — fully transparent — ensuring
+    // powerline glyph edges never overwrite adjacent cells' background colours.
+    return vec4(in.fg.rgb * alpha, alpha);
 }
 
 // Background-only pass (draws flat bg color for the whole cell).

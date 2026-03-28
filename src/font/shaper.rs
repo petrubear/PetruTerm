@@ -77,9 +77,12 @@ impl TextShaper {
 
         for run in buffer.layout_runs() {
             if let Some(glyph) = run.glyphs.first() {
-                self.cell_width = glyph.w;
+                // Round to integer physical pixels so every column boundary
+                // lands on an exact pixel, preventing sub-pixel seams between
+                // adjacent cell background rects.
+                self.cell_width = glyph.w.round();
             }
-            self.cell_height = run.line_height;
+            self.cell_height = run.line_height.round();
             break;
         }
 
