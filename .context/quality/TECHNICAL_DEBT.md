@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-03-27
-**Total Items:** 6
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 4 | **P3:** 2
+**Total Items:** 5
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 3 | **P3:** 2
 
 ## Priority Definitions
 
@@ -79,23 +79,21 @@ _None_
 - `start_selection` guarded by `!any_mouse` (no conflict with nvim/tmux mouse reporting).
 - Window drag: `setMovableByWindowBackground: NO`; clicks in pad_top zone → `window.drag_window()`.
 
-### TD-018: catppuccin tmux separators don't blend with adjacent cells
-- **File:** `src/app.rs` (`collect_grid_cells`, `build_instances`)
-- **Issue:** catppuccin-tmux uses powerline separator glyphs (U+E0B0 ``, U+E0B2 ``,
-  U+E0B4 ``, U+E0B6 `` and their sub-variants U+E0B1/E0B3) to draw pill/arrow shapes.
-  These glyphs work by using the FOREGROUND color of the separator cell to match the
-  BACKGROUND color of the adjacent cell, creating a seamless color-blend appearance.
-  The cell containing the separator has: fg = color of adjacent segment, bg = current segment.
-  When `Flags::INVERSE` is also set (TD-017), the colors are additionally swapped.
-  Currently these separators render with incorrect colors because:
-  1. TD-017 (INVERSE not applied) causes wrong fg/bg on the separator cells themselves.
-  2. The glyph is rendered on top of a solid-color background quad — if the background of the
-     separator cell does not match the adjacent cell's background, the "blending" looks wrong
-     regardless of color correctness.
-- **Note:** The blending effect is purely a fg/bg color rendering concern — no GPU alpha
-  blending is needed. Fixing TD-017 first will resolve most of this. The remainder is a
-  color-assignment issue in catppuccin's tmux config that expects correct reverse-video handling.
-- **Priority:** P2 — cosmetic but prominent with catppuccin-tmux; also affects tmux smoke test.
+### ~~TD-018: catppuccin tmux separators don't blend with adjacent cells~~ — RESOLVED
+<!--
+Root cause: two compounding issues.
+1. Fragment shader was doing mix(bg, fg, alpha) and returning alpha=1.0 always — so transparent
+   edge pixels of powerline glyphs wrote the separator's bg color over the adjacent cell's bg,
+   creating a visible "fringe" strip.
+2. Some powerline/Nerd Font glyphs had bitmaps wider than one cell, causing raw pixel overflow
+   into the neighbouring cell even before blending.
+Fix (2026-03-27):
+- Shader switched to premultiplied alpha: returns vec4(fg_srgb * alpha, alpha) instead of mix.
+- wgpu blend state: SrcAlpha → One (matches premultiplied output, One/OneMinusSrcAlpha).
+  Alpha-0 glyph pixels are now fully transparent; bg pass colour shows through correctly.
+- Glyph right-edge clamped to cell_width: actual_gw = min(gw, cell_w - ox). UV u1 clipped
+  proportionally (fx1 = actual_gw/gw). Ligatures with negative ox unaffected (cell_w - ox > gw).
+-->
 
 ### TD-005: PTY thread JoinHandle type-erased
 - **File:** `src/term/pty.rs`
@@ -158,6 +156,7 @@ _None_
 
 | ID | Title | Resolved | Resolution |
 |----|-------|----------|------------|
+| TD-018 | Powerline separator colour fringing | 2026-03-27 | Premultiplied alpha in shader + blend state (One/OneMinusSrcAlpha); glyph right-edge clamped to cell_width |
 | — | Ligature rendering (negative bearing_x clipped) | 2026-03-27 | Removed X-axis clamping in build_instances; bearing_x passed raw to shader |
 | TD-004 | Scrollback rendering broken (display_offset ignored) | 2026-03-24 | `collect_grid_cells` uses `Line(row - display_offset)`; trackpad PixelDelta divisor fixed (logical pts) |
 | TD-013 | Arrow keys ignore APP_CURSOR (DECCKM) | 2026-03-24 | `send_key_to_active_terminal` reads `TermMode::APP_CURSOR`; sends `\x1bO_` vs `\x1b[_` |

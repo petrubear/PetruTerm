@@ -82,6 +82,12 @@ Bundle: dist/PetruTerm.app, 18 MB, ad-hoc signed, icon embedded.
 All deliverables implemented. Verified: OpenRouter, LMStudio streaming; shell integration;
 Ctrl+Shift+E/F; mouse text selection with visual highlight.
 
+### Post-Phase-2 Bug Fixes (2026-03-27)
+- [x] TD-018: Powerline separator colour fringing — premultiplied alpha in fragment shader
+  (returns `vec4(fg*alpha, alpha)`); blend state changed to `One/OneMinusSrcAlpha`; glyph
+  right-edge clamped to `min(gw, cell_w - ox)` with UV proportionally adjusted. Ligatures
+  with negative bearing_x unaffected.
+
 ## Key Technical Decisions (stable)
 
 ### Phase 1
@@ -108,3 +114,10 @@ Ctrl+Shift+E/F; mouse text selection with visual highlight.
 - Mouse selection: `SelectionRange::to_range(term)` per frame; fg/bg inverted for selected cells;
   title bar drag via `window.drag_window()` when click y < pad_top; content drag = selection
 - Providers: OpenRouter (SSE + auth), Ollama + LMStudio via `OpenAICompatProvider` (no auth)
+
+### Glyph Rendering (updated post-Phase-2)
+- **Premultiplied alpha:** glyph pass fragment shader outputs `vec4(fg*alpha, alpha)`; blend
+  state `One/OneMinusSrcAlpha`. Alpha-0 glyph edge pixels are transparent — bg pass shows through.
+- **Right-edge clamp:** `actual_gw = min(gw, cell_w - ox)`; UV u1 = `u0 + fx1*(u1-u0)`.
+  Ligatures with negative ox (JetBrains Mono calt): `cell_w - ox > gw` so no clamp applied.
+- **Y clamp still active:** `y1 = min(oy+gh, cell_height)` prevents row bleeding (TD-012).
