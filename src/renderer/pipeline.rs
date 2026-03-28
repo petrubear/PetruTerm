@@ -83,11 +83,24 @@ fn lin_to_srgb(c: f32) -> f32 {
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     let alpha = textureSample(t_atlas, s_atlas, in.uv).r;
-    // Premultiplied alpha blend over the bg pass (blend state: One / OneMinusSrcAlpha).
-    // fg is already sRGB-encoded (same space as the bg pass output), so premultiply
-    // directly. Alpha-0 pixels output vec4(0) — fully transparent — ensuring
-    // powerline glyph edges never overwrite adjacent cells' background colours.
-    return vec4(in.fg.rgb * alpha, alpha);
+
+    // Pixels with near-zero alpha are glyph edges that overflow into adjacent
+    // cells (powerline separators, double-wide icons, ligatures).  Output fully
+    // transparent so the bg pass colour shows through without fringing.
+    // Threshold 0.004 ≈ 1/255 — handles floating-point quantisation of exact-0.
+    if alpha < 0.004 {
+        return vec4(0.0);
+    }
+
+    // Gamma-correct blend: mix fg and bg in linear light, then encode back to sRGB.
+    // Blending in sRGB space (the naive approach) produces AA edges that are too
+    // dark; linear blending matches how WezTerm and correct renderers work.
+    // in.bg is the cell's background colour already drawn by the bg pass, so the
+    // manually-blended result replaces it with alpha=1 (no hardware re-blend).
+    let fg_lin = vec3(srgb_to_lin(in.fg.r), srgb_to_lin(in.fg.g), srgb_to_lin(in.fg.b));
+    let bg_lin = vec3(srgb_to_lin(in.bg.r), srgb_to_lin(in.bg.g), srgb_to_lin(in.bg.b));
+    let m = mix(bg_lin, fg_lin, alpha);
+    return vec4(lin_to_srgb(m.r), lin_to_srgb(m.g), lin_to_srgb(m.b), 1.0);
 }
 
 // Background-only pass (draws flat bg color for the whole cell).
@@ -186,9 +199,12 @@ impl CellPipeline {
             immediate_size: 0,
         });
 
-        // Premultiplied alpha blend for the glyph pass: shader outputs (rgb*a, a).
-        // Using One/OneMinusSrcAlpha so alpha=0 pixels are fully transparent and
-        // never overwrite the bg pass's colours (fixes powerline fringing).
+        // Blend state for the glyph pass (One / OneMinusSrcAlpha).
+        // Shader outputs either vec4(0) for near-transparent pixels (pass-through)
+        // or vec4(gamma_blended_rgb, 1.0) for visible pixels (full replace).
+        // Both cases work correctly with this blend equation:
+        //   alpha=0 → 0 + 1*dst = dst  (bg pass colour visible, no fringing)
+        //   alpha=1 → rgb + 0*dst = rgb (gamma-correct blend replaces bg)
         let blend = wgpu::BlendState {
             color: wgpu::BlendComponent {
                 src_factor: wgpu::BlendFactor::One,
