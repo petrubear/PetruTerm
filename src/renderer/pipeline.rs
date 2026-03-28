@@ -1,4 +1,4 @@
-use crate::renderer::cell::{CellUniforms, CellVertex};
+use crate::renderer::cell::CellVertex;
 
 /// WGSL shader source for terminal cell rendering.
 const CELL_SHADER: &str = r#"
@@ -83,11 +83,15 @@ fn lin_to_srgb(c: f32) -> f32 {
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     let alpha = textureSample(t_atlas, s_atlas, in.uv).r;
-    // Linearise → blend → back to sRGB so antialiased edges render correctly.
-    let bg_lin = vec4(srgb_to_lin(in.bg.r), srgb_to_lin(in.bg.g), srgb_to_lin(in.bg.b), in.bg.a);
-    let fg_lin = vec4(srgb_to_lin(in.fg.r), srgb_to_lin(in.fg.g), srgb_to_lin(in.fg.b), in.fg.a);
-    let m = mix(bg_lin, fg_lin, alpha);
-    return vec4(lin_to_srgb(m.r), lin_to_srgb(m.g), lin_to_srgb(m.b), m.a);
+    // Convert fg to sRGB then premultiply by alpha.
+    // The bg pass already drew the correct cell background; we blend on top
+    // using premultiplied alpha (blend: One / OneMinusSrcAlpha) so that
+    // alpha=0 glyph pixels are fully transparent and never overwrite adjacent
+    // cells' backgrounds — fixes powerline separator colour fringing.
+    let fg_srgb = vec3(lin_to_srgb(srgb_to_lin(in.fg.r)),
+                       lin_to_srgb(srgb_to_lin(in.fg.g)),
+                       lin_to_srgb(srgb_to_lin(in.fg.b)));
+    return vec4(fg_srgb * alpha, alpha);
 }
 
 // Background-only pass (draws flat bg color for the whole cell).
@@ -186,9 +190,12 @@ impl CellPipeline {
             immediate_size: 0,
         });
 
+        // Premultiplied alpha blend for the glyph pass: shader outputs (rgb*a, a).
+        // Using One/OneMinusSrcAlpha so alpha=0 pixels are fully transparent and
+        // never overwrite the bg pass's colours (fixes powerline fringing).
         let blend = wgpu::BlendState {
             color: wgpu::BlendComponent {
-                src_factor: wgpu::BlendFactor::SrcAlpha,
+                src_factor: wgpu::BlendFactor::One,
                 dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
                 operation: wgpu::BlendOperation::Add,
             },

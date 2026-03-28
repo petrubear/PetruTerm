@@ -138,7 +138,7 @@ impl App {
     }
 
     /// Allocate a new terminal pane within the current tab.
-    fn open_terminal(&mut self, viewport: Option<Rect>) -> Result<usize> {
+    fn open_terminal(&mut self, _viewport: Option<Rect>) -> Result<usize> {
         let (cols, rows) = self.default_grid_size();
         let (cell_w, cell_h) = self.cell_dims();
         let terminal = Terminal::new(&self.config, cols, rows, cell_w, cell_h, self.wakeup_proxy.clone())?;
@@ -236,7 +236,7 @@ impl App {
 
     /// Submit the current panel input to the LLM provider via a tokio task.
     fn submit_ai_query(&mut self) {
-        let Some(user_content) = self.chat_panel.submit_input() else { return };
+        let Some(_user_content) = self.chat_panel.submit_input() else { return };
 
         let Some(provider) = self.llm_provider.clone() else {
             self.chat_panel.mark_error(
@@ -1386,13 +1386,15 @@ fn push_shaped_row(
                 let gh = e.height as f32;
                 let y0 = oy.max(0.0);
                 let y1 = (oy + gh).min(shaper.cell_height);
-                if y1 <= y0 || gw == 0.0 || gh == 0.0 {
+                let actual_gw = gw.min(shaper.cell_width - ox);
+                if y1 <= y0 || actual_gw <= 0.0 || gh == 0.0 {
                     ([0.0f32; 4], [0.0; 2], [0.0; 2])
                 } else {
                     let fy0 = (y0 - oy) / gh;
                     let fy1 = (y1 - oy) / gh;
+                    let fx1 = actual_gw / gw;
                     let [u0, v0, u1, v1] = e.uv;
-                    ([u0, v0 + fy0*(v1-v0), u1, v0 + fy1*(v1-v0)], [ox, y0], [gw, y1-y0])
+                    ([u0, v0 + fy0*(v1-v0), u0 + fx1*(u1-u0), v0 + fy1*(v1-v0)], [ox, y0], [actual_gw, y1-y0])
                 }
             }
             None => ([0.0f32; 4], [0.0; 2], [0.0; 2]),
@@ -1679,22 +1681,25 @@ fn build_instances(
                     let gw = e.width as f32;
                     let gh = e.height as f32;
 
-                    // Only clamp Y to cell_height (prevents Nerd Font row bleeding,
-                    // TD-012). X is intentionally NOT clamped: JetBrains Mono calt
-                    // ligatures use negative bearing_x to extend into the previous cell
-                    // (e.g. '==' second glyph has bx=-16, bitmap 32px wide, spanning
-                    // both cells). Clamping x0 to 0 strips the left half.
+                    // Clamp Y to cell_height (prevents Nerd Font row bleeding, TD-012).
                     let y0 = oy.max(0.0);
                     let y1 = (oy + gh).min(shaper.cell_height);
 
-                    if y1 <= y0 || gw == 0.0 || gh == 0.0 {
+                    // Clamp right edge to cell_width so powerline/pill glyphs don't
+                    // bleed into the adjacent cell. Formula: actual_gw = min(gw, cell_w - ox).
+                    // For ligatures (negative ox): cell_w - ox > cell_w > gw, so no clamp.
+                    // For oversized Nerd Font glyphs (ox ≈ 0): clips the extra pixels.
+                    let actual_gw = gw.min(shaper.cell_width - ox);
+
+                    if y1 <= y0 || actual_gw <= 0.0 || gh == 0.0 {
                         ([0.0f32; 4], [0.0; 2], [0.0; 2])
                     } else {
                         let fy0 = (y0 - oy) / gh;
                         let fy1 = (y1 - oy) / gh;
+                        let fx1 = actual_gw / gw;
                         let [u0, v0, u1, v1] = e.uv;
-                        let uv = [u0, v0 + fy0 * (v1 - v0), u1, v0 + fy1 * (v1 - v0)];
-                        (uv, [ox, y0], [gw, y1 - y0])
+                        let uv = [u0, v0 + fy0*(v1-v0), u0 + fx1*(u1-u0), v0 + fy1*(v1-v0)];
+                        (uv, [ox, y0], [actual_gw, y1 - y0])
                     }
                 }
                 None => ([0.0f32; 4], [0.0; 2], [0.0; 2]),
