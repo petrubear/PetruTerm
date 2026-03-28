@@ -1280,8 +1280,15 @@ impl ApplicationHandler<()> for App {
                     .unwrap_or((false, false, false));
 
                 if any_mouse {
-                    // Forward as scroll wheel buttons (64=up, 65=down) for tmux/nvim.
-                    let btn = if lines > 0 { 64u8 } else { 65u8 };
+                    // Forward scroll as mouse button reports.
+                    // btn=64 = wheel-up (toward top of file/history)
+                    // btn=65 = wheel-down (toward bottom)
+                    // Convention: lines > 0 = finger swiped up (macOS natural scroll).
+                    // With natural scrolling, swipe-up = "push content up" = see content
+                    // below = scroll DOWN in the application → btn=65.
+                    // Note: if tmux scroll appears reversed after this change, swap back to
+                    // `if lines > 0 { 64 } else { 65 }` — tmux and vim may disagree.
+                    let btn = if lines > 0 { 65u8 } else { 64u8 };
                     for _ in 0..lines.abs() {
                         self.send_mouse_report(btn, col, row, true);
                     }
