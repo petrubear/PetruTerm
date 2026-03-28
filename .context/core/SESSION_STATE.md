@@ -84,9 +84,10 @@ Ctrl+Shift+E/F; mouse text selection with visual highlight.
 
 ### Post-Phase-2 Bug Fixes (2026-03-27)
 - [x] TD-018: Powerline separator colour fringing — premultiplied alpha in fragment shader
-  (returns `vec4(fg*alpha, alpha)`); blend state changed to `One/OneMinusSrcAlpha`; glyph
-  right-edge clamped to `min(gw, cell_w - ox)` with UV proportionally adjusted. Ligatures
-  with negative bearing_x unaffected.
+  (returns `vec4(fg*alpha, alpha)`); blend state changed to `One/OneMinusSrcAlpha`.
+  Alpha-0 edge pixels are fully transparent, bg pass shows through — no fringing.
+  Right-edge X clamp intentionally NOT applied: double-wide Nerd Font icons (MonoLisa NF
+  non-Mono) need to overflow their cell; premultiplied alpha makes the overflow invisible.
 
 ## Key Technical Decisions (stable)
 
@@ -118,6 +119,7 @@ Ctrl+Shift+E/F; mouse text selection with visual highlight.
 ### Glyph Rendering (updated post-Phase-2)
 - **Premultiplied alpha:** glyph pass fragment shader outputs `vec4(fg*alpha, alpha)`; blend
   state `One/OneMinusSrcAlpha`. Alpha-0 glyph edge pixels are transparent — bg pass shows through.
-- **Right-edge clamp:** `actual_gw = min(gw, cell_w - ox)`; UV u1 = `u0 + fx1*(u1-u0)`.
-  Ligatures with negative ox (JetBrains Mono calt): `cell_w - ox > gw` so no clamp applied.
-- **Y clamp still active:** `y1 = min(oy+gh, cell_height)` prevents row bleeding (TD-012).
+  This alone fixes powerline separator fringing without needing X-axis clipping.
+- **X axis: never clamped.** JetBrains Mono calt ligatures use negative bearing_x to extend left;
+  MonoLisa Nerd Font non-Mono double-wide icons need to extend right. Both are correct.
+- **Y clamp:** `y1 = min(oy+gh, cell_height)` prevents row bleeding (TD-012).

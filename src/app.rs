@@ -1384,17 +1384,21 @@ fn push_shaped_row(
                 let oy = shaped.ascent - e.bearing_y as f32;
                 let gw = e.width as f32;
                 let gh = e.height as f32;
+                // Only clamp Y to cell_height (prevents Nerd Font row bleeding, TD-012).
+                // X is intentionally NOT clamped: JetBrains Mono calt ligatures use
+                // negative bearing_x to extend left; double-wide Nerd Font icons (e.g.
+                // MonoLisa Nerd Font non-Mono) have bitmaps wider than one cell and must
+                // overflow — premultiplied alpha (blend: One/OneMinusSrcAlpha) handles
+                // transparent edge pixels without fringing, so no X clip is needed.
                 let y0 = oy.max(0.0);
                 let y1 = (oy + gh).min(shaper.cell_height);
-                let actual_gw = gw.min(shaper.cell_width - ox);
-                if y1 <= y0 || actual_gw <= 0.0 || gh == 0.0 {
+                if y1 <= y0 || gw == 0.0 || gh == 0.0 {
                     ([0.0f32; 4], [0.0; 2], [0.0; 2])
                 } else {
                     let fy0 = (y0 - oy) / gh;
                     let fy1 = (y1 - oy) / gh;
-                    let fx1 = actual_gw / gw;
                     let [u0, v0, u1, v1] = e.uv;
-                    ([u0, v0 + fy0*(v1-v0), u0 + fx1*(u1-u0), v0 + fy1*(v1-v0)], [ox, y0], [actual_gw, y1-y0])
+                    ([u0, v0 + fy0*(v1-v0), u1, v0 + fy1*(v1-v0)], [ox, y0], [gw, y1-y0])
                 }
             }
             None => ([0.0f32; 4], [0.0; 2], [0.0; 2]),
@@ -1681,25 +1685,19 @@ fn build_instances(
                     let gw = e.width as f32;
                     let gh = e.height as f32;
 
-                    // Clamp Y to cell_height (prevents Nerd Font row bleeding, TD-012).
+                    // Only clamp Y to cell_height (prevents Nerd Font row bleeding, TD-012).
+                    // X is intentionally NOT clamped — see note in build_grid_instances.
                     let y0 = oy.max(0.0);
                     let y1 = (oy + gh).min(shaper.cell_height);
 
-                    // Clamp right edge to cell_width so powerline/pill glyphs don't
-                    // bleed into the adjacent cell. Formula: actual_gw = min(gw, cell_w - ox).
-                    // For ligatures (negative ox): cell_w - ox > cell_w > gw, so no clamp.
-                    // For oversized Nerd Font glyphs (ox ≈ 0): clips the extra pixels.
-                    let actual_gw = gw.min(shaper.cell_width - ox);
-
-                    if y1 <= y0 || actual_gw <= 0.0 || gh == 0.0 {
+                    if y1 <= y0 || gw == 0.0 || gh == 0.0 {
                         ([0.0f32; 4], [0.0; 2], [0.0; 2])
                     } else {
                         let fy0 = (y0 - oy) / gh;
                         let fy1 = (y1 - oy) / gh;
-                        let fx1 = actual_gw / gw;
                         let [u0, v0, u1, v1] = e.uv;
-                        let uv = [u0, v0 + fy0*(v1-v0), u0 + fx1*(u1-u0), v0 + fy1*(v1-v0)];
-                        (uv, [ox, y0], [actual_gw, y1 - y0])
+                        let uv = [u0, v0 + fy0*(v1-v0), u1, v0 + fy1*(v1-v0)];
+                        (uv, [ox, y0], [gw, y1 - y0])
                     }
                 }
                 None => ([0.0f32; 4], [0.0; 2], [0.0; 2]),

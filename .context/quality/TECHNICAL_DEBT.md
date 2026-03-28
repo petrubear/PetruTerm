@@ -81,18 +81,16 @@ _None_
 
 ### ~~TD-018: catppuccin tmux separators don't blend with adjacent cells~~ — RESOLVED
 <!--
-Root cause: two compounding issues.
-1. Fragment shader was doing mix(bg, fg, alpha) and returning alpha=1.0 always — so transparent
-   edge pixels of powerline glyphs wrote the separator's bg color over the adjacent cell's bg,
-   creating a visible "fringe" strip.
-2. Some powerline/Nerd Font glyphs had bitmaps wider than one cell, causing raw pixel overflow
-   into the neighbouring cell even before blending.
+Root cause: fragment shader was doing mix(bg, fg, alpha) and returning alpha=1.0 always.
+Transparent edge pixels of powerline glyphs wrote the separator's bg color over the adjacent
+cell's background, creating a visible fringe strip.
 Fix (2026-03-27):
 - Shader switched to premultiplied alpha: returns vec4(fg_srgb * alpha, alpha) instead of mix.
 - wgpu blend state: SrcAlpha → One (matches premultiplied output, One/OneMinusSrcAlpha).
   Alpha-0 glyph pixels are now fully transparent; bg pass colour shows through correctly.
-- Glyph right-edge clamped to cell_width: actual_gw = min(gw, cell_w - ox). UV u1 clipped
-  proportionally (fx1 = actual_gw/gw). Ligatures with negative ox unaffected (cell_w - ox > gw).
+Note: right-edge clamping was initially added but later removed (2026-03-27) because it broke
+double-wide Nerd Font icons (MonoLisa NF non-Mono). Premultiplied alpha alone is sufficient
+to fix the fringing — overflowing transparent pixels cause no visible artifact.
 -->
 
 ### TD-005: PTY thread JoinHandle type-erased
