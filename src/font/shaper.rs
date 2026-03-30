@@ -41,6 +41,8 @@ pub struct TextShaper {
     pub metrics: Metrics,
     pub cell_width: f32,
     pub cell_height: f32,
+    /// Reusable shaping buffer — avoids a Buffer allocation on every shape_line call.
+    shape_buf: Buffer,
 }
 
 impl TextShaper {
@@ -48,12 +50,17 @@ impl TextShaper {
         let line_height = font_config.size * font_config.line_height;
         let metrics = Metrics::new(font_config.size, line_height);
 
+        // Create the reusable buffer before moving font_system into the struct.
+        let mut font_system = font_system;
+        let shape_buf = Buffer::new(&mut font_system, metrics);
+
         let mut shaper = Self {
             font_system,
             swash_cache: SwashCache::new(),
             metrics,
             cell_width: font_config.size * 0.6,
             cell_height: line_height,
+            shape_buf,
         };
 
         shaper.measure_cell(font_config);
@@ -106,23 +113,24 @@ impl TextShaper {
         font_config: &FontConfig,
     ) -> ShapedRun {
         let attrs = Self::make_attrs(font_config);
-        let mut buffer = Buffer::new(&mut self.font_system, self.metrics);
-        buffer.set_size(&mut self.font_system, None, Some(self.cell_height));
-
         let attr_list = AttrsList::new(&attrs);
-        buffer.lines = vec![BufferLine::new(
+
+        // Reuse the stored buffer: replace lines and re-shape in-place.
+        // This avoids a Buffer heap allocation on every call (~5 000–7 000/s at 60 fps).
+        self.shape_buf.set_size(&mut self.font_system, None, Some(self.cell_height));
+        self.shape_buf.lines = vec![BufferLine::new(
             text,
             cosmic_text::LineEnding::None,
             attr_list,
             Shaping::Advanced,
         )];
-        buffer.shape_until_scroll(&mut self.font_system, false);
+        self.shape_buf.shape_until_scroll(&mut self.font_system, false);
 
         let mut glyphs = Vec::new();
         let mut ascent = 0.0f32;
         let mut line_height = self.cell_height;
 
-        for run in buffer.layout_runs() {
+        for run in self.shape_buf.layout_runs() {
             ascent = run.line_y;
             line_height = run.line_height;
 

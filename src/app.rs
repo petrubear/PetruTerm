@@ -77,6 +77,11 @@ pub struct App {
 
     // winit event loop proxy — lets PTY threads wake the event loop immediately.
     wakeup_proxy: EventLoopProxy<()>,
+
+    // Reusable per-frame GPU instance buffer. Capacity grows to the high-water
+    // mark and is never freed between frames, eliminating the ~200 KB/frame
+    // Vec<CellVertex> allocation that would otherwise occur at 60 fps.
+    instances: Vec<CellVertex>,
 }
 
 impl App {
@@ -134,6 +139,7 @@ impl App {
             cursor_blink_on: true,
             cursor_last_blink: std::time::Instant::now(),
             wakeup_proxy,
+            instances: Vec::new(),
         }
     }
 
@@ -1114,7 +1120,8 @@ impl ApplicationHandler<()> for App {
                 if let (Some(renderer), Some(shaper)) =
                     (&mut self.renderer, &mut self.shaper)
                 {
-                    let mut instances = build_instances(
+                    build_instances(
+                        &mut self.instances,
                         &cell_data,
                         shaper,
                         renderer,
@@ -1125,7 +1132,8 @@ impl ApplicationHandler<()> for App {
                     );
 
                     if panel_visible {
-                        let panel_instances = build_chat_panel_instances(
+                        build_chat_panel_instances(
+                            &mut self.instances,
                             &self.chat_panel,
                             self.panel_focused,
                             shaper,
@@ -1134,10 +1142,9 @@ impl ApplicationHandler<()> for App {
                             term_cols,
                             term_rows,
                         );
-                        instances.extend(panel_instances);
                     }
 
-                    renderer.upload_instances(&instances);
+                    renderer.upload_instances(&self.instances);
                     if let Err(e) = renderer.render() {
                         log::error!("Render error: {e}");
                     }
@@ -1438,6 +1445,7 @@ fn push_shaped_row(
 /// - Rows 1..N-5 : scrollable message history
 /// - Row 0  : header
 fn build_chat_panel_instances(
+    instances: &mut Vec<CellVertex>,
     panel: &ChatPanel,
     panel_focused: bool,
     shaper: &mut TextShaper,
@@ -1445,13 +1453,13 @@ fn build_chat_panel_instances(
     font: &crate::config::schema::FontConfig,
     term_cols: usize,
     screen_rows: usize,
-) -> Vec<CellVertex> {
+) {
     use crate::llm::chat_panel::{PanelState, titled_separator, word_wrap, wrap_input};
     use crate::llm::ChatRole;
 
     let panel_cols = panel.width_cols as usize;
     // Need at least: header + separator + 2 input rows + hints = 5
-    if panel_cols == 0 || screen_rows < 5 { return vec![]; }
+    if panel_cols == 0 || screen_rows < 5 { return; }
 
     const PANEL_BG:       [f32; 4] = [0.10, 0.09, 0.16, 1.0];
     const SEP_FG:         [f32; 4] = [0.35, 0.30, 0.52, 1.0];
@@ -1552,7 +1560,6 @@ fn build_chat_panel_instances(
     };
 
     // ── Assemble rows ────────────────────────────────────────────────────────
-    let mut instances = Vec::new();
     let co = term_cols;
     let header_fg = if panel_focused { HEADER_FOCUS } else { HEADER_UNFOCUS };
 
@@ -1561,7 +1568,7 @@ fn build_chat_panel_instances(
     };
 
     // Row 0: header (bright when focused, dim when terminal has focus)
-    push(&titled_separator("⚡ Petrubot", panel_cols), header_fg, 0, &mut instances);
+    push(&titled_separator("⚡ Petrubot", panel_cols), header_fg, 0, instances);
 
     // History rows
     for i in 0..history_rows {
@@ -1570,15 +1577,15 @@ fn build_chat_panel_instances(
             .get(visible_start + i)
             .map(|(t, f)| (t.as_str(), *f))
             .unwrap_or(("", PANEL_BG));
-        push(text, fg, row, &mut instances);
+        push(text, fg, row, instances);
     }
 
     // Separator
-    push(&"─".repeat(panel_cols), SEP_FG, sep_row, &mut instances);
+    push(&"─".repeat(panel_cols), SEP_FG, sep_row, instances);
 
     // Input rows (wrapped, 2 lines)
-    push(&input_line1, input_fg, input_row1, &mut instances);
-    push(&input_line2, input_fg, input_row2, &mut instances);
+    push(&input_line1, input_fg, input_row1, instances);
+    push(&input_line2, input_fg, input_row2, instances);
 
     // Hints
     let hints = if !panel_focused {
@@ -1595,9 +1602,7 @@ fn build_chat_panel_instances(
             PanelState::Hidden    => "",
         }
     };
-    push(hints, HINT_FG, hints_row, &mut instances);
-
-    instances
+    push(hints, HINT_FG, hints_row, instances);
 }
 
 /// Apply macOS-specific title bar customization to an NSWindow.
@@ -1655,7 +1660,11 @@ unsafe fn apply_macos_custom_titlebar(window: &Window) {
 /// Shapes each row with cosmic-text, rasterizes glyphs into the atlas,
 /// and emits one `CellVertex` per glyph. A cursor vertex is appended at
 /// the end when the cursor is visible and blink is on.
+///
+/// Writes into `instances` (cleared first). The caller should pass a
+/// persistent Vec so its capacity is reused across frames.
 fn build_instances(
+    instances: &mut Vec<CellVertex>,
     cell_data: &[(String, Vec<(AnsiColor, AnsiColor)>)],
     shaper: &mut TextShaper,
     renderer: &mut GpuRenderer,
@@ -1663,20 +1672,23 @@ fn build_instances(
     font: &crate::config::schema::FontConfig,
     cursor: Option<&CursorInfo>,
     cursor_blink_on: bool,
-) -> Vec<CellVertex> {
-    let mut instances = Vec::with_capacity(cell_data.len() * 80);
+) {
+    instances.clear();
+
+    // Scratch buffer for per-row color resolution. Reused across rows to
+    // avoid a Vec allocation per row (40+ rows × 60 fps = ~2 400 allocs/s).
+    let mut colors_scratch: Vec<([f32; 4], [f32; 4])> = Vec::with_capacity(256);
 
     for (row_idx, (text, raw_colors)) in cell_data.iter().enumerate() {
-        // Resolve alacritty colors → linear RGBA
-        let colors: Vec<([f32; 4], [f32; 4])> = raw_colors
-            .iter()
-            .map(|(fg, bg)| {
-                (
-                    resolve_color(*fg, &config.colors),
-                    resolve_color(*bg, &config.colors),
-                )
-            })
-            .collect();
+        // Resolve alacritty colors → linear RGBA into the reusable scratch buffer.
+        colors_scratch.clear();
+        colors_scratch.extend(raw_colors.iter().map(|(fg, bg)| {
+            (
+                resolve_color(*fg, &config.colors),
+                resolve_color(*bg, &config.colors),
+            )
+        }));
+        let colors: &[([f32; 4], [f32; 4])] = &colors_scratch;
 
         let shaped = shaper.shape_line(text, &colors, font);
 
@@ -1754,6 +1766,4 @@ fn build_instances(
             });
         }
     }
-
-    instances
 }
