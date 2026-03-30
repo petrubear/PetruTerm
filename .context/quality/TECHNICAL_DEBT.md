@@ -130,5 +130,5 @@ _None_
 | TD-029 | O(N^2) Column Calculation | 2026-03-30 | Incremental column tracking in shape_line. |
 | TD-033 | Atlas Stability & Eviction | 2026-03-30 | Flush-and-restart strategy on AtlasError::Full. |
 | TD-025 | Vertical spacing too tight | 2026-03-27 | font.line_height config (default 1.2). |
-| TD-018 | Powerline separator fringing | 2026-03-27 | Premultiplied alpha + blend: One/OneMinusSrcAlpha. |
+| TD-018 | Powerline separator fringing | 2026-03-30 | Pixel snapping (floor) in vertex shader + manual blending in fragment shader. |
 | TD-012 | Nerd Font icons overflow cell | 2026-03-23 | clamp_glyph_to_cell() crops glyph_size. |

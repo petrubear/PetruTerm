@@ -41,14 +41,14 @@ const QUAD: array<vec2<f32>, 6> = array<vec2<f32>, 6>(
 fn vs_main(@builtin(vertex_index) vi: u32, instance: InstanceIn) -> VertexOut {
     let q = QUAD[vi];
 
-    // Cell pixel origin (top-left)
-    let cell_origin = uniforms.padding + instance.grid_pos * uniforms.cell_size;
+    // Cell pixel origin (top-left) - snapped to integer pixels to avoid fringing
+    let cell_origin = floor(uniforms.padding + instance.grid_pos * uniforms.cell_size + vec2(0.001));
 
     // Background quad: covers the entire cell
     let bg_pixel = cell_origin + q * uniforms.cell_size;
 
     // Glyph quad: covers only the glyph bitmap within the cell
-    let glyph_pixel = cell_origin + instance.glyph_offset + q * instance.glyph_size;
+    let glyph_pixel = cell_origin + floor(instance.glyph_offset + vec2(0.001)) + q * instance.glyph_size;
 
     // Convert pixel coords to NDC [-1, 1]
     let to_ndc = vec2(2.0, -2.0) / uniforms.viewport_size;
@@ -87,20 +87,20 @@ fn to_array4(v: vec4<f32>) -> array<f32, 4> {
 
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
-    let alpha = textureSample(t_atlas, s_atlas, in.uv).r;
-    let ca = pow(alpha, 1.0 / 1.4);
-    // Hybrid bg-aware premultiplied blend (TD-026a/b):
-    //   - Blend fg over vertex-bg in linear space for gamma-correct colours.
-    //   - Output premultiplied by ca so transparent pixels (ca≈0) produce
-    //     vec4(0) → GPU blend One/OneMinusSrcAlpha passes through the
-    //     bg-pass framebuffer, which carries the correct adjacent-cell bg
-    //     for overflow glyphs (wide Nerd Font icons, powerline separators).
-    //   - Solid pixels (ca=1) → out = fg_srgb at full intensity (vivid).
+    let mask = textureSample(t_atlas, s_atlas, in.uv).r;
+    if mask < 0.01 { discard; } // Don't even draw if near-transparent
+
+    let ca = pow(mask, 1.0 / 1.4);
     let fg_lin = vec3(srgb_to_lin(in.fg.r), srgb_to_lin(in.fg.g), srgb_to_lin(in.fg.b));
     let bg_lin = vec3(srgb_to_lin(in.bg.r), srgb_to_lin(in.bg.g), srgb_to_lin(in.bg.b));
+    
+    // Manual blend in shader against the cell's own background
     let blended = mix(bg_lin, fg_lin, ca);
     let rgb = vec3(lin_to_srgb(blended.r), lin_to_srgb(blended.g), lin_to_srgb(blended.b));
-    return vec4(rgb * ca, ca);
+    
+    // Output OPAQUE pixel. Since we draw BG first, then this, and we blended 
+    // manually, we don't want the GPU to blend with the global terminal background again.
+    return vec4(rgb, 1.0);
 }
 
 // TD-026b: Background-aware gamma-correct blend.
@@ -221,9 +221,10 @@ const QUAD: array<vec2<f32>, 6> = array<vec2<f32>, 6>(
 @vertex
 fn vs_main(@builtin(vertex_index) vi: u32, instance: InstanceIn) -> VertexOut {
     let q = QUAD[vi];
-    let cell_origin = uniforms.padding + instance.grid_pos * uniforms.cell_size;
+    // Cell pixel origin (top-left) - snapped to integer pixels to avoid fringing
+    let cell_origin = floor(uniforms.padding + instance.grid_pos * uniforms.cell_size + vec2(0.001));
     let bg_pixel = cell_origin + q * uniforms.cell_size;
-    let glyph_pixel = cell_origin + instance.glyph_offset + q * instance.glyph_size;
+    let glyph_pixel = cell_origin + floor(instance.glyph_offset + vec2(0.001)) + q * instance.glyph_size;
     let to_ndc = vec2(2.0, -2.0) / uniforms.viewport_size;
     let bg_ndc  = bg_pixel   * to_ndc + vec2(-1.0,  1.0);
     let gly_ndc = glyph_pixel * to_ndc + vec2(-1.0,  1.0);
@@ -252,12 +253,13 @@ fn to_array4(v: vec4<f32>) -> array<f32, 4> {
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     let alpha = textureSample(t_atlas, s_atlas, in.uv).r;
+    if alpha < 0.01 { discard; }
     let ca = pow(alpha, 1.0 / 1.4);
     let fg_lin = vec3(srgb_to_lin(in.fg.r), srgb_to_lin(in.fg.g), srgb_to_lin(in.fg.b));
     let bg_lin = vec3(srgb_to_lin(in.bg.r), srgb_to_lin(in.bg.g), srgb_to_lin(in.bg.b));
     let blended = mix(bg_lin, fg_lin, ca);
     let rgb = vec3(lin_to_srgb(blended.r), lin_to_srgb(blended.g), lin_to_srgb(blended.b));
-    return vec4(rgb * ca, ca);
+    return vec4(rgb, 1.0);
 }
 
 @fragment
