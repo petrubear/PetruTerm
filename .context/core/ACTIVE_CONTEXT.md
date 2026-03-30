@@ -1,54 +1,37 @@
 # Active Context
 
-**Current Focus:** Phase 3 — Rendering Quality
+**Current Focus:** Project Audit & Performance Optimization
 **Last Active:** 2026-03-30
-**Target Completion:** TD-027 (powerline vivid rendering)
-**Priority:** P3
+**Target Completion:** Address critical tech debt (Security/Performance)
+**Priority:** P1
 
 ## Current State
 
-**Phase 1 & 2 complete as of 2026-03-27.**
-All acceptance criteria verified on M4 Max.
+**Audit & Core Optimizations complete as of 2026-03-30.**
+A comprehensive audit identified 12 new technical debt items (TD-028 to TD-039). Critical performance and stability issues were addressed immediately.
 
-### Phase 1 Verified ✓
-- Dracula Pro background `#22212c` ✓
-- JetBrains Mono Nerd Font Mono 15pt, 18×36px at 2× Retina ✓
-- zsh + Starship, keyboard input (including Ctrl keys), `ls` output ✓
-- Mouse: drag selection, scroll wheel (trackpad+mouse), SGR/X10 reporting ✓
-- Clipboard: Cmd+C/V, OSC 52, bracketed paste ✓
-- Cursor: block/underline/beam, 530ms blink, resets on keypress ✓
-- PTY resize: uses actual cell px from TextShaper ✓
-- Shell exit: `exit` / Ctrl+D closes window ✓
-- Nerd Font icons: clamped to cell height, no row bleeding ✓
-- Config hot-reload ✓
-- Custom title bar: transparent, traffic lights, draggable ✓
-- Launch directory: opens in `~` ✓
-- .app bundle: `dist/PetruTerm.app` (18 MB, ad-hoc signed) ✓
-- App icon: Dracula purple chevron + cursor ✓
-- Scrollback: 110k lines, display_offset-aware rendering ✓
-- Top padding: 60px physical clears traffic lights ✓
-- Arrow keys APP_CURSOR mode (atuin, nvim, tmux) ✓
-- Reverse-video (SGR 7 / Flags::INVERSE) ✓
-- nvim: colors, cursor, input, scroll ✓
-- tmux: attach, split, scroll, Ctrl+B prefix ✓
-- Font ligatures: `->` `=>` `==` `===` `!=` `>=` `|>` ✓
+### Performance & Stability Fixes ✓
+- **TD-028: Row-Level Shaping Cache** — Implemented `RowCache` in `App`. Rows are hashed (text + colors); cached shaped glyphs and GPU instances are reused if the hash matches. HarfBuzz is now only called for "dirty" rows. ✓
+- **TD-029: $O(N)$ Column Calculation** — `TextShaper::shape_line` now uses incremental character counts instead of $O(N^2)$ `chars().count()` calls. ✓
+- **TD-033: Atlas Eviction Strategy** — Implemented "flush and start over" strategy. `GlyphAtlas::upload` returns `AtlasError::Full`, triggering a full atlas/cache clear and re-render. ✓
+- **TD-032: GPU Upload Optimization** — Cached `CellVertex` data at the row level reduces per-frame CPU-side calculations. ✓
 
-## Next Session Scope — Rendering Quality
+### Remaining High Priority (P1)
+1. **TD-030** — Secret Leakage to LLM Provider: Sanitization of `last_command` in `ShellContext`.
+2. **TD-031** — Insecure API Key Storage: Wrap keys in `secrecy` crate or fetch from system keychain.
+
+### Rendering Quality (Phase 3)
+- **TD-027** — Powerline separator vivid rendering — OPEN. Hybrid bg-aware premul in `fs_main` is best current approach.
+
+## Next Session Scope
 
 ### Priority Order
-1. ~~**TD-025** — Line spacing~~ **DONE** — `font.line_height: f32` (default 1.2), propagated via Metrics → cell_height → PTY.
-2. ~~**TD-026** — Antialiasing quality~~ **DONE (all 3 levels)** — TD-026a gamma correction, TD-026b background-aware blending, TD-026c LCD subpixel AA.
-3. **TD-027** — Powerline separator vivid rendering — OPEN. Hybrid bg-aware premul in `fs_main` is best current approach. See TD-027 in TECHNICAL_DEBT.md for next steps.
-
-### Out of Scope (Phase 3)
-- `src/plugins/` — Phase 3
-- `src/snippets/` — Phase 3
-- `src/ui/statusbar/` — Phase 3
-- TD-022 Agent mode — needs design doc
-- TD-023 Leader key — polish
+1. **TD-030 / TD-031** — Security hardening (Secret leakage & API key protection).
+2. **TD-034 / TD-035** — Architectural refactoring: Decompose `App` god-object and decouple UI from terminal.
+3. **TD-036** — Render pass consolidation for Tiled Deferred GPUs.
 
 ## Files to Reference
-- `.context/specs/build_phases.md` — Phase 2 deliverables checklist
-- `.context/specs/term_specs.md` — authoritative spec
-- `.context/quality/TECHNICAL_DEBT.md` — open debt items
-- `.context/core/SESSION_STATE.md` — session notes + Phase 2 order
+- `.context/quality/TECHNICAL_DEBT.md` — updated with 12 new items and 4 resolutions.
+- `src/app.rs` — contains new `RowCache` and updated `build_instances` / `RedrawRequested`.
+- `src/renderer/atlas.rs` — new `AtlasError` and `upload` Result.
+- `src/font/shaper.rs` — $O(N)$ optimization.

@@ -1,6 +1,14 @@
-use anyhow::Result;
 use cosmic_text::CacheKey;
 use std::collections::HashMap;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum AtlasError {
+    #[error("Glyph atlas is full")]
+    Full,
+    #[error("Atlas upload error: {0}")]
+    Other(String),
+}
 
 /// Location of a glyph in the GPU atlas texture.
 #[derive(Debug, Clone, Copy)]
@@ -99,7 +107,7 @@ impl GlyphAtlas {
         height: u32,
         bearing_x: i32,
         bearing_y: i32,
-    ) -> Result<AtlasEntry> {
+    ) -> Result<AtlasEntry, AtlasError> {
         let w = width + Self::PADDING * 2;
         let h = height + Self::PADDING * 2;
 
@@ -109,10 +117,9 @@ impl GlyphAtlas {
             self.shelf_height = 0;
         }
 
-        anyhow::ensure!(
-            self.cursor_y + h <= self.height,
-            "Glyph atlas is full — increase GlyphAtlas::SIZE"
-        );
+        if self.cursor_y + h > self.height {
+            return Err(AtlasError::Full);
+        }
 
         let x = self.cursor_x;
         let y = self.cursor_y;

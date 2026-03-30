@@ -18,7 +18,7 @@ use winit::event_loop::EventLoopProxy;
 use crate::config::{self, Config};
 use crate::config::schema::TitleBarStyle;
 use crate::config::watcher::ConfigWatcher;
-use crate::font::{build_font_system, TextShaper};
+use crate::font::{build_font_system, ShapedGlyph, TextShaper};
 use crate::llm::chat_panel::{AiEvent, ChatPanel, PanelState};
 use crate::llm::shell_context::ShellContext;
 use crate::renderer::cell::{CellVertex, FLAG_CURSOR, FLAG_LCD};
@@ -26,6 +26,39 @@ use crate::renderer::GpuRenderer;
 use crate::term::color::resolve_color;
 use crate::term::{CursorInfo, CursorShape, Terminal};
 use crate::ui::{CommandPalette, PaneManager, Rect, SplitDir, TabManager};
+
+/// Cache for a single shaped row to avoid re-shaping every frame.
+#[derive(Clone)]
+struct RowCacheEntry {
+    /// Hash of the row's text and colors.
+    hash: u64,
+    /// The resulting shaped glyphs for this row.
+    glyphs: Vec<ShapedGlyph>,
+    /// The physical pixel instances for this row (cached to avoid re-building CellVertex).
+    instances: Vec<CellVertex>,
+    /// The LCD instances for this row.
+    lcd_instances: Vec<CellVertex>,
+}
+
+/// Tracks shaped data for every visible row in the active terminal viewport.
+struct RowCache {
+    /// Indexed by (viewport_row).
+    rows: Vec<Option<RowCacheEntry>>,
+    /// Tracks which terminal ID this cache is valid for.
+    terminal_id: Option<usize>,
+    /// Tracks font config hash to invalidate on font change.
+    font_hash: u64,
+}
+
+impl RowCache {
+    fn new() -> Self {
+        Self { rows: Vec::new(), terminal_id: None, font_hash: 0 }
+    }
+
+    fn clear(&mut self) {
+        for r in &mut self.rows { *r = None; }
+    }
+}
 
 /// Top-level application state.
 ///
@@ -45,6 +78,11 @@ pub struct App {
     panes: Vec<PaneManager>,           // one PaneManager per tab
     terminals: Vec<Option<Terminal>>,  // indexed by terminal_id
     next_terminal_id: usize,
+
+    // Performance: Shaping & Instance Cache
+    row_cache: RowCache,
+    /// Generation counter for the glyph atlas — incremented when atlas is cleared.
+    atlas_generation: usize,
 
     // UI overlays
     palette: CommandPalette,
@@ -123,6 +161,8 @@ impl App {
             panes: Vec::new(),
             terminals: Vec::new(),
             next_terminal_id: 0,
+            row_cache: RowCache::new(),
+            atlas_generation: 0,
             palette: CommandPalette::new(),
             chat_panel: ChatPanel::new(),
             panel_focused: false,
@@ -1081,7 +1121,7 @@ impl ApplicationHandler<()> for App {
                 let scaled_font = self.scaled_font_config();
                 let lcd_atlas = self.renderer.as_mut().and_then(|r| r.get_lcd_atlas());
                 let mut shaper = if let Some(r) = &mut self.renderer {
-                    TextShaper::new(r.device(), fs, &scaled_font, lcd_atlas)
+                    TextShaper::new(&r.device(), fs, &scaled_font, lcd_atlas)
                 } else {
                     return;
                 };
@@ -1131,11 +1171,14 @@ impl ApplicationHandler<()> for App {
                 let cursor = self.active_terminal().map(|t| t.cursor_info());
                 let (term_cols, term_rows) = self.active_terminal_size();
                 let panel_visible = self.chat_panel.is_visible();
+                let active_tab_idx = self.tabs.active_index();
+                let terminal_id = self.panes.get(active_tab_idx).map(|p| p.focused_terminal).unwrap_or(0);
 
                 if let (Some(renderer), Some(shaper)) =
                     (&mut self.renderer, &mut self.shaper)
                 {
-                    build_instances(
+                    // Attempt to build instances. If the atlas is full, clear it and retry once.
+                    let result = build_instances(
                         &mut self.instances,
                         &mut self.lcd_instances,
                         &cell_data,
@@ -1145,7 +1188,34 @@ impl ApplicationHandler<()> for App {
                         &scaled_font,
                         cursor.as_ref(),
                         self.cursor_blink_on,
+                        &mut self.row_cache,
+                        terminal_id,
                     );
+
+                    if let Err(crate::renderer::atlas::AtlasError::Full) = result {
+                        log::warn!("Glyph atlas full; clearing and re-rendering (generation {}).", self.atlas_generation + 1);
+                        renderer.atlas.clear(&renderer.device());
+                        if let Some(atlas) = renderer.get_lcd_atlas() {
+                            atlas.borrow_mut().clear(&renderer.device());
+                        }
+                        self.row_cache.clear();
+                        self.atlas_generation += 1;
+
+                        // Second attempt with clean atlas.
+                        let _ = build_instances(
+                            &mut self.instances,
+                            &mut self.lcd_instances,
+                            &cell_data,
+                            shaper,
+                            renderer,
+                            &self.config,
+                            &scaled_font,
+                            cursor.as_ref(),
+                            self.cursor_blink_on,
+                            &mut self.row_cache,
+                            terminal_id,
+                        );
+                    }
 
                     if panel_visible {
                         build_chat_panel_instances(
@@ -1407,43 +1477,36 @@ fn push_shaped_row(
 
     for glyph in &shaped.glyphs {
         let (atlas, queue) = renderer.atlas_and_queue();
-        let entry = shaper.rasterize_to_atlas(glyph.cache_key, atlas, queue);
+        let entry = match shaper.rasterize_to_atlas(glyph.cache_key, atlas, queue) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
 
-        let (atlas_uv, glyph_offset, glyph_size) = match entry {
-            Some(e) => {
-                let ox = e.bearing_x as f32;
-                let oy = shaped.ascent - e.bearing_y as f32;
-                let gw = e.width as f32;
-                let gh = e.height as f32;
-                // Only clamp Y to cell_height (prevents Nerd Font row bleeding, TD-012).
-                // X is intentionally NOT clamped: JetBrains Mono calt ligatures use
-                // negative bearing_x to extend left; double-wide Nerd Font icons (e.g.
-                // MonoLisa Nerd Font non-Mono) have bitmaps wider than one cell and must
-                // overflow — premultiplied alpha (blend: One/OneMinusSrcAlpha) handles
-                // transparent edge pixels without fringing, so no X clip is needed.
-                let y0 = oy.max(0.0);
-                let y1 = (oy + gh).min(shaper.cell_height);
-                if y1 <= y0 || gw == 0.0 || gh == 0.0 {
-                    ([0.0f32; 4], [0.0; 2], [0.0; 2])
-                } else {
-                    let fy0 = (y0 - oy) / gh;
-                    let fy1 = (y1 - oy) / gh;
-                    let [u0, v0, u1, v1] = e.uv;
-                    ([u0, v0 + fy0*(v1-v0), u1, v0 + fy1*(v1-v0)], [ox, y0], [gw, y1-y0])
-                }
-            }
-            None => ([0.0f32; 4], [0.0; 2], [0.0; 2]),
+        let ox = entry.bearing_x as f32;
+        let oy = shaped.ascent - entry.bearing_y as f32;
+        let gw = entry.width as f32;
+        let gh = entry.height as f32;
+        let y0 = oy.max(0.0);
+        let y1 = (oy + gh).min(shaper.cell_height);
+
+        let (atlas_uv, glyph_offset, glyph_size) = if y1 <= y0 || gw == 0.0 || gh == 0.0 {
+            ([0.0f32; 4], [0.0; 2], [0.0; 2])
+        } else {
+            let fy0 = (y0 - oy) / gh;
+            let fy1 = (y1 - oy) / gh;
+            let [u0, v0, u1, v1] = entry.uv;
+            ([u0, v0 + fy0 * (v1 - v0), u1, v0 + fy1 * (v1 - v0)], [ox, y0], [gw, y1 - y0])
         };
 
         instances.push(CellVertex {
-            grid_pos:     [(col_offset + glyph.col) as f32, row as f32],
+            grid_pos: [(col_offset + glyph.col) as f32, row as f32],
             atlas_uv,
-            fg:           glyph.fg,
-            bg:           glyph.bg,
+            fg: glyph.fg,
+            bg: glyph.bg,
             glyph_offset,
             glyph_size,
-            flags:        0,
-            _pad:         0,
+            flags: 0,
+            _pad: 0,
         });
     }
 }
@@ -1672,17 +1735,19 @@ unsafe fn apply_macos_custom_titlebar(window: &Window) {
 }
 
 
+fn calculate_row_hash(text: &str, colors: &[([f32; 4], [f32; 4])]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    text.hash(&mut hasher);
+    // Rough hash of colors to avoid full float bit-pattern hashing
+    for (fg, bg) in colors {
+        ((fg[0] * 255.0) as u32).hash(&mut hasher);
+        ((bg[0] * 255.0) as u32).hash(&mut hasher);
+    }
+    hasher.finish()
+}
+
 /// Build the GPU instance list from raw terminal cell data.
-///
-/// Shapes each row with cosmic-text, rasterizes glyphs into the atlas,
-/// and emits one `CellVertex` per glyph. A cursor vertex is appended at
-/// the end when the cursor is visible and blink is on.
-///
-/// Writes into `instances` (cleared first). The caller should pass a
-/// persistent Vec so its capacity is reused across frames.
-///
-/// When LCD AA is enabled, glyphs are rasterized via FreeType LCD mode
-/// and emitted into `lcd_instances` with the `FLAG_LCD` flag set.
 fn build_instances(
     instances: &mut Vec<CellVertex>,
     lcd_instances: &mut Vec<CellVertex>,
@@ -1693,16 +1758,21 @@ fn build_instances(
     font: &crate::config::schema::FontConfig,
     cursor: Option<&CursorInfo>,
     cursor_blink_on: bool,
-) {
+    row_cache: &mut RowCache,
+    terminal_id: usize,
+) -> Result<(), crate::renderer::atlas::AtlasError> {
     instances.clear();
     lcd_instances.clear();
 
-    // Scratch buffer for per-row color resolution. Reused across rows to
-    // avoid a Vec allocation per row (40+ rows × 60 fps = ~2 400 allocs/s).
+    if row_cache.rows.len() < cell_data.len() {
+        row_cache.rows.resize(cell_data.len(), None);
+    }
+
+    // Scratch buffer for per-row color resolution.
     let mut colors_scratch: Vec<([f32; 4], [f32; 4])> = Vec::with_capacity(256);
 
     for (row_idx, (text, raw_colors)) in cell_data.iter().enumerate() {
-        // Resolve alacritty colors → linear RGBA into the reusable scratch buffer.
+        // Resolve colors.
         colors_scratch.clear();
         colors_scratch.extend(raw_colors.iter().map(|(fg, bg)| {
             (
@@ -1712,36 +1782,44 @@ fn build_instances(
         }));
         let colors: &[([f32; 4], [f32; 4])] = &colors_scratch;
 
+        let row_hash = calculate_row_hash(text, colors);
+
+        if let Some(Some(entry)) = row_cache.rows.get(row_idx) {
+            if entry.hash == row_hash && row_cache.terminal_id == Some(terminal_id) {
+                instances.extend_from_slice(&entry.instances);
+                lcd_instances.extend_from_slice(&entry.lcd_instances);
+                continue;
+            }
+        }
+
+        // Cache miss: Shape and build instances for this row.
+        let mut row_instances = Vec::new();
+        let mut row_lcd_instances = Vec::new();
+
         let shaped = shaper.shape_line(text, &colors, font);
 
         for glyph in &shaped.glyphs {
             let (atlas, queue) = renderer.atlas_and_queue();
-            let entry = shaper.rasterize_to_atlas(glyph.cache_key, atlas, queue);
+            let entry = shaper.rasterize_to_atlas(glyph.cache_key, atlas, queue)?;
 
-            let (atlas_uv, glyph_offset, glyph_size) = match entry {
-                Some(e) => {
-                    let ox = e.bearing_x as f32;
-                    let oy = shaped.ascent - e.bearing_y as f32;
-                    let gw = e.width as f32;
-                    let gh = e.height as f32;
-                    let y0 = oy.max(0.0);
-                    let y1 = (oy + gh).min(shaper.cell_height);
-                    if y1 <= y0 || gw == 0.0 || gh == 0.0 {
-                        ([0.0f32; 4], [0.0; 2], [0.0; 2])
-                    } else {
-                        let fy0 = (y0 - oy) / gh;
-                        let fy1 = (y1 - oy) / gh;
-                        let [u0, v0, u1, v1] = e.uv;
-                        ([u0, v0 + fy0*(v1-v0), u1, v0 + fy1*(v1-v0)], [ox, y0], [gw, y1 - y0])
-                    }
+            let (atlas_uv, glyph_offset, glyph_size) = {
+                let ox = entry.bearing_x as f32;
+                let oy = shaped.ascent - entry.bearing_y as f32;
+                let gw = entry.width as f32;
+                let gh = entry.height as f32;
+                let y0 = oy.max(0.0);
+                let y1 = (oy + gh).min(shaper.cell_height);
+                if y1 <= y0 || gw == 0.0 || gh == 0.0 {
+                    ([0.0f32; 4], [0.0; 2], [0.0; 2])
+                } else {
+                    let fy0 = (y0 - oy) / gh;
+                    let fy1 = (y1 - oy) / gh;
+                    let [u0, v0, u1, v1] = entry.uv;
+                    ([u0, v0 + fy0 * (v1 - v0), u1, v0 + fy1 * (v1 - v0)], [ox, y0], [gw, y1 - y0])
                 }
-                None => ([0.0f32; 4], [0.0; 2], [0.0; 2]),
             };
 
-            // Main pass: Always draw background + greyscale glyph.
-            // If LCD AA is enabled, we'll still draw the background here.
-            // If the char has an LCD representation, we'll later draw it on top.
-            instances.push(CellVertex {
+            row_instances.push(CellVertex {
                 grid_pos: [glyph.col as f32, row_idx as f32],
                 atlas_uv,
                 fg: glyph.fg,
@@ -1766,9 +1844,9 @@ fn build_instances(
                             let fy0 = (y0 - oy) / gh;
                             let fy1 = (y1 - oy) / gh;
                             let [u0, v0, u1, v1] = entry.uv;
-                            lcd_instances.push(CellVertex {
+                            row_lcd_instances.push(CellVertex {
                                 grid_pos: [glyph.col as f32, row_idx as f32],
-                                atlas_uv: [u0, v0 + fy0*(v1-v0), u1, v0 + fy1*(v1-v0)],
+                                atlas_uv: [u0, v0 + fy0 * (v1 - v0), u1, v0 + fy1 * (v1 - v0)],
                                 fg: glyph.fg,
                                 bg: glyph.bg,
                                 glyph_offset: [ox, y0],
@@ -1781,9 +1859,21 @@ fn build_instances(
                 }
             }
         }
+
+        instances.extend_from_slice(&row_instances);
+        lcd_instances.extend_from_slice(&row_lcd_instances);
+
+        row_cache.rows[row_idx] = Some(RowCacheEntry {
+            hash: row_hash,
+            glyphs: shaped.glyphs,
+            instances: row_instances,
+            lcd_instances: row_lcd_instances,
+        });
     }
 
-    // Cursor instance — appended to the bg pass so it draws on top of cell backgrounds.
+    row_cache.terminal_id = Some(terminal_id);
+
+    // Cursor instance — always appended (not cached).
     if let Some(info) = cursor {
         if info.visible && cursor_blink_on {
             let cw = shaper.cell_width;
@@ -1814,4 +1904,5 @@ fn build_instances(
             });
         }
     }
+    Ok(())
 }

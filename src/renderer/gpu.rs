@@ -447,8 +447,8 @@ impl GpuRenderer {
         self.lcd_atlas.as_ref().map(|rc| Rc::clone(rc))
     }
 
-    pub fn device(&self) -> &wgpu::Device {
-        &self.device
+    pub fn device(&self) -> wgpu::Device {
+        self.device.clone()
     }
 
     pub fn queue(&self) -> &wgpu::Queue {

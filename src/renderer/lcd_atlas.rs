@@ -140,4 +140,26 @@ impl LcdGlyphAtlas {
     pub fn sampler(&self) -> &wgpu::Sampler {
         &self.sampler
     }
+
+    pub fn clear(&mut self, device: &wgpu::Device) {
+        self.cursor_x = Self::PADDING;
+        self.cursor_y = Self::PADDING;
+        self.shelf_height = 0;
+        self.cache.clear();
+        self.texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("LCD glyph atlas"),
+            size: wgpu::Extent3d {
+                width: Self::SIZE,
+                height: Self::SIZE,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        self.view = self.texture.create_view(&wgpu::TextureViewDescriptor::default());
+    }
 }

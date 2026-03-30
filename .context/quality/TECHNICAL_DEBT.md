@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-03-30
-**Total Items:** 9
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 2 | **P3:** 6
+**Total Items:** 21
+**Critical (P0):** 0 | **P1:** 3 | **P2:** 3 | **P3:** 6
 
 ## Priority Definitions
 
@@ -23,7 +23,84 @@ _None_
 
 ## P1 - High Priority
 
-_None_
+### ~~TD-028: Redundant Text Shaping (Performance)~~ — RESOLVED
+- **File:** `src/app.rs` (`WindowEvent::RedrawRequested`)
+- **Issue:** `shaper.shape_line` was called for every visible row on every frame (60+ times/sec), even if terminal content hadn't changed. Shaping (HarfBuzz) is expensive.
+- **Fix:** Implemented a row-level `RowCache` in `App`. Rows are hashed (text + colors); cached shaped glyphs and GPU instances are reused if the hash matches.
+- **WezTerm Inspiration:** WezTerm caches shaping results at the `Line` level (using `termwiz` appdata). It only re-shapes clusters when the underlying grid row is modified.
+
+### ~~TD-029: $O(N^2)$ Column Calculation during Shaping (Performance)~~ — RESOLVED
+- **File:** `src/font/shaper.rs` (`shape_line`)
+- **Issue:** Column index for each glyph was calculated using `text[..start].chars().count()`. Inside a loop over all glyphs, this makes shaping a single line $O(N^2)$ relative to character count.
+- **Fix:** `TextShaper::shape_line` now uses incremental character counts to determine glyph columns in $O(N)$.
+- **WezTerm Inspiration:** WezTerm iterates through `CellCluster` objects and keeps an incremental count of the visual columns covered, avoiding redundant string traversals.
+
+### TD-030: Secret Leakage to LLM Provider (Security)
+- **File:** `src/llm/shell_context.rs`, `src/app.rs`
+- **Issue:** `ShellContext` automatically captures `last_command` from shell history and includes it in the LLM system prompt. Sensitive data (API keys, tokens, passwords) used in shell commands are transmitted in plaintext to the LLM provider.
+- **Fix:** Add a sanitization step to strip likely secrets from `last_command`, or add a user confirmation/opt-out setting for sending shell history.
+- **WezTerm Inspiration:** While WezTerm doesn't have a built-in LLM sidecar, it promotes a "secret-first" config pattern. PetruTerm should adopt a similar pattern where shell integration only captures "safe" metadata unless explicitly allowed.
+
+### TD-031: Insecure API Key Storage (Security)
+- **File:** `src/llm/openrouter.rs`, `src/llm/openai_compat.rs`
+- **Issue:** API keys are stored as raw `String` objects. They are vulnerable to exposure in memory dumps, `Debug` logs, and error reporting.
+- **Fix:** Wrap API keys in a secret-protecting type (e.g., using the `secrecy` crate) to ensure they are zeroed on drop and hidden from `Debug` output.
+- **WezTerm Inspiration:** WezTerm allows loading secrets from environment variables or external processes (like `security find-generic-password` on macOS). PetruTerm should allow `llm.lua` to fetch keys via `wezterm.run_child_process` (or equivalent) rather than hardcoding them.
+
+### TD-032: High-Bandwidth GPU Instance Uploads (Performance)
+- **File:** `src/renderer/gpu.rs` (`upload_instances`)
+- **Issue:** The entire terminal grid (up to 32k instances, ~2MB) is uploaded to the GPU via `write_buffer` every frame, creating ~120MB/s of unnecessary memory traffic at 60 FPS.
+- **Fix:** Use a "dirty-rect" or "dirty-row" approach to only upload modified `CellVertex` data, or use `wgpu` buffer mapping/staging to reduce copy overhead.
+- **WezTerm Inspiration:** WezTerm caches the vertex data (quads) and only updates the GPU buffers for rows that have changed (dirty row tracking).
+
+---
+
+## P2 - Medium Priority
+
+### ~~TD-033: Atlas Stability & Eviction (Stability)~~ — RESOLVED
+- **File:** `src/renderer/atlas.rs`
+- **Issue:** `GlyphAtlas` used a simple shelf-packer with no eviction policy. It would eventually fill up and crash/error if many unique glyphs (Nerd Fonts, different sizes) were rendered.
+- **Fix:** Implemented a "flush and start over" strategy. `GlyphAtlas::upload` now returns `AtlasError::Full`. `App::render` catches this, clears both Glyph and LCD atlases, clears the `RowCache`, and re-renders the frame.
+- **WezTerm Inspiration:** WezTerm uses a "flush and start over" strategy. When the atlas runs out of space (`OutOfTextureSpace`), it clears the entire atlas and re-populates it with just the glyphs needed for the current frame.
+
+### TD-034: God Object Pattern in `App` (Architecture)
+- **File:** `src/app.rs`
+- **Issue:** `App` manages window lifecycle, GPU state, terminal instances, input mapping, AI logic, and UI rendering. It has too many responsibilities, making it hard to test and maintain.
+- **Fix:** Refactor into specialized managers: `RenderContext` for GPU, `InputHandler` for keymaps, and `TabManager`/`PaneManager` for terminal layout.
+- **WezTerm Inspiration:** WezTerm separates concerns into `TermWindow` (UI/Logic), `RenderState` (GPU), and a dedicated `Mux` (Multiplexer) for managing terminals and tabs.
+
+### TD-035: Tight Coupling between UI and Terminal (Architecture)
+- **File:** `src/app.rs`, `src/ui/`
+- **Issue:** `App` manually iterates over panes and terminals for resizing and event polling. The UI layout logic is not sufficiently isolated from the terminal state.
+- **Fix:** Define a clear trait-based interface for UI components to interact with terminal instances, allowing for easier testing and alternative UI implementations.
+- **WezTerm Inspiration:** WezTerm uses a decoupled model where the terminal state (`Pane`) is distinct from the windowing layer, communicating via events and shared state.
+
+### TD-036: Suboptimal Render Pass Architecture (Performance)
+- **File:** `src/renderer/gpu.rs`
+- **Issue:** Rendering uses three separate passes (BG, Glyph, LCD). On Tiled Deferred GPUs (macOS/iOS), multiple passes with `LoadOp::Load` force unnecessary tile memory reloads.
+- **Fix:** Consolidate BG and Glyph passes into a single render pass if possible, or optimize load/store operations to minimize bandwidth.
+- **WezTerm Inspiration:** WezTerm's OpenGL/WebGPU renderers minimize passes. Its WebGPU backend leverages modern bind-groups to draw backgrounds and glyphs in a more unified flow.
+
+---
+
+## P3 - Low Priority
+
+### TD-037: Incomplete Palette Actions (Implementation)
+- **File:** `src/app.rs` (`handle_palette_action`)
+- **Issue:** "Explain Last Output" and "Fix Last Error" in the command palette are currently stubs that just log info, despite implementations existing as methods in `App`.
+- **Fix:** Wire up the palette actions to call `explain_last_output()` and `fix_last_error()`.
+
+### TD-038: Hardcoded UI Constants (Implementation)
+- **File:** `src/app.rs` (`build_chat_panel_instances`)
+- **Issue:** AI panel colors, paddings, and layout constants are hardcoded in the rendering function.
+- **Fix:** Move UI constants to the Lua configuration system or a dedicated `theme.lua` module.
+- **WezTerm Inspiration:** Virtually all UI aspects in WezTerm are configurable via Lua, from border widths to individual color palette indices.
+
+### TD-039: Manual ANSI Key Encoding (Implementation)
+- **File:** `src/app.rs` (`send_key_to_active_terminal`)
+- **Issue:** Arrow keys and other special keys are manually converted to ANSI escape sequences. This is error-prone and hard to extend.
+- **Fix:** Use a dedicated key-to-sequence mapping library or a data-driven approach based on the `TERM` definition.
+- **WezTerm Inspiration:** WezTerm uses a robust input mapping system that translates `winit` events into terminal sequences based on the current terminal mode and `TERM` capability database.
 
 ### ~~TD-021: Drag-and-drop file path not inserted~~ — RESOLVED
 - `WindowEvent::DroppedFile`: panel focused → append to chat input; terminal focused → write path to PTY.
@@ -46,53 +123,6 @@ _None_
 
 ### ~~TD-003: PTY cell_width/cell_height hardcoded at 8×16~~ — RESOLVED
 
----
-
-## P2 - Medium Priority
-
-### ~~TD-012: Nerd Font / special-character glyphs overflow cell bounds~~ — RESOLVED
-<!--
-- **File:** `src/font/shaper.rs`, `src/app.rs` (`build_instances`)
-- **Issue:** Nerd Font PUA icons (U+E000–U+F8FF, U+F0000+) such as the Apple logo,
-  git branch glyph, and Starship separator arrows render visibly taller/larger than
-  regular characters. They overflow the cell height, clipping into adjacent rows.
-- **Root cause:** Two likely causes (needs investigation):
-  1. The swash rasterizer returns a bitmap larger than `cell_height` for these glyphs
-     (their design is taller in the font metrics). `build_instances` uses the raw
-     bitmap size as `glyph_size`, so the quad expands beyond the cell.
-  2. `bearing_y` / ascent calculation pushes the glyph origin outside the cell rect.
-- **Fix options:**
-  1. Clamp `glyph_size` to `[cell_width, cell_height]` in `build_instances` so no
-     glyph quad can exceed its cell.
-  2. Scale oversized glyphs down proportionally to fit within the cell box.
-  3. Add a scissor rect per cell in the render pass (GPU-level clipping).
-- **Priority:** P2 — cosmetic but prominent with any Starship / Nerd Font theme.
-- **Observed:** Apple logo, ⎇ branch icon, Starship separator arrows are taller than
-  text rows; the prompt background segments look correct but icons bleed vertically.
--->
-
-### ~~TD-004: Scrollback not verified at 100k lines~~ — RESOLVED
-- Scrollback rendering fixed (display_offset applied); 110k lines confirmed scrollable.
-
-### ~~TD-024: Mouse text selection not working~~ — RESOLVED
-- `cell_in_selection()` checks `SelectionRange` per cell; selected cells rendered with inverted fg/bg.
-- `start_selection` guarded by `!any_mouse` (no conflict with nvim/tmux mouse reporting).
-- Window drag: `setMovableByWindowBackground: NO`; clicks in pad_top zone → `window.drag_window()`.
-
-### ~~TD-018: catppuccin tmux separators don't blend with adjacent cells~~ — RESOLVED
-<!--
-Root cause: fragment shader was doing mix(bg, fg, alpha) and returning alpha=1.0 always.
-Transparent edge pixels of powerline glyphs wrote the separator's bg color over the adjacent
-cell's background, creating a visible fringe strip.
-Fix (2026-03-27):
-- Shader switched to premultiplied alpha: returns vec4(fg_srgb * alpha, alpha) instead of mix.
-- wgpu blend state: SrcAlpha → One (matches premultiplied output, One/OneMinusSrcAlpha).
-  Alpha-0 glyph pixels are now fully transparent; bg pass colour shows through correctly.
-Note: right-edge clamping was initially added but later removed (2026-03-27) because it broke
-double-wide Nerd Font icons (MonoLisa NF non-Mono). Premultiplied alpha alone is sufficient
-to fix the fringing — overflowing transparent pixels cause no visible artifact.
--->
-
 ### TD-005: PTY thread JoinHandle type-erased
 - **File:** `src/term/pty.rs`
 - **Issue:** `EventLoop::spawn()` return value is boxed as `Box<dyn Any + Send>`. Thread can't be joined or inspected on exit.
@@ -103,101 +133,6 @@ to fix the fringing — overflowing transparent pixels cause no visible artifact
 ### ~~TD-007: No clipboard integration~~ — RESOLVED
 
 ### ~~TD-010: Nerd Font icons render as CJK fallback glyphs~~ — RESOLVED
-- **File:** `src/font/loader.rs`, `src/font/shaper.rs`
-- **Issue:** Starship prompt and other tools use Nerd Font Private Use Area codepoints (U+E000–U+F8FF, U+F0000+) for icons. The bundled JetBrains Mono does not include these glyphs. cosmic-text falls back to system CJK fonts for PUA codepoints, rendering Chinese characters instead of icons.
-- **Observed:** File-type icons, git branch icon (󰘬), and arrow separators all render as CJK characters in the Starship prompt.
-- **Impact:** Cosmetic — terminal is functional but prompt looks broken with any Nerd Font theme.
-- **Fix options:**
-  1. Bundle `JetBrainsMono Nerd Font` (the patched variant from nerdfonts.com) instead of stock JetBrains Mono.
-  2. Bundle a dedicated Nerd Font symbols-only font (`NerdFontsSymbolsOnly`) as a fallback and load it after JetBrains Mono in fontdb — cosmic-text will try it for missing glyphs automatically.
-  3. Instruct users to set a Nerd Font variant in `config.lua`: `font.family = "JetBrainsMono Nerd Font"`.
-  - Option 2 is recommended: keeps the main font clean, symbols font is ~3MB, covers all PUA ranges.
-- **Priority:** P2 — cosmetic, but prominent with any Nerd Font shell theme.
-
----
-
-## P3 - Low Priority
-
-### TD-027: Powerline separator arrows render less vivid than WezTerm
-- **File:** `src/renderer/pipeline.rs` (`fs_main`), `src/font/shaper.rs`
-- **Issue:** Powerline separator arrows (U+E0B0 etc.) appear darker / less saturated than WezTerm. Root cause is twofold: (1) swash greyscale AA does not produce alpha=1.0 for solid-fill pixels the way CoreText does; (2) the linear-space bg-aware premultiplied blend in `fs_main` partially compensates but edge-pixel contribution is still attenuated by the `ca * ca` double-weight.
-- **Current state (2026-03-30):** `fs_main` uses hybrid bg-aware premul: `mix(bg_lin, fg_lin, ca)` in linear space, output `(rgb * ca, ca)`. Solid-fill pixels → `ca=1 → fg_srgb` (vivid). Edge pixels attenuated more than pure bg_aware (9% fg vs 30% fg at ca=0.3). Overall better than plain premul but still slightly duller than WezTerm.
-- **Attempts so far:** (1) bg_aware REPLACE — vivid but had TD-018 fringing; (2) premul sRGB — no fringing but dark; (3) hybrid bg-aware premul — best compromise so far, still not matching WezTerm.
-- **Next steps to investigate:**
-  1. Verify swash `SwashContent::Mask` alpha for solid pixels — add debug log for max alpha per glyph. If max < 230, swash quality is the bottleneck (not shader math).
-  2. Try `pow(alpha, 1/2.2)` (standard gamma) instead of `1/1.4` — might push solid pixels closer to 1.0.
-  3. Consider rendering powerline glyphs via CoreText directly on macOS (use `objc2` + `CGFont`) for solid fill — these glyphs don't benefit from LCD AA and just need solid coverage.
-  4. WezTerm approach: render bg-pass to a separate texture, bind it as `@group(2)` in the glyph pass — then `fs_main` samples the ACTUAL background at each fragment instead of using vertex-bg, eliminating the premul attenaution entirely.
-- **Priority:** P3 — text and regular glyphs look correct; only Starship/Nerd Font separators are affected.
-
-### TD-022: Chat panel has no access to current working directory or project files
-- **File:** `src/llm/` (new), `src/app.rs`
-- **Issue:** The chat panel sends user messages to the LLM with only a static system prompt. It has no awareness of the current working directory, open files, shell history, or directory listing. This limits the AI's usefulness for project-specific questions ("explain this file", "what's in this directory", "why did that command fail").
-- **Vision:** Implement a lightweight local agent that runs when the chat panel is open. The agent would: (1) capture CWD from the PTY via OSC sequences or shell integration hooks; (2) on user query, attach relevant context (CWD, `ls` output, relevant file snippets) to the system prompt; (3) support tool calls: `read_file`, `list_dir`, `run_command` — executed locally in a sandboxed manner; (4) multi-turn with tool results fed back to the model.
-- **Scope:** Substantial — requires shell integration script (TD roadmap item), a tool-call loop in the tokio task, and a context-assembly step before each LLM call. Warrants its own design doc before implementation.
-- **Priority:** P3 — chat works for general questions; agent mode is a Phase 3 feature.
-
-### TD-023: Leader key for panel and pane actions
-- **Files:** `src/app.rs`, `src/config/schema.rs`
-- **Issue:** Panel toggle (Ctrl+C) and focus switch (Ctrl+V) conflict with standard terminal shortcuts (SIGINT, literal-next). As more panel actions are added (explain output, fix error, run last command), each will need a dedicated keybind — and the available Ctrl+key space is nearly exhausted by terminal conventions.
-- **Vision:** Implement a second leader key (separate from the tmux leader used for pane splits) dedicated to AI/panel actions. Example: `Ctrl+A` as default. Sequence: `Ctrl+A` → panel opens if closed, then next key selects action:
-  - `Ctrl+A` again → close panel
-  - `Tab` / `Ctrl+V` → switch focus
-  - `e` → explain last output (Ctrl+Shift+E)
-  - `f` → fix last error (Ctrl+Shift+F)
-  - `r` → run last AI command
-  This mirrors how tmux solves the same conflict — all multiplexer actions live behind a prefix, leaving the raw key space to the running process.
-- **Migration:** Once implemented, Ctrl+C/Ctrl+V panel bindings become aliases or are removed.
-- **Priority:** P3 — current bindings work; this is a polish/extensibility improvement.
-
-### TD-026: Glyph antialiasing quality vs WezTerm
-- **File:** `src/renderer/atlas.rs`, `src/font/shaper.rs`, fragment shader in `src/renderer/pipeline.rs`
-- **Issue:** Rendered text looks rougher / less crisp than WezTerm at the same font size and DPI. WezTerm applies subpixel antialiasing (freetype LCD rendering or CoreText CG subpixel AA on macOS) and composites glyphs against the actual cell background colour, whereas PetruTerm rasterises masks in greyscale and blends in the fragment shader without background-aware correction.
-- **Investigation:** Review WezTerm's antialiasing pipeline:
-  - `wezterm-font/src/rasterizer/` — how it selects between freetype, CoreText, and DirectWrite backends per platform.
-  - `wezterm-render/` — how LCD RGB masks (3-channel) are stored in the atlas and composited against bg in the shader (separate R/G/B coverage → per-channel lerp).
-  - Check whether swash exposes subpixel/LCD output or only greyscale masks, and whether cosmic-text passes through subpixel hints.
-- **Reference:** WezTerm `wezterm-font/src/rasterizer/freetype.rs` (LCD filter flags) and `wezterm-render/src/glyphcache.rs` (atlas format + shader).
-- **Priority:** P3 — text is readable; this is a polish/fidelity improvement for Phase 2.
-
-**Resolution: 3-level plan (in progress)**
-
-### TD-026a: Greyscale gamma correction (Nivel 1)
-- **Status:** DONE (2026-03-30)
-- **Fix:** Use existing `srgb_to_lin`/`lin_to_srgb` helpers in fragment shader. Convert fg to linear, blend with bg (linear), convert back to sRGB. Applies `pow(alpha, 1/2.2)` for greyscale gamma.
-- **Effort:** Low — shader change only.
-- **Commit:** shader pipeline.rs:84-93 — `fs_main` now converts fg sRGB→linear, applies `pow(alpha, 1/2.2)`, outputs premultiplied linear for GPU blend.
-
-### TD-026b: Background-aware blending (Nivel 2)
-- **Status:** DONE (2026-03-30)
-- **Fix:** `fs_bg_aware` does gamma-correct blend manually in linear space: sRGB→linear for both fg and bg, `mix(bg_lin, fg_lin, pow(alpha, 1/2.2))`, then linear→sRGB output with alpha=1.0. Separate `CellPipelineBgAware` pipeline with `BlendState::REPLACE` (no GPU premultiplied blend).
-- **Effort:** Medium — requires pipeline re-evaluation.
-- **Commit:** `fs_bg_aware` shader + `CellPipelineBgAware` pipeline in `src/renderer/pipeline.rs`; `GpuRenderer` uses it for glyph pass.
-
-### TD-026c: LCD subpixel AA (Nivel 3)
-- **Status:** DONE (2026-03-30) — FULLY WIRED
-- **Fix:** FreeType LCD rasterizer (`FreeTypeLcdRasterizer`) using `FT_RENDER_MODE_LCD`; deinterleaves R/G/B subpixel data into RGBA atlas format. Separate `LcdGlyphAtlas` + `CellPipelineLcd` shader with `fs_lcd` entry point that blends per-channel in linear space against cell background. LCD glyphs stored in separate atlas from SwashCache greyscale glyphs. LCD AA enabled via `config.font.lcd_antialiasing = true`.
-- **Architecture:** `GpuRenderer` owns `LcdGlyphAtlas` (via `RefCell`), `TextShaper` uses `FreeTypeLcdRasterizer` which writes to that atlas. Glyphs with `FLAG_LCD` go through separate `lcd_instances` buffer and `upload_lcd_instances()`. Render pass 3 (LCD pass) draws LCD glyphs with `fs_lcd` shader reading from LCD atlas bind group (`@group(2)`).
-- **Effort:** High — major architecture change.
-- **Commit:** `src/font/freetype_lcd.rs` (FreeType LCD rasterizer), `src/renderer/lcd_atlas.rs` (LCD atlas), `src/renderer/pipeline.rs` (LCD shader + `CellPipelineLcd`), `src/renderer/gpu.rs` (LCD infrastructure wired), `src/font/shaper.rs` (`rasterize_lcd_to_atlas`, `ch` field added to `ShapedGlyph`), `src/app.rs` (LCD instance routing in `build_instances`), `Cargo.toml` (added `freetype = "0.7"`).
-
-### ~~TD-025: Vertical spacing between terminal lines too tight~~ — RESOLVED
-<!--
-Fix: `font.line_height: f32` added to `FontConfig` (default 1.2); `TextShaper::new` passes
-`font_config.size * font_config.line_height` as line_height to `cosmic_text::Metrics`.
-`measure_cell` reads `run.line_height` which reflects the multiplier → `cell_height` propagates
-to PTY resize via `cell_dims()`. Configurable from Lua: `font.line_height = 1.4`.
--->
-
-### TD-008: Dead code / unused import warnings
-- **Files:** `src/font/`, `src/renderer/`, `src/term/`, `src/ui/`
-- **Issue:** ~23 warnings for unused stubs. Render loop being wired up has cleared most original offenders.
-- **Fix:** Suppress with `#[allow(dead_code)]` on stub items that will be used in Phase 2/3.
-
-### TD-009: Default config require() path not set up for embedded eval
-- **File:** `src/config/mod.rs`
-- **Issue:** `load_config_str` doesn't set `package.path`, so require() in embedded defaults fails. Currently mitigated because the user config is loaded from disk (which does set the path).
-- **Fix:** Embed all default modules as flat Lua or eval them in sequence before the main config.
 
 ---
 
@@ -205,25 +140,9 @@ to PTY resize via `cell_dims()`. Configurable from Lua: `font.line_height = 1.4`
 
 | ID | Title | Resolved | Resolution |
 |----|-------|----------|------------|
-| TD-025 | Vertical spacing too tight | 2026-03-27 | `font.line_height: f32` (default 1.2) in FontConfig; Metrics line_height = size * multiplier; propagates to cell_height + PTY |
-| TD-018 | Powerline separator colour fringing | 2026-03-27 | Premultiplied alpha in shader + blend state (One/OneMinusSrcAlpha); glyph right-edge clamped to cell_width |
-| — | Ligature rendering (negative bearing_x clipped) | 2026-03-27 | Removed X-axis clamping in build_instances; bearing_x passed raw to shader |
-| TD-004 | Scrollback rendering broken (display_offset ignored) | 2026-03-24 | `collect_grid_cells` uses `Line(row - display_offset)`; trackpad PixelDelta divisor fixed (logical pts) |
-| TD-013 | Arrow keys ignore APP_CURSOR (DECCKM) | 2026-03-24 | `send_key_to_active_terminal` reads `TermMode::APP_CURSOR`; sends `\x1bO_` vs `\x1b[_` |
-| TD-002 | PTY placeholder proxy drops PtyWrite | 2026-03-24 | `Arc<OnceLock<Notifier>>` shared between Term proxy and Pty::spawn; atuin/TUI cursor queries now work |
-| TD-012 | Nerd Font icons overflow cell | 2026-03-23 | clamp_glyph_to_cell() crops glyph_size + atlas_uv to cell bounds before emitting CellVertex |
-| TD-011 | exit doesn't close window | 2026-03-23 | poll_pty_events returns (has_data, shell_exited); both about_to_wait and RedrawRequested call event_loop.exit() on exit |
-| TD-003 | PTY cell_width/height hardcoded | 2026-03-23 | Pty::spawn/resize now accept cell_w/h from TextShaper; Terminal::resize propagated; WindowEvent::Resized now calls terminal.resize() |
-| TD-007 | No clipboard integration | 2026-03-23 | arboard crate; Cmd+C copies selection, Cmd+V pastes (bracketed-paste aware); OSC 52 via PtyEvent::ClipboardStore/Load; PtyWrite forwarding |
-| TD-006 | No mouse event handling | 2026-03-23 | CursorMoved/MouseInput/MouseWheel handled; drag selection via alacritty Selection API; SGR+X10 mouse reporting; scrollback scroll wheel |
-| TD-001 | Cell rendering not connected | 2026-03-22 | Full pipeline wired: grid walk → shape_line → rasterize → CellVertex → bg+glyph draw passes |
-| TD-010 | Nerd Font icons render as CJK | 2026-03-22 | Replaced bundled JetBrains Mono with JetBrains Mono Nerd Font Mono v3.3.0 |
-| — | wgpu 29 API breaks | 2026-03-22 | `CurrentSurfaceTexture`, `TexelCopyTextureInfo`, `TexelCopyBufferLayout`, `immediate_size`, `multiview_mask`, `depth_slice` |
-| — | alacritty_terminal SizeInfo removed | 2026-03-22 | Local `TermSize: Dimensions` trait implemented |
-| — | mlua LuaError not Send+Sync | 2026-03-22 | Internal fns return `LuaResult<T>`, map at public boundary |
-| — | cosmic-text AttrsList API | 2026-03-22 | `AttrsList::new(&attrs)`, `get_image_uncached()` for owned Option |
-| — | Glyph mask sampled via wrong channel | 2026-03-22 | Changed mask RGBA storage to `[a,a,a,255]`; shader reads `.r` correctly |
-| — | sRGB/linear color mismatch | 2026-03-22 | Switched surface format to non-sRGB; colors stored as sRGB display correctly |
-| — | JetBrains Mono not installed | 2026-03-22 | Bundled via `include_bytes!` in `assets/fonts/`; always available |
-| — | Retina HiDPI font too small | 2026-03-22 | `scale_factor` from `window.scale_factor()` applied to font size; cell size now 18×36px at 2× |
-| — | Lua `require('petruterm')` fails | 2026-03-22 | Registered in `package.preload` after global injection |
+| TD-028 | Redundant Text Shaping | 2026-03-30 | Row-level caching (RowCache) with hashing. |
+| TD-029 | O(N^2) Column Calculation | 2026-03-30 | Incremental column tracking in shape_line. |
+| TD-033 | Atlas Stability & Eviction | 2026-03-30 | Flush-and-restart strategy on AtlasError::Full. |
+| TD-025 | Vertical spacing too tight | 2026-03-27 | font.line_height config (default 1.2). |
+| TD-018 | Powerline separator fringing | 2026-03-27 | Premultiplied alpha + blend: One/OneMinusSrcAlpha. |
+| TD-012 | Nerd Font icons overflow cell | 2026-03-23 | clamp_glyph_to_cell() crops glyph_size. |

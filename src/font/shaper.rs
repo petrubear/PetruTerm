@@ -223,55 +223,55 @@ impl TextShaper {
     }
 
     /// Rasterize a glyph via swash and upload it to the GPU atlas.
-    /// Returns the atlas entry, or None if the glyph has no visual representation.
     pub fn rasterize_to_atlas(
         &mut self,
         cache_key: CacheKey,
         atlas: &mut GlyphAtlas,
         queue: &wgpu::Queue,
-    ) -> Option<AtlasEntry> {
+    ) -> Result<AtlasEntry, crate::renderer::atlas::AtlasError> {
         if let Some(entry) = atlas.get(&cache_key) {
-            return Some(entry);
+            return Ok(entry);
         }
 
         let image = self
             .swash_cache
-            .get_image_uncached(&mut self.font_system, cache_key)?;
+            .get_image_uncached(&mut self.font_system, cache_key)
+            .ok_or_else(|| crate::renderer::atlas::AtlasError::Other("Swash failed to rasterize glyph".into()))?;
 
         let width = image.placement.width;
         let height = image.placement.height;
 
         if width == 0 || height == 0 {
-            return None;
+            // Return a dummy entry for empty glyphs (like space) so we don't try to re-rasterize.
+            return Ok(AtlasEntry {
+                uv: [0.0; 4],
+                width: 0,
+                height: 0,
+                bearing_x: 0,
+                bearing_y: 0,
+            });
         }
 
         // Convert swash image content to RGBA8.
-        // Store coverage in R channel — the shader reads `.r` as the alpha mask.
-        // Color glyphs (emoji) are stored as full RGBA with R=255, so `.r` = 1.0
-        // and the fg/bg mix will render the glyph color via the atlas directly.
         let rgba: Vec<u8> = match image.content {
             cosmic_text::SwashContent::Mask => {
-                // Grayscale mask: replicate coverage into all channels, full alpha.
                 image.data.iter().flat_map(|&a| [a, a, a, 255u8]).collect()
             }
             cosmic_text::SwashContent::Color => image.data.to_vec(),
             cosmic_text::SwashContent::SubpixelMask => {
-                // Treat subpixel as grayscale for now.
                 image.data.iter().flat_map(|&a| [a, a, a, 255u8]).collect()
             }
         };
 
-        atlas
-            .upload(
-                queue,
-                cache_key,
-                &rgba,
-                width,
-                height,
-                image.placement.left,
-                image.placement.top,
-            )
-            .ok()
+        atlas.upload(
+            queue,
+            cache_key,
+            &rgba,
+            width,
+            height,
+            image.placement.left,
+            image.placement.top,
+        )
     }
 
     /// Rasterize a character using the FreeType LCD rasterizer and upload to the LCD atlas.
