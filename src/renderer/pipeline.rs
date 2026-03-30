@@ -72,6 +72,11 @@ fn lin_to_srgb(c: f32) -> f32 {
     return 1.055 * pow(c, 1.0 / 2.4) - 0.055;
 }
 
+// Convert a vec4 (rgba) to an array of 4 f32s — enables component-wise indexing.
+fn to_array4(v: vec4<f32>) -> array<f32, 4> {
+    return array<f32, 4>(v.r, v.g, v.b, v.a);
+}
+
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     let mask = textureSample(t_atlas, s_atlas, in.uv).r;
@@ -233,6 +238,7 @@ fn lin_to_srgb(c: f32) -> f32 {
     return 1.055 * pow(c, 1.0 / 2.4) - 0.055;
 }
 
+// Convert a vec4 (rgba) to an array of 4 f32s — enables component-wise indexing.
 fn to_array4(v: vec4<f32>) -> array<f32, 4> {
     return array<f32, 4>(v.r, v.g, v.b, v.a);
 }
