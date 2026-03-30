@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-03-30
 **Total Items:** 21
-**Critical (P0):** 0 | **P1:** 1 | **P2:** 2 | **P3:** 6
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 1 | **P3:** 1
 
 ## Priority Definitions
 
@@ -57,10 +57,9 @@ _None_
 - **Fix:** Implemented a "flush and start over" strategy. `GlyphAtlas::upload` now returns `AtlasError::Full`. `App::render` catches this, clears both Glyph and LCD atlases, clears the `RowCache`, and re-renders the frame.
 - **WezTerm Inspiration:** WezTerm uses a "flush and start over" strategy. When the atlas runs out of space (`OutOfTextureSpace`), it clears the entire atlas and re-populates it with just the glyphs needed for the current frame.
 
-### TD-034: God Object Pattern in `App` (Architecture)
-- **File:** `src/app.rs`
-- **Issue:** `App` manages window lifecycle, GPU state, terminal instances, input mapping, AI logic, and UI rendering. It has too many responsibilities, making it hard to test and maintain.
-- **Fix:** Refactor into specialized managers: `RenderContext` for GPU, `InputHandler` for keymaps, and `TabManager`/`PaneManager` for terminal layout.
+### ~~TD-034: God Object Pattern in `App` (Architecture)~~ — RESOLVED
+- **Implementation:** Decomposed the 2000-line `App` struct into specialized managers: `RenderContext` (GPU), `Mux` (PTY/Tabs/Panes), `UiManager` (AI/Overlays), and `InputHandler` (Keyboard/Mouse).
+- **Result:** Drastic improvement in maintainability and modularity. `App` is now a thin event coordinator.
 - **WezTerm Inspiration:** WezTerm separates concerns into `TermWindow` (UI/Logic), `RenderState` (GPU), and a dedicated `Mux` (Multiplexer) for managing terminals and tabs.
 
 ### TD-035: Tight Coupling between UI and Terminal (Architecture)
