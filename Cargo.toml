@@ -23,6 +23,12 @@ alacritty_terminal = "0.25"
 # Font shaping and rendering
 cosmic-text = "0.18"
 
+# FreeType LCD subpixel rasterization (TD-026c)
+freetype = "0.7"
+
+# Font discovery for LCD AA (any system font)
+font-kit = "0.14"
+
 # Lua 5.4 config DSL
 mlua = { version = "0.11", features = ["lua54", "vendored"] }
 

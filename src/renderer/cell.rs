@@ -1,6 +1,8 @@
 /// Cell flag bits for the `flags` field in `CellVertex`.
 /// Used by the GPU shader to select rendering mode.
 pub const FLAG_CURSOR: u32 = 0x08;
+/// LCD subpixel AA glyph (3× horizontal resolution in atlas).
+pub const FLAG_LCD: u32 = 0x10;
 
 /// A single instanced vertex representing one terminal cell on the GPU.
 ///

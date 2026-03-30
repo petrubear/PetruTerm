@@ -1,8 +1,8 @@
 # Active Context
 
 **Current Focus:** Phase 3 — Rendering Quality
-**Last Active:** 2026-03-27
-**Target Completion:** TD-025, TD-026
+**Last Active:** 2026-03-30
+**Target Completion:** TD-027 (powerline vivid rendering)
 **Priority:** P3
 
 ## Current State
@@ -37,9 +37,8 @@ All acceptance criteria verified on M4 Max.
 
 ### Priority Order
 1. ~~**TD-025** — Line spacing~~ **DONE** — `font.line_height: f32` (default 1.2), propagated via Metrics → cell_height → PTY.
-2. **TD-026** — Antialiasing quality
-   - Files: `src/renderer/atlas.rs`, `src/renderer/pipeline.rs`, `src/font/shaper.rs`
-   - Research: WezTerm `wezterm-font/src/rasterizer/` LCD pipeline; swash subpixel support
+2. ~~**TD-026** — Antialiasing quality~~ **DONE (all 3 levels)** — TD-026a gamma correction, TD-026b background-aware blending, TD-026c LCD subpixel AA.
+3. **TD-027** — Powerline separator vivid rendering — OPEN. Hybrid bg-aware premul in `fs_main` is best current approach. See TD-027 in TECHNICAL_DEBT.md for next steps.
 
 ### Out of Scope (Phase 3)
 - `src/plugins/` — Phase 3

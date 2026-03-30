@@ -108,6 +108,36 @@ Phase 2 complete. No new code this close-out session — only debt registry upda
 ### Next Session Start
 - Tackle TD-026 (antialiasing) — research WezTerm sources first.
 
+## Session Notes (2026-03-30)
+
+### TD-026 — Antialiasing Quality (ALL COMPLETE)
+All three levels implemented:
+- **TD-026a** (2026-03-30): Greyscale gamma correction.
+- **TD-026b** (2026-03-30): Background-aware blending (`fs_bg_aware` + `CellPipelineBgAware`).
+- **TD-026c** (2026-03-30): LCD subpixel AA — FreeType `FT_RENDER_MODE_LCD`, `LcdGlyphAtlas`, `fs_lcd`.
+
+### Powerline Rendering Regression (2026-03-30)
+Minimax delegated TD-026 introduced `fs_bg_aware` as the PRIMARY glyph pass (REPLACE blend),
+which re-introduced TD-018 fringing and broke powerline overflow. Fix applied:
+
+**Root causes found and fixed:**
+1. Glyph pass was using `bg_aware_pipeline` (REPLACE blend) → fringing on overflow glyphs.
+   Fixed: reverted to `pipeline.cell_pipeline` (One/OneMinusSrcAlpha premul).
+2. `fs_main` was converting fg to linear before premultiplying — linear values written to
+   sRGB framebuffer, blend mixed color spaces → vivid wrong colors.
+   Fixed: remove sRGB→linear from `fs_main`, keep corrected_alpha only.
+3. With correct premul, powerline arrows appeared darker than WezTerm (swash alpha < CoreText).
+   Fix: hybrid bg-aware premul in `fs_main`:
+   `mix(bg_lin, fg_lin, ca)` in linear space, output `(rgb*ca, ca)`.
+   Solid pixels → ca=1 → pure fg (vivid). Transparent pixels → vec4(0) → pass-through (no fringing).
+   PARTIAL FIX — still slightly less vivid than WezTerm. Tracked as TD-027.
+
+### TD-027 — Powerline Vivid Rendering (OPEN, P3)
+Best hypothesis: swash greyscale coverage < 1.0 for solid Nerd Font fill glyphs; CoreText reaches
+1.0. Next steps: (1) log max-alpha per glyph to confirm; (2) try gamma 1/2.2 instead of 1/1.4;
+(3) render bg to separate texture, bind in glyph pass for true framebuffer-read bg-aware blend.
+See TECHNICAL_DEBT.md TD-027 for full investigation notes.
+
 ## Key Technical Decisions (stable)
 
 ### Phase 1

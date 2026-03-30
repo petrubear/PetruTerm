@@ -1,11 +1,14 @@
 use anyhow::{Context, Result};
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 use winit::window::Window;
 
 use crate::config::Config;
 use crate::renderer::atlas::GlyphAtlas;
 use crate::renderer::cell::{CellUniforms, CellVertex};
-use crate::renderer::pipeline::CellPipeline;
+use crate::renderer::lcd_atlas::LcdGlyphAtlas;
+use crate::renderer::pipeline::{CellPipeline, CellPipelineBgAware, CellPipelineLcd};
 
 /// Maximum number of cell instances per frame (cols × rows + overdraw headroom).
 const MAX_INSTANCES: usize = 32_768;
@@ -23,12 +26,23 @@ pub struct GpuRenderer {
 
     // Cell rendering resources
     pipeline: CellPipeline,
+    bg_aware_pipeline: CellPipelineBgAware,
     pub atlas: GlyphAtlas,
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
     atlas_bind_group: wgpu::BindGroup,
+    bg_aware_uniform_bind_group: wgpu::BindGroup,
+    bg_aware_atlas_bind_group: wgpu::BindGroup,
     instance_buffer: wgpu::Buffer,
     cell_count: usize,
+
+    // LCD subpixel AA resources
+    lcd_pipeline: Option<CellPipelineLcd>,
+    lcd_atlas: Option<Rc<RefCell<LcdGlyphAtlas>>>,
+    lcd_atlas_bind_group: wgpu::BindGroup,
+    lcd_instance_buffer: wgpu::Buffer,
+    lcd_instance_count: usize,
+    lcd_ready: bool,
 }
 
 impl GpuRenderer {
@@ -106,6 +120,7 @@ impl GpuRenderer {
 
         // Build pipeline and atlas
         let pipeline = CellPipeline::new(&device, format);
+        let bg_aware_pipeline = CellPipelineBgAware::new(&device, format);
         let atlas = GlyphAtlas::new(&device);
 
         // Uniform buffer (CellUniforms, updated when cell size or viewport changes)
@@ -136,9 +151,70 @@ impl GpuRenderer {
         // Atlas bind group
         let atlas_bind_group = make_atlas_bind_group(&device, &pipeline, &atlas);
 
+        // Bind groups for bg-aware pipeline (same resource, different layout instances)
+        let bg_aware_uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("cell uniform bg (bg-aware)"),
+            layout: &bg_aware_pipeline.uniform_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform_buffer.as_entire_binding(),
+            }],
+        });
+        let bg_aware_atlas_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("atlas bg (bg-aware)"),
+            layout: &bg_aware_pipeline.atlas_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(atlas.texture_view()),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(atlas.sampler()),
+                },
+            ],
+        });
+
         // Instance buffer (GPU-side, write each frame)
         let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("cell instances"),
+            size: (MAX_INSTANCES * std::mem::size_of::<CellVertex>()) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        // LCD subpixel AA resources (created only if LCD AA is enabled in config)
+        let lcd_pipeline = if config.font.lcd_antialiasing {
+            let pipeline = CellPipelineLcd::new(&device, format);
+            log::info!("LCD subpixel AA pipeline created");
+            Some(pipeline)
+        } else {
+            None
+        };
+
+        let lcd_atlas = if config.font.lcd_antialiasing {
+            Some(Rc::new(RefCell::new(LcdGlyphAtlas::new(&device))))
+        } else {
+            None
+        };
+
+        // LCD atlas bind group (created now, will be recreated when set_lcd_atlas is called)
+        let lcd_atlas_bind_group: wgpu::BindGroup;
+
+        // Placeholder bind group initially
+        let dummy_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("LCD atlas bg (dummy)"),
+            entries: &[],
+        });
+        lcd_atlas_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("LCD atlas bg (placeholder)"),
+            layout: &dummy_layout,
+            entries: &[],
+        });
+
+        // LCD instance buffer
+        let lcd_instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("LCD cell instances"),
             size: (MAX_INSTANCES * std::mem::size_of::<CellVertex>()) as u64,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
@@ -153,12 +229,21 @@ impl GpuRenderer {
             size: (inner.width, inner.height),
             bg_color: bg,
             pipeline,
+            bg_aware_pipeline,
             atlas,
             uniform_buffer,
             uniform_bind_group,
             atlas_bind_group,
+            bg_aware_uniform_bind_group,
+            bg_aware_atlas_bind_group,
             instance_buffer,
             cell_count: 0,
+            lcd_pipeline,
+            lcd_atlas,
+            lcd_atlas_bind_group,
+            lcd_instance_buffer,
+            lcd_instance_count: 0,
+            lcd_ready: false,
         })
     }
 
@@ -279,6 +364,35 @@ impl GpuRenderer {
             pass.draw(0..6, 0..self.cell_count as u32);
         }
 
+        // LCD subpixel AA pass (renders LCD-glyph instances on top of bg-aware pass)
+        if self.lcd_instance_count > 0 {
+            if let Some(ref lcd_pipeline) = self.lcd_pipeline {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("LCD glyph pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    occlusion_query_set: None,
+                    timestamp_writes: None,
+                    multiview_mask: None,
+                });
+
+                pass.set_pipeline(&lcd_pipeline.lcd_pipeline);
+                pass.set_bind_group(0, &self.bg_aware_uniform_bind_group, &[]);
+                pass.set_bind_group(1, &self.bg_aware_atlas_bind_group, &[]);
+                pass.set_bind_group(2, &self.lcd_atlas_bind_group, &[]);
+                pass.set_vertex_buffer(0, self.lcd_instance_buffer.slice(..));
+                pass.draw(0..6, 0..self.lcd_instance_count as u32);
+            }
+        }
+
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
         Ok(())
@@ -292,6 +406,45 @@ impl GpuRenderer {
     /// in one call, avoiding split-borrow issues in callers.
     pub fn atlas_and_queue(&mut self) -> (&mut GlyphAtlas, &wgpu::Queue) {
         (&mut self.atlas, &self.queue)
+    }
+
+    /// Returns mutable access to the LCD atlas and an immutable reference to the queue.
+    /// Only available when LCD AA is enabled.
+    pub fn lcd_atlas_and_queue(&mut self) -> Option<(std::cell::RefMut<'_, LcdGlyphAtlas>, &wgpu::Queue)> {
+        if let Some(atlas) = &self.lcd_atlas {
+            Some((atlas.borrow_mut(), &self.queue))
+        } else {
+            None
+        }
+    }
+
+    /// Upload LCD cell instances for this frame. Must be called before `render()`.
+    pub fn upload_lcd_instances(&mut self, instances: &[CellVertex]) {
+        let count = instances.len().min(MAX_INSTANCES);
+        if count > 0 {
+            self.queue.write_buffer(
+                &self.lcd_instance_buffer,
+                0,
+                bytemuck::cast_slice(&instances[..count]),
+            );
+        }
+        self.lcd_instance_count = count;
+    }
+
+    /// Returns true if LCD subpixel AA is enabled.
+    pub fn has_lcd(&self) -> bool {
+        self.lcd_pipeline.is_some()
+    }
+
+    /// Take the LCD atlas out of the renderer, transferring it to TextShaper.
+    /// Called during initialization to share the atlas with the rasterizer.
+    pub fn take_lcd_atlas(&mut self) -> Option<Rc<RefCell<LcdGlyphAtlas>>> {
+        self.lcd_atlas.take()
+    }
+
+    /// Returns a clone of the LCD atlas Rc for sharing with TextShaper.
+    pub fn get_lcd_atlas(&self) -> Option<Rc<RefCell<LcdGlyphAtlas>>> {
+        self.lcd_atlas.as_ref().map(|rc| Rc::clone(rc))
     }
 
     pub fn device(&self) -> &wgpu::Device {
@@ -308,6 +461,45 @@ impl GpuRenderer {
 
     pub fn size(&self) -> (u32, u32) {
         self.size
+    }
+
+    /// Set the LCD atlas and create the bind group for the LCD render pass.
+    /// Called once after TextShaper is created, to share the same atlas between
+    /// the rasterizer (in TextShaper) and the renderer (here).
+    pub fn set_lcd_atlas(&mut self, atlas: Rc<RefCell<LcdGlyphAtlas>>) {
+        let pipeline = match &self.lcd_pipeline {
+            Some(p) => p,
+            None => return,
+        };
+
+        {
+            let atlas_ref = atlas.borrow();
+            let atlas_view = atlas_ref.texture_view();
+            let atlas_sampler = atlas_ref.sampler();
+
+            self.lcd_atlas_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("LCD atlas bg"),
+                layout: &pipeline.lcd_atlas_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&atlas_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&atlas_sampler),
+                    },
+                ],
+            });
+        }
+
+        self.lcd_atlas = Some(atlas);
+        self.lcd_ready = true;
+    }
+
+    /// Returns true if LCD subpixel AA is ready (atlas has been set).
+    pub fn is_lcd_ready(&self) -> bool {
+        self.lcd_ready
     }
 }
 

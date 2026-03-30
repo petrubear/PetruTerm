@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-03-27
-**Total Items:** 8
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 3 | **P3:** 5
+**Last Updated:** 2026-03-30
+**Total Items:** 9
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 2 | **P3:** 6
 
 ## Priority Definitions
 
@@ -118,6 +118,18 @@ to fix the fringing — overflowing transparent pixels cause no visible artifact
 
 ## P3 - Low Priority
 
+### TD-027: Powerline separator arrows render less vivid than WezTerm
+- **File:** `src/renderer/pipeline.rs` (`fs_main`), `src/font/shaper.rs`
+- **Issue:** Powerline separator arrows (U+E0B0 etc.) appear darker / less saturated than WezTerm. Root cause is twofold: (1) swash greyscale AA does not produce alpha=1.0 for solid-fill pixels the way CoreText does; (2) the linear-space bg-aware premultiplied blend in `fs_main` partially compensates but edge-pixel contribution is still attenuated by the `ca * ca` double-weight.
+- **Current state (2026-03-30):** `fs_main` uses hybrid bg-aware premul: `mix(bg_lin, fg_lin, ca)` in linear space, output `(rgb * ca, ca)`. Solid-fill pixels → `ca=1 → fg_srgb` (vivid). Edge pixels attenuated more than pure bg_aware (9% fg vs 30% fg at ca=0.3). Overall better than plain premul but still slightly duller than WezTerm.
+- **Attempts so far:** (1) bg_aware REPLACE — vivid but had TD-018 fringing; (2) premul sRGB — no fringing but dark; (3) hybrid bg-aware premul — best compromise so far, still not matching WezTerm.
+- **Next steps to investigate:**
+  1. Verify swash `SwashContent::Mask` alpha for solid pixels — add debug log for max alpha per glyph. If max < 230, swash quality is the bottleneck (not shader math).
+  2. Try `pow(alpha, 1/2.2)` (standard gamma) instead of `1/1.4` — might push solid pixels closer to 1.0.
+  3. Consider rendering powerline glyphs via CoreText directly on macOS (use `objc2` + `CGFont`) for solid fill — these glyphs don't benefit from LCD AA and just need solid coverage.
+  4. WezTerm approach: render bg-pass to a separate texture, bind it as `@group(2)` in the glyph pass — then `fs_main` samples the ACTUAL background at each fragment instead of using vertex-bg, eliminating the premul attenaution entirely.
+- **Priority:** P3 — text and regular glyphs look correct; only Starship/Nerd Font separators are affected.
+
 ### TD-022: Chat panel has no access to current working directory or project files
 - **File:** `src/llm/` (new), `src/app.rs`
 - **Issue:** The chat panel sends user messages to the LLM with only a static system prompt. It has no awareness of the current working directory, open files, shell history, or directory listing. This limits the AI's usefulness for project-specific questions ("explain this file", "what's in this directory", "why did that command fail").
@@ -145,12 +157,29 @@ to fix the fringing — overflowing transparent pixels cause no visible artifact
   - `wezterm-font/src/rasterizer/` — how it selects between freetype, CoreText, and DirectWrite backends per platform.
   - `wezterm-render/` — how LCD RGB masks (3-channel) are stored in the atlas and composited against bg in the shader (separate R/G/B coverage → per-channel lerp).
   - Check whether swash exposes subpixel/LCD output or only greyscale masks, and whether cosmic-text passes through subpixel hints.
-- **Fix options:**
-  1. **Greyscale gamma correction:** apply gamma-correct linear blending in the fragment shader (`pow(alpha, 1/2.2)`) — low effort, noticeable improvement.
-  2. **Background-aware blending:** pass cell bg colour to the fragment shader and blend in linear light (already partially explored — see revert commit `2d2b7da`). Re-evaluate with correct premultiplied alpha pipeline.
-  3. **LCD subpixel AA:** rasterise glyphs at 3× horizontal resolution via swash subpixel mode (if available), store RGB mask in atlas, composite with per-channel coverage in shader — highest quality, matches WezTerm/Alacritty on macOS.
 - **Reference:** WezTerm `wezterm-font/src/rasterizer/freetype.rs` (LCD filter flags) and `wezterm-render/src/glyphcache.rs` (atlas format + shader).
 - **Priority:** P3 — text is readable; this is a polish/fidelity improvement for Phase 2.
+
+**Resolution: 3-level plan (in progress)**
+
+### TD-026a: Greyscale gamma correction (Nivel 1)
+- **Status:** DONE (2026-03-30)
+- **Fix:** Use existing `srgb_to_lin`/`lin_to_srgb` helpers in fragment shader. Convert fg to linear, blend with bg (linear), convert back to sRGB. Applies `pow(alpha, 1/2.2)` for greyscale gamma.
+- **Effort:** Low — shader change only.
+- **Commit:** shader pipeline.rs:84-93 — `fs_main` now converts fg sRGB→linear, applies `pow(alpha, 1/2.2)`, outputs premultiplied linear for GPU blend.
+
+### TD-026b: Background-aware blending (Nivel 2)
+- **Status:** DONE (2026-03-30)
+- **Fix:** `fs_bg_aware` does gamma-correct blend manually in linear space: sRGB→linear for both fg and bg, `mix(bg_lin, fg_lin, pow(alpha, 1/2.2))`, then linear→sRGB output with alpha=1.0. Separate `CellPipelineBgAware` pipeline with `BlendState::REPLACE` (no GPU premultiplied blend).
+- **Effort:** Medium — requires pipeline re-evaluation.
+- **Commit:** `fs_bg_aware` shader + `CellPipelineBgAware` pipeline in `src/renderer/pipeline.rs`; `GpuRenderer` uses it for glyph pass.
+
+### TD-026c: LCD subpixel AA (Nivel 3)
+- **Status:** DONE (2026-03-30) — FULLY WIRED
+- **Fix:** FreeType LCD rasterizer (`FreeTypeLcdRasterizer`) using `FT_RENDER_MODE_LCD`; deinterleaves R/G/B subpixel data into RGBA atlas format. Separate `LcdGlyphAtlas` + `CellPipelineLcd` shader with `fs_lcd` entry point that blends per-channel in linear space against cell background. LCD glyphs stored in separate atlas from SwashCache greyscale glyphs. LCD AA enabled via `config.font.lcd_antialiasing = true`.
+- **Architecture:** `GpuRenderer` owns `LcdGlyphAtlas` (via `RefCell`), `TextShaper` uses `FreeTypeLcdRasterizer` which writes to that atlas. Glyphs with `FLAG_LCD` go through separate `lcd_instances` buffer and `upload_lcd_instances()`. Render pass 3 (LCD pass) draws LCD glyphs with `fs_lcd` shader reading from LCD atlas bind group (`@group(2)`).
+- **Effort:** High — major architecture change.
+- **Commit:** `src/font/freetype_lcd.rs` (FreeType LCD rasterizer), `src/renderer/lcd_atlas.rs` (LCD atlas), `src/renderer/pipeline.rs` (LCD shader + `CellPipelineLcd`), `src/renderer/gpu.rs` (LCD infrastructure wired), `src/font/shaper.rs` (`rasterize_lcd_to_atlas`, `ch` field added to `ShapedGlyph`), `src/app.rs` (LCD instance routing in `build_instances`), `Cargo.toml` (added `freetype = "0.7"`).
 
 ### ~~TD-025: Vertical spacing between terminal lines too tight~~ — RESOLVED
 <!--

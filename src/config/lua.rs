@@ -117,6 +117,10 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
         config.font.line_height = lh;
     }
 
+    if let Ok(lcd) = table.get::<bool>("lcd_antialiasing") {
+        config.font.lcd_antialiasing = lcd;
+    }
+
     if let Ok(features) = table.get::<LuaTable>("font_features") {
         let mut fs = Vec::new();
         for pair in features.sequence_values::<String>() {

@@ -21,7 +21,7 @@ use crate::config::watcher::ConfigWatcher;
 use crate::font::{build_font_system, TextShaper};
 use crate::llm::chat_panel::{AiEvent, ChatPanel, PanelState};
 use crate::llm::shell_context::ShellContext;
-use crate::renderer::cell::{CellVertex, FLAG_CURSOR};
+use crate::renderer::cell::{CellVertex, FLAG_CURSOR, FLAG_LCD};
 use crate::renderer::GpuRenderer;
 use crate::term::color::resolve_color;
 use crate::term::{CursorInfo, CursorShape, Terminal};
@@ -82,6 +82,8 @@ pub struct App {
     // mark and is never freed between frames, eliminating the ~200 KB/frame
     // Vec<CellVertex> allocation that would otherwise occur at 60 fps.
     instances: Vec<CellVertex>,
+    // Separate instance buffer for LCD glyphs (drawn with LCD pipeline).
+    lcd_instances: Vec<CellVertex>,
 }
 
 impl App {
@@ -140,6 +142,7 @@ impl App {
             cursor_last_blink: std::time::Instant::now(),
             wakeup_proxy,
             instances: Vec::new(),
+            lcd_instances: Vec::new(),
         }
     }
 
@@ -198,6 +201,7 @@ impl App {
     fn scaled_font_config(&self) -> crate::config::schema::FontConfig {
         let mut cfg = self.config.font.clone();
         cfg.size *= self.scale_factor;
+        crate::font::loader::locate_font_for_lcd(&mut cfg);
         cfg
     }
 
@@ -1075,10 +1079,21 @@ impl ApplicationHandler<()> for App {
         match build_font_system(&self.config.font) {
             Ok(fs) => {
                 let scaled_font = self.scaled_font_config();
-                let shaper = TextShaper::new(fs, &scaled_font);
+                let lcd_atlas = self.renderer.as_mut().and_then(|r| r.get_lcd_atlas());
+                let mut shaper = if let Some(r) = &mut self.renderer {
+                    TextShaper::new(r.device(), fs, &scaled_font, lcd_atlas)
+                } else {
+                    return;
+                };
+
+                // Share LCD atlas between TextShaper (rasterizer) and GpuRenderer (rendering)
                 if let Some(r) = &mut self.renderer {
                     r.set_cell_size(shaper.cell_width, shaper.cell_height);
+                    if let Some(atlas) = shaper.lcd_atlas.take() {
+                        r.set_lcd_atlas(atlas);
+                    }
                 }
+
                 self.shaper = Some(shaper);
             }
             Err(e) => log::error!("Font system init failed: {e}"),
@@ -1122,6 +1137,7 @@ impl ApplicationHandler<()> for App {
                 {
                     build_instances(
                         &mut self.instances,
+                        &mut self.lcd_instances,
                         &cell_data,
                         shaper,
                         renderer,
@@ -1145,6 +1161,7 @@ impl ApplicationHandler<()> for App {
                     }
 
                     renderer.upload_instances(&self.instances);
+                    renderer.upload_lcd_instances(&self.lcd_instances);
                     if let Err(e) = renderer.render() {
                         log::error!("Render error: {e}");
                     }
@@ -1663,8 +1680,12 @@ unsafe fn apply_macos_custom_titlebar(window: &Window) {
 ///
 /// Writes into `instances` (cleared first). The caller should pass a
 /// persistent Vec so its capacity is reused across frames.
+///
+/// When LCD AA is enabled, glyphs are rasterized via FreeType LCD mode
+/// and emitted into `lcd_instances` with the `FLAG_LCD` flag set.
 fn build_instances(
     instances: &mut Vec<CellVertex>,
+    lcd_instances: &mut Vec<CellVertex>,
     cell_data: &[(String, Vec<(AnsiColor, AnsiColor)>)],
     shaper: &mut TextShaper,
     renderer: &mut GpuRenderer,
@@ -1674,6 +1695,7 @@ fn build_instances(
     cursor_blink_on: bool,
 ) {
     instances.clear();
+    lcd_instances.clear();
 
     // Scratch buffer for per-row color resolution. Reused across rows to
     // avoid a Vec allocation per row (40+ rows × 60 fps = ~2 400 allocs/s).
@@ -1696,32 +1718,29 @@ fn build_instances(
             let (atlas, queue) = renderer.atlas_and_queue();
             let entry = shaper.rasterize_to_atlas(glyph.cache_key, atlas, queue);
 
-
             let (atlas_uv, glyph_offset, glyph_size) = match entry {
                 Some(e) => {
                     let ox = e.bearing_x as f32;
                     let oy = shaped.ascent - e.bearing_y as f32;
                     let gw = e.width as f32;
                     let gh = e.height as f32;
-
-                    // Only clamp Y to cell_height (prevents Nerd Font row bleeding, TD-012).
-                    // X is intentionally NOT clamped — see note in build_grid_instances.
                     let y0 = oy.max(0.0);
                     let y1 = (oy + gh).min(shaper.cell_height);
-
                     if y1 <= y0 || gw == 0.0 || gh == 0.0 {
                         ([0.0f32; 4], [0.0; 2], [0.0; 2])
                     } else {
                         let fy0 = (y0 - oy) / gh;
                         let fy1 = (y1 - oy) / gh;
                         let [u0, v0, u1, v1] = e.uv;
-                        let uv = [u0, v0 + fy0*(v1-v0), u1, v0 + fy1*(v1-v0)];
-                        (uv, [ox, y0], [gw, y1 - y0])
+                        ([u0, v0 + fy0*(v1-v0), u1, v0 + fy1*(v1-v0)], [ox, y0], [gw, y1 - y0])
                     }
                 }
                 None => ([0.0f32; 4], [0.0; 2], [0.0; 2]),
             };
 
+            // Main pass: Always draw background + greyscale glyph.
+            // If LCD AA is enabled, we'll still draw the background here.
+            // If the char has an LCD representation, we'll later draw it on top.
             instances.push(CellVertex {
                 grid_pos: [glyph.col as f32, row_idx as f32],
                 atlas_uv,
@@ -1732,6 +1751,35 @@ fn build_instances(
                 flags: 0,
                 _pad: 0,
             });
+
+            if renderer.has_lcd() {
+                if let Some((_lcd_atlas, queue)) = renderer.lcd_atlas_and_queue() {
+                    if let Some(entry) = shaper.rasterize_lcd_to_atlas(glyph.ch, queue) {
+                        let ox = (entry.bearing_x * 3) as f32;
+                        let oy = shaped.ascent - entry.bearing_y as f32;
+                        let gw = entry.width as f32;
+                        let gh = entry.height as f32;
+                        let y0 = oy.max(0.0);
+                        let y1 = (oy + gh).min(shaper.cell_height);
+
+                        if y1 > y0 && gw > 0.0 && gh > 0.0 {
+                            let fy0 = (y0 - oy) / gh;
+                            let fy1 = (y1 - oy) / gh;
+                            let [u0, v0, u1, v1] = entry.uv;
+                            lcd_instances.push(CellVertex {
+                                grid_pos: [glyph.col as f32, row_idx as f32],
+                                atlas_uv: [u0, v0 + fy0*(v1-v0), u1, v0 + fy1*(v1-v0)],
+                                fg: glyph.fg,
+                                bg: glyph.bg,
+                                glyph_offset: [ox, y0],
+                                glyph_size: [gw, y1 - y0],
+                                flags: FLAG_LCD,
+                                _pad: 0,
+                            });
+                        }
+                    }
+                }
+            }
         }
     }
 

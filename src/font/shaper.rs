@@ -1,10 +1,15 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use cosmic_text::{
     Attrs, AttrsList, Buffer, BufferLine, CacheKey, CacheKeyFlags, Family, FontSystem, LayoutGlyph,
     Metrics, Shaping, SwashCache,
 };
 
 use crate::config::schema::FontConfig;
+use crate::font::freetype_lcd::{FreeTypeLcdRasterizer, LcdAtlasEntry};
 use crate::renderer::atlas::{AtlasEntry, GlyphAtlas};
+use crate::renderer::lcd_atlas::LcdGlyphAtlas;
 
 /// A shaped text run ready for rendering.
 #[derive(Debug, Clone)]
@@ -20,6 +25,8 @@ pub struct ShapedGlyph {
     pub col: usize,
     /// Number of terminal columns this glyph covers (>1 for ligatures / wide chars).
     pub span: usize,
+    /// The UTF-8 character for this glyph (for LCD AA rasterization).
+    pub ch: char,
     /// cosmic-text cache key for atlas lookup / rasterization.
     pub cache_key: CacheKey,
     /// X advance in pixels.
@@ -43,16 +50,51 @@ pub struct TextShaper {
     pub cell_height: f32,
     /// Reusable shaping buffer — avoids a Buffer allocation on every shape_line call.
     shape_buf: Buffer,
+    /// FreeType LCD rasterizer (holds Rc clone of lcd_atlas), available when lcd_antialiasing is enabled.
+    pub lcd_rasterizer: Option<FreeTypeLcdRasterizer>,
+    /// LCD glyph atlas (Rc clone, shared with GpuRenderer via set_lcd_atlas).
+    pub lcd_atlas: Option<Rc<RefCell<LcdGlyphAtlas>>>,
 }
 
+unsafe impl Send for TextShaper {}
+unsafe impl Sync for TextShaper {}
+
 impl TextShaper {
-    pub fn new(font_system: FontSystem, font_config: &FontConfig) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        font_system: FontSystem,
+        font_config: &FontConfig,
+        lcd_atlas: Option<Rc<RefCell<LcdGlyphAtlas>>>,
+    ) -> Self {
         let line_height = font_config.size * font_config.line_height;
         let metrics = Metrics::new(font_config.size, line_height);
 
         // Create the reusable buffer before moving font_system into the struct.
         let mut font_system = font_system;
         let shape_buf = Buffer::new(&mut font_system, metrics);
+
+        // Create LCD rasterizer using the provided atlas (from GpuRenderer)
+        let lcd_rasterizer = if font_config.lcd_antialiasing {
+            if let Some(atlas) = &lcd_atlas {
+                match FreeTypeLcdRasterizer::new(device, font_config, Rc::clone(atlas)) {
+                    Ok(r) => {
+                        log::info!("LCD subpixel AA enabled via FreeType");
+                        Some(r)
+                    }
+                    Err(e) => {
+                        log::warn!(
+                            "Failed to initialize FreeType LCD rasterizer: {e}. LCD AA disabled."
+                        );
+                        None
+                    }
+                }
+            } else {
+                log::warn!("LCD AA enabled but no atlas provided. LCD AA disabled.");
+                None
+            }
+        } else {
+            None
+        };
 
         let mut shaper = Self {
             font_system,
@@ -61,6 +103,8 @@ impl TextShaper {
             cell_width: font_config.size * 0.6,
             cell_height: line_height,
             shape_buf,
+            lcd_rasterizer,
+            lcd_atlas,
         };
 
         shaper.measure_cell(font_config);
@@ -117,14 +161,16 @@ impl TextShaper {
 
         // Reuse the stored buffer: replace lines and re-shape in-place.
         // This avoids a Buffer heap allocation on every call (~5 000–7 000/s at 60 fps).
-        self.shape_buf.set_size(&mut self.font_system, None, Some(self.cell_height));
+        self.shape_buf
+            .set_size(&mut self.font_system, None, Some(self.cell_height));
         self.shape_buf.lines = vec![BufferLine::new(
             text,
             cosmic_text::LineEnding::None,
             attr_list,
             Shaping::Advanced,
         )];
-        self.shape_buf.shape_until_scroll(&mut self.font_system, false);
+        self.shape_buf
+            .shape_until_scroll(&mut self.font_system, false);
 
         let mut glyphs = Vec::new();
         let mut ascent = 0.0f32;
@@ -145,6 +191,9 @@ impl TextShaper {
                 // span = number of terminal columns the cluster occupies (>=1).
                 let span = text[start..end].chars().count().max(1);
 
+                // Extract the first character from the glyph cluster for LCD AA.
+                let ch = text[start..end].chars().next().unwrap_or(' ');
+
                 let (fg, bg) = colors
                     .get(col)
                     .copied()
@@ -155,6 +204,7 @@ impl TextShaper {
                 glyphs.push(ShapedGlyph {
                     col,
                     span,
+                    ch,
                     cache_key,
                     advance: glyph.w,
                     bearing_x: glyph.x - (col as f32 * self.cell_width),
@@ -222,6 +272,17 @@ impl TextShaper {
                 image.placement.top,
             )
             .ok()
+    }
+
+    /// Rasterize a character using the FreeType LCD rasterizer and upload to the LCD atlas.
+    /// Returns the LCD atlas entry, or None if the character has no LCD representation.
+    pub fn rasterize_lcd_to_atlas(
+        &mut self,
+        c: char,
+        queue: &wgpu::Queue,
+    ) -> Option<LcdAtlasEntry> {
+        let rasterizer = self.lcd_rasterizer.as_mut()?;
+        rasterizer.rasterize_char(c, queue)
     }
 
     fn make_attrs(font_config: &FontConfig) -> Attrs<'_> {
