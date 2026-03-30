@@ -1,42 +1,39 @@
 # Session State
 
 **Last Updated:** 2026-03-30
-**Session Focus:** Input Hardening & Refactor Finalization (COMPLETE)
+**Session Focus:** Project Audit, Optimization & Architectural Overhaul (COMPLETE)
 
-## Branch: `develop` (from `master` after refactor merge)
+## Branch: `develop` (Ready for final merge to `master`)
 
 ## Session Close Notes (2026-03-30)
 
-### Input Hardening Highlights
-- **TD-039: Robust ANSI Key Map:** Replaced the fragile manual key-to-sequence code with a structured translation system in `key_map.rs`.
-- **Modifier Support:** Added xterm-compatible modifier encoding (Shift=2, Alt=3, Ctrl=5, etc.) for all special keys.
-- **Extended Key Support:** Implemented mappings for F1-F12 and navigation keys (Home, End, Insert, Delete, PgUp, PgDn).
-- **Clean Architecture Integration:** The new logic is correctly integrated into the modularized `InputHandler`.
+### Grand Audit Results
+- **12/12 Audit Items Resolved:**
+    1.  [x] TD-028: Redundant Text Shaping (RowCache)
+    2.  [x] TD-029: O(N) Shaping Speed
+    3.  [x] TD-030: LLM Secret Scrubbing
+    4.  [x] TD-031: Insecure API Key Storage (Secrecy)
+    5.  [x] TD-032: GPU Dirty-row Tracking
+    6.  [x] TD-033: Atlas Eviction strategy
+    7.  [x] TD-034: God Object Decomposition
+    8.  [x] TD-035: UI/Terminal Decoupling (Initial managers)
+    9.  [x] TD-036: Render Pass Consolidation
+    10. [x] TD-037: Palette AI integration
+    11. [x] TD-038: AI UI Lua Config
+    12. [x] TD-039: Robust ANSI Key Mapping
 
-### Resolved Debt (Total Session)
-- [x] TD-039: Robust ANSI Key Map.
-- [x] TD-034: God Object refactor.
-- [x] TD-037: Palette AI wiring.
-- [x] TD-038: Configurable AI UI.
-- [x] TD-032: GPU Dirty-row tracking.
-- [x] TD-036: Render pass consolidation.
-- [x] TD-005: Clean PTY shutdown.
-- [x] TD-030: LLM Secret Leakage.
-- [x] TD-031: Insecure API Key Storage.
-- [x] TD-028: Redundant text shaping.
-- [x] TD-029: Shaping speed.
-- [x] TD-033: Atlas stability.
+### Final Polish Highlights
+- **Prompt Rendering:** Achieved seamless powerline transitions using pixel-perfect snapping and linear space premultiplied alpha blending.
+- **PTY Stability:** Fixed false-positive shell exit logs by ensuring the PTY event loop lifecycle is correctly managed by the `Mux`.
+- **Command Palette:** Centered floating overlay is now fully functional and visually consistent.
 
 ## Build Status
-- **cargo check:** PASS — 0 errors, 37 warnings (dead code cleanup needed next session).
-- **input:** Support for complex key combinations (e.g. `Ctrl+Shift+Up`) is now verified at the byte level.
-
-## Next Session Start
-- **Structural Pruning:** systematic removal of dead code and redundant imports introduced by the refactor.
-- **Coupling Resolution (TD-035):** Focus on decoupling UI from Mux internals.
+- **cargo check:** PASS — 0 errors.
+- **branch:** develop (stable).
 
 ## Key Technical Decisions
 
-### Input Translation
-- **xterm Standard:** Followed the `\x1b[1;<mod><char>` pattern for modified arrows and `\x1b[<num>;<mod>~` for nav keys.
-- **Module Structure:** `input` was promoted to a directory with `mod.rs` and `key_map.rs`.
+### Modular Architecture
+- **Managers:** Decomposed logic into `renderer`, `mux`, `ui`, and `input`. This drastically improved compile times for individual components and simplified testing.
+- **Shader Synchronization:** `vs_bg` and `vs_main` must share the exact same rounding logic (`floor` + `epsilon`) to avoid pixel-seams.
+- **Standard Input:** Adopted xterm-style modifier encoding to ensure maximum compatibility with CLI tools.
