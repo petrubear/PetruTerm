@@ -881,12 +881,9 @@ impl App {
                         }
                     },
                     // Channel TX was dropped — the PTY event-loop thread exited
-                    // without sending PtyEvent::Exit (common on macOS when the
-                    // shell exits and alacritty_terminal drains the PTY before
-                    // dispatching the event).  Treat as shell exit.
+                    // without sending PtyEvent::Exit.
                     Err(TryRecvError::Disconnected) => {
-                        log::info!("PTY shell exited (channel disconnected).");
-                        shell_exited = true;
+                        log::warn!("PTY channel disconnected.");
                         break;
                     }
                     Err(TryRecvError::Empty) => break,
@@ -1503,7 +1500,7 @@ fn push_shaped_row(
 ) {
     if width == 0 { return; }
 
-    // Pad / truncate to exactly `width` chars so every column gets a BG rect.
+    // 1. Prepare text and colors
     let chars: Vec<char> = text.chars().take(width).collect();
     let len = chars.len();
     let padded: String = chars
@@ -1514,36 +1511,34 @@ fn push_shaped_row(
     let colors: Vec<([f32; 4], [f32; 4])> = (0..width).map(|_| (fg, bg)).collect();
     let shaped = shaper.shape_line(&padded, &colors, font);
 
-    for glyph in &shaped.glyphs {
+    // 2. Map glyphs to grid columns. 
+    // cosmic-text might return multiple glyphs per column or clusters.
+    // For UI, we simplified to 1-glyph-per-cell via padded string.
+    for glyph in shaped.glyphs {
+        if glyph.col >= width { continue; }
+
         let (atlas, queue) = renderer.atlas_and_queue();
         let entry = match shaper.rasterize_to_atlas(glyph.cache_key, atlas, queue) {
             Ok(e) => e,
-            Err(_) => continue,
+            Err(_) => crate::renderer::atlas::AtlasEntry {
+                uv: [0.0; 4],
+                width: 0, height: 0, bearing_x: 0, bearing_y: 0,
+            },
         };
 
+        // UI overlay rendering: simple 1:1 cell mapping
         let ox = entry.bearing_x as f32;
         let oy = shaped.ascent - entry.bearing_y as f32;
         let gw = entry.width as f32;
         let gh = entry.height as f32;
-        let y0 = oy.max(0.0);
-        let y1 = (oy + gh).min(shaper.cell_height);
-
-        let (atlas_uv, glyph_offset, glyph_size) = if y1 <= y0 || gw == 0.0 || gh == 0.0 {
-            ([0.0f32; 4], [0.0; 2], [0.0; 2])
-        } else {
-            let fy0 = (y0 - oy) / gh;
-            let fy1 = (y1 - oy) / gh;
-            let [u0, v0, u1, v1] = entry.uv;
-            ([u0, v0 + fy0 * (v1 - v0), u1, v0 + fy1 * (v1 - v0)], [ox, y0], [gw, y1 - y0])
-        };
 
         instances.push(CellVertex {
             grid_pos: [(col_offset + glyph.col) as f32, row as f32],
-            atlas_uv,
-            fg: glyph.fg,
-            bg: glyph.bg,
-            glyph_offset,
-            glyph_size,
+            atlas_uv: entry.uv,
+            fg,
+            bg,
+            glyph_offset: [ox, oy],
+            glyph_size: [gw, gh],
             flags: 0,
             _pad: 0,
         });

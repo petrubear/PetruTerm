@@ -137,10 +137,12 @@ impl Pty {
         // bypassing the main thread. Set before spawn so it's ready immediately.
         let _ = direct_notifier.set(Notifier(pty_event_loop.channel()));
 
-        // Spawn in a wrapper thread to hide the complex alacritty return types
-        // and get a clean JoinHandle<()>.
+        // We use a wrapper thread to get a JoinHandle<()> and hide the internal types.
+        // Alacritty's spawn() already starts a thread, but it returns a complex type.
+        // We wrap the spawned result into our own thread joiner.
+        let spawned = pty_event_loop.spawn();
         let thread_handle = std::thread::spawn(move || {
-            let _ = pty_event_loop.spawn().join();
+            let _ = spawned.join();
         });
 
         log::info!("PTY spawned: shell={}", config.shell);
