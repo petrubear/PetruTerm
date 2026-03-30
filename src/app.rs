@@ -1236,6 +1236,20 @@ impl ApplicationHandler<()> for App {
                         );
                     }
 
+                    if self.palette.visible {
+                        self.row_cache.dirty_rows.fill(true); // Force full upload for overlay
+                        build_palette_instances(
+                            &mut self.instances,
+                            &self.palette,
+                            shaper,
+                            renderer,
+                            &self.config,
+                            &scaled_font,
+                            term_cols + if panel_visible { self.chat_panel.width_cols as usize } else { 0 },
+                            term_rows,
+                        );
+                    }
+
                     // TD-032: Dirty-row tracking. Upload only rows that changed.
                     let cols = term_cols as usize + if panel_visible { self.chat_panel.width_cols as usize } else { 0 };
                     for (row_idx, is_dirty) in self.row_cache.dirty_rows.iter_mut().enumerate() {
@@ -1940,6 +1954,54 @@ fn build_instances(
         }
     }
     Ok(())
+}
+
+/// Build GPU instances for the command palette overlay.
+fn build_palette_instances(
+    instances: &mut Vec<CellVertex>,
+    palette: &CommandPalette,
+    shaper: &mut TextShaper,
+    renderer: &mut GpuRenderer,
+    _config: &Config,
+    font: &crate::config::schema::FontConfig,
+    total_cols: usize,
+    total_rows: usize,
+) {
+    use crate::ui::palette::PaletteAction;
+
+    let palette_width = 60_usize;
+    let palette_height = 15_usize;
+
+    if total_cols < palette_width || total_rows < palette_height {
+        return;
+    }
+
+    let start_col = (total_cols - palette_width) / 2;
+    let start_row = (total_rows - palette_height) / 2;
+
+    let bg = [0.05, 0.05, 0.10, 0.95];
+    let fg = [1.0, 1.0, 1.0, 1.0];
+    let highlight_bg = [0.2, 0.2, 0.4, 1.0];
+    let prompt_fg = [0.5, 0.8, 1.0, 1.0];
+
+    // 1. Draw input line
+    let prompt = format!(" > {}▋", palette.query);
+    push_shaped_row(&prompt, prompt_fg, bg, start_row, start_col, palette_width, shaper, renderer, font, instances);
+
+    // 2. Draw results
+    for i in 0..(palette_height - 1) {
+        let row = start_row + 1 + i;
+        let is_selected = i == palette.selected;
+        let current_bg = if is_selected { highlight_bg } else { bg };
+
+        let text = if let Some(action) = palette.results.get(i) {
+            format!("  {}", action.name)
+        } else {
+            String::new()
+        };
+
+        push_shaped_row(&text, fg, current_bg, row, start_col, palette_width, shaper, renderer, font, instances);
+    }
 }
 
 impl Drop for App {
