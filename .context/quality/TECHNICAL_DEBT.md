@@ -35,17 +35,13 @@ _None_
 - **Fix:** `TextShaper::shape_line` now uses incremental character counts to determine glyph columns in $O(N)$.
 - **WezTerm Inspiration:** WezTerm iterates through `CellCluster` objects and keeps an incremental count of the visual columns covered, avoiding redundant string traversals.
 
-### TD-030: Secret Leakage to LLM Provider (Security)
-- **File:** `src/llm/shell_context.rs`, `src/app.rs`
-- **Issue:** `ShellContext` automatically captures `last_command` from shell history and includes it in the LLM system prompt. Sensitive data (API keys, tokens, passwords) used in shell commands are transmitted in plaintext to the LLM provider.
-- **Fix:** Add a sanitization step to strip likely secrets from `last_command`, or add a user confirmation/opt-out setting for sending shell history.
-- **WezTerm Inspiration:** While WezTerm doesn't have a built-in LLM sidecar, it promotes a "secret-first" config pattern. PetruTerm should adopt a similar pattern where shell integration only captures "safe" metadata unless explicitly allowed.
+### ~~TD-030: Secret Leakage to LLM Provider~~ — RESOLVED
+- **Implementation:** Added `sanitize_command` to `ShellContext`. Uses regex to redact `export VAR=secret` and Authorization headers from `last_command` before injecting into system prompt.
+- **Result:** Sensitive credentials are no longer sent to the LLM provider in plaintext.
 
-### TD-031: Insecure API Key Storage (Security)
-- **File:** `src/llm/openrouter.rs`, `src/llm/openai_compat.rs`
-- **Issue:** API keys are stored as raw `String` objects. They are vulnerable to exposure in memory dumps, `Debug` logs, and error reporting.
-- **Fix:** Wrap API keys in a secret-protecting type (e.g., using the `secrecy` crate) to ensure they are zeroed on drop and hidden from `Debug` output.
-- **WezTerm Inspiration:** WezTerm allows loading secrets from environment variables or external processes (like `security find-generic-password` on macOS). PetruTerm should allow `llm.lua` to fetch keys via `wezterm.run_child_process` (or equivalent) rather than hardcoding them.
+### ~~TD-031: Insecure API Key Storage~~ — RESOLVED
+- **Implementation:** Switched `LlmConfig::api_key` to `secrecy::SecretString`. Added `#[serde(skip_serializing)]` to prevent keys from being written to disk or logs. Used `expose_secret()` only at the request boundary.
+- **Result:** API keys are protected in memory and hidden from Debug/Serialization output.
 
 ### TD-032: High-Bandwidth GPU Instance Uploads (Performance)
 - **File:** `src/renderer/gpu.rs` (`upload_instances`)

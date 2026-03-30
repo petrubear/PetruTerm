@@ -192,7 +192,7 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
             config.llm.model = m;
         }
         if let Ok(k) = llm_table.get::<String>("api_key") {
-            config.llm.api_key = Some(k);
+            config.llm.api_key = Some(k.into());
         }
         if let Ok(u) = llm_table.get::<String>("base_url") {
             config.llm.base_url = Some(u);

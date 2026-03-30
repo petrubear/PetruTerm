@@ -32,6 +32,19 @@ impl ShellContext {
         self.last_exit_code != 0
     }
 
+    /// Redact sensitive information like API keys, tokens, and passwords from commands.
+    pub fn sanitize_command(cmd: &str) -> String {
+        // Redact "export VAR=secret" or "VAR=secret command"
+        let export_regex = regex::Regex::new(r##"(?i)(password|token|key|secret|auth|pass|pwd)=[^ \t\n\r|;&<>]+"##).unwrap();
+        let cmd = export_regex.replace_all(cmd, "$1=[REDACTED]");
+
+        // Redact common auth headers/keys in curl or similar commands
+        let auth_regex = regex::Regex::new(r##"(?i)(-H|--header)\s+['"]?(authorization|x-api-key):\s*[^ \t\n\r'"|;&<>]+['"]?"##).unwrap();
+        let cmd = auth_regex.replace_all(&cmd, "$1 $2: [REDACTED]");
+
+        cmd.to_string()
+    }
+
     /// One-paragraph summary suitable for appending to a system message.
     pub fn format_for_system_message(&self) -> String {
         let mut parts = Vec::new();
@@ -39,7 +52,8 @@ impl ShellContext {
             parts.push(format!("Current directory: {}", self.cwd));
         }
         if !self.last_command.is_empty() {
-            parts.push(format!("Last command: {}", self.last_command));
+            let sanitized = Self::sanitize_command(&self.last_command);
+            parts.push(format!("Last command: {}", sanitized));
         }
         if self.last_exit_code != 0 {
             parts.push(format!(

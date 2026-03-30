@@ -47,6 +47,9 @@ futures-util = "0.3"
 # Config hot-reload
 notify = "8"
 
+# Regular expressions for sanitization
+regex = "1"
+
 # Command palette fuzzy search
 fuzzy-matcher = "0.3"
 
@@ -59,6 +62,9 @@ dirs = "5"
 # Error handling
 anyhow = "1"
 thiserror = "2"
+
+# Secure storage for secrets (API keys)
+secrecy = { version = "0.10", features = ["serde"] }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }

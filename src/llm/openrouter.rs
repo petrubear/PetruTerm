@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use reqwest::Client;
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 
 use crate::config::schema::LlmConfig;
@@ -11,7 +12,7 @@ const DEFAULT_BASE_URL: &str = "https://openrouter.ai/api/v1";
 
 pub struct OpenRouterProvider {
     client: Client,
-    api_key: String,
+    api_key: SecretString,
     model: String,
     base_url: String,
 }
@@ -26,8 +27,11 @@ impl OpenRouterProvider {
         let api_key = config
             .api_key
             .clone()
-            .filter(|k| !k.is_empty())
-            .or_else(|| std::env::var("OPENROUTER_API_KEY").ok())
+            .or_else(|| {
+                std::env::var("OPENROUTER_API_KEY")
+                    .ok()
+                    .map(SecretString::from)
+            })
             .context(
                 "OpenRouter API key not found. \
                  Set the OPENROUTER_API_KEY environment variable \
@@ -135,7 +139,7 @@ impl LlmProvider for OpenRouterProvider {
         let resp = self
             .client
             .post(&url)
-            .bearer_auth(&self.api_key)
+            .bearer_auth(self.api_key.expose_secret())
             .header("HTTP-Referer", "https://github.com/edisontim/petruterm")
             .header("X-Title", "PetruTerm")
             .json(&ChatRequest {
@@ -166,7 +170,7 @@ impl LlmProvider for OpenRouterProvider {
         let byte_stream = self
             .client
             .post(&url)
-            .bearer_auth(&self.api_key)
+            .bearer_auth(self.api_key.expose_secret())
             .header("HTTP-Referer", "https://github.com/edisontim/petruterm")
             .header("X-Title", "PetruTerm")
             .json(&ChatRequest {

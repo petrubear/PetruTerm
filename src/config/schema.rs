@@ -1,3 +1,4 @@
+use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 
 /// Top-level resolved configuration. All Lua config values are deserialized into this.
@@ -215,7 +216,8 @@ pub struct LlmConfig {
     pub enabled: bool,
     pub provider: String,
     pub model: String,
-    pub api_key: Option<String>,
+    #[serde(skip_serializing)]
+    pub api_key: Option<SecretString>,
     pub base_url: Option<String>,
     pub context_lines: u32,
     pub features: LlmFeatures,

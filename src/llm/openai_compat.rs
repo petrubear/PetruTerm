@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use reqwest::Client;
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 
 use crate::config::schema::LlmConfig;
@@ -16,7 +17,7 @@ pub struct OpenAICompatProvider {
     model: String,
     base_url: String,
     /// Optional Bearer token (LMStudio supports it; Ollama ignores it).
-    api_key: Option<String>,
+    api_key: Option<SecretString>,
 }
 
 impl OpenAICompatProvider {
@@ -29,7 +30,7 @@ impl OpenAICompatProvider {
             client: Client::new(),
             model: config.model.clone(),
             base_url,
-            api_key: config.api_key.clone().filter(|k| !k.is_empty()),
+            api_key: config.api_key.clone(),
         }
     }
 
@@ -42,7 +43,7 @@ impl OpenAICompatProvider {
             client: Client::new(),
             model: config.model.clone(),
             base_url,
-            api_key: config.api_key.clone().filter(|k| !k.is_empty()),
+            api_key: config.api_key.clone(),
         }
     }
 }
@@ -122,7 +123,7 @@ impl LlmProvider for OpenAICompatProvider {
         let url = format!("{}/chat/completions", self.base_url);
         let mut req = self.client.post(&url);
         if let Some(key) = &self.api_key {
-            req = req.bearer_auth(key);
+            req = req.bearer_auth(key.expose_secret());
         }
         let resp = req
             .json(&ChatRequest {
@@ -151,7 +152,7 @@ impl LlmProvider for OpenAICompatProvider {
         let url = format!("{}/chat/completions", self.base_url);
         let mut req = self.client.post(&url);
         if let Some(key) = &self.api_key {
-            req = req.bearer_auth(key);
+            req = req.bearer_auth(key.expose_secret());
         }
         let byte_stream = req
             .json(&ChatRequest {
