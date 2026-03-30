@@ -1,36 +1,34 @@
 # Active Context
 
-**Current Focus:** Architectural Refactoring (God Object cleanup)
+**Current Focus:** Final Polish & Input Hardening
 **Last Active:** 2026-03-30
-**Target Completion:** Address major architectural debt (TD-034)
-**Priority:** P2
+**Target Completion:** Resolve remaining low-priority debt (TD-039)
+**Priority:** P3
 
 ## Current State
 
-**Major Architectural Refactoring complete as of 2026-03-30.**
-The 2000-line `App` struct in `src/app/mod.rs` has been decomposed into modular, focused managers following Clean Architecture principles and WezTerm's inspiration.
+**Robust Input Mapping (TD-039) complete as of 2026-03-30.**
+Replaced manual key sequence encoding with a structured `translate_key` system that supports xterm-compatible modifier encoding for Arrows, Functional keys, and Navigation keys.
 
 ### Modular Components ✓
-- **`RenderContext`** (`src/app/renderer.rs`): Owns WGPU resources, shaper, and orchestrates frame building. ✓
-- **`Mux`** (`src/app/mux.rs`): Multiplexer managing terminals, tabs, panes, and PTY polling. ✓
-- **`UiManager`** (`src/app/ui.rs`): Handles overlays (Palette, Chat Panel) and AI provider integration. ✓
-- **`InputHandler`** (`src/app/input.rs`): Manages keyboard/mouse state, leader key, and cursor blinking. ✓
-- **`App`** (`src/app/mod.rs`): Lean coordinator implementing `winit::ApplicationHandler`. ✓
+- **`RenderContext`** (`src/app/renderer.rs`): GPU & Shaping manager. ✓
+- **`Mux`** (`src/app/mux.rs`): Multiplexer manager. ✓
+- **`UiManager`** (`src/app/ui.rs`): AI & Overlay manager. ✓
+- **`InputHandler`** (`src/app/input/mod.rs`): Input & Interaction manager. ✓
+- **`KeyMap`** (`src/app/input/key_map.rs`): ANSI sequence translator. ✓
 
-### Remaining Priority
-1. **TD-035** — UI/Terminal Coupling: Further decouple layout from terminal core (ongoing).
-2. **TD-039** — ANSI key mapping improvement.
+### Remaining Debt
+1. **TD-035** — UI/Terminal Coupling: Decouple layout from terminal core.
+2. **Dead Code Cleanup** — 30+ warnings still present from the major refactor.
 
 ## Next Session Scope
 
 ### Priority Order
-1. **Validation:** Thoroughly test all UI interactions (Palette, Chat, Tabs) in the new modular structure.
-2. **Cleanup:** Address the remaining 30+ warnings (dead code, unused imports) across the project.
-3. **TD-039:** Implement a data-driven ANSI key mapping system.
+1. **Cleanup:** Systematic pruning of unused methods, fields, and imports introduced during the decomposition of `App`.
+2. **Persistence:** Add session persistence for AI chat history (optional).
+3. **TD-035:** Implement a trait-based interface for the Mux to talk to UI components.
 
 ## Files to Reference
-- `src/app/mod.rs` — new entry point coordinator.
-- `src/app/renderer.rs` — GPU & Shaping logic.
-- `src/app/mux.rs` — Terminal multiplexer.
-- `src/app/ui.rs` — Overlay & AI management.
-- `src/app/input.rs` — Input state machine.
+- `src/app/input/key_map.rs` — new ANSI translation logic.
+- `src/app/input/mod.rs` — updated to use `key_map`.
+- `.context/quality/TECHNICAL_DEBT.md` — 12 total items resolved today.

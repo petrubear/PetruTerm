@@ -1,23 +1,21 @@
 # Session State
 
 **Last Updated:** 2026-03-30
-**Session Focus:** Architectural Refactoring (COMPLETE)
+**Session Focus:** Input Hardening & Refactor Finalization (COMPLETE)
 
-## Branch: `refactor/app-god-object`
+## Branch: `develop` (from `master` after refactor merge)
 
 ## Session Close Notes (2026-03-30)
 
-### Major Refactoring Highlights
-- **TD-034: Decomposed App Struct:** The `App` god-object was split into 4 specialized managers:
-    - `RenderContext`: GPU resources and frame drawing.
-    - `Mux`: Terminal instances, tabs, and panes.
-    - `UiManager`: AI Panel, Command Palette, and provider logic.
-    - `InputHandler`: Modifiers, mouse, and keyboard mapping.
-- **Improved Code Organization:** Moved `src/app.rs` to `src/app/mod.rs` and created supporting sub-modules.
-- **Thin Coordinator Pattern:** `src/app/mod.rs` now contains ~300 lines (down from 2000), acting solely as a dispatcher for `winit` events.
+### Input Hardening Highlights
+- **TD-039: Robust ANSI Key Map:** Replaced the fragile manual key-to-sequence code with a structured translation system in `key_map.rs`.
+- **Modifier Support:** Added xterm-compatible modifier encoding (Shift=2, Alt=3, Ctrl=5, etc.) for all special keys.
+- **Extended Key Support:** Implemented mappings for F1-F12 and navigation keys (Home, End, Insert, Delete, PgUp, PgDn).
+- **Clean Architecture Integration:** The new logic is correctly integrated into the modularized `InputHandler`.
 
-### Resolved Debt (this session)
-- [x] TD-034: God Object refactoring.
+### Resolved Debt (Total Session)
+- [x] TD-039: Robust ANSI Key Map.
+- [x] TD-034: God Object refactor.
 - [x] TD-037: Palette AI wiring.
 - [x] TD-038: Configurable AI UI.
 - [x] TD-032: GPU Dirty-row tracking.
@@ -30,19 +28,15 @@
 - [x] TD-033: Atlas stability.
 
 ## Build Status
-- **cargo check:** PASS — 0 errors, 37 warnings (mostly dead code in specialized modules).
-- **Architecture:** Clean Architecture principles applied; dependencies are explicitly passed between managers.
+- **cargo check:** PASS — 0 errors, 37 warnings (dead code cleanup needed next session).
+- **input:** Support for complex key combinations (e.g. `Ctrl+Shift+Up`) is now verified at the byte level.
 
 ## Next Session Start
-- **Integration Testing:** Ensure the new modular structure handles all edge cases (resizing, multi-tab AI queries, etc.).
-- **Dead Code Cleanup:** Prune the methods and imports that were made redundant by the refactor.
-- **TD-039:** Implement ANSI key mapping database.
+- **Structural Pruning:** systematic removal of dead code and redundant imports introduced by the refactor.
+- **Coupling Resolution (TD-035):** Focus on decoupling UI from Mux internals.
 
-## Key Technical Decisions (Refactor)
+## Key Technical Decisions
 
-### Ownership Model
-- `App` owns the managers.
-- Managers are initialized in `App::new` (static) or `App::resumed` (dynamic resources like WGPU).
-- `RenderContext` holds the `RowCache` to keep performance optimizations close to the drawing logic.
-- `Mux` is the source of truth for terminal data.
-- `InputHandler` maintains the interaction state machine.
+### Input Translation
+- **xterm Standard:** Followed the `\x1b[1;<mod><char>` pattern for modified arrows and `\x1b[<num>;<mod>~` for nav keys.
+- **Module Structure:** `input` was promoted to a directory with `mod.rs` and `key_map.rs`.

@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-03-30
 **Total Items:** 21
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 1 | **P3:** 1
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 1 | **P3:** 0
 
 ## Priority Definitions
 
@@ -24,16 +24,12 @@ _None_
 ## P1 - High Priority
 
 ### ~~TD-028: Redundant Text Shaping (Performance)~~ — RESOLVED
-- **File:** `src/app.rs` (`WindowEvent::RedrawRequested`)
-- **Issue:** `shaper.shape_line` was called for every visible row on every frame (60+ times/sec), even if terminal content hadn't changed. Shaping (HarfBuzz) is expensive.
-- **Fix:** Implemented a row-level `RowCache` in `App`. Rows are hashed (text + colors); cached shaped glyphs and GPU instances are reused if the hash matches.
-- **WezTerm Inspiration:** WezTerm caches shaping results at the `Line` level (using `termwiz` appdata). It only re-shapes clusters when the underlying grid row is modified.
+- **Implementation:** Implemented a row-level `RowCache` in `App`. Rows are hashed (text + colors); cached shaped glyphs and GPU instances are reused if the hash matches.
+- **Result:** Drastic reduction in CPU usage when terminal content is static.
 
 ### ~~TD-029: $O(N^2)$ Column Calculation during Shaping (Performance)~~ — RESOLVED
-- **File:** `src/font/shaper.rs` (`shape_line`)
-- **Issue:** Column index for each glyph was calculated using `text[..start].chars().count()`. Inside a loop over all glyphs, this made shaping a single line $O(N^2)$ relative to character count.
-- **Fix:** `TextShaper::shape_line` now uses incremental character counts to determine glyph columns in $O(N)$.
-- **WezTerm Inspiration:** WezTerm iterates through `CellCluster` objects and keeps an incremental count of the visual columns covered, avoiding redundant string traversals.
+- **Implementation:** `TextShaper::shape_line` uses incremental character counts to determine glyph columns in $O(N)$.
+- **Result:** Faster shaping for long lines.
 
 ### ~~TD-030: Secret Leakage to LLM Provider~~ — RESOLVED
 - **Implementation:** Added `sanitize_command` to `ShellContext`. Uses regex to redact `export VAR=secret` and Authorization headers from `last_command` before injecting into system prompt.
@@ -52,15 +48,12 @@ _None_
 ## P2 - Medium Priority
 
 ### ~~TD-033: Atlas Stability & Eviction (Stability)~~ — RESOLVED
-- **File:** `src/renderer/atlas.rs`
-- **Issue:** `GlyphAtlas` used a simple shelf-packer with no eviction policy. It would eventually fill up and crash/error if many unique glyphs (Nerd Fonts, different sizes) were rendered.
-- **Fix:** Implemented a "flush and start over" strategy. `GlyphAtlas::upload` now returns `AtlasError::Full`. `App::render` catches this, clears both Glyph and LCD atlases, clears the `RowCache`, and re-renders the frame.
-- **WezTerm Inspiration:** WezTerm uses a "flush and start over" strategy. When the atlas runs out of space (`OutOfTextureSpace`), it clears the entire atlas and re-populates it with just the glyphs needed for the current frame.
+- **Implementation:** Implemented a "flush and start over" strategy. `GlyphAtlas::upload` now returns `AtlasError::Full`. `App::render` catches this, clears both Glyph and LCD atlases, clears the `RowCache`, and re-renders the frame.
+- **Result:** Terminal no longer crashes or stops rendering when the atlas fills up.
 
 ### ~~TD-034: God Object Pattern in `App` (Architecture)~~ — RESOLVED
 - **Implementation:** Decomposed the 2000-line `App` struct into specialized managers: `RenderContext` (GPU), `Mux` (PTY/Tabs/Panes), `UiManager` (AI/Overlays), and `InputHandler` (Keyboard/Mouse).
 - **Result:** Drastic improvement in maintainability and modularity. `App` is now a thin event coordinator.
-- **WezTerm Inspiration:** WezTerm separates concerns into `TermWindow` (UI/Logic), `RenderState` (GPU), and a dedicated `Mux` (Multiplexer) for managing terminals and tabs.
 
 ### TD-035: Tight Coupling between UI and Terminal (Architecture)
 - **File:** `src/app.rs`, `src/ui/`
@@ -84,10 +77,9 @@ _None_
 - **Implementation:** Introduced `ChatUiConfig` in the schema. Moved hardcoded colors and panel width from `src/app.rs` to the Lua configuration system (`llm.ui`). Added `parse_hex_linear` helper to support hex strings in Lua.
 - **Result:** AI panel appearance is now fully customizable via Lua.
 
-### TD-039: Manual ANSI Key Encoding (Implementation)
-- **File:** `src/app.rs` (`send_key_to_active_terminal`)
-- **Issue:** Arrow keys and other special keys are manually converted to ANSI escape sequences. This is error-prone and hard to extend.
-- **Fix:** Use a dedicated key-to-sequence mapping library or a data-driven approach based on the `TERM` definition.
+### ~~TD-039: Manual ANSI Key Encoding~~ — RESOLVED
+- **Implementation:** Created `src/app/input/key_map.rs` with a structured `translate_key` function. Supports xterm-compatible modifier encoding (Shift, Ctrl, Alt) for Arrows, F-keys, and navigation keys.
+- **Result:** Robust and extensible input handling that follows industry standards.
 - **WezTerm Inspiration:** WezTerm uses a robust input mapping system that translates `winit` events into terminal sequences based on the current terminal mode and `TERM` capability database.
 
 ### ~~TD-021: Drag-and-drop file path not inserted~~ — RESOLVED
@@ -127,6 +119,10 @@ _None_
 
 | ID | Title | Resolved | Resolution |
 |----|-------|----------|------------|
+| TD-039 | Robust ANSI Key Map | 2026-03-30 | Structured translate_key with xterm modifiers. |
+| TD-034 | God Object Refactor | 2026-03-30 | App split into 4 specialized managers. |
+| TD-037 | Palette AI Integration | 2026-03-30 | Command palette wired to AI logic. |
+| TD-038 | AI UI Lua Configuration | 2026-03-30 | Panel appearance moved to Lua (llm.ui). |
 | TD-032 | GPU Partial Uploads | 2026-03-30 | Dirty-row tracking for instance buffer. |
 | TD-036 | Render Pass Consolidation | 2026-03-30 | BG + Glyph passes merged into one. |
 | TD-005 | PTY JoinHandle | 2026-03-30 | std::thread JoinHandle + shutdown() loop. |

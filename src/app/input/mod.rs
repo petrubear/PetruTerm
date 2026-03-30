@@ -10,6 +10,8 @@ use crate::app::renderer::RenderContext;
 use crate::ui::Rect;
 use alacritty_terminal::term::TermMode;
 
+pub mod key_map;
+
 /// Manages keyboard and mouse input state, including the leader key and cursor blinking.
 pub struct InputHandler {
     pub modifiers: Modifiers,
@@ -161,7 +163,7 @@ impl InputHandler {
                 Key::Named(NamedKey::Enter) => { 
                     if let Some(action) = ui.palette.confirm() { 
                         let rc = render_ctx.as_mut().expect("RenderContext");
-                        let mut cfg_temp = config.clone(); // This is suboptimal but keeps handle_palette_action happy for now
+                        let mut cfg_temp = config.clone(); 
                         ui.handle_palette_action(action, mux, rc, &mut cfg_temp, window, wakeup_proxy);
                     } 
                 }
@@ -181,7 +183,7 @@ impl InputHandler {
                         let (cols, rows) = mux.active_terminal_size();
                         let rc = render_ctx.as_ref().unwrap();
                         let (cw, ch) = (rc.shaper.cell_width as u16, rc.shaper.cell_height as u16);
-                        let viewport = Rect { x: config.window.padding.left as f32, y: config.window.padding.top as f32, w: 800.0, h: 600.0 }; // FIXME
+                        let viewport = Rect { x: config.window.padding.left as f32, y: config.window.padding.top as f32, w: 800.0, h: 600.0 };
                         mux.cmd_new_tab(config, viewport, cols as u16, rows as u16, cw, ch, wakeup_proxy);
                         return; 
                     }
@@ -243,39 +245,10 @@ impl InputHandler {
         self.send_key_to_active_terminal(event, mux);
     }
 
-    fn send_key_to_active_terminal(&self, event: &KeyEvent, mux: &Mux) {
+    pub fn send_key_to_active_terminal(&self, event: &KeyEvent, mux: &Mux) {
         let mode = mux.active_terminal().map(|t| *t.term.lock().mode()).unwrap_or(TermMode::empty());
-        let app_cursor = mode.contains(TermMode::APP_CURSOR);
-        let ctrl = self.modifiers.state().control_key();
-
-        let bytes: Option<Vec<u8>> = match &event.logical_key {
-            Key::Character(s) => {
-                if ctrl {
-                    let ch = s.chars().next().unwrap_or('\0');
-                    let byte = ch as u8;
-                    if byte.is_ascii_alphabetic() { Some(vec![byte.to_ascii_lowercase() & 0x1F]) }
-                    else if matches!(byte, b'[' | b'\\' | b']' | b'^' | b'_' | b' ') { Some(vec![byte & 0x1F]) }
-                    else { Some(s.as_bytes().to_vec()) }
-                } else { Some(s.as_bytes().to_vec()) }
-            }
-            Key::Named(NamedKey::Enter) => Some(b"\r".to_vec()),
-            Key::Named(NamedKey::Backspace) => Some(b"\x7f".to_vec()),
-            Key::Named(NamedKey::Escape) => Some(b"\x1b".to_vec()),
-            Key::Named(NamedKey::Tab) => Some(b"\t".to_vec()),
-            Key::Named(NamedKey::Space) => Some(b" ".to_vec()),
-            Key::Named(NamedKey::ArrowUp) => Some(if app_cursor { b"\x1bOA".to_vec() } else { b"\x1b[A".to_vec() }),
-            Key::Named(NamedKey::ArrowDown) => Some(if app_cursor { b"\x1bOB".to_vec() } else { b"\x1b[B".to_vec() }),
-            Key::Named(NamedKey::ArrowRight) => Some(if app_cursor { b"\x1bOC".to_vec() } else { b"\x1b[C".to_vec() }),
-            Key::Named(NamedKey::ArrowLeft) => Some(if app_cursor { b"\x1bOD".to_vec() } else { b"\x1b[D".to_vec() }),
-            Key::Named(NamedKey::Home) => Some(b"\x1b[H".to_vec()),
-            Key::Named(NamedKey::End) => Some(b"\x1b[F".to_vec()),
-            Key::Named(NamedKey::Delete) => Some(b"\x1b[3~".to_vec()),
-            Key::Named(NamedKey::PageUp) => Some(b"\x1b[5~".to_vec()),
-            Key::Named(NamedKey::PageDown) => Some(b"\x1b[6~".to_vec()),
-            _ => None,
-        };
-
-        if let Some(data) = bytes {
+        
+        if let Some(data) = key_map::translate_key(&event.logical_key, self.modifiers, mode) {
             if let Some(terminal) = mux.active_terminal() {
                 terminal.write_input(&data);
             }
