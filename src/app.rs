@@ -44,6 +44,8 @@ struct RowCacheEntry {
 struct RowCache {
     /// Indexed by (viewport_row).
     rows: Vec<Option<RowCacheEntry>>,
+    /// Tracks which rows changed since the last upload to GPU.
+    dirty_rows: Vec<bool>,
     /// Tracks which terminal ID this cache is valid for.
     terminal_id: Option<usize>,
     /// Tracks font config hash to invalidate on font change.
@@ -52,11 +54,12 @@ struct RowCache {
 
 impl RowCache {
     fn new() -> Self {
-        Self { rows: Vec::new(), terminal_id: None, font_hash: 0 }
+        Self { rows: Vec::new(), dirty_rows: Vec::new(), terminal_id: None, font_hash: 0 }
     }
 
     fn clear(&mut self) {
         for r in &mut self.rows { *r = None; }
+        for d in &mut self.dirty_rows { *d = true; }
     }
 }
 
@@ -1230,7 +1233,26 @@ impl ApplicationHandler<()> for App {
                         );
                     }
 
-                    renderer.upload_instances(&self.instances);
+                    // TD-032: Dirty-row tracking. Upload only rows that changed.
+                    let cols = term_cols as usize + if panel_visible { self.chat_panel.width_cols as usize } else { 0 };
+                    for (row_idx, is_dirty) in self.row_cache.dirty_rows.iter_mut().enumerate() {
+                        if *is_dirty {
+                            let start = row_idx * cols;
+                            let end = (start + cols).min(self.instances.len());
+                            if start < self.instances.len() {
+                                renderer.upload_instances(&self.instances[start..end], start);
+                            }
+                            *is_dirty = false;
+                        }
+                    }
+
+                    // Cursor is not cached, upload it every frame at the end of the buffer.
+                    if self.instances.len() > 0 {
+                        let cursor_idx = self.instances.len() - 1;
+                        renderer.upload_instances(&self.instances[cursor_idx..], cursor_idx);
+                    }
+
+                    renderer.set_cell_count(self.instances.len());
                     renderer.upload_lcd_instances(&self.lcd_instances);
                     if let Err(e) = renderer.render() {
                         log::error!("Render error: {e}");
@@ -1766,6 +1788,12 @@ fn build_instances(
 
     if row_cache.rows.len() < cell_data.len() {
         row_cache.rows.resize(cell_data.len(), None);
+        row_cache.dirty_rows.resize(cell_data.len(), true);
+    }
+
+    if row_cache.terminal_id != Some(terminal_id) {
+        row_cache.clear();
+        row_cache.terminal_id = Some(terminal_id);
     }
 
     // Scratch buffer for per-row color resolution.
@@ -1785,7 +1813,7 @@ fn build_instances(
         let row_hash = calculate_row_hash(text, colors);
 
         if let Some(Some(entry)) = row_cache.rows.get(row_idx) {
-            if entry.hash == row_hash && row_cache.terminal_id == Some(terminal_id) {
+            if entry.hash == row_hash {
                 instances.extend_from_slice(&entry.instances);
                 lcd_instances.extend_from_slice(&entry.lcd_instances);
                 continue;
@@ -1793,6 +1821,7 @@ fn build_instances(
         }
 
         // Cache miss: Shape and build instances for this row.
+        row_cache.dirty_rows[row_idx] = true;
         let mut row_instances = Vec::new();
         let mut row_lcd_instances = Vec::new();
 
@@ -1905,4 +1934,13 @@ fn build_instances(
         }
     }
     Ok(())
+}
+
+impl Drop for App {
+    fn drop(&mut self) {
+        log::info!("App dropping; shutting down PTYs.");
+        for terminal in self.terminals.iter_mut().flatten() {
+            terminal.pty.shutdown();
+        }
+    }
 }

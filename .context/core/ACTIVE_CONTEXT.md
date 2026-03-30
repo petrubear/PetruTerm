@@ -1,35 +1,34 @@
 # Active Context
 
-**Current Focus:** Project Security Hardening
+**Current Focus:** GPU Performance & PTY Stability
 **Last Active:** 2026-03-30
-**Target Completion:** Fix critical security tech debt (TD-030/TD-031)
+**Target Completion:** Address remaining high-impact performance debt (TD-032, TD-036, TD-005)
 **Priority:** P1
 
 ## Current State
 
-**Security Hardening complete as of 2026-03-30.**
-Critical security vulnerabilities related to LLM integration were addressed using secret-protecting types and command sanitization.
+**GPU Performance & PTY Stability optimizations complete as of 2026-03-30.**
+Significant improvements to memory bandwidth, power efficiency, and process management were implemented.
 
-### Security & Core Optimizations ✓
-- **TD-030: LLM Secret Scrubbing** — Added regex-based sanitization to `ShellContext` to redact secrets (exports, tokens, auth headers) from shell history before sending to LLM provider. ✓
-- **TD-031: Secure API Key Storage** — Switched LLM API keys to `secrecy::SecretString` and skipped serialization to prevent memory, disk, and log leakage. ✓
-- **TD-028: Row-Level Shaping Cache** — Implemented `RowCache` in `App`. HarfBuzz is now only called for "dirty" rows. ✓
-- **TD-029: $O(N)$ Column Calculation** — Shaping speed optimized. ✓
-- **TD-033: Atlas Eviction Strategy** — Stability improved with automated atlas resets. ✓
+### Performance & Stability Fixes ✓
+- **TD-032: GPU Dirty-Row Tracking** — `GpuRenderer` now supports partial buffer updates. `App` only uploads terminal rows that actually changed, drastically reducing memory traffic. ✓
+- **TD-036: Render Pass Consolidation** — BG and Glyph passes merged into a single pass ("terminal pass"). Prevents tile memory reloads on Apple Silicon. ✓
+- **TD-005: Clean PTY Shutdown** — Replaced type-erased thread handles with `std::thread::JoinHandle`. `App::drop` now triggers a graceful shutdown of all shell processes. ✓
+- **TD-030/TD-031: Security Hardening** — Secret scrubbing and `secrecy` storage implemented. ✓
+- **TD-028/TD-029: Shaping Optimizations** — Row caching and $O(N)$ tracking implemented. ✓
 
 ### Remaining High Priority (P1)
-- **TD-034** — "God Object" in `App`: Refactor into `RenderContext`, `InputHandler`, and `PaneManager`.
-- **TD-035** — UI/Terminal Coupling: Decouple layout from terminal core.
+- **TD-034** — "God Object" in `App`: Refactor into `RenderContext`, `InputHandler`, and `PaneManager`. (Next major focus).
 
 ## Next Session Scope
 
 ### Priority Order
 1. **TD-034 / TD-035** — Architectural refactoring: Decompose `App` god-object and decouple UI from terminal.
-2. **TD-036** — Render pass consolidation for Tiled Deferred GPUs (bandwidth optimization).
-3. **TD-032** — GPU Dirty-row tracking (further performance optimization).
+2. **TD-037** — Wire up Palette actions (Explain/Fix) to AI logic.
+3. **TD-038 / TD-039** — UI polish: Move constants to Lua and improve ANSI key mapping.
 
 ## Files to Reference
-- `.context/quality/TECHNICAL_DEBT.md` — updated with 6 resolutions.
-- `src/llm/shell_context.rs` — contains command sanitization logic.
-- `src/config/schema.rs` — uses `SecretString` for keys.
-- `src/llm/openrouter.rs` — updated to use `ExposeSecret`.
+- `.context/quality/TECHNICAL_DEBT.md` — updated with 9 resolutions.
+- `src/renderer/gpu.rs` — consolidated render passes and partial uploads.
+- `src/app.rs` — implementation of dirty-row tracking and clean drop.
+- `src/term/pty.rs` — thread join handle implementation.

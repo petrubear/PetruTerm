@@ -269,20 +269,24 @@ impl GpuRenderer {
         self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&cell));
     }
 
-    /// Upload cell instances for this frame. Must be called before `render()`.
-    pub fn upload_instances(&mut self, instances: &[CellVertex]) {
-        let count = instances.len().min(MAX_INSTANCES);
-        if count > 0 {
+    /// Upload cell instances for this frame. Supports partial updates via offset.
+    pub fn upload_instances(&mut self, instances: &[CellVertex], offset: usize) {
+        let count = instances.len();
+        if count > 0 && offset + count <= MAX_INSTANCES {
             self.queue.write_buffer(
                 &self.instance_buffer,
-                0,
-                bytemuck::cast_slice(&instances[..count]),
+                (offset * std::mem::size_of::<CellVertex>()) as u64,
+                bytemuck::cast_slice(instances),
             );
         }
-        self.cell_count = count;
+        // cell_count is the total count to draw, set by the caller.
     }
 
-    /// Render a single frame: bg pass then glyph pass.
+    pub fn set_cell_count(&mut self, count: usize) {
+        self.cell_count = count.min(MAX_INSTANCES);
+    }
+
+    /// Render a single frame: combined pass for bg and glyphs.
     pub fn render(&mut self) -> Result<()> {
         use wgpu::CurrentSurfaceTexture;
         let output = match self.surface.get_current_texture() {
@@ -313,7 +317,7 @@ impl GpuRenderer {
 
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("clear + bg pass"),
+                label: Some("terminal pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     depth_slice: None,
@@ -330,66 +334,31 @@ impl GpuRenderer {
             });
 
             if self.cell_count > 0 {
-                // Background pass
+                // Backgrounds first
                 pass.set_pipeline(&self.pipeline.bg_pipeline);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                 pass.set_bind_group(1, &self.atlas_bind_group, &[]);
                 pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
                 pass.draw(0..6, 0..self.cell_count as u32);
+
+                // Glyphs on top (same pass, no reload)
+                pass.set_pipeline(&self.pipeline.cell_pipeline);
+                pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                pass.set_bind_group(1, &self.atlas_bind_group, &[]);
+                pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
+                pass.draw(0..6, 0..self.cell_count as u32);
             }
-        }
 
-        if self.cell_count > 0 {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("glyph pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                occlusion_query_set: None,
-                timestamp_writes: None,
-                multiview_mask: None,
-            });
-
-            pass.set_pipeline(&self.pipeline.cell_pipeline);
-            pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-            pass.set_bind_group(1, &self.atlas_bind_group, &[]);
-            pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
-            pass.draw(0..6, 0..self.cell_count as u32);
-        }
-
-        // LCD subpixel AA pass (renders LCD-glyph instances on top of bg-aware pass)
-        if self.lcd_instance_count > 0 {
-            if let Some(ref lcd_pipeline) = self.lcd_pipeline {
-                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("LCD glyph pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &view,
-                        depth_slice: None,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                    occlusion_query_set: None,
-                    timestamp_writes: None,
-                    multiview_mask: None,
-                });
-
-                pass.set_pipeline(&lcd_pipeline.lcd_pipeline);
-                pass.set_bind_group(0, &self.bg_aware_uniform_bind_group, &[]);
-                pass.set_bind_group(1, &self.bg_aware_atlas_bind_group, &[]);
-                pass.set_bind_group(2, &self.lcd_atlas_bind_group, &[]);
-                pass.set_vertex_buffer(0, self.lcd_instance_buffer.slice(..));
-                pass.draw(0..6, 0..self.lcd_instance_count as u32);
+            // LCD pass (if any)
+            if self.lcd_instance_count > 0 {
+                if let Some(ref lcd_pipeline) = self.lcd_pipeline {
+                    pass.set_pipeline(&lcd_pipeline.lcd_pipeline);
+                    pass.set_bind_group(0, &self.bg_aware_uniform_bind_group, &[]);
+                    pass.set_bind_group(1, &self.bg_aware_atlas_bind_group, &[]);
+                    pass.set_bind_group(2, &self.lcd_atlas_bind_group, &[]);
+                    pass.set_vertex_buffer(0, self.lcd_instance_buffer.slice(..));
+                    pass.draw(0..6, 0..self.lcd_instance_count as u32);
+                }
             }
         }
 

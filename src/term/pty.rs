@@ -81,9 +81,8 @@ pub struct Pty {
     pub notifier: Notifier,
     /// Receive events from the PTY reader thread.
     pub rx: crossbeam_channel::Receiver<PtyEvent>,
-    /// Kept alive to ensure the PTY thread is not prematurely dropped.
-    /// Type-erased because alacritty's EventLoop return type is complex.
-    _thread: Box<dyn std::any::Any + Send>,
+    /// Handle to the PTY reader thread for clean shutdown.
+    thread_handle: Option<std::thread::JoinHandle<()>>,
 }
 
 impl Pty {
@@ -137,10 +136,24 @@ impl Pty {
         // Give the proxy a direct path to write responses back to the PTY,
         // bypassing the main thread. Set before spawn so it's ready immediately.
         let _ = direct_notifier.set(Notifier(pty_event_loop.channel()));
-        let thread = Box::new(pty_event_loop.spawn());
+
+        // Spawn in a wrapper thread to hide the complex alacritty return types
+        // and get a clean JoinHandle<()>.
+        let thread_handle = std::thread::spawn(move || {
+            let _ = pty_event_loop.spawn().join();
+        });
 
         log::info!("PTY spawned: shell={}", config.shell);
-        Ok(Self { notifier, rx, _thread: thread })
+        Ok(Self { notifier, rx, thread_handle: Some(thread_handle) })
+    }
+
+    /// Cleanly shut down the PTY thread.
+    pub fn shutdown(&mut self) {
+        log::debug!("Shutting down PTY thread...");
+        let _ = self.notifier.0.send(Msg::Shutdown);
+        if let Some(handle) = self.thread_handle.take() {
+            let _ = handle.join();
+        }
     }
 
     /// Write raw bytes to the PTY (keyboard input → shell).
