@@ -56,8 +56,11 @@ impl RenderContext {
         let renderer = GpuRenderer::new(window.clone(), config).await?;
         let scale_factor = window.scale_factor() as f32;
 
-        let font_system = build_font_system(&config.font)?;
-        let scaled_font = config.font.clone(); 
+        let mut scaled_font = config.font.clone();
+        scaled_font.size *= scale_factor;
+        crate::font::loader::locate_font_for_lcd(&mut scaled_font);
+
+        let font_system = build_font_system(&scaled_font)?;
         let lcd_atlas = renderer.get_lcd_atlas();
         
         let mut shaper = TextShaper::new(&renderer.device(), font_system, &scaled_font, lcd_atlas);
