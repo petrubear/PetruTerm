@@ -1247,16 +1247,24 @@ impl ApplicationHandler<()> for App {
                         );
                     }
 
-                    // TD-032: Dirty-row tracking. Upload only rows that changed.
+                    // TD-032: Dirty-row tracking.
                     let cols = term_cols as usize + if panel_visible { self.chat_panel.width_cols as usize } else { 0 };
-                    for (row_idx, is_dirty) in self.row_cache.dirty_rows.iter_mut().enumerate() {
-                        if *is_dirty {
-                            let start = row_idx * cols;
-                            let end = (start + cols).min(self.instances.len());
-                            if start < self.instances.len() {
-                                renderer.upload_instances(&self.instances[start..end], start);
+                    
+                    if self.palette.visible {
+                        // If palette is visible, bypass optimization and upload everything.
+                        // Overlays like the palette don't align with the row-based cache.
+                        renderer.upload_instances(&self.instances, 0);
+                    } else {
+                        // Standard optimized path for terminal content.
+                        for (row_idx, is_dirty) in self.row_cache.dirty_rows.iter_mut().enumerate() {
+                            if *is_dirty {
+                                let start = row_idx * cols;
+                                let end = (start + cols).min(self.instances.len());
+                                if start < self.instances.len() {
+                                    renderer.upload_instances(&self.instances[start..end], start);
+                                }
+                                *is_dirty = false;
                             }
-                            *is_dirty = false;
                         }
                     }
 
