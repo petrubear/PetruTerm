@@ -75,6 +75,18 @@ pub struct PtyEventProxy {
     pub direct_notifier: Arc<OnceLock<Notifier>>,
 }
 
+use std::any::Any;
+
+pub trait PtyJoinHandle: Send {
+    fn join(self: Box<Self>) -> Result<(), Box<dyn Any + Send>>;
+}
+
+impl<T: Send> PtyJoinHandle for std::thread::JoinHandle<T> {
+    fn join(self: Box<Self>) -> Result<(), Box<dyn Any + Send>> {
+        (*self).join().map(|_| ()).map_err(|e| e)
+    }
+}
+
 /// A spawned PTY with a running alacritty_terminal I/O thread.
 pub struct Pty {
     /// Send data to the PTY (keyboard input → shell).
@@ -82,7 +94,7 @@ pub struct Pty {
     /// Receive events from the PTY reader thread.
     pub rx: crossbeam_channel::Receiver<PtyEvent>,
     /// Handle to the PTY reader thread for clean shutdown.
-    thread_handle: Option<std::thread::JoinHandle<()>>,
+    thread_handle: Option<Box<dyn PtyJoinHandle>>,
 }
 
 impl Pty {
@@ -137,16 +149,10 @@ impl Pty {
         // bypassing the main thread. Set before spawn so it's ready immediately.
         let _ = direct_notifier.set(Notifier(pty_event_loop.channel()));
 
-        // We use a wrapper thread to get a JoinHandle<()> and hide the internal types.
-        // Alacritty's spawn() already starts a thread, but it returns a complex type.
-        // We wrap the spawned result into our own thread joiner.
-        let spawned = pty_event_loop.spawn();
-        let thread_handle = std::thread::spawn(move || {
-            let _ = spawned.join();
-        });
+        let thread_handle = pty_event_loop.spawn();
 
         log::info!("PTY spawned: shell={}", config.shell);
-        Ok(Self { notifier, rx, thread_handle: Some(thread_handle) })
+        Ok(Self { notifier, rx, thread_handle: Some(Box::new(thread_handle)) })
     }
 
     /// Cleanly shut down the PTY thread.
