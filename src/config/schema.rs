@@ -221,6 +221,7 @@ pub struct LlmConfig {
     pub base_url: Option<String>,
     pub context_lines: u32,
     pub features: LlmFeatures,
+    pub ui: ChatUiConfig,
 }
 
 impl Default for LlmConfig {
@@ -233,6 +234,28 @@ impl Default for LlmConfig {
             base_url: None,
             context_lines: 50,
             features: LlmFeatures::default(),
+            ui: ChatUiConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatUiConfig {
+    pub width_cols: u16,
+    pub background: [f32; 4],
+    pub user_fg: [f32; 4],
+    pub assistant_fg: [f32; 4],
+    pub input_fg: [f32; 4],
+}
+
+impl Default for ChatUiConfig {
+    fn default() -> Self {
+        Self {
+            width_cols: 55,
+            background: [0.10, 0.09, 0.16, 1.0],
+            user_fg: [0.75, 0.90, 1.00, 1.0],
+            assistant_fg: [0.55, 1.00, 0.53, 1.0],
+            input_fg: [1.00, 1.00, 1.00, 1.0],
         }
     }
 }

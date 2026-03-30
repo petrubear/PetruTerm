@@ -77,16 +77,13 @@ _None_
 
 ## P3 - Low Priority
 
-### TD-037: Incomplete Palette Actions (Implementation)
-- **File:** `src/app.rs` (`handle_palette_action`)
-- **Issue:** "Explain Last Output" and "Fix Last Error" in the command palette are currently stubs that just log info, despite implementations existing as methods in `App`.
-- **Fix:** Wire up the palette actions to call `explain_last_output()` and `fix_last_error()`.
+### ~~TD-037: Incomplete Palette Actions~~ — RESOLVED
+- **Implementation:** Connected `Action::ExplainLastOutput` and `Action::FixLastError` in `handle_palette_action` to their respective methods in `App`.
+- **Result:** Command palette now correctly triggers AI context analysis.
 
-### TD-038: Hardcoded UI Constants (Implementation)
-- **File:** `src/app.rs` (`build_chat_panel_instances`)
-- **Issue:** AI panel colors, paddings, and layout constants are hardcoded in the rendering function.
-- **Fix:** Move UI constants to the Lua configuration system or a dedicated `theme.lua` module.
-- **WezTerm Inspiration:** Virtually all UI aspects in WezTerm are configurable via Lua, from border widths to individual color palette indices.
+### ~~TD-038: Hardcoded UI Constants~~ — RESOLVED
+- **Implementation:** Introduced `ChatUiConfig` in the schema. Moved hardcoded colors and panel width from `src/app.rs` to the Lua configuration system (`llm.ui`). Added `parse_hex_linear` helper to support hex strings in Lua.
+- **Result:** AI panel appearance is now fully customizable via Lua.
 
 ### TD-039: Manual ANSI Key Encoding (Implementation)
 - **File:** `src/app.rs` (`send_key_to_active_terminal`)

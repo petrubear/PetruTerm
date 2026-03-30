@@ -4,6 +4,15 @@ use std::path::Path;
 
 use super::schema::Config;
 
+fn parse_hex_linear(s: &str) -> [f32; 4] {
+    let s = s.trim_start_matches('#');
+    if s.len() < 6 { return [0.0, 0.0, 0.0, 1.0]; }
+    let r = u8::from_str_radix(&s[0..2], 16).unwrap_or(0) as f32 / 255.0;
+    let g = u8::from_str_radix(&s[2..4], 16).unwrap_or(0) as f32 / 255.0;
+    let b = u8::from_str_radix(&s[4..6], 16).unwrap_or(0) as f32 / 255.0;
+    [r, g, b, 1.0]
+}
+
 /// Load and evaluate a Lua config file, returning a resolved Config.
 pub fn load_config(path: &Path) -> Result<Config> {
     let lua = Lua::new();
@@ -199,6 +208,24 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
         }
         if let Ok(c) = llm_table.get::<u32>("context_lines") {
             config.llm.context_lines = c;
+        }
+
+        if let Ok(ui_table) = llm_table.get::<LuaTable>("ui") {
+            if let Ok(w) = ui_table.get::<u16>("width_cols") {
+                config.llm.ui.width_cols = w;
+            }
+            if let Ok(bg) = ui_table.get::<String>("background") {
+                config.llm.ui.background = parse_hex_linear(&bg);
+            }
+            if let Ok(ufg) = ui_table.get::<String>("user_fg") {
+                config.llm.ui.user_fg = parse_hex_linear(&ufg);
+            }
+            if let Ok(afg) = ui_table.get::<String>("assistant_fg") {
+                config.llm.ui.assistant_fg = parse_hex_linear(&afg);
+            }
+            if let Ok(ifg) = ui_table.get::<String>("input_fg") {
+                config.llm.ui.input_fg = parse_hex_linear(&ifg);
+            }
         }
     }
 

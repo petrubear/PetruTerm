@@ -508,9 +508,11 @@ impl App {
                 self.panel_focused = false;
                 self.resize_terminals_for_panel();
             }
-            // TODO Phase 2 steps 8-9
-            Action::ExplainLastOutput | Action::FixLastError => {
-                log::info!("Explain/Fix not yet implemented.");
+            Action::ExplainLastOutput => {
+                self.explain_last_output();
+            }
+            Action::FixLastError => {
+                self.fix_last_error();
             }
         }
     }
@@ -1227,6 +1229,7 @@ impl ApplicationHandler<()> for App {
                             self.panel_focused,
                             shaper,
                             renderer,
+                            &self.config,
                             &scaled_font,
                             term_cols,
                             term_rows,
@@ -1552,6 +1555,7 @@ fn build_chat_panel_instances(
     panel_focused: bool,
     shaper: &mut TextShaper,
     renderer: &mut GpuRenderer,
+    config: &Config,
     font: &crate::config::schema::FontConfig,
     term_cols: usize,
     screen_rows: usize,
@@ -1563,14 +1567,16 @@ fn build_chat_panel_instances(
     // Need at least: header + separator + 2 input rows + hints = 5
     if panel_cols == 0 || screen_rows < 5 { return; }
 
-    const PANEL_BG:       [f32; 4] = [0.10, 0.09, 0.16, 1.0];
+    let ui_cfg = &config.llm.ui;
+    let panel_bg       = ui_cfg.background;
+    let user_fg        = ui_cfg.user_fg;
+    let asst_fg        = ui_cfg.assistant_fg;
+    let input_fg       = ui_cfg.input_fg;
+
     const SEP_FG:         [f32; 4] = [0.35, 0.30, 0.52, 1.0];
     const HEADER_FOCUS:   [f32; 4] = [0.75, 0.65, 1.00, 1.0];
     const HEADER_UNFOCUS: [f32; 4] = [0.42, 0.38, 0.58, 1.0]; // dim when terminal has focus
-    const USER_FG:        [f32; 4] = [0.75, 0.90, 1.00, 1.0];
-    const ASST_FG:        [f32; 4] = [0.55, 1.00, 0.53, 1.0];
     const STREAM_FG:      [f32; 4] = [0.95, 0.88, 0.45, 1.0];
-    const INPUT_FG:       [f32; 4] = [1.00, 1.00, 1.00, 1.0];
     const INPUT_DIM:      [f32; 4] = [0.55, 0.52, 0.65, 1.0]; // dim when not focused
     const HINT_FG:        [f32; 4] = [0.42, 0.40, 0.52, 1.0];
     const ERR_FG:         [f32; 4] = [1.00, 0.55, 0.45, 1.0];
@@ -1590,8 +1596,8 @@ fn build_chat_panel_instances(
 
     for msg in &panel.messages {
         let (prefix, cont, fg) = match msg.role {
-            ChatRole::User      => (" You  ", "      ", USER_FG),
-            ChatRole::Assistant => ("  AI  ", "      ", ASST_FG),
+            ChatRole::User      => (" You  ", "      ", user_fg),
+            ChatRole::Assistant => ("  AI  ", "      ", asst_fg),
             ChatRole::System    => continue,
         };
         let wrapped = word_wrap(&msg.content, inner_w);
@@ -1636,7 +1642,7 @@ fn build_chat_panel_instances(
             (format!(" ! {msg}"), String::new(), ERR_FG)
         }
         _ => {
-            let fg = if panel_focused { INPUT_FG } else { INPUT_DIM };
+            let fg = if panel_focused { input_fg } else { INPUT_DIM };
             let raw = if panel_focused && panel.is_idle() {
                 format!("{}▋", panel.input)
             } else {
@@ -1666,7 +1672,7 @@ fn build_chat_panel_instances(
     let header_fg = if panel_focused { HEADER_FOCUS } else { HEADER_UNFOCUS };
 
     let mut push = |text: &str, fg, row, instances: &mut Vec<CellVertex>| {
-        push_shaped_row(text, fg, PANEL_BG, row, co, panel_cols, shaper, renderer, font, instances);
+        push_shaped_row(text, fg, panel_bg, row, co, panel_cols, shaper, renderer, font, instances);
     };
 
     // Row 0: header (bright when focused, dim when terminal has focus)
@@ -1678,7 +1684,7 @@ fn build_chat_panel_instances(
         let (text, fg) = all_lines
             .get(visible_start + i)
             .map(|(t, f)| (t.as_str(), *f))
-            .unwrap_or(("", PANEL_BG));
+            .unwrap_or(("", panel_bg));
         push(text, fg, row, instances);
     }
 

@@ -1,34 +1,35 @@
 # Active Context
 
-**Current Focus:** GPU Performance & PTY Stability
+**Current Focus:** AI UX & UI Config
 **Last Active:** 2026-03-30
-**Target Completion:** Address remaining high-impact performance debt (TD-032, TD-036, TD-005)
-**Priority:** P1
+**Target Completion:** Address UX/Implementation debt (TD-037, TD-038)
+**Priority:** P3
 
 ## Current State
 
-**GPU Performance & PTY Stability optimizations complete as of 2026-03-30.**
-Significant improvements to memory bandwidth, power efficiency, and process management were implemented.
+**AI UX & UI Config debt resolved as of 2026-03-30.**
+Palette actions are now fully functional and the AI panel UI is configurable via Lua.
 
-### Performance & Stability Fixes ✓
-- **TD-032: GPU Dirty-Row Tracking** — `GpuRenderer` now supports partial buffer updates. `App` only uploads terminal rows that actually changed, drastically reducing memory traffic. ✓
-- **TD-036: Render Pass Consolidation** — BG and Glyph passes merged into a single pass ("terminal pass"). Prevents tile memory reloads on Apple Silicon. ✓
-- **TD-005: Clean PTY Shutdown** — Replaced type-erased thread handles with `std::thread::JoinHandle`. `App::drop` now triggers a graceful shutdown of all shell processes. ✓
-- **TD-030/TD-031: Security Hardening** — Secret scrubbing and `secrecy` storage implemented. ✓
-- **TD-028/TD-029: Shaping Optimizations** — Row caching and $O(N)$ tracking implemented. ✓
+### UX & Implementation Fixes ✓
+- **TD-037: Palette AI Integration** — Wired "Explain Last Output" and "Fix Last Error" palette actions to the actual LLM query logic in `App`. ✓
+- **TD-038: Configurable AI UI** — Created `ChatUiConfig` and added `llm.ui` table to Lua. Hardcoded colors and widths in `build_chat_panel_instances` replaced with config values. ✓
+- **Security & Performance** — All high-priority audit items (TD-028 to TD-033, TD-036, TD-005) were resolved earlier this session. ✓
 
 ### Remaining High Priority (P1)
-- **TD-034** — "God Object" in `App`: Refactor into `RenderContext`, `InputHandler`, and `PaneManager`. (Next major focus).
+- **None.** All P1 items from the audit are resolved.
+
+### Remaining Medium Priority (P2)
+- **TD-034** — "God Object" in `App`: Refactor into `RenderContext`, `InputHandler`, and `PaneManager`.
+- **TD-035** — UI/Terminal Coupling: Decouple layout from terminal core.
 
 ## Next Session Scope
 
 ### Priority Order
-1. **TD-034 / TD-035** — Architectural refactoring: Decompose `App` god-object and decouple UI from terminal.
-2. **TD-037** — Wire up Palette actions (Explain/Fix) to AI logic.
-3. **TD-038 / TD-039** — UI polish: Move constants to Lua and improve ANSI key mapping.
+1. **TD-034 / TD-035** — Major architectural refactoring (The Big Cleanup).
+2. **TD-039** — ANSI key mapping improvement.
 
 ## Files to Reference
-- `.context/quality/TECHNICAL_DEBT.md` — updated with 9 resolutions.
-- `src/renderer/gpu.rs` — consolidated render passes and partial uploads.
-- `src/app.rs` — implementation of dirty-row tracking and clean drop.
-- `src/term/pty.rs` — thread join handle implementation.
+- `.context/quality/TECHNICAL_DEBT.md` — updated with 11 total resolutions.
+- `src/app.rs` — wiring of actions and use of UI config.
+- `src/config/schema.rs` — new `ChatUiConfig` struct.
+- `src/config/lua.rs` — hex parser and table loader.
