@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-03-30
-**Total Items:** 21
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 1 | **P3:** 0
+**Last Updated:** 2026-03-31
+**Total Items:** 22
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 2 | **P3:** 0
 
 ## Priority Definitions
 
@@ -54,6 +54,241 @@ _None_
 ### ~~TD-034: God Object Pattern in `App` (Architecture)~~ — RESOLVED
 - **Implementation:** Decomposed the 2000-line `App` struct into specialized managers: `RenderContext` (GPU), `Mux` (PTY/Tabs/Panes), `UiManager` (AI/Overlays), and `InputHandler` (Keyboard/Mouse).
 - **Result:** Drastic improvement in maintainability and modularity. `App` is now a thin event coordinator.
+
+### TD-040: Leader Key Action Dispatch System (UX / Architecture)
+
+- **Files:** `src/app/input/mod.rs`, `src/config/schema.rs`, `src/config/lua.rs`, `src/ui/palette/actions.rs`, `config/default/keybinds.lua`
+- **Priority:** P2
+- **Goal:** Let any `Action` be triggered via `<leader> + key`, configured in Lua. Example: `<leader>a` → toggle AI panel, `<leader>p` → command palette. Currently every leader binding is a hardcoded `match` arm with bespoke logic.
+
+---
+
+#### Background — What Already Exists
+
+The infrastructure is mostly in place; it just needs to be wired together.
+
+1. **`LeaderConfig`** (`src/config/schema.rs` line ~197):
+   ```rust
+   pub struct LeaderConfig {
+       pub key: String,       // e.g. "b"
+       pub mods: String,      // e.g. "CTRL"
+       pub timeout_ms: u64,
+   }
+   ```
+
+2. **`InputHandler`** (`src/app/input/mod.rs`) already tracks leader state:
+   ```rust
+   pub leader_active: bool,
+   pub leader_timer: Option<Instant>,
+   pub leader_timeout_ms: u64,
+   ```
+   And the dispatch block (lines ~228–243) fires after a leader keypress:
+   ```rust
+   if self.leader_active {
+       self.leader_active = false;
+       self.leader_timer = None;
+       if let Key::Character(s) = &event.logical_key {
+           match s.as_str() {
+               "%" => { /* split horizontal */ }
+               "\"" => { /* split vertical */ }
+               "x" => { mux.cmd_close_pane(); }
+               _ => {}
+           }
+       }
+       return;
+   }
+   ```
+   **Problem:** actions are hardcoded here; no Lua config is consulted.
+
+3. **`Action` enum** (`src/ui/palette/actions.rs`) already lists all available actions:
+   ```rust
+   pub enum Action { NewTab, CloseTab, SplitHorizontal, SplitVertical, ClosePane,
+                     ToggleAiMode, ExplainLastOutput, FixLastError, CommandPalette, … }
+   ```
+   `UiManager::handle_palette_action` already knows how to execute all of them.
+
+4. **`keybinds.lua`** (`config/default/keybinds.lua`) already declares leader-bound keys:
+   ```lua
+   { mods = "LEADER", key = "%",  action = petruterm.action.SplitHorizontal },
+   { mods = "LEADER", key = '"',  action = petruterm.action.SplitVertical },
+   { mods = "LEADER", key = "x",  action = petruterm.action.ClosePane },
+   ```
+   **Problem:** the Lua parser does NOT read `config.keys`; these entries are purely decorative.
+
+5. **`Action::ToggleAiMode`** exists but there is no `Action::ToggleAiPanel`. They can be unified or `ToggleAiMode` repurposed — it already opens the panel and focuses it (see `ui.rs` line ~183).
+
+---
+
+#### Implementation Plan
+
+##### Step 1 — Add `keys: Vec<KeyBind>` to `Config`
+
+In `src/config/schema.rs`, add:
+
+```rust
+/// A single keybind entry parsed from Lua's `config.keys` table.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeyBind {
+    pub mods:   String,  // "LEADER", "CMD", "CMD|SHIFT", "CTRL|SHIFT", …
+    pub key:    String,  // "a", "%", "p", …
+    pub action: String,  // action name as string, resolved at load time
+}
+```
+
+Add `pub keys: Vec<KeyBind>` to `Config`, with `Default` returning `vec![]`.
+
+##### Step 2 — Parse `config.keys` in the Lua loader
+
+In `src/config/lua.rs`, inside the function that builds a `Config` from the Lua VM (look for the section that reads `config.leader`), add:
+
+```rust
+if let Ok(keys_table) = lua_config.get::<mlua::Table>("keys") {
+    for pair in keys_table.sequence_values::<mlua::Table>() {
+        if let Ok(entry) = pair {
+            let mods:   String = entry.get("mods").unwrap_or_default();
+            let key:    String = entry.get("key").unwrap_or_default();
+            let action: String = entry.get("action").unwrap_or_default();
+            config.keys.push(KeyBind { mods, key, action });
+        }
+    }
+}
+```
+
+Note: `petruterm.action.SplitHorizontal` in Lua should resolve to the string `"SplitHorizontal"`. Implement `petruterm.action` as a simple Lua table of string constants in the Lua prelude (in `src/config/lua.rs` where the `petruterm` module is registered):
+
+```lua
+petruterm.action = {
+    SplitHorizontal  = "SplitHorizontal",
+    SplitVertical    = "SplitVertical",
+    ClosePane        = "ClosePane",
+    NewTab           = "NewTab",
+    CloseTab         = "CloseTab",
+    CommandPalette   = "CommandPalette",
+    ToggleAiPanel    = "ToggleAiPanel",
+    ExplainLastOutput= "ExplainLastOutput",
+    FixLastError     = "FixLastError",
+    Quit             = "Quit",
+}
+```
+
+##### Step 3 — Build a leader map at startup
+
+In `src/app/input/mod.rs`, add a `leader_map` field to `InputHandler`:
+
+```rust
+pub leader_map: std::collections::HashMap<String, crate::ui::palette::Action>,
+```
+
+In `InputHandler::new`, build the map from `config.keys`:
+
+```rust
+let leader_map = config.keys.iter()
+    .filter(|kb| kb.mods.to_ascii_uppercase() == "LEADER")
+    .filter_map(|kb| {
+        let action = Action::from_str(&kb.action).ok()?;
+        Some((kb.key.clone(), action))
+    })
+    .collect();
+```
+
+This requires `Action` to implement `FromStr`. Add it in `src/ui/palette/actions.rs`:
+
+```rust
+impl std::str::FromStr for Action {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, ()> {
+        match s {
+            "SplitHorizontal"   => Ok(Action::SplitHorizontal),
+            "SplitVertical"     => Ok(Action::SplitVertical),
+            "ClosePane"         => Ok(Action::ClosePane),
+            "NewTab"            => Ok(Action::NewTab),
+            "CloseTab"          => Ok(Action::CloseTab),
+            "CommandPalette"    => Ok(Action::CommandPalette),
+            "ToggleAiPanel"     => Ok(Action::ToggleAiMode),  // alias
+            "ExplainLastOutput" => Ok(Action::ExplainLastOutput),
+            "FixLastError"      => Ok(Action::FixLastError),
+            "Quit"              => Ok(Action::Quit),
+            _                   => Err(()),
+        }
+    }
+}
+```
+
+Also add `Action::ToggleAiPanel` as a proper variant (or keep the alias above — either works).
+
+##### Step 4 — Replace the hardcoded leader dispatch
+
+In `src/app/input/mod.rs`, replace the hardcoded `match s.as_str()` block inside `if self.leader_active { … }` with a lookup:
+
+```rust
+if self.leader_active {
+    self.leader_active = false;
+    self.leader_timer = None;
+
+    if let Key::Character(s) = &event.logical_key {
+        let key_str = s.to_ascii_lowercase();
+        if let Some(action) = self.leader_map.get(key_str.as_str()).cloned() {
+            let rc = render_ctx.as_mut().expect("RenderContext");
+            let mut cfg_temp = config.clone();
+            ui.handle_palette_action(action, mux, rc, &mut cfg_temp, window, wakeup_proxy);
+        }
+    }
+    return;
+}
+```
+
+`handle_palette_action` (in `src/app/ui.rs`) already handles every action including
+`SplitHorizontal`, `ClosePane`, `ToggleAiMode`, etc., so no new action routing is needed.
+
+##### Step 5 — Update `keybinds.lua`
+
+Add the new AI panel binding and move the existing leader bindings so they are the
+single source of truth:
+
+```lua
+-- AI panel
+{ mods = "LEADER", key = "a", action = petruterm.action.ToggleAiPanel },
+
+-- Pane management (already present — no change needed if Step 2 is correct)
+{ mods = "LEADER", key = "%",  action = petruterm.action.SplitHorizontal },
+{ mods = "LEADER", key = '"',  action = petruterm.action.SplitVertical },
+{ mods = "LEADER", key = "x",  action = petruterm.action.ClosePane },
+```
+
+##### Step 6 — Wire `Config` into `InputHandler::new`
+
+`InputHandler::new` currently takes only `leader_timeout_ms: u64`. Change it to accept
+the full `Config` (or a `&[KeyBind]` slice) so it can build `leader_map`:
+
+```rust
+// Before
+pub fn new(leader_timeout_ms: u64) -> Self
+
+// After
+pub fn new(config: &Config) -> Self
+```
+
+Update the call site in `src/app/mod.rs`:
+
+```rust
+// Before
+input: InputHandler::new(config.leader.timeout_ms),
+
+// After
+input: InputHandler::new(&config),
+```
+
+---
+
+#### Acceptance Criteria
+
+- `<leader>a` opens/focuses/closes the AI panel (same cycle as `Cmd+Shift+A`).
+- `<leader>%`, `<leader>"`, `<leader>x` continue to work as before (now via map, not hardcoded).
+- Adding any new leader binding requires only a Lua change — no Rust recompile.
+- Unknown leader keys are silently ignored (no crash).
+- `cargo check` passes with 0 errors.
+
+---
 
 ### TD-035: Tight Coupling between UI and Terminal (Architecture)
 - **File:** `src/app.rs`, `src/ui/`
@@ -132,3 +367,4 @@ _None_
 | TD-025 | Vertical spacing too tight | 2026-03-27 | font.line_height config (default 1.2). |
 | TD-018 | Powerline separator fringing | 2026-03-30 | Pixel snapping (floor) in vertex shader + manual blending in fragment shader. |
 | TD-012 | Nerd Font icons overflow cell | 2026-03-23 | clamp_glyph_to_cell() crops glyph_size. |
+| TD-041 | AI panel off-screen + broken upload | 2026-03-31 | resize_terminals_for_panel() on visibility change; full GPU upload when panel visible. |
