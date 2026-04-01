@@ -210,7 +210,7 @@ impl ApplicationHandler<()> for App {
                     }
 
                     if self.ui.is_panel_visible() {
-                        rc.build_chat_panel_instances(&self.ui.chat_panel, self.ui.panel_focused, &self.config, &scaled_font, term_cols, term_rows);
+                        rc.build_chat_panel_instances(&self.ui.chat_panel, self.ui.panel_focused, &self.config, &scaled_font, term_cols, term_rows, self.input.cursor_blink_on);
                     }
                     if self.ui.palette.visible {
                         rc.row_cache.dirty_rows.fill(true);
@@ -218,8 +218,11 @@ impl ApplicationHandler<()> for App {
                     }
 
                     let cols = term_cols + if self.ui.is_panel_visible() { self.ui.chat_panel.width_cols as usize } else { 0 };
-                    if self.ui.palette.visible { rc.renderer.upload_instances(&rc.instances, 0); }
-                    else {
+                    // When the panel is visible its instances are appended after terminal rows,
+                    // so the dirty-row slice math no longer maps 1-to-1. Use a full upload instead.
+                    if self.ui.palette.visible || self.ui.is_panel_visible() {
+                        rc.renderer.upload_instances(&rc.instances, 0);
+                    } else {
                         for (row_idx, is_dirty) in rc.row_cache.dirty_rows.iter_mut().enumerate() {
                             if *is_dirty {
                                 let start = row_idx * cols;
@@ -246,7 +249,11 @@ impl ApplicationHandler<()> for App {
             WindowEvent::ModifiersChanged(mods) => self.input.modifiers = mods,
             WindowEvent::KeyboardInput { event, is_synthetic, .. } => {
                 if !is_synthetic {
+                    let panel_was_visible = self.ui.is_panel_visible();
                     self.input.handle_key_input(&event, event_loop, &self.config, &mut self.mux, &mut self.ui, &mut self.render_ctx, self.window.as_deref(), self.wakeup_proxy.clone());
+                    if self.ui.is_panel_visible() != panel_was_visible {
+                        self.resize_terminals_for_panel();
+                    }
                     if let Some(w) = &self.window { w.request_redraw(); }
                 }
             }

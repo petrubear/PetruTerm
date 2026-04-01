@@ -110,7 +110,23 @@ impl InputHandler {
 
         if cmd && shift {
             if let Key::Character(s) = &event.logical_key {
-                if s.as_str().eq_ignore_ascii_case("p") { ui.palette.open(); return; }
+                match s.as_str().to_ascii_lowercase().as_str() {
+                    "p" => { ui.palette.open(); return; }
+                    "a" => {
+                        // Toggle AI panel: open → focus → close cycle
+                        if !ui.chat_panel.is_visible() {
+                            ui.chat_panel.open();
+                            ui.panel_focused = true;
+                        } else if !ui.panel_focused {
+                            ui.panel_focused = true;
+                        } else {
+                            ui.chat_panel.close();
+                            ui.panel_focused = false;
+                        }
+                        return;
+                    }
+                    _ => {}
+                }
             }
         }
 
@@ -119,19 +135,6 @@ impl InputHandler {
                 match s.as_str().to_ascii_lowercase().as_str() {
                     "e" => { ui.explain_last_output(mux, wakeup_proxy); return; }
                     "f" => { ui.fix_last_error(mux, wakeup_proxy); return; }
-                    _ => {}
-                }
-            }
-        }
-
-        if ctrl {
-            if let Key::Character(s) = &event.logical_key {
-                match s.as_str() {
-                    "c" | "C" => {
-                        if !ui.chat_panel.is_visible() { ui.chat_panel.open(); ui.panel_focused = true; return; }
-                        else if ui.panel_focused { ui.chat_panel.close(); ui.panel_focused = false; return; }
-                    }
-                    "v" | "V" => { if ui.chat_panel.is_visible() { ui.panel_focused = !ui.panel_focused; return; } }
                     _ => {}
                 }
             }

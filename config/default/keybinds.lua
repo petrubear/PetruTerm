@@ -11,6 +11,9 @@ function module.apply_to_config(config)
     -- Command palette
     { mods = "CMD|SHIFT", key = "P",     action = petruterm.action.CommandPalette },
 
+    -- AI assistant panel (open → focus → close cycle)
+    { mods = "CMD|SHIFT", key = "A",     action = petruterm.action.ToggleAiPanel },
+
     -- Pane splits (tmux-style, via leader)
     { mods = "LEADER",    key = "%",     action = petruterm.action.SplitHorizontal },
     { mods = "LEADER",    key = '"',     action = petruterm.action.SplitVertical },

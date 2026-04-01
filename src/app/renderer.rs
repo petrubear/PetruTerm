@@ -321,94 +321,143 @@ impl RenderContext {
         font: &crate::config::schema::FontConfig,
         term_cols: usize,
         screen_rows: usize,
+        cursor_blink_on: bool,
     ) {
-        use crate::llm::chat_panel::{titled_separator, word_wrap, wrap_input};
+        use crate::llm::chat_panel::{word_wrap, wrap_input};
         use crate::llm::ChatRole;
 
         let panel_cols = panel.width_cols as usize;
-        if panel_cols == 0 || screen_rows < 5 { return; }
+        if panel_cols == 0 || screen_rows < 6 { return; }
 
-        let ui_cfg = &config.llm.ui;
-        let panel_bg       = ui_cfg.background;
-        let user_fg        = ui_cfg.user_fg;
-        let asst_fg        = ui_cfg.assistant_fg;
-        let input_fg       = ui_cfg.input_fg;
+        // ── Colors (Dracula Pro palette) ─────────────────────────────────────
+        let panel_bg = config.llm.ui.background;
+        let user_fg  = config.llm.ui.user_fg;
+        let asst_fg  = config.llm.ui.assistant_fg;
+        let input_fg = config.llm.ui.input_fg;
 
-        const SEP_FG:         [f32; 4] = [0.35, 0.30, 0.52, 1.0];
-        const HEADER_FOCUS:   [f32; 4] = [0.75, 0.65, 1.00, 1.0];
-        const HEADER_UNFOCUS: [f32; 4] = [0.42, 0.38, 0.58, 1.0];
-        const STREAM_FG:      [f32; 4] = [0.95, 0.88, 0.45, 1.0];
-        const INPUT_DIM:      [f32; 4] = [0.55, 0.52, 0.65, 1.0];
-        const HINT_FG:        [f32; 4] = [0.42, 0.40, 0.52, 1.0];
-        const ERR_FG:         [f32; 4] = [1.00, 0.55, 0.45, 1.0];
+        const BORDER_FG: [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // purple
+        const BORDER_DIM:[f32; 4] = [0.32, 0.28, 0.50, 1.0]; // dimmed purple
+        const STREAM_FG: [f32; 4] = [0.95, 0.98, 0.55, 1.0]; // yellow
+        const HINT_FG:   [f32; 4] = [0.38, 0.44, 0.64, 1.0]; // comment gray
+        const ERR_FG:    [f32; 4] = [1.00, 0.33, 0.33, 1.0]; // red
+        const SEP_FG:    [f32; 4] = [0.27, 0.28, 0.36, 1.0]; // current-line
+        const DIM_FG:    [f32; 4] = [0.50, 0.47, 0.60, 1.0]; // dimmed input
 
+        // Braille spinner cycles as streaming buffer grows
+        const SPIN: [&str; 8] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"];
+        let spin = SPIN[panel.streaming_buf.chars().count() % 8];
+
+        // ── Layout ───────────────────────────────────────────────────────────
+        // Bottom 4 rows: separator, input line 1, input line 2, hints
         let hints_row  = screen_rows - 1;
         let input_row2 = screen_rows - 2;
         let input_row1 = screen_rows - 3;
         let sep_row    = screen_rows - 4;
-        let history_start = 1_usize;
-        let history_end   = sep_row;
-        let history_rows  = history_end.saturating_sub(history_start);
+        // Rows 1..sep_row are the scrollable message history
+        let history_rows = sep_row.saturating_sub(1);
 
-        let inner_w = panel_cols.saturating_sub(6);
+        // "│  You  " / "│   AI  " prefix = 8 chars; inner content fills the rest
+        let msg_inner_w = panel_cols.saturating_sub(8);
+        let co = term_cols; // grid column where panel begins
+
+        let border_fg = if panel_focused { BORDER_FG } else { BORDER_DIM };
+
+        // ── Header ───────────────────────────────────────────────────────────
+        let title = " Petrubot ";
+        let left  = "│───";
+        let dashes = panel_cols.saturating_sub(left.chars().count() + title.chars().count());
+        let header = format!("{}{}{}", left, title, "─".repeat(dashes));
+        self.push_shaped_row(&header, border_fg, panel_bg, 0, co, panel_cols, font);
+
+        // ── Build message lines ───────────────────────────────────────────────
         let mut all_lines: Vec<(String, [f32; 4])> = Vec::new();
 
         for msg in &panel.messages {
-            let (prefix, cont, fg) = match msg.role {
-                ChatRole::User      => (" You  ", "      ", user_fg),
-                ChatRole::Assistant => ("  AI  ", "      ", asst_fg),
+            let (first_p, cont_p, fg) = match msg.role {
+                ChatRole::User      => ("│  You  ", "│       ", user_fg),
+                ChatRole::Assistant => ("│   AI  ", "│       ", asst_fg),
                 ChatRole::System    => continue,
             };
-            let wrapped = word_wrap(&msg.content, inner_w);
+            let wrapped = word_wrap(&msg.content, msg_inner_w);
             for (i, line) in wrapped.iter().enumerate() {
-                let p = if i == 0 { prefix } else { cont };
+                let p = if i == 0 { first_p } else { cont_p };
                 all_lines.push((format!("{}{}", p, line), fg));
             }
+            // blank line between messages
+            all_lines.push(("│".to_string(), SEP_FG));
         }
 
-        if panel.is_streaming() {
-            let wrapped = word_wrap(&panel.streaming_buf, inner_w);
+        // Streaming tokens (in-flight assistant response)
+        if panel.is_streaming() && !panel.streaming_buf.is_empty() {
+            let wrapped = word_wrap(&panel.streaming_buf, msg_inner_w);
             for (i, line) in wrapped.iter().enumerate() {
-                let p = if i == 0 { "  AI  " } else { "      " };
+                let p = if i == 0 { "│   AI  " } else { "│       " };
                 all_lines.push((format!("{}{}", p, line), STREAM_FG));
             }
         }
 
-        let visible_start = all_lines.len().saturating_sub(history_rows + panel.scroll_offset);
-        let input_lines = wrap_input(&panel.input, panel_cols - 4);
-        let input_line1 = format!(" > {}", input_lines.get(0).cloned().unwrap_or_default());
-        let input_line2 = format!("   {}", input_lines.get(1).cloned().unwrap_or_default());
+        // Loading placeholder (waiting for first token)
+        if matches!(panel.state, PanelState::Loading) {
+            all_lines.push((format!("│   {}  Thinking\u{2026}", spin), STREAM_FG));
+        }
 
-        let co = term_cols;
-        let header_fg = if panel_focused { HEADER_FOCUS } else { HEADER_UNFOCUS };
+        // Error
+        if let PanelState::Error(ref err) = panel.state {
+            let wrapped = word_wrap(err, msg_inner_w);
+            for (i, line) in wrapped.iter().enumerate() {
+                let p = if i == 0 { "│  \u{2717}    " } else { "│       " }; // ✗
+                all_lines.push((format!("{}{}", p, line), ERR_FG));
+            }
+        }
 
-        self.push_shaped_row(&titled_separator("⚡ Petrubot", panel_cols), header_fg, panel_bg, 0, co, panel_cols, font);
+        // ── Render visible history ────────────────────────────────────────────
+        let visible_start = all_lines.len()
+            .saturating_sub(history_rows + panel.scroll_offset);
 
         for i in 0..history_rows {
-            let row = history_start + i;
+            let row = 1 + i;
             let (text, fg) = all_lines
                 .get(visible_start + i)
                 .map(|(t, f)| (t.as_str(), *f))
-                .unwrap_or(("", panel_bg));
+                .unwrap_or(("│", SEP_FG));
             self.push_shaped_row(text, fg, panel_bg, row, co, panel_cols, font);
         }
 
-        self.push_shaped_row(&"─".repeat(panel_cols), SEP_FG, panel_bg, sep_row, co, panel_cols, font);
-        self.push_shaped_row(&input_line1, if panel_focused { input_fg } else { INPUT_DIM }, panel_bg, input_row1, co, panel_cols, font);
-        self.push_shaped_row(&input_line2, if panel_focused { input_fg } else { INPUT_DIM }, panel_bg, input_row2, co, panel_cols, font);
+        // ── Separator ────────────────────────────────────────────────────────
+        let sep = format!("│{}", "─".repeat(panel_cols.saturating_sub(1)));
+        self.push_shaped_row(&sep, SEP_FG, panel_bg, sep_row, co, panel_cols, font);
 
+        // ── Input field ──────────────────────────────────────────────────────
+        // "│ ▸  " = 5 chars; remaining width for text
+        let input_inner_w = panel_cols.saturating_sub(5);
+        let mut input_display = panel.input.clone();
+        if panel_focused && cursor_blink_on && panel.is_idle() {
+            input_display.push('\u{258b}'); // ▋ block cursor
+        }
+        let input_lines = wrap_input(&input_display, input_inner_w);
+        let inp_fg = if panel_focused { input_fg } else { DIM_FG };
+        let line1 = format!("│ \u{25b8}  {}", input_lines.first().cloned().unwrap_or_default()); // ▸
+        let line2 = format!("│    {}", input_lines.get(1).cloned().unwrap_or_default());
+        self.push_shaped_row(&line1, inp_fg, panel_bg, input_row1, co, panel_cols, font);
+        self.push_shaped_row(&line2, inp_fg, panel_bg, input_row2, co, panel_cols, font);
+
+        // ── Key hints ────────────────────────────────────────────────────────
+        let has_assistant = panel.messages.iter().any(|m| matches!(m.role, ChatRole::Assistant));
         let hints = if !panel_focused {
-            " [Ctrl+V] focus chat  [Ctrl+C] close"
+            "│ Cmd+Shift+A: focus / close"
         } else {
             match &panel.state {
-                PanelState::Idle if panel.input.trim().is_empty()
-                    && panel.messages.iter().any(|m| matches!(m.role, ChatRole::Assistant))
-                    => " [Enter] run last  [Ctrl+C] close",
-                PanelState::Idle      => " [Enter] send  [Ctrl+C] close",
-                PanelState::Streaming |
-                PanelState::Loading   => " [Ctrl+C] close",
-                PanelState::Error(_)  => " [Esc] dismiss",
-                PanelState::Hidden    => "",
+                PanelState::Idle if !panel.input.trim().is_empty()
+                    => "│ Enter: send   Esc: close",
+                PanelState::Idle if has_assistant
+                    => "│ Enter: run last cmd   Esc: close",
+                PanelState::Idle
+                    => "│ Enter: send   Esc: close",
+                PanelState::Loading | PanelState::Streaming
+                    => "│ streaming\u{2026}   Cmd+Shift+A: close",
+                PanelState::Error(_)
+                    => "│ Esc: dismiss   Cmd+Shift+A: close",
+                PanelState::Hidden => "│",
             }
         };
         self.push_shaped_row(hints, HINT_FG, panel_bg, hints_row, co, panel_cols, font);
