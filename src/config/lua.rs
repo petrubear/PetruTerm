@@ -53,12 +53,15 @@ fn inject_petruterm_global(lua: &Lua) -> LuaResult<()> {
     let font_fn = lua.create_function(|_, family: String| Ok(family))?;
     petruterm.set("font", font_fn)?;
 
-    // petruterm.action — table of action name strings
+    // petruterm.action — table of action name strings.
+    // Each key maps to itself so Lua can write `petruterm.action.NewTab`
+    // and get the string "NewTab" that Rust then resolves via Action::from_str.
     let action = lua.create_table()?;
     for name in &[
         "CommandPalette",
-        "ToggleAiMode",
-        "ExplainOutput",
+        "ToggleAiPanel",
+        "ToggleAiMode",   // legacy alias kept for compatibility
+        "ExplainLastOutput",
         "FixLastError",
         "SplitHorizontal",
         "SplitVertical",
@@ -67,6 +70,7 @@ fn inject_petruterm_global(lua: &Lua) -> LuaResult<()> {
         "NewTab",
         "CloseTab",
         "ToggleFullscreen",
+        "Quit",
     ] {
         action.set(*name, *name)?;
     }
@@ -186,6 +190,31 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
             }
             if let Ok(b) = pad.get::<u32>("bottom") {
                 config.window.padding.bottom = b;
+            }
+        }
+    }
+
+    if let Ok(leader_table) = table.get::<LuaTable>("leader") {
+        if let Ok(k) = leader_table.get::<String>("key") {
+            config.leader.key = k;
+        }
+        if let Ok(m) = leader_table.get::<String>("mods") {
+            config.leader.mods = m;
+        }
+        if let Ok(t) = leader_table.get::<u64>("timeout_ms") {
+            config.leader.timeout_ms = t;
+        }
+    }
+
+    if let Ok(keys_table) = table.get::<LuaTable>("keys") {
+        for pair in keys_table.sequence_values::<LuaTable>() {
+            if let Ok(entry) = pair {
+                let mods: String = entry.get("mods").unwrap_or_default();
+                let key: String = entry.get("key").unwrap_or_default();
+                let action: String = entry.get("action").unwrap_or_default();
+                if !mods.is_empty() && !key.is_empty() && !action.is_empty() {
+                    config.keys.push(super::schema::KeyBind { mods, key, action });
+                }
             }
         }
     }

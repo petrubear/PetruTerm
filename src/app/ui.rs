@@ -152,6 +152,7 @@ impl UiManager {
     ) {
         use crate::ui::palette::Action;
         match action {
+            Action::CommandPalette => { self.palette.open(); }
             Action::ReloadConfig => if let Ok(new_cfg) = config::reload() {
                 *config = new_cfg;
                 render_ctx.renderer.update_bg_color(config.colors.background_wgpu());
@@ -180,7 +181,19 @@ impl UiManager {
                 w.set_fullscreen(if is_fs { None } else { Some(winit::window::Fullscreen::Borderless(None)) });
             },
             Action::Quit => if let Some(w) = window { let _ = w.request_inner_size(winit::dpi::PhysicalSize::new(0u32, 0u32)); }
-            Action::ToggleAiMode | Action::EnableAiFeatures => {
+            // Full open → focus → close cycle (same as the Cmd+Shift+A that was removed).
+            Action::ToggleAiPanel | Action::ToggleAiMode => {
+                if !self.chat_panel.is_visible() {
+                    self.chat_panel.open();
+                    self.panel_focused = true;
+                } else if !self.panel_focused {
+                    self.panel_focused = true;
+                } else {
+                    self.chat_panel.close();
+                    self.panel_focused = false;
+                }
+            }
+            Action::EnableAiFeatures => {
                 if !self.chat_panel.is_visible() { self.chat_panel.open(); self.panel_focused = true; }
                 else { self.panel_focused = true; }
             }

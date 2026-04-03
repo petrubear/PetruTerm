@@ -50,7 +50,7 @@ impl App {
             render_ctx: None,
             mux: Mux::new(),
             ui: UiManager::new(&config),
-            input: InputHandler::new(config.leader.timeout_ms),
+            input: InputHandler::new(&config),
             wakeup_proxy,
         }
     }

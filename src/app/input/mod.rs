@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::time::Instant;
 use winit::event::{Modifiers, ElementState, KeyEvent};
 use winit::event_loop::ActiveEventLoop;
@@ -7,7 +8,7 @@ use crate::app::mux::Mux;
 use crate::app::ui::UiManager;
 use crate::llm::chat_panel::PanelState;
 use crate::app::renderer::RenderContext;
-use crate::ui::Rect;
+use crate::ui::palette::Action;
 use alacritty_terminal::term::TermMode;
 
 pub mod key_map;
@@ -18,6 +19,8 @@ pub struct InputHandler {
     pub leader_active: bool,
     pub leader_timer: Option<Instant>,
     pub leader_timeout_ms: u64,
+    /// Maps leader-key characters (e.g. "a", "%") → Action, built from `config.keys`.
+    pub leader_map: HashMap<String, Action>,
 
     // Mouse state
     pub mouse_pos: (f64, f64),
@@ -30,12 +33,21 @@ pub struct InputHandler {
 }
 
 impl InputHandler {
-    pub fn new(leader_timeout_ms: u64) -> Self {
+    pub fn new(config: &Config) -> Self {
+        let leader_map = config.keys.iter()
+            .filter(|kb| kb.mods.to_ascii_uppercase() == "LEADER")
+            .filter_map(|kb| {
+                let action = kb.action.parse::<Action>().ok()?;
+                Some((kb.key.clone(), action))
+            })
+            .collect();
+
         Self {
             modifiers: Modifiers::default(),
             leader_active: false,
             leader_timer: None,
-            leader_timeout_ms,
+            leader_timeout_ms: config.leader.timeout_ms,
+            leader_map,
             mouse_pos: (0.0, 0.0),
             mouse_left_pressed: false,
             scroll_pixel_accum: 0.0,
@@ -108,38 +120,6 @@ impl InputHandler {
         let ctrl = self.modifiers.state().control_key();
         let shift = self.modifiers.state().shift_key();
 
-        if cmd && shift {
-            if let Key::Character(s) = &event.logical_key {
-                match s.as_str().to_ascii_lowercase().as_str() {
-                    "p" => { ui.palette.open(); return; }
-                    "a" => {
-                        // Toggle AI panel: open → focus → close cycle
-                        if !ui.chat_panel.is_visible() {
-                            ui.chat_panel.open();
-                            ui.panel_focused = true;
-                        } else if !ui.panel_focused {
-                            ui.panel_focused = true;
-                        } else {
-                            ui.chat_panel.close();
-                            ui.panel_focused = false;
-                        }
-                        return;
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        if ctrl && shift {
-            if let Key::Character(s) = &event.logical_key {
-                match s.as_str().to_ascii_lowercase().as_str() {
-                    "e" => { ui.explain_last_output(mux, wakeup_proxy); return; }
-                    "f" => { ui.fix_last_error(mux, wakeup_proxy); return; }
-                    _ => {}
-                }
-            }
-        }
-
         if ui.chat_panel.is_visible() && ui.panel_focused && !cmd {
             match &event.logical_key {
                 Key::Named(NamedKey::Escape) => {
@@ -182,25 +162,17 @@ impl InputHandler {
         if cmd && !shift && !ctrl {
             if let Key::Character(s) = &event.logical_key {
                 match s.as_str() {
-                    "t" => { 
-                        let (cols, rows) = mux.active_terminal_size();
-                        let rc = render_ctx.as_ref().unwrap();
-                        let (cw, ch) = (rc.shaper.cell_width as u16, rc.shaper.cell_height as u16);
-                        let viewport = Rect { x: config.window.padding.left as f32, y: config.window.padding.top as f32, w: 800.0, h: 600.0 };
-                        mux.cmd_new_tab(config, viewport, cols as u16, rows as u16, cw, ch, wakeup_proxy);
-                        return; 
-                    }
-                    "w" => { mux.cmd_close_tab(); return; }
+                    // System clipboard — always Cmd+C / Cmd+V, not configurable via leader.
                     "q" => { event_loop.exit(); return; }
-                    "c" => { 
+                    "c" => {
                         if let Some(terminal) = mux.active_terminal() {
                             if let Some(text) = terminal.selection_text() {
                                 if let Ok(mut cb) = arboard::Clipboard::new() { let _ = cb.set_text(text); }
                             }
                         }
-                        return; 
+                        return;
                     }
-                    "v" => { 
+                    "v" => {
                         if let Some(terminal) = mux.active_terminal() {
                             if let Ok(text) = arboard::Clipboard::new().and_then(|mut cb| cb.get_text()) {
                                 if terminal.bracketed_paste_mode() {
@@ -211,8 +183,9 @@ impl InputHandler {
                                 } else { terminal.write_input(text.as_bytes()); }
                             }
                         }
-                        return; 
+                        return;
                     }
+                    // Cmd+1-9: switch tab by index (standard macOS pattern).
                     _ => { if let Ok(n) = s.parse::<usize>() { if n >= 1 && n <= 9 { mux.tabs.switch_to_index(n-1); return; } } }
                 }
             }
@@ -232,14 +205,20 @@ impl InputHandler {
             self.leader_active = false;
             self.leader_timer = None;
             if let Key::Character(s) = &event.logical_key {
-                let (cols, rows) = mux.active_terminal_size();
-                let rc = render_ctx.as_ref().unwrap();
-                let (cw, ch) = (rc.shaper.cell_width as u16, rc.shaper.cell_height as u16);
-                match s.as_str() {
-                    "%" => { mux.cmd_split(config, crate::ui::SplitDir::Horizontal, cols as u16, rows as u16, cw, ch, wakeup_proxy); return; }
-                    "\"" => { mux.cmd_split(config, crate::ui::SplitDir::Vertical, cols as u16, rows as u16, cw, ch, wakeup_proxy); return; }
-                    "x" => { mux.cmd_close_pane(); return; }
-                    _ => {}
+                // Look up the pressed key in the leader map (case-insensitive for letters).
+                let key = s.to_ascii_lowercase();
+                let action = self.leader_map.get(s.as_str())
+                    .or_else(|| self.leader_map.get(key.as_str()))
+                    .cloned();
+                if let Some(action) = action {
+                    if action == Action::Quit {
+                        event_loop.exit();
+                        return;
+                    }
+                    if let Some(rc) = render_ctx.as_mut() {
+                        let mut cfg_temp = config.clone();
+                        ui.handle_palette_action(action, mux, rc, &mut cfg_temp, window, wakeup_proxy);
+                    }
                 }
             }
             return;

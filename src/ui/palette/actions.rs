@@ -20,15 +20,43 @@ pub enum Action {
     SplitHorizontal,
     SplitVertical,
     ClosePane,
+    // Overlays
+    CommandPalette,
     // Window
     ToggleFullscreen,
     Quit,
-    // Phase 2 (registered here as stubs so palette works before Phase 2)
-    ToggleAiMode,
+    // AI / Phase 2
+    ToggleAiPanel,
+    ToggleAiMode,   // legacy alias — same behaviour as ToggleAiPanel
     EnableAiFeatures,
     DisableAiFeatures,
     ExplainLastOutput,
     FixLastError,
+}
+
+impl std::str::FromStr for Action {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, ()> {
+        match s {
+            "OpenConfigFile"    => Ok(Action::OpenConfigFile),
+            "ReloadConfig"      => Ok(Action::ReloadConfig),
+            "NewTab"            => Ok(Action::NewTab),
+            "CloseTab"          => Ok(Action::CloseTab),
+            "SplitHorizontal"   => Ok(Action::SplitHorizontal),
+            "SplitVertical"     => Ok(Action::SplitVertical),
+            "ClosePane"         => Ok(Action::ClosePane),
+            "CommandPalette"    => Ok(Action::CommandPalette),
+            "ToggleFullscreen"  => Ok(Action::ToggleFullscreen),
+            "Quit"              => Ok(Action::Quit),
+            "ToggleAiPanel"     => Ok(Action::ToggleAiPanel),
+            "ToggleAiMode"      => Ok(Action::ToggleAiPanel), // alias
+            "EnableAiFeatures"  => Ok(Action::EnableAiFeatures),
+            "DisableAiFeatures" => Ok(Action::DisableAiFeatures),
+            "ExplainLastOutput" => Ok(Action::ExplainLastOutput),
+            "FixLastError"      => Ok(Action::FixLastError),
+            _                   => Err(()),
+        }
+    }
 }
 
 /// Build the built-in action registry.
@@ -44,7 +72,7 @@ pub fn built_in_actions() -> Vec<PaletteAction> {
         PaletteAction { name: "Toggle Fullscreen".into(),       action: Action::ToggleFullscreen },
         PaletteAction { name: "Quit PetruTerm".into(),          action: Action::Quit },
         // Phase 2 stubs
-        PaletteAction { name: "Toggle AI Mode".into(),          action: Action::ToggleAiMode },
+        PaletteAction { name: "Toggle AI Panel".into(),          action: Action::ToggleAiPanel },
         PaletteAction { name: "Enable AI Features".into(),      action: Action::EnableAiFeatures },
         PaletteAction { name: "Disable AI Features".into(),     action: Action::DisableAiFeatures },
         PaletteAction { name: "Explain Last Output".into(),     action: Action::ExplainLastOutput },

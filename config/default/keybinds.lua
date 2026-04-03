@@ -1,5 +1,11 @@
 -- PetruTerm keybinds configuration
--- Leader key: Ctrl+B (tmux-style), 1000ms timeout
+-- Leader key: Ctrl+B (tmux-style), 1000ms timeout.
+-- After pressing Ctrl+B, press the bound key within the timeout window.
+--
+-- System keybinds that remain hardcoded (not configurable here):
+--   Cmd+C / Cmd+V   — copy / paste (clipboard)
+--   Cmd+Q           — quit
+--   Cmd+1-9         — switch to tab N
 
 local petruterm = require("petruterm")
 local module    = {}
@@ -8,29 +14,24 @@ function module.apply_to_config(config)
   config.leader = { key = "b", mods = "CTRL", timeout_ms = 1000 }
 
   config.keys = {
-    -- Command palette
-    { mods = "CMD|SHIFT", key = "P",     action = petruterm.action.CommandPalette },
+    -- ── Overlays ──────────────────────────────────────────────────────────
+    { mods = "LEADER", key = "p",  action = petruterm.action.CommandPalette },
 
-    -- AI assistant panel (open → focus → close cycle)
-    { mods = "CMD|SHIFT", key = "A",     action = petruterm.action.ToggleAiPanel },
+    -- ── AI panel (open → focus → close cycle) ─────────────────────────────
+    { mods = "LEADER", key = "a",  action = petruterm.action.ToggleAiPanel },
 
-    -- Pane splits (tmux-style, via leader)
-    { mods = "LEADER",    key = "%",     action = petruterm.action.SplitHorizontal },
-    { mods = "LEADER",    key = '"',     action = petruterm.action.SplitVertical },
+    -- ── AI context actions ─────────────────────────────────────────────────
+    { mods = "LEADER", key = "e",  action = petruterm.action.ExplainLastOutput },
+    { mods = "LEADER", key = "f",  action = petruterm.action.FixLastError },
 
-    -- Pane navigation (vim-style, via leader)
-    { mods = "LEADER",    key = "h",     action = petruterm.action.ActivatePane },
-    { mods = "LEADER",    key = "l",     action = petruterm.action.ActivatePane },
-    { mods = "LEADER",    key = "k",     action = petruterm.action.ActivatePane },
-    { mods = "LEADER",    key = "j",     action = petruterm.action.ActivatePane },
-    { mods = "LEADER",    key = "x",     action = petruterm.action.ClosePane },
+    -- ── Tabs ───────────────────────────────────────────────────────────────
+    { mods = "LEADER", key = "t",  action = petruterm.action.NewTab },
+    { mods = "LEADER", key = "w",  action = petruterm.action.CloseTab },
 
-    -- Tabs
-    { mods = "CMD",       key = "t",     action = petruterm.action.NewTab },
-    { mods = "CMD",       key = "w",     action = petruterm.action.CloseTab },
-
-    -- Window
-    { mods = "CMD",       key = "q",     action = "Quit" },
+    -- ── Pane splits (tmux-style) ───────────────────────────────────────────
+    { mods = "LEADER", key = "%",  action = petruterm.action.SplitHorizontal },
+    { mods = "LEADER", key = '"',  action = petruterm.action.SplitVertical },
+    { mods = "LEADER", key = "x",  action = petruterm.action.ClosePane },
   }
 end
 

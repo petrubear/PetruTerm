@@ -11,6 +11,7 @@ pub struct Config {
     pub enable_scroll_bar: bool,
     pub max_fps: u32,
     pub leader: LeaderConfig,
+    pub keys: Vec<KeyBind>,
     pub shell: String,
     pub shell_integration: bool,
     pub llm: LlmConfig,
@@ -26,6 +27,7 @@ impl Default for Config {
             enable_scroll_bar: true,
             max_fps: 60,
             leader: LeaderConfig::default(),
+            keys: vec![],
             shell: std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into()),
             shell_integration: true,
             llm: LlmConfig::default(),
@@ -209,6 +211,17 @@ impl Default for LeaderConfig {
             timeout_ms: 1000,
         }
     }
+}
+
+/// A single key binding entry, parsed from `config.keys` in Lua.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeyBind {
+    /// Modifier string: "LEADER", "CMD", "CMD|SHIFT", "CTRL|SHIFT", …
+    pub mods: String,
+    /// The key character or name, e.g. "a", "%", '"'.
+    pub key: String,
+    /// Action name string, matched against `Action::from_str`.
+    pub action: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
