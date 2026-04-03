@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-03-31
-**Total Items:** 22
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 2 | **P3:** 0
+**Last Updated:** 2026-04-03
+**Total Items:** 23
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 1 | **P3:** 0
 
 ## Priority Definitions
 
@@ -55,15 +55,13 @@ _None_
 - **Implementation:** Decomposed the 2000-line `App` struct into specialized managers: `RenderContext` (GPU), `Mux` (PTY/Tabs/Panes), `UiManager` (AI/Overlays), and `InputHandler` (Keyboard/Mouse).
 - **Result:** Drastic improvement in maintainability and modularity. `App` is now a thin event coordinator.
 
-### TD-040: Leader Key Action Dispatch System (UX / Architecture)
-
+### ~~TD-040: Leader Key Action Dispatch System (UX / Architecture)~~ — RESOLVED
 - **Files:** `src/app/input/mod.rs`, `src/config/schema.rs`, `src/config/lua.rs`, `src/ui/palette/actions.rs`, `config/default/keybinds.lua`
-- **Priority:** P2
-- **Goal:** Let any `Action` be triggered via `<leader> + key`, configured in Lua. Example: `<leader>a` → toggle AI panel, `<leader>p` → command palette. Currently every leader binding is a hardcoded `match` arm with bespoke logic.
+- **Resolution:** `InputHandler` builds a `leader_map: HashMap<String, Action>` at startup from `config.keys`. All custom keybinds declared in `keybinds.lua` as `{ mods = "LEADER", key = "…", action = petruterm.action.… }`. Hardcoded `Cmd+Shift+P/A`, `Ctrl+Shift+E/F`, `Cmd+T/W` removed; replaced by leader bindings. `Action::FromStr` maps string names to enum variants. Adding a new binding requires only a Lua change.
 
 ---
 
-#### Background — What Already Exists
+#### ~~Background — What Already Exists~~
 
 The infrastructure is mostly in place; it just needs to be wired together.
 
@@ -368,3 +366,5 @@ input: InputHandler::new(&config),
 | TD-018 | Powerline separator fringing | 2026-03-30 | Pixel snapping (floor) in vertex shader + manual blending in fragment shader. |
 | TD-012 | Nerd Font icons overflow cell | 2026-03-23 | clamp_glyph_to_cell() crops glyph_size. |
 | TD-041 | AI panel off-screen + broken upload | 2026-03-31 | resize_terminals_for_panel() on visibility change; full GPU upload when panel visible. |
+| TD-040 | Leader Key Action Dispatch | 2026-04-03 | leader_map from config.keys; all custom binds via Lua; Action::FromStr. |
+| TD-042 | Mouse selection + typing delay + font memory | 2026-04-03 | display_offset in selections; request_redraw on PTY data; remove per-frame font clone. |
