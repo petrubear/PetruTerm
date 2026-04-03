@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-04-03
-**Open Items:** 1
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 1 | **P3:** 0
+**Open Items:** 3
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 3 | **P3:** 0
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -37,6 +37,16 @@ _None_
 - **Fix:** Define a clear trait-based interface for UI components to interact with terminal instances, enabling easier testing and alternative UI backends.
 - **WezTerm Inspiration:** WezTerm uses a decoupled model where `Pane` (terminal state) is distinct from the windowing layer, communicating via events and shared state.
 
+### TD-036: AI Panel Toggle Inconsistency (UX/UI)
+- **File:** `src/llm/chat_panel.rs`, `src/app/input/key_map.rs`
+- **Issue:** The AI window opens with `<leader>+a`, but the same command does not close it, forcing the user to remain in the chat.
+- **Fix:** Implement a toggle state in the input handler to ensure the same keybinding can close the active AI panel.
+
+### TD-037: Missing Mouse Interaction between Terminal and AI Panel (Input)
+- **File:** `src/app/ui.rs`, `src/app/renderer.rs`
+- **Issue:** When the AI panel is open, mouse events are not correctly routed to allow switching focus or interacting between the terminal panes and the AI panel.
+- **Fix:** Update the mouse event dispatcher to handle the split between terminal and AI context, ensuring hit-testing works for both regions.
+
 ---
 
 ## P3 - Low Priority
@@ -50,3 +60,5 @@ _None_
 | ID | Title | Priority | Area |
 |----|-------|----------|------|
 | TD-035 | Tight Coupling UI ↔ Terminal | P2 | Architecture |
+| TD-036 | AI Panel Toggle Inconsistency | P2 | UX/UI |
+| TD-037 | Missing Mouse Focus AI ↔ Term | P2 | Input |

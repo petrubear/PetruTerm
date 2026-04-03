@@ -9,7 +9,19 @@ use std::path::PathBuf;
 
 /// Default config source embedded in the binary.
 const DEFAULT_CONFIG: &str = include_str!("../../config/default/config.lua");
+const DEFAULT_UI: &str = include_str!("../../config/default/ui.lua");
+const DEFAULT_PERF: &str = include_str!("../../config/default/perf.lua");
+const DEFAULT_KEYBINDS: &str = include_str!("../../config/default/keybinds.lua");
+const DEFAULT_LLM: &str = include_str!("../../config/default/llm.lua");
 const SHELL_INTEGRATION_ZSH: &str = include_str!("../../scripts/shell-integration.zsh");
+
+/// Modules preloaded for the embedded fallback config (no filesystem access).
+pub const EMBEDDED_MODULES: &[(&str, &str)] = &[
+    ("ui",       DEFAULT_UI),
+    ("perf",     DEFAULT_PERF),
+    ("keybinds", DEFAULT_KEYBINDS),
+    ("llm",      DEFAULT_LLM),
+];
 
 /// Resolve the user config directory: ~/.config/petruterm/
 ///
@@ -46,12 +58,14 @@ pub fn load() -> Result<Config> {
     }
     install_shell_integration(&dir)?;
 
+    update_managed_configs(&dir);
+
     if path.exists() {
         log::info!("Loading config: {}", path.display());
         lua::load_config(&path)
     } else {
         log::warn!("Config file not found; using built-in defaults");
-        lua::load_config_str(DEFAULT_CONFIG, "default/config.lua")
+        lua::load_config_str(DEFAULT_CONFIG, "default/config.lua", EMBEDDED_MODULES)
     }
 }
 
@@ -61,8 +75,42 @@ pub fn reload() -> Result<Config> {
     if path.exists() {
         lua::load_config(&path)
     } else {
-        lua::load_config_str(DEFAULT_CONFIG, "default/config.lua")
+        lua::load_config_str(DEFAULT_CONFIG, "default/config.lua", EMBEDDED_MODULES)
     }
+}
+
+/// Auto-update managed config files whose bundled version is newer than the installed one.
+///
+/// Only files that include a `-- petruterm-config-version: N` line are managed.
+/// User-customizable files (ui.lua, perf.lua, llm.lua) are intentionally NOT versioned
+/// so this function never overwrites them.
+fn update_managed_configs(dir: &std::path::Path) {
+    let managed: &[(&str, &str)] = &[
+        ("keybinds.lua", DEFAULT_KEYBINDS),
+    ];
+    for (name, bundled) in managed {
+        let dest = dir.join(name);
+        let needs_update = if dest.exists() {
+            let existing = std::fs::read_to_string(&dest).unwrap_or_default();
+            extract_lua_version(&existing) != extract_lua_version(bundled)
+        } else {
+            true
+        };
+        if needs_update {
+            if let Err(e) = std::fs::write(&dest, bundled) {
+                log::warn!("Failed to update {name}: {e}");
+            } else {
+                log::info!("Updated managed config: {}", dest.display());
+            }
+        }
+    }
+}
+
+/// Extract the `-- petruterm-config-version: N` tag from a Lua config file.
+fn extract_lua_version(content: &str) -> Option<&str> {
+    content.lines()
+        .find(|l| l.trim_start().starts_with("-- petruterm-config-version:"))
+        .map(|l| l.trim())
 }
 
 /// Copy all default config files to the user config directory on first launch.

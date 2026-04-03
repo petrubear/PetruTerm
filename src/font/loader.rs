@@ -1,5 +1,6 @@
 use anyhow::Result;
-use cosmic_text::{FontSystem, SwashCache};
+use cosmic_text::{fontdb, FontSystem, SwashCache};
+use std::collections::HashSet;
 
 use crate::config::schema::FontConfig;
 use crate::font::locator::FontLocator;
@@ -14,25 +15,48 @@ const JBM_ITALIC: &[u8] = include_bytes!("../../assets/fonts/JetBrainsMonoNerdFo
 const JBM_BOLD_ITALIC: &[u8] =
     include_bytes!("../../assets/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf");
 
-/// Initializes the cosmic-text FontSystem with bundled + system fonts.
+/// Initializes a focused cosmic-text FontSystem with only the necessary fonts.
 pub fn build_font_system(font_config: &FontConfig) -> Result<FontSystem> {
-    // FontSystem::new() scans system fonts automatically.
-    let mut font_system = FontSystem::new();
+    let mut db = fontdb::Database::new();
 
-    // Load bundled JetBrains Mono — always available regardless of system.
-    {
-        let db = font_system.db_mut();
-        db.load_font_data(JBM_REGULAR.to_vec());
-        db.load_font_data(JBM_BOLD.to_vec());
-        db.load_font_data(JBM_ITALIC.to_vec());
-        db.load_font_data(JBM_BOLD_ITALIC.to_vec());
-    }
+    // 1. Load bundled JetBrains Mono — always available as a base.
+    db.load_font_data(JBM_REGULAR.to_vec());
+    db.load_font_data(JBM_BOLD.to_vec());
+    db.load_font_data(JBM_ITALIC.to_vec());
+    db.load_font_data(JBM_BOLD_ITALIC.to_vec());
 
-    // Load any additional fonts from the user's PetruTerm font directory.
+    // 2. Load fonts from the user's custom font directory.
     let user_font_dir = crate::config::config_dir().join("fonts");
     if user_font_dir.exists() {
-        load_fonts_from_dir(&mut font_system, &user_font_dir);
+        db.load_fonts_dir(&user_font_dir);
     }
+
+    // 3. Explicitly locate and load the primary font and user/system fallbacks.
+    // This avoids a full system scan and is much more performant.
+    let locator = FontLocator::new();
+    let mut loaded_families = HashSet::new();
+
+    let families_to_load = std::iter::once(font_config.family.as_str())
+        .chain(font_config.fallbacks.iter().map(String::as_str))
+        .chain(["Menlo", "SF Mono", "Monaco", "Courier New"]); // Generic fallbacks
+
+    for family in families_to_load {
+        if loaded_families.contains(family) {
+            continue;
+        }
+        if let Some(font_path) = locator.locate_font(family) {
+            if db.load_font_file(&font_path.path).is_ok() {
+                log::debug!("Loaded font file: {:?}", font_path.path);
+                loaded_families.insert(family.to_string());
+            } else {
+                log::warn!("Failed to load font file: {:?}", font_path.path);
+            }
+        }
+    }
+
+    // Construct the FontSystem with our curated database.
+    // We pass a default locale; cosmic-text uses this for language-specific shaping.
+    let font_system = FontSystem::new_with_locale_and_db("en-US".to_string(), db);
 
     log::info!(
         "Font system initialized. Primary: '{}' {}pt",
@@ -40,51 +64,22 @@ pub fn build_font_system(font_config: &FontConfig) -> Result<FontSystem> {
         font_config.size
     );
 
-    // Verify the primary font is available; warn and suggest alternatives if not.
-    if !font_available(&font_system, &font_config.family) {
-        // Try user-configured fallbacks, then known macOS system fonts.
-        let system_fallbacks = ["Menlo", "SF Mono", "Monaco", "Courier New"];
-        let all_fallbacks: Vec<&str> = font_config
-            .fallbacks
-            .iter()
-            .map(String::as_str)
-            .chain(system_fallbacks.iter().copied())
-            .collect();
+    // Check if the primary font was successfully loaded into the database.
+    let primary_font_missing = !font_system
+        .db()
+        .faces()
+        .any(|face| face.families.iter().any(|(f, _)| f == &font_config.family));
 
-        let found = all_fallbacks
-            .iter()
-            .find(|&&f| font_available(&font_system, f));
-        match found {
-            Some(fb) => log::warn!(
-                "Font '{}' not found. Using fallback: '{fb}'. \
-                 Install '{}' or set `font.family` in config.lua.",
-                font_config.family,
-                font_config.family
-            ),
-            None => log::warn!(
-                "Font '{}' not found and no fallbacks available. \
-                 Text may render with a default system font.",
-                font_config.family
-            ),
-        }
+    if primary_font_missing {
+        log::warn!(
+            "Primary font '{}' not found or failed to load. 
+            Please ensure it's installed correctly. 
+            A fallback font will be used.",
+            font_config.family
+        );
     }
 
     Ok(font_system)
-}
-
-/// Load all .ttf / .otf / .ttc files from a directory into the font system.
-fn load_fonts_from_dir(font_system: &mut FontSystem, dir: &std::path::Path) {
-    font_system.db_mut().load_fonts_dir(dir);
-    log::debug!("Loaded user fonts from: {}", dir.display());
-}
-
-/// Check if a font family name is available in the font system.
-fn font_available(font_system: &FontSystem, family: &str) -> bool {
-    font_system.db().faces().any(|f| {
-        f.families
-            .iter()
-            .any(|(name, _)| name.eq_ignore_ascii_case(family))
-    })
 }
 
 /// Cached font path lookup to avoid repeated filesystem scans.
@@ -131,9 +126,4 @@ pub fn locate_font_for_lcd(font_config: &mut FontConfig) {
         .unwrap()
         .insert(font_config.family.clone(), path.clone());
     font_config.font_path = path;
-}
-
-/// Construct a SwashCache for glyph rasterization.
-pub fn build_swash_cache() -> SwashCache {
-    SwashCache::new()
 }

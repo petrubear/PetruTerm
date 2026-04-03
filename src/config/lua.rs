@@ -32,9 +32,14 @@ pub fn load_config(path: &Path) -> Result<Config> {
 }
 
 /// Evaluate a Lua config from embedded source (used for defaults).
-pub fn load_config_str(src: &str, name: &str) -> Result<Config> {
+///
+/// `preloaded` is a list of `(module_name, source)` pairs registered into
+/// `package.preload` so that `require("ui")` etc. work without the filesystem.
+pub fn load_config_str(src: &str, name: &str, preloaded: &[(&str, &str)]) -> Result<Config> {
     let lua = Lua::new();
     inject_petruterm_global(&lua).map_err(|e| anyhow::anyhow!("Lua setup error: {e}"))?;
+    inject_preloaded_modules(&lua, preloaded)
+        .map_err(|e| anyhow::anyhow!("Lua preload error: {e}"))?;
 
     let config_table: LuaTable = lua
         .load(src)
@@ -87,6 +92,18 @@ fn inject_petruterm_global(lua: &Lua) -> LuaResult<()> {
     lua.load(r#"package.preload['petruterm'] = function() return petruterm end"#)
         .exec()?;
 
+    Ok(())
+}
+
+/// Register embedded Lua sources into `package.preload` so `require()` works
+/// when there is no config directory on the filesystem (embedded fallback).
+fn inject_preloaded_modules(lua: &Lua, modules: &[(&str, &str)]) -> LuaResult<()> {
+    let package: LuaTable = lua.globals().get("package")?;
+    let preload: LuaTable = package.get("preload")?;
+    for (mod_name, mod_src) in modules {
+        let func = lua.load(*mod_src).into_function()?;
+        preload.set(*mod_name, func)?;
+    }
     Ok(())
 }
 

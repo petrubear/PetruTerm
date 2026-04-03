@@ -1,4 +1,5 @@
 -- PetruTerm keybinds configuration
+-- petruterm-config-version: 2
 -- Leader key: Ctrl+B (tmux-style), 1000ms timeout.
 -- After pressing Ctrl+B, press the bound key within the timeout window.
 --
