@@ -36,4 +36,5 @@
 - `src/app/ui.rs` — `handle_palette_action` — action execution logic.
 - `src/config/lua.rs` — Lua parsing for `config.leader`, `config.keys`.
 - `src/llm/` — LLM providers and chat panel state.
-- `.context/quality/TECHNICAL_DEBT.md` — Known debt registry.
+- `.context/quality/TECHNICAL_DEBT.md` — Open debt (1 item: TD-035).
+- `.context/quality/TECHNICAL_DEBT_archive.md` — All resolved items.
