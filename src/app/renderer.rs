@@ -84,10 +84,11 @@ impl RenderContext {
     }
 
     /// Returns the font config with size scaled to physical pixels.
+    /// Note: bundled_font_data and font_path are NOT set here — they are only
+    /// needed during FreeTypeLcdRasterizer init (in RenderContext::new), not per frame.
     pub fn scaled_font_config(&self, config: &Config) -> crate::config::schema::FontConfig {
         let mut cfg = config.font.clone();
         cfg.size *= self.scale_factor;
-        crate::font::loader::locate_font_for_lcd(&mut cfg);
         cfg
     }
 

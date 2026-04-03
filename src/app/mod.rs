@@ -152,9 +152,10 @@ impl App {
 
 impl ApplicationHandler<()> for App {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, _event: ()) {
-        let (_, shell_exited) = self.mux.poll_pty_events();
+        let (has_data, shell_exited) = self.mux.poll_pty_events();
         if shell_exited { event_loop.exit(); return; }
-        if self.ui.poll_ai_events() { if let Some(w) = &self.window { w.request_redraw(); } }
+        let needs_redraw = has_data || self.ui.poll_ai_events();
+        if needs_redraw { if let Some(w) = &self.window { w.request_redraw(); } }
     }
 
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
@@ -304,7 +305,12 @@ impl ApplicationHandler<()> for App {
                 let (col, row) = self.input.pixel_to_cell(self.input.mouse_pos.0, self.input.mouse_pos.1, &self.config, &self.render_ctx, &self.mux);
                 let (any_mouse, _, _) = self.mux.active_terminal().map(|t| t.mouse_mode_flags()).unwrap_or((false, false, false));
                 if any_mouse { let btn = if lines > 0 { 65u8 } else { 64u8 }; for _ in 0..lines.abs() { self.input.send_mouse_report(btn, col, row, true, &self.mux); } }
-                else if let Some(terminal) = self.mux.active_terminal() { terminal.scroll_display(-lines); if let Some(w) = &self.window { w.request_redraw(); } }
+                else if let Some(terminal) = self.mux.active_terminal() {
+                    terminal.scroll_display(-lines);
+                    // Extend selection when dragging while scrolling.
+                    if self.input.mouse_left_pressed { terminal.update_selection(col, row); }
+                    if let Some(w) = &self.window { w.request_redraw(); }
+                }
             }
             WindowEvent::DroppedFile(path) => {
                 let path_str = path.to_string_lossy().into_owned();

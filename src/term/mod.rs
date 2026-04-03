@@ -121,16 +121,22 @@ impl Terminal {
         self.pty.write(data);
     }
 
-    /// Start a new text selection at the given cell coordinate.
+    /// Start a new text selection at the given viewport cell coordinate.
+    /// Adjusts for display_offset so the selection is anchored in buffer space.
     pub fn start_selection(&self, col: usize, row: usize, ty: SelectionType) {
-        let point = Point::new(Line(row as i32), Column(col));
-        self.term.lock().selection = Some(Selection::new(ty, point, Direction::Left));
+        let mut term = self.term.lock();
+        let display_offset = term.grid().display_offset() as i32;
+        let point = Point::new(Line(row as i32 - display_offset), Column(col));
+        term.selection = Some(Selection::new(ty, point, Direction::Left));
     }
 
-    /// Extend the active selection to the given cell coordinate.
+    /// Extend the active selection to the given viewport cell coordinate.
+    /// Adjusts for display_offset so the selection tracks the scrolled position.
     pub fn update_selection(&self, col: usize, row: usize) {
-        let point = Point::new(Line(row as i32), Column(col));
-        if let Some(sel) = &mut self.term.lock().selection {
+        let mut term = self.term.lock();
+        let display_offset = term.grid().display_offset() as i32;
+        let point = Point::new(Line(row as i32 - display_offset), Column(col));
+        if let Some(sel) = &mut term.selection {
             sel.update(point, Direction::Right);
         }
     }

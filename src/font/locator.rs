@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
 pub struct FontPath {
@@ -24,41 +24,24 @@ impl FontLocator {
     }
 
     fn locate_via_font_kit(&self, family: &str) -> Option<FontPath> {
+        use font_kit::family_name::FamilyName;
+        use font_kit::properties::Properties;
+
         let source = font_kit::source::SystemSource::new();
-        let families = source.all_families().ok()?;
 
-        // Try exact match first
-        let matched = families.iter().find(|f| f.eq_ignore_ascii_case(family))?;
+        // select_best_match finds the closest weight/style match without loading
+        // any font binary data — much cheaper than enumerating all family members.
+        let handle = source
+            .select_best_match(
+                &[FamilyName::Title(family.to_owned())],
+                &Properties::new(),
+            )
+            .ok()?;
 
-        let family_handle = source.select_family_by_name(matched).ok()?;
-        let handles = family_handle.fonts();
-
-        // Collect all handles with their weights
-        let mut regular: Option<FontPath> = None;
-        let mut medium: Option<FontPath> = None;
-        let mut others: Vec<FontPath> = Vec::new();
-
-        for h in handles {
-            if let Ok(font) = h.load() {
-                let path = match font.handle()? {
-                    font_kit::handle::Handle::Path { path, .. } => path.clone(),
-                    font_kit::handle::Handle::Memory { .. } => continue,
-                };
-                let weight = font.properties().weight.0 as i32;
-
-                let fp = FontPath { path, index: 0 };
-                if weight == 400 {
-                    regular = Some(fp);
-                } else if weight == 500 {
-                    medium = Some(fp);
-                } else {
-                    others.push(fp);
-                }
-            }
+        match handle {
+            font_kit::handle::Handle::Path { path, .. } => Some(FontPath { path, index: 0 }),
+            font_kit::handle::Handle::Memory { .. } => None,
         }
-
-        // Prefer Regular (400) > Medium (500) > others
-        regular.or(medium).or_else(|| others.into_iter().next())
     }
 
     fn scan_user_fonts(&self, family: &str) -> Option<FontPath> {
