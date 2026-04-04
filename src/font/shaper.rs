@@ -17,17 +17,17 @@ fn is_pua(ch: char) -> bool {
     )
 }
 
-/// Build an `AttrsList` where PUA codepoints are forced to `Family::Monospace`
-/// (the first monospace face in fontdb — our bundled JBM Nerd Font) while all
+/// Build an `AttrsList` where PUA codepoints are forced to `nf_family`
+/// (the bundled JBM Nerd Font, as queried from fontdb at startup) while all
 /// other codepoints use the configured primary family.
-fn build_attr_list<'a>(text: &str, default_attrs: &'a Attrs<'a>) -> AttrsList {
+fn build_attr_list<'a>(text: &str, default_attrs: &'a Attrs<'a>, nf_family: &'a str) -> AttrsList {
     let mut attr_list = AttrsList::new(default_attrs);
-    let mono_attrs = Attrs::new().family(Family::Monospace);
+    let nf_attrs = Attrs::new().family(Family::Name(nf_family));
     let mut byte_idx = 0;
     for ch in text.chars() {
         let ch_len = ch.len_utf8();
         if is_pua(ch) {
-            attr_list.add_span(byte_idx..byte_idx + ch_len, &mono_attrs);
+            attr_list.add_span(byte_idx..byte_idx + ch_len, &nf_attrs);
         }
         byte_idx += ch_len;
     }
@@ -82,6 +82,9 @@ pub struct TextShaper {
     pub lcd_rasterizer: Option<FreeTypeLcdRasterizer>,
     /// LCD glyph atlas (Rc clone, shared with GpuRenderer via set_lcd_atlas).
     pub lcd_atlas: Option<Rc<RefCell<LcdGlyphAtlas>>>,
+    /// Actual family name of the bundled Nerd Font (queried from fontdb at startup).
+    /// Used to route PUA codepoints (powerline separators, icons) to the correct face.
+    nf_family: String,
 }
 
 unsafe impl Send for TextShaper {}
@@ -91,6 +94,7 @@ impl TextShaper {
     pub fn new(
         device: &wgpu::Device,
         font_system: FontSystem,
+        nf_family: String,
         font_config: &FontConfig,
         lcd_atlas: Option<Rc<RefCell<LcdGlyphAtlas>>>,
     ) -> Self {
@@ -133,6 +137,7 @@ impl TextShaper {
             shape_buf,
             lcd_rasterizer,
             lcd_atlas,
+            nf_family,
         };
 
         shaper.measure_cell(font_config);
@@ -185,7 +190,7 @@ impl TextShaper {
         font_config: &FontConfig,
     ) -> ShapedRun {
         let attrs = Self::make_attrs(font_config);
-        let attr_list = build_attr_list(text, &attrs);
+        let attr_list = build_attr_list(text, &attrs, &self.nf_family);
 
         // Reuse the stored buffer: replace lines and re-shape in-place.
         // This avoids a Buffer heap allocation on every call (~5 000–7 000/s at 60 fps).

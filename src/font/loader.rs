@@ -16,14 +16,26 @@ const JBM_BOLD_ITALIC: &[u8] =
     include_bytes!("../../assets/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf");
 
 /// Initializes a focused cosmic-text FontSystem with only the necessary fonts.
-pub fn build_font_system(font_config: &FontConfig) -> Result<FontSystem> {
+/// Also returns the actual internal family name of the bundled Nerd Font so callers
+/// can route PUA codepoints to it explicitly (rather than relying on Family::Monospace).
+pub fn build_font_system(font_config: &FontConfig) -> Result<(FontSystem, String)> {
     let mut db = fontdb::Database::new();
 
-    // 1. Load bundled JetBrains Mono — always available as a base.
+    // 1. Load bundled JetBrains Mono Nerd Font Mono — always available as a base.
     db.load_font_data(JBM_REGULAR.to_vec());
     db.load_font_data(JBM_BOLD.to_vec());
     db.load_font_data(JBM_ITALIC.to_vec());
     db.load_font_data(JBM_BOLD_ITALIC.to_vec());
+
+    // Grab the actual internal family name right after loading the bundled fonts
+    // (they are always first in the DB). This is more reliable than a hardcoded string
+    // because the exact name varies across Nerd Font versions ("JetBrainsMono NF",
+    // "JetBrainsMono Nerd Font Mono", etc.).
+    let bundled_nf_family: String = db
+        .faces()
+        .next()
+        .and_then(|f| f.families.first().map(|(name, _)| name.clone()))
+        .unwrap_or_else(|| "JetBrainsMono Nerd Font Mono".to_string());
 
     // 2. Load fonts from the user's custom font directory.
     let user_font_dir = crate::config::config_dir().join("fonts");
@@ -59,9 +71,10 @@ pub fn build_font_system(font_config: &FontConfig) -> Result<FontSystem> {
     let font_system = FontSystem::new_with_locale_and_db("en-US".to_string(), db);
 
     log::info!(
-        "Font system initialized. Primary: '{}' {}pt",
+        "Font system initialized. Primary: '{}' {}pt. Bundled NF family: '{}'",
         font_config.family,
-        font_config.size
+        font_config.size,
+        bundled_nf_family,
     );
 
     // Check if the primary font was successfully loaded into the database.
@@ -72,14 +85,14 @@ pub fn build_font_system(font_config: &FontConfig) -> Result<FontSystem> {
 
     if primary_font_missing {
         log::warn!(
-            "Primary font '{}' not found or failed to load. 
-            Please ensure it's installed correctly. 
+            "Primary font '{}' not found or failed to load. \
+            Please ensure it's installed correctly. \
             A fallback font will be used.",
             font_config.family
         );
     }
 
-    Ok(font_system)
+    Ok((font_system, bundled_nf_family))
 }
 
 /// Cached font path lookup to avoid repeated filesystem scans.
