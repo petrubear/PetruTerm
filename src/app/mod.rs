@@ -101,12 +101,9 @@ impl App {
 
     fn resize_terminals_for_panel(&mut self) {
         let viewport = self.viewport_rect();
-        for pane_mgr in &mut self.mux.panes { pane_mgr.resize(viewport); }
         let (cols, rows) = self.default_grid_size();
         let (cell_w, cell_h) = self.cell_dims();
-        for terminal in self.mux.terminals.iter_mut().flatten() {
-            terminal.resize(cols, rows, self.config.scrollback_lines as usize, cell_w, cell_h);
-        }
+        self.mux.resize_all(viewport, cols, rows, self.config.scrollback_lines as usize, cell_w, cell_h);
     }
 
     fn check_config_reload(&mut self) {
@@ -261,7 +258,7 @@ impl ApplicationHandler<()> for App {
             }
             WindowEvent::CursorMoved { position, .. } => {
                 self.input.mouse_pos = (position.x, position.y);
-                if self.input.mouse_left_pressed {
+                if self.input.mouse_left_pressed && !self.mouse_in_panel() {
                     let (col, row) = self.input.pixel_to_cell(position.x, position.y, &self.config, &self.render_ctx, &self.mux);
                     if let Some(terminal) = self.mux.active_terminal() {
                         terminal.update_selection(col, row);
@@ -272,19 +269,25 @@ impl ApplicationHandler<()> for App {
                 }
             }
             WindowEvent::MouseInput { state, button, .. } => {
+                let in_panel = self.mouse_in_panel();
                 let (col, row) = self.input.pixel_to_cell(self.input.mouse_pos.0, self.input.mouse_pos.1, &self.config, &self.render_ctx, &self.mux);
                 match (button, state) {
                     (MouseButton::Left, ElementState::Pressed) => {
                         if self.input.mouse_pos.1 < self.config.window.padding.top as f64 { if let Some(w) = &self.window { let _ = w.drag_window(); } return; }
-                        self.input.mouse_left_pressed = true;
-                        if !self.mux.active_terminal().map(|t| t.mouse_mode_flags().0).unwrap_or(false) {
-                            if let Some(terminal) = self.mux.active_terminal() { terminal.start_selection(col, row, SelectionType::Simple); }
+                        if in_panel {
+                            self.ui.panel_focused = true;
+                        } else {
+                            if self.ui.is_panel_visible() { self.ui.panel_focused = false; }
+                            self.input.mouse_left_pressed = true;
+                            if !self.mux.active_terminal().map(|t| t.mouse_mode_flags().0).unwrap_or(false) {
+                                if let Some(terminal) = self.mux.active_terminal() { terminal.start_selection(col, row, SelectionType::Simple); }
+                            }
+                            self.input.send_mouse_report(0, col, row, true, &self.mux);
                         }
-                        self.input.send_mouse_report(0, col, row, true, &self.mux);
                     }
-                    (MouseButton::Left, ElementState::Released) => { self.input.mouse_left_pressed = false; self.input.send_mouse_report(0, col, row, false, &self.mux); }
-                    (MouseButton::Right, ElementState::Pressed) => self.input.send_mouse_report(2, col, row, true, &self.mux),
-                    (MouseButton::Right, ElementState::Released) => self.input.send_mouse_report(2, col, row, false, &self.mux),
+                    (MouseButton::Left, ElementState::Released) => { self.input.mouse_left_pressed = false; if !in_panel { self.input.send_mouse_report(0, col, row, false, &self.mux); } }
+                    (MouseButton::Right, ElementState::Pressed) => if !in_panel { self.input.send_mouse_report(2, col, row, true, &self.mux) },
+                    (MouseButton::Right, ElementState::Released) => if !in_panel { self.input.send_mouse_report(2, col, row, false, &self.mux) },
                     _ => {}
                 }
                 if let Some(w) = &self.window { w.request_redraw(); }

@@ -6,6 +6,34 @@ use cosmic_text::{
     Metrics, Shaping, SwashCache,
 };
 
+/// Returns true for Unicode Private Use Area codepoints where Nerd Font icons live.
+#[inline]
+fn is_pua(ch: char) -> bool {
+    let c = ch as u32;
+    matches!(c,
+        0xE000..=0xF8FF |   // BMP PUA — main Nerd Font icon range
+        0xF0000..=0xFFFFF | // Supplementary PUA-A
+        0x100000..=0x10FFFF // Supplementary PUA-B
+    )
+}
+
+/// Build an `AttrsList` where PUA codepoints are forced to `Family::Monospace`
+/// (the first monospace face in fontdb — our bundled JBM Nerd Font) while all
+/// other codepoints use the configured primary family.
+fn build_attr_list<'a>(text: &str, default_attrs: &'a Attrs<'a>) -> AttrsList {
+    let mut attr_list = AttrsList::new(default_attrs);
+    let mono_attrs = Attrs::new().family(Family::Monospace);
+    let mut byte_idx = 0;
+    for ch in text.chars() {
+        let ch_len = ch.len_utf8();
+        if is_pua(ch) {
+            attr_list.add_span(byte_idx..byte_idx + ch_len, &mono_attrs);
+        }
+        byte_idx += ch_len;
+    }
+    attr_list
+}
+
 use crate::config::schema::FontConfig;
 use crate::font::freetype_lcd::{FreeTypeLcdRasterizer, LcdAtlasEntry};
 use crate::renderer::atlas::{AtlasEntry, GlyphAtlas};
@@ -157,7 +185,7 @@ impl TextShaper {
         font_config: &FontConfig,
     ) -> ShapedRun {
         let attrs = Self::make_attrs(font_config);
-        let attr_list = AttrsList::new(&attrs);
+        let attr_list = build_attr_list(text, &attrs);
 
         // Reuse the stored buffer: replace lines and re-shape in-place.
         // This avoids a Buffer heap allocation on every call (~5 000–7 000/s at 60 fps).

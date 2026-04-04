@@ -199,6 +199,25 @@ impl Mux {
         }
     }
 
+    /// Resize all panes and terminals in response to a window resize or panel open/close.
+    /// Encapsulates iteration over `panes` and `terminals` so callers don't reach into internals.
+    pub fn resize_all(
+        &mut self,
+        viewport: Rect,
+        cols: u16,
+        rows: u16,
+        scrollback: usize,
+        cell_w: u16,
+        cell_h: u16,
+    ) {
+        for pane_mgr in &mut self.panes {
+            pane_mgr.resize(viewport);
+        }
+        for terminal in self.terminals.iter_mut().flatten() {
+            terminal.resize(cols, rows, scrollback, cell_w, cell_h);
+        }
+    }
+
     pub fn shutdown(&mut self) {
         for terminal in self.terminals.iter_mut().flatten() {
             terminal.pty.shutdown();
