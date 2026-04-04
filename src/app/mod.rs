@@ -170,9 +170,10 @@ impl ApplicationHandler<()> for App {
             Ok(w) => Arc::new(w),
             Err(e) => { log::error!("Failed to create window: {e}"); event_loop.exit(); return; }
         };
-
         #[cfg(target_os = "macos")]
         if self.config.window.title_bar_style == TitleBarStyle::Custom { unsafe { self.apply_macos_custom_titlebar(&window); } }
+
+        if self.config.window.start_maximized { window.set_maximized(true); }
 
         let render_ctx = match pollster::block_on(RenderContext::new(window.clone(), &self.config)) {
             Ok(rc) => rc,
