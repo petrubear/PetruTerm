@@ -11,7 +11,7 @@ use crate::term::color::resolve_color;
 use alacritty_terminal::vte::ansi::Color as AnsiColor;
 use crate::llm::chat_panel::{ChatPanel, PanelState};
 use crate::llm::ai_block::{AiBlock, AiState, AI_BLOCK_ROWS};
-use crate::ui::CommandPalette;
+use crate::ui::{CommandPalette, Tab};
 
 /// Cache for a single shaped row to avoid re-shaping every frame.
 #[derive(Clone)]
@@ -615,6 +615,114 @@ impl RenderContext {
             };
 
             self.push_shaped_row(&text, fg, current_bg, row, start_col, palette_width, font);
+        }
+    }
+}
+
+impl RenderContext {
+    /// Render the tab bar at grid row -1 (one cell row above the terminal).
+    /// Requires `set_padding` to have shifted padding.y up by one cell_height
+    /// so that row -1 maps to the correct on-screen pixel position.
+    pub fn build_tab_bar_instances(
+        &mut self,
+        tabs: &[Tab],
+        active_idx: usize,
+        font: &crate::config::schema::FontConfig,
+        total_cols: usize,
+    ) {
+        if tabs.is_empty() || total_cols == 0 { return; }
+
+        const BAR_BG:     [f32; 4] = [0.16, 0.15, 0.22, 1.0]; // dark bar bg
+        const ACTIVE_BG:  [f32; 4] = [0.27, 0.28, 0.35, 1.0]; // current-line
+        const ACTIVE_FG:  [f32; 4] = [0.97, 0.97, 0.95, 1.0]; // bright fg
+        const INACTIVE_FG:[f32; 4] = [0.38, 0.45, 0.64, 1.0]; // comment gray
+        const SEP_FG:     [f32; 4] = [0.30, 0.29, 0.40, 1.0]; // dim separator
+
+        const MAX_TAB_WIDTH: usize = 22;
+
+        let mut col = 0usize;
+        for (i, tab) in tabs.iter().enumerate() {
+            if col >= total_cols { break; }
+            let is_active = i == active_idx;
+            let bg = if is_active { ACTIVE_BG } else { BAR_BG };
+            let fg = if is_active { ACTIVE_FG } else { INACTIVE_FG };
+
+            // Label: " N: title " capped to MAX_TAB_WIDTH
+            let raw = format!(" {}: {} ", i + 1, tab.title);
+            let label: String = raw.chars().take(MAX_TAB_WIDTH).collect();
+            let width = label.chars().count().min(total_cols - col);
+
+            // Separator " │ " before non-first tabs
+            if i > 0 && col < total_cols {
+                let sep_w = 1usize.min(total_cols - col);
+                let start = self.instances.len();
+                self.push_shaped_row("│", SEP_FG, BAR_BG, 0, col, sep_w, font);
+                for inst in &mut self.instances[start..] { inst.grid_pos[1] = -1.0; }
+                col += sep_w;
+                if col >= total_cols { break; }
+            }
+
+            let start = self.instances.len();
+            self.push_shaped_row(&label, fg, bg, 0, col, width, font);
+            for inst in &mut self.instances[start..] { inst.grid_pos[1] = -1.0; }
+            col += width;
+        }
+
+        // Fill remainder with bar background
+        if col < total_cols {
+            let start = self.instances.len();
+            self.push_shaped_row("", [0.0; 4], BAR_BG, 0, col, total_cols - col, font);
+            for inst in &mut self.instances[start..] { inst.grid_pos[1] = -1.0; }
+        }
+    }
+
+    /// Render a scroll bar on the right edge of the terminal (overlays rightmost ~6px of the
+    /// last terminal column). Only emits instances when history_size > 0.
+    pub fn build_scroll_bar_instances(
+        &mut self,
+        display_offset: usize,
+        history_size: usize,
+        screen_rows: usize,
+        term_cols: usize,
+    ) {
+        if history_size == 0 || screen_rows == 0 || term_cols == 0 { return; }
+
+        const SCROLLBAR_PX: f32 = 6.0;
+        const TRACK_COLOR: [f32; 4] = [0.18, 0.17, 0.24, 1.0];
+        const THUMB_COLOR: [f32; 4] = [0.40, 0.37, 0.55, 1.0];
+
+        let cell_w = self.shaper.cell_width;
+        let cell_h = self.shaper.cell_height;
+
+        // Thumb height: proportional to visible rows vs total (visible + history)
+        let total_lines = screen_rows + history_size;
+        let thumb_rows = (((screen_rows as f32 / total_lines as f32) * screen_rows as f32)
+            .max(1.0)
+            .ceil() as usize)
+            .min(screen_rows);
+
+        // Thumb position: display_offset=0 → thumb at bottom, display_offset=max → thumb at top
+        let slack = screen_rows.saturating_sub(thumb_rows);
+        let scroll_frac = (display_offset as f32 / history_size as f32).clamp(0.0, 1.0);
+        let thumb_start = ((1.0 - scroll_frac) * slack as f32).round() as usize;
+        let thumb_end = thumb_start + thumb_rows;
+
+        let col = (term_cols - 1) as f32;
+        let glyph_offset = [cell_w - SCROLLBAR_PX, 0.0];
+        let glyph_size   = [SCROLLBAR_PX, cell_h];
+
+        for row in 0..screen_rows {
+            let color = if row >= thumb_start && row < thumb_end { THUMB_COLOR } else { TRACK_COLOR };
+            self.instances.push(CellVertex {
+                grid_pos:     [col, row as f32],
+                atlas_uv:     [0.0; 4],
+                fg:           [0.0; 4],
+                bg:           color,
+                glyph_offset,
+                glyph_size,
+                flags:        FLAG_CURSOR,
+                _pad:         0,
+            });
         }
     }
 }

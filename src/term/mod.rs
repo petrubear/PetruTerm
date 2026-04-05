@@ -156,6 +156,16 @@ impl Terminal {
         self.term.lock().scroll_display(Scroll::Delta(delta));
     }
 
+    /// Return (display_offset, history_size) for scroll bar positioning.
+    /// display_offset = 0 means at the bottom; display_offset = history_size means at the top.
+    pub fn scrollback_info(&self) -> (usize, usize) {
+        self.with_term(|term| {
+            let offset = term.grid().display_offset();
+            let history = term.grid().history_size();
+            (offset, history)
+        })
+    }
+
     /// Cursor position and shape for the current frame.
     pub fn cursor_info(&self) -> CursorInfo {
         self.with_term(|term| {

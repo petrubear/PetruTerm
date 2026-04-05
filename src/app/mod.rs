@@ -55,14 +55,19 @@ impl App {
         }
     }
 
+    fn tab_bar_height_px(&self) -> f32 {
+        self.cell_dims().1 as f32
+    }
+
     fn default_grid_size(&self) -> (u16, u16) {
         if let Some(rc) = &self.render_ctx {
             let (w, h) = rc.renderer.size();
             let (cell_w, cell_h) = self.cell_dims();
             let pad = &self.config.window.padding;
             let panel_px = if self.ui.is_panel_visible() { self.chat_panel_width_px() } else { 0.0 };
+            let tab_h = self.tab_bar_height_px();
             let cols = ((w as f32 - pad.left as f32 - pad.right as f32 - panel_px) / cell_w as f32).max(1.0) as u16;
-            let rows = ((h as f32 - pad.top as f32 - pad.bottom as f32) / cell_h as f32).max(1.0) as u16;
+            let rows = ((h as f32 - pad.top as f32 - pad.bottom as f32 - tab_h) / cell_h as f32).max(1.0) as u16;
             (cols, rows)
         } else { (120, 40) }
     }
@@ -87,16 +92,17 @@ impl App {
 
     fn viewport_rect(&self) -> Rect {
         let pad = &self.config.window.padding;
+        let tab_h = self.tab_bar_height_px();
         if let Some(rc) = &self.render_ctx {
             let (w, h) = rc.renderer.size();
             let panel_px = if self.ui.is_panel_visible() { self.chat_panel_width_px() } else { 0.0 };
             Rect {
                 x: pad.left as f32,
-                y: pad.top as f32,
+                y: pad.top as f32 + tab_h,
                 w: (w as f32 - pad.left as f32 - pad.right as f32 - panel_px).max(0.0),
-                h: (h as f32 - pad.top as f32 - pad.bottom as f32).max(0.0),
+                h: (h as f32 - pad.top as f32 - pad.bottom as f32 - tab_h).max(0.0),
             }
-        } else { Rect { x: pad.left as f32, y: pad.top as f32, w: 800.0, h: 600.0 } }
+        } else { Rect { x: pad.left as f32, y: pad.top as f32 + tab_h, w: 800.0, h: 600.0 } }
     }
 
     fn resize_terminals_for_panel(&mut self) {
@@ -186,6 +192,13 @@ impl ApplicationHandler<()> for App {
 
         self.window = Some(window);
         self.render_ctx = Some(render_ctx);
+        // Shift the GPU padding origin down by one cell row to make room for the tab bar.
+        // Tab bar renders at grid row -1: pixel_y = (pad.top + cell_h) - cell_h = pad.top. ✓
+        if let Some(rc) = &mut self.render_ctx {
+            let tab_h = rc.shaper.cell_height;
+            let pad = &self.config.window.padding;
+            rc.renderer.set_padding(pad.left as f32, pad.top as f32 + tab_h);
+        }
         if self.open_initial_tab().is_err() { event_loop.exit(); }
     }
 
@@ -217,6 +230,24 @@ impl ApplicationHandler<()> for App {
                         rc.row_cache.clear();
                         rc.atlas_generation += 1;
                         let _ = rc.build_instances(&cell_data, &self.config, &scaled_font, cursor.as_ref(), self.input.cursor_blink_on, terminal_id);
+                    }
+
+                    // ── Tab bar (always rendered above terminal, row = -1) ──────────────
+                    let total_cols_for_tab = term_cols
+                        + if self.ui.is_panel_visible() { self.ui.panel().width_cols as usize } else { 0 };
+                    rc.build_tab_bar_instances(
+                        self.mux.tabs.tabs(),
+                        self.mux.tabs.active_index(),
+                        &scaled_font,
+                        total_cols_for_tab,
+                    );
+
+                    // ── Scroll bar (overlays right edge of terminal) ─────────────────────
+                    if self.config.enable_scroll_bar {
+                        if let Some(terminal) = self.mux.active_terminal() {
+                            let (disp_off, hist) = terminal.scrollback_info();
+                            rc.build_scroll_bar_instances(disp_off, hist, term_rows, term_cols);
+                        }
                     }
 
                     // ── Chat panel (side panel) ───────────────────────────────────────────
@@ -268,28 +299,11 @@ impl ApplicationHandler<()> for App {
                     }
 
                     // ── GPU upload ───────────────────────────────────────────────────────
-                    // When any overlay is visible its instances interleave with terminal rows,
-                    // breaking the fixed-stride dirty-row upload. Do a full upload instead.
-                    if self.ui.palette.visible || panel_visible || block_visible {
-                        rc.renderer.upload_instances(&rc.instances, 0);
-                        rc.row_cache.dirty_rows.fill(false);
-                    } else {
-                        for (row_idx, is_dirty) in rc.row_cache.dirty_rows.iter_mut().enumerate() {
-                            if *is_dirty {
-                                let start = row_idx * term_cols;
-                                let end = (start + term_cols).min(rc.instances.len());
-                                if start < rc.instances.len() {
-                                    rc.renderer.upload_instances(&rc.instances[start..end], start);
-                                }
-                                *is_dirty = false;
-                            }
-                        }
-                        // Always upload the cursor instance to prevent flickering.
-                        if !rc.instances.is_empty() {
-                            let cursor_idx = rc.instances.len() - 1;
-                            rc.renderer.upload_instances(&rc.instances[cursor_idx..], cursor_idx);
-                        }
-                    }
+                    // Tab bar + scroll bar instances are appended after terminal rows, so
+                    // offset-based dirty-row upload no longer maps cleanly. Always do a
+                    // full upload — at ~5000 instances × 48 bytes the cost is negligible.
+                    rc.renderer.upload_instances(&rc.instances, 0);
+                    rc.row_cache.dirty_rows.fill(false);
                     rc.renderer.set_cell_count(rc.instances.len());
                     rc.renderer.upload_lcd_instances(&rc.lcd_instances);
                     let _ = rc.renderer.render();

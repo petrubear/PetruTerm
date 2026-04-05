@@ -269,6 +269,14 @@ impl GpuRenderer {
         self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&cell));
     }
 
+    /// Update the padding (origin offset) uniform. The x/y values are in physical pixels.
+    /// Call after set_cell_size when the tab bar height is known.
+    pub fn set_padding(&mut self, x: f32, y: f32) {
+        let pad = [x, y];
+        // CellUniforms layout: cell_size(8) + viewport_size(8) + padding(8) + _pad(8)
+        self.queue.write_buffer(&self.uniform_buffer, 16, bytemuck::cast_slice(&pad));
+    }
+
     /// Upload cell instances for this frame. Supports partial updates via offset.
     pub fn upload_instances(&mut self, instances: &[CellVertex], offset: usize) {
         let count = instances.len();
