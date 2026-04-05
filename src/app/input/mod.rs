@@ -120,6 +120,41 @@ impl InputHandler {
         let ctrl = self.modifiers.state().control_key();
         let shift = self.modifiers.state().shift_key();
 
+        // ── Leader key activation — checked BEFORE panel/palette handlers so that
+        // Ctrl+B always activates the leader even when the AI panel is focused.
+        if ctrl && !shift && !cmd {
+            if let Key::Character(s) = &event.logical_key {
+                if s.as_str() == config.leader.key.as_str() {
+                    self.leader_active = true;
+                    self.leader_timer = Some(Instant::now());
+                    return;
+                }
+            }
+        }
+
+        // ── Leader key dispatch ───────────────────────────────────────────────
+        if self.leader_active {
+            self.leader_active = false;
+            self.leader_timer = None;
+            if let Key::Character(s) = &event.logical_key {
+                let key = s.to_ascii_lowercase();
+                let action = self.leader_map.get(s.as_str())
+                    .or_else(|| self.leader_map.get(key.as_str()))
+                    .cloned();
+                if let Some(action) = action {
+                    if action == Action::Quit {
+                        event_loop.exit();
+                        return;
+                    }
+                    if let Some(rc) = render_ctx.as_mut() {
+                        let mut cfg_temp = config.clone();
+                        ui.handle_palette_action(action, mux, rc, &mut cfg_temp, window, wakeup_proxy);
+                    }
+                }
+            }
+            return;
+        }
+
         if ui.chat_panel.is_visible() && ui.panel_focused && !cmd {
             match &event.logical_key {
                 Key::Named(NamedKey::Escape) => {
@@ -189,39 +224,6 @@ impl InputHandler {
                     _ => { if let Ok(n) = s.parse::<usize>() { if n >= 1 && n <= 9 { mux.tabs.switch_to_index(n-1); return; } } }
                 }
             }
-        }
-
-        if ctrl && !shift && !cmd {
-            if let Key::Character(s) = &event.logical_key {
-                if s.as_str() == config.leader.key.as_str() {
-                    self.leader_active = true;
-                    self.leader_timer = Some(Instant::now());
-                    return;
-                }
-            }
-        }
-
-        if self.leader_active {
-            self.leader_active = false;
-            self.leader_timer = None;
-            if let Key::Character(s) = &event.logical_key {
-                // Look up the pressed key in the leader map (case-insensitive for letters).
-                let key = s.to_ascii_lowercase();
-                let action = self.leader_map.get(s.as_str())
-                    .or_else(|| self.leader_map.get(key.as_str()))
-                    .cloned();
-                if let Some(action) = action {
-                    if action == Action::Quit {
-                        event_loop.exit();
-                        return;
-                    }
-                    if let Some(rc) = render_ctx.as_mut() {
-                        let mut cfg_temp = config.clone();
-                        ui.handle_palette_action(action, mux, rc, &mut cfg_temp, window, wakeup_proxy);
-                    }
-                }
-            }
-            return;
         }
 
         self.send_key_to_active_terminal(event, mux);

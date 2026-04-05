@@ -34,6 +34,9 @@ pub struct ChatPanel {
     pub scroll_offset: usize,
     /// Panel width in terminal cell columns.
     pub width_cols: u16,
+    /// Marks panel content as changed — renderer uses this to skip re-shaping
+    /// unchanged frames (avoids HarfBuzz calls on every redraw).
+    pub dirty: bool,
 }
 
 impl ChatPanel {
@@ -45,6 +48,7 @@ impl ChatPanel {
             streaming_buf: String::new(),
             scroll_offset: 0,
             width_cols: PANEL_COLS,
+            dirty: true,
         }
     }
 
@@ -64,22 +68,26 @@ impl ChatPanel {
         if matches!(self.state, PanelState::Hidden) {
             self.state = PanelState::Idle;
             self.input.clear();
+            self.dirty = true;
         }
     }
 
     pub fn close(&mut self) {
         self.state = PanelState::Hidden;
+        self.dirty = true;
     }
 
     pub fn type_char(&mut self, c: char) {
         if self.is_idle() {
             self.input.push(c);
+            self.dirty = true;
         }
     }
 
     pub fn backspace(&mut self) {
         if self.is_idle() {
             self.input.pop();
+            self.dirty = true;
         }
     }
 
@@ -90,6 +98,7 @@ impl ChatPanel {
                 self.input.push(' ');
             }
             self.input.push_str(path);
+            self.dirty = true;
         }
     }
 
@@ -104,12 +113,14 @@ impl ChatPanel {
         self.input.clear();
         self.state = PanelState::Loading;
         self.streaming_buf.clear();
+        self.dirty = true;
         Some(content)
     }
 
     pub fn append_token(&mut self, tok: &str) {
         self.state = PanelState::Streaming;
         self.streaming_buf.push_str(tok);
+        self.dirty = true;
     }
 
     pub fn mark_done(&mut self) {
@@ -120,27 +131,32 @@ impl ChatPanel {
         self.streaming_buf.clear();
         self.state = PanelState::Idle;
         self.scroll_offset = 0; // snap to bottom
+        self.dirty = true;
     }
 
     pub fn mark_error(&mut self, msg: String) {
         self.streaming_buf.clear();
         self.state = PanelState::Error(msg);
+        self.dirty = true;
     }
 
     pub fn dismiss_error(&mut self) {
         if matches!(self.state, PanelState::Error(_)) {
             self.state = PanelState::Idle;
+            self.dirty = true;
         }
     }
 
     /// Scroll history toward older messages (up).
     pub fn scroll_up(&mut self, lines: usize) {
         self.scroll_offset = self.scroll_offset.saturating_add(lines);
+        self.dirty = true;
     }
 
     /// Scroll history toward newer messages (down).
     pub fn scroll_down(&mut self, lines: usize) {
         self.scroll_offset = self.scroll_offset.saturating_sub(lines);
+        self.dirty = true;
     }
 
     /// Returns the last assistant message stripped of markdown fences,

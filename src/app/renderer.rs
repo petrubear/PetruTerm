@@ -49,6 +49,8 @@ pub struct RenderContext {
     pub row_cache: RowCache,
     pub instances: Vec<CellVertex>,
     pub lcd_instances: Vec<CellVertex>,
+    /// Cached GPU instances for the AI chat panel — rebuilt only when `ChatPanel::dirty`.
+    pub panel_instances_cache: Vec<CellVertex>,
 }
 
 impl RenderContext {
@@ -80,6 +82,7 @@ impl RenderContext {
             row_cache: RowCache::new(),
             instances: Vec::new(),
             lcd_instances: Vec::new(),
+            panel_instances_cache: Vec::new(),
         })
     }
 

@@ -104,6 +104,8 @@ impl App {
         let (cols, rows) = self.default_grid_size();
         let (cell_w, cell_h) = self.cell_dims();
         self.mux.resize_all(viewport, cols, rows, self.config.scrollback_lines as usize, cell_w, cell_h);
+        // Panel layout depends on term_cols/screen_rows — must rebuild instances after resize.
+        self.ui.chat_panel.dirty = true;
     }
 
     fn check_config_reload(&mut self) {
@@ -209,7 +211,14 @@ impl ApplicationHandler<()> for App {
                     }
 
                     if self.ui.is_panel_visible() {
-                        rc.build_chat_panel_instances(&self.ui.chat_panel, self.ui.panel_focused, &self.config, &scaled_font, term_cols, term_rows, self.input.cursor_blink_on);
+                        if self.ui.chat_panel.dirty {
+                            let panel_start = rc.instances.len();
+                            rc.build_chat_panel_instances(&self.ui.chat_panel, self.ui.panel_focused, &self.config, &scaled_font, term_cols, term_rows, self.input.cursor_blink_on);
+                            rc.panel_instances_cache = rc.instances[panel_start..].to_vec();
+                            self.ui.chat_panel.dirty = false;
+                        } else {
+                            rc.instances.extend_from_slice(&rc.panel_instances_cache);
+                        }
                     }
                     if self.ui.palette.visible {
                         rc.row_cache.dirty_rows.fill(true);
@@ -337,7 +346,14 @@ impl ApplicationHandler<()> for App {
         let (_, shell_exited) = self.mux.poll_pty_events();
         if shell_exited { event_loop.exit(); return; }
         if self.ui.poll_ai_events() { if let Some(w) = &self.window { w.request_redraw(); } }
-        if self.input.update_cursor_blink() { if let Some(w) = &self.window { w.request_redraw(); } }
+        if self.input.update_cursor_blink() {
+            // When the panel is focused, the input cursor also blinks — mark dirty so the
+            // cached panel instances are rebuilt with the updated cursor glyph.
+            if self.ui.is_panel_visible() && self.ui.panel_focused {
+                self.ui.chat_panel.dirty = true;
+            }
+            if let Some(w) = &self.window { w.request_redraw(); }
+        }
         event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(self.input.cursor_last_blink + std::time::Duration::from_millis(530)));
     }
 }
