@@ -59,13 +59,14 @@ impl FreeTypeLcdRasterizer {
             return Err(anyhow::anyhow!("FT_Init_FreeType failed: {err}"));
         }
 
-        let face = if let Some(ref font_data) = font_config.bundled_font_data {
-            Self::load_face_from_memory(library, font_data)?
-        } else if let Some(ref font_path) = font_config.font_path {
+        let face = if let Some(ref font_path) = font_config.font_path {
             Self::load_face_from_file(library, font_path)?
         } else {
             unsafe { ft::FT_Done_FreeType(library) };
-            return Err(anyhow::anyhow!("No font data for LCD AA: set lcd_antialiasing=false or use JetBrainsMono Nerd Font"));
+            return Err(anyhow::anyhow!(
+                "Font '{}' could not be located for LCD AA. Set lcd_antialiasing=false or ensure the font is installed.",
+                font_config.family
+            ));
         };
 
         if face.is_null() {
@@ -91,41 +92,24 @@ impl FreeTypeLcdRasterizer {
         })
     }
 
-    fn load_face_from_memory(
-        library: ft::FT_Library,
-        font_data: &[u8],
-    ) -> anyhow::Result<ft::FT_Face> {
-        let mut face: ft::FT_Face = std::ptr::null_mut();
-        let err = unsafe {
-            ft::FT_New_Memory_Face(
-                library,
-                font_data.as_ptr() as *const ft::FT_Byte,
-                font_data.len() as ft::FT_Long,
-                0,
-                &mut face,
-            )
-        };
-        if err != 0 {
-            anyhow::bail!("FT_New_Memory_Face failed: {err}");
-        }
-        Ok(face)
-    }
-
     fn load_face_from_file(
         library: ft::FT_Library,
         font_path: &std::path::Path,
     ) -> anyhow::Result<ft::FT_Face> {
-        use std::fs::File;
-        use std::io::Read;
+        use std::ffi::CString;
 
-        let mut file = File::open(font_path)
-            .map_err(|e| anyhow::anyhow!("Failed to open font file {:?}: {}", font_path, e))?;
+        let path_str = font_path
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("Font path is not valid UTF-8: {:?}", font_path))?;
+        let c_path = CString::new(path_str)
+            .map_err(|e| anyhow::anyhow!("Font path contains null byte: {e}"))?;
 
-        let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer)
-            .map_err(|e| anyhow::anyhow!("Failed to read font file {:?}: {}", font_path, e))?;
-
-        Self::load_face_from_memory(library, &buffer)
+        let mut face: ft::FT_Face = std::ptr::null_mut();
+        let err = unsafe { ft::FT_New_Face(library, c_path.as_ptr(), 0, &mut face) };
+        if err != 0 {
+            anyhow::bail!("FT_New_Face failed for {:?}: {err}", font_path);
+        }
+        Ok(face)
     }
 
     pub fn rasterize(&mut self, glyph_id: u32, queue: &wgpu::Queue) -> Option<LcdAtlasEntry> {

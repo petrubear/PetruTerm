@@ -60,10 +60,10 @@ impl RenderContext {
         scaled_font.size *= scale_factor;
         crate::font::loader::locate_font_for_lcd(&mut scaled_font);
 
-        let (font_system, nf_family) = build_font_system(&scaled_font)?;
+        let (font_system, actual_family, face_id, font_path) = build_font_system(&scaled_font)?;
         let lcd_atlas = renderer.get_lcd_atlas();
 
-        let mut shaper = TextShaper::new(&renderer.device(), font_system, nf_family, &scaled_font, lcd_atlas);
+        let mut shaper = TextShaper::new(&renderer.device(), font_system, actual_family, face_id, font_path, &scaled_font, lcd_atlas);
         
         // Finalize renderer setup with shaper info
         let mut renderer = renderer;
@@ -84,8 +84,6 @@ impl RenderContext {
     }
 
     /// Returns the font config with size scaled to physical pixels.
-    /// Note: bundled_font_data and font_path are NOT set here — they are only
-    /// needed during FreeTypeLcdRasterizer init (in RenderContext::new), not per frame.
     pub fn scaled_font_config(&self, config: &Config) -> crate::config::schema::FontConfig {
         let mut cfg = config.font.clone();
         cfg.size *= self.scale_factor;
@@ -143,14 +141,28 @@ impl RenderContext {
             let shaped = self.shaper.shape_line(text, &colors, font);
 
             for glyph in &shaped.glyphs {
-                let (atlas, queue) = self.renderer.atlas_and_queue();
-                let entry = self.shaper.rasterize_to_atlas(glyph.cache_key, atlas, queue)?;
+                // Try LCD rasterization first (when LCD AA is enabled).
+                // If it succeeds, the LCD instance paints the glyph and the swash
+                // instance is reduced to background-only (glyph_size = 0) so we
+                // never double-render the same character.
+                let lcd_entry = if let Some(queue) = self.renderer.lcd_queue() {
+                    self.shaper
+                        .rasterize_lcd_to_atlas(glyph.cache_key, glyph.ch, queue)
+                } else {
+                    None
+                };
 
-                let (atlas_uv, glyph_offset, glyph_size) = {
-                    let ox = entry.bearing_x as f32;
-                    let oy = shaped.ascent - entry.bearing_y as f32;
-                    let gw = entry.width as f32;
-                    let gh = entry.height as f32;
+                // Swash instance — always emitted for the background color rect.
+                // Only carries glyph data when LCD did not produce an entry.
+                let (atlas, queue) = self.renderer.atlas_and_queue();
+                let swash_entry = self.shaper.rasterize_to_atlas(glyph.cache_key, atlas, queue)?;
+
+                let (atlas_uv, glyph_offset, glyph_size) = if lcd_entry.is_none() {
+                    // No LCD — use swash glyph.
+                    let ox = swash_entry.bearing_x as f32;
+                    let oy = shaped.ascent - swash_entry.bearing_y as f32;
+                    let gw = swash_entry.width as f32;
+                    let gh = swash_entry.height as f32;
                     let y0 = oy.max(0.0);
                     let y1 = (oy + gh).min(self.shaper.cell_height);
                     if y1 <= y0 || gw == 0.0 || gh == 0.0 {
@@ -158,9 +170,12 @@ impl RenderContext {
                     } else {
                         let fy0 = (y0 - oy) / gh;
                         let fy1 = (y1 - oy) / gh;
-                        let [u0, v0, u1, v1] = entry.uv;
+                        let [u0, v0, u1, v1] = swash_entry.uv;
                         ([u0, v0 + fy0 * (v1 - v0), u1, v0 + fy1 * (v1 - v0)], [ox, y0], [gw, y1 - y0])
                     }
+                } else {
+                    // LCD handles the glyph — swash provides background only.
+                    ([0.0f32; 4], [0.0; 2], [0.0; 2])
                 };
 
                 row_instances.push(CellVertex {
@@ -174,32 +189,29 @@ impl RenderContext {
                     _pad: 0,
                 });
 
-                if self.renderer.has_lcd() {
-                    if let Some((_lcd_atlas, queue)) = self.renderer.lcd_atlas_and_queue() {
-                        if let Some(entry) = self.shaper.rasterize_lcd_to_atlas(glyph.ch, queue) {
-                            let ox = (entry.bearing_x * 3) as f32;
-                            let oy = shaped.ascent - entry.bearing_y as f32;
-                            let gw = entry.width as f32;
-                            let gh = entry.height as f32;
-                            let y0 = oy.max(0.0);
-                            let y1 = (oy + gh).min(self.shaper.cell_height);
+                // LCD instance — emitted only when FreeType successfully rasterized the glyph.
+                if let Some(entry) = lcd_entry {
+                    let ox = entry.bearing_x as f32;
+                    let oy = shaped.ascent - entry.bearing_y as f32;
+                    let gw = entry.width as f32;
+                    let gh = entry.height as f32;
+                    let y0 = oy.max(0.0);
+                    let y1 = (oy + gh).min(self.shaper.cell_height);
 
-                            if y1 > y0 && gw > 0.0 && gh > 0.0 {
-                                let fy0 = (y0 - oy) / gh;
-                                let fy1 = (y1 - oy) / gh;
-                                let [u0, v0, u1, v1] = entry.uv;
-                                row_lcd_instances.push(CellVertex {
-                                    grid_pos: [glyph.col as f32, row_idx as f32],
-                                    atlas_uv: [u0, v0 + fy0 * (v1 - v0), u1, v0 + fy1 * (v1 - v0)],
-                                    fg: glyph.fg,
-                                    bg: glyph.bg,
-                                    glyph_offset: [ox, y0],
-                                    glyph_size: [gw, y1 - y0],
-                                    flags: FLAG_LCD,
-                                    _pad: 0,
-                                });
-                            }
-                        }
+                    if y1 > y0 && gw > 0.0 && gh > 0.0 {
+                        let fy0 = (y0 - oy) / gh;
+                        let fy1 = (y1 - oy) / gh;
+                        let [u0, v0, u1, v1] = entry.uv;
+                        row_lcd_instances.push(CellVertex {
+                            grid_pos: [glyph.col as f32, row_idx as f32],
+                            atlas_uv: [u0, v0 + fy0 * (v1 - v0), u1, v0 + fy1 * (v1 - v0)],
+                            fg: glyph.fg,
+                            bg: glyph.bg,
+                            glyph_offset: [ox, y0],
+                            glyph_size: [gw, y1 - y0],
+                            flags: FLAG_LCD,
+                            _pad: 0,
+                        });
                     }
                 }
             }

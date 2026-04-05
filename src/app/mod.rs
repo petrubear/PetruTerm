@@ -217,23 +217,30 @@ impl ApplicationHandler<()> for App {
                     }
 
                     let cols = term_cols + if self.ui.is_panel_visible() { self.ui.chat_panel.width_cols as usize } else { 0 };
-                    // When the panel is visible its instances are appended after terminal rows,
-                    // so the dirty-row slice math no longer maps 1-to-1. Use a full upload instead.
+                    // When the panel or palette is visible, its instances are appended after terminal rows,
+                    // which breaks the fixed-size row layout assumption in the dirty-row logic.
+                    // Use a full upload to ensure consistency.
                     if self.ui.palette.visible || self.ui.is_panel_visible() {
                         rc.renderer.upload_instances(&rc.instances, 0);
+                        rc.row_cache.dirty_rows.fill(false);
                     } else {
                         for (row_idx, is_dirty) in rc.row_cache.dirty_rows.iter_mut().enumerate() {
                             if *is_dirty {
-                                let start = row_idx * cols;
-                                let end = (start + cols).min(rc.instances.len());
-                                if start < rc.instances.len() { rc.renderer.upload_instances(&rc.instances[start..end], start); }
+                                let start = row_idx * term_cols;
+                                let end = (start + term_cols).min(rc.instances.len());
+                                if start < rc.instances.len() {
+                                    rc.renderer.upload_instances(&rc.instances[start..end], start);
+                                }
                                 *is_dirty = false;
                             }
                         }
-                    }
-                    if !rc.instances.is_empty() {
-                        let cursor_idx = rc.instances.len() - 1;
-                        rc.renderer.upload_instances(&rc.instances[cursor_idx..], cursor_idx);
+
+                        // Always ensure the cursor (usually the very last instance) is uploaded
+                        // when in terminal mode to avoid cursor-only flickering.
+                        if !rc.instances.is_empty() {
+                            let cursor_idx = rc.instances.len() - 1;
+                            rc.renderer.upload_instances(&rc.instances[cursor_idx..], cursor_idx);
+                        }
                     }
                     rc.renderer.set_cell_count(rc.instances.len());
                     rc.renderer.upload_lcd_instances(&rc.lcd_instances);

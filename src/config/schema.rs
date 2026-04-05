@@ -49,11 +49,7 @@ pub struct FontConfig {
     pub fallbacks: Vec<String>,
     /// Enable LCD subpixel antialiasing (FreeType LCD mode, 3× horizontal resolution).
     pub lcd_antialiasing: bool,
-    /// Bundled font bytes for LCD FreeType rasterizer (Regular variant).
-    /// Only set for bundled fonts (JetBrainsMono Nerd Font).
-    pub bundled_font_data: Option<Vec<u8>>,
-    /// Font file path for LCD AA (system fonts via font-kit, or bundled).
-    /// None means LCD AA is disabled or font couldn't be located.
+    /// Font file path for LCD AA. None means LCD AA is disabled or font couldn't be located.
     pub font_path: Option<std::path::PathBuf>,
 }
 
@@ -66,7 +62,6 @@ impl Default for FontConfig {
             features: vec!["calt=1".into(), "liga=1".into(), "dlig=1".into()],
             fallbacks: vec!["Noto Color Emoji".into()],
             lcd_antialiasing: false,
-            bundled_font_data: None,
             font_path: None,
         }
     }

@@ -377,11 +377,11 @@ impl GpuRenderer {
         (&mut self.atlas, &self.queue)
     }
 
-    /// Returns mutable access to the LCD atlas and an immutable reference to the queue.
-    /// Only available when LCD AA is enabled.
-    pub fn lcd_atlas_and_queue(&mut self) -> Option<(std::cell::RefMut<'_, LcdGlyphAtlas>, &wgpu::Queue)> {
-        if let Some(atlas) = &self.lcd_atlas {
-            Some((atlas.borrow_mut(), &self.queue))
+    /// Returns the wgpu queue when LCD AA is enabled, without borrowing the atlas.
+    /// Use this to pass the queue to the rasterizer (which accesses its own Rc<RefCell> internally).
+    pub fn lcd_queue(&self) -> Option<&wgpu::Queue> {
+        if self.lcd_atlas.is_some() {
+            Some(&self.queue)
         } else {
             None
         }

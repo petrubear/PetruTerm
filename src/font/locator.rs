@@ -8,19 +8,30 @@ pub struct FontPath {
 
 pub struct FontLocator;
 
+/// Standard macOS font directories, in search priority order.
+const MACOS_FONT_DIRS: &[&str] = &[
+    // User-installed fonts (highest priority)
+    "~/Library/Fonts",
+    // System-wide installed fonts
+    "/Library/Fonts",
+    // macOS built-in fonts
+    "/System/Library/Fonts",
+    "/System/Library/Fonts/Supplemental",
+];
+
 impl FontLocator {
     pub fn new() -> Self {
         Self
     }
 
     pub fn locate_font(&self, family: &str) -> Option<FontPath> {
-        // Try system source first
+        // Try system source first (CoreText, fast)
         if let Some(path) = self.locate_via_font_kit(family) {
             return Some(path);
         }
 
-        // Scan ~/Library/Fonts directly
-        self.scan_user_fonts(family)
+        // Scan all standard macOS font directories
+        self.scan_font_dirs(family)
     }
 
     fn locate_via_font_kit(&self, family: &str) -> Option<FontPath> {
@@ -29,8 +40,6 @@ impl FontLocator {
 
         let source = font_kit::source::SystemSource::new();
 
-        // select_best_match finds the closest weight/style match without loading
-        // any font binary data — much cheaper than enumerating all family members.
         let handle = source
             .select_best_match(
                 &[FamilyName::Title(family.to_owned())],
@@ -44,51 +53,63 @@ impl FontLocator {
         }
     }
 
-    fn scan_user_fonts(&self, family: &str) -> Option<FontPath> {
-        let user_fonts = dirs::home_dir()?.join("Library/Fonts");
-        if !user_fonts.exists() {
-            return None;
-        }
+    fn scan_font_dirs(&self, family: &str) -> Option<FontPath> {
+        let home = dirs::home_dir().unwrap_or_default();
+        // Split family into words and lowercase for matching.
+        // "MonoLisa Nerd Font" → ["monolisa", "nerd", "font"]
+        let family_words: Vec<String> = family.split_whitespace()
+            .map(|w| w.to_lowercase())
+            .collect();
 
-        let entries = std::fs::read_dir(user_fonts).ok()?;
-        let family_lower = family.to_lowercase();
-        let family_nospace = family_lower.replace(' ', "");
+        let dirs: Vec<PathBuf> = MACOS_FONT_DIRS
+            .iter()
+            .map(|d| {
+                let s = d.replace('~', home.to_str().unwrap_or(""));
+                PathBuf::from(s)
+            })
+            .filter(|p| p.exists())
+            .collect();
 
         let mut candidates: Vec<(i32, PathBuf)> = Vec::new();
 
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let ext = path.extension()?.to_str()?;
-            if ext != "ttf" && ext != "otf" {
+        for dir in dirs {
+            let Ok(entries) = std::fs::read_dir(&dir) else {
                 continue;
-            }
-
-            let filename = path.file_name()?.to_string_lossy().to_lowercase();
-
-            // Check if filename matches family name
-            if !filename.contains(&family_nospace) {
-                continue;
-            }
-
-            // Score by preference (lower is better)
-            let score = if filename.contains("regular") && !filename.contains("bold") {
-                0
-            } else if filename.contains("medium") && !filename.contains("bold") {
-                1
-            } else if !filename.contains("bold") && !filename.contains("italic") {
-                2
-            } else {
-                3
             };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+                    continue;
+                };
+                if ext != "ttf" && ext != "otf" {
+                    continue;
+                }
+                let stem = path
+                    .file_stem()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_lowercase();
 
-            candidates.push((score, path));
+                // All words from the family name must appear in the filename stem.
+                if !family_words.iter().all(|w| stem.contains(w.as_str())) {
+                    continue;
+                }
+
+                let score = if stem.contains("regular") && !stem.contains("bold") {
+                    0
+                } else if stem.contains("medium") && !stem.contains("bold") {
+                    1
+                } else if !stem.contains("bold") && !stem.contains("italic") {
+                    2
+                } else {
+                    3
+                };
+                candidates.push((score, path));
+            }
         }
 
         candidates.sort_by_key(|(s, _)| *s);
-        candidates
-            .into_iter()
-            .next()
-            .map(|(_, p)| FontPath { path: p, index: 0 })
+        candidates.into_iter().next().map(|(_, p)| FontPath { path: p, index: 0 })
     }
 }
 

@@ -2,42 +2,190 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use cosmic_text::{
-    Attrs, AttrsList, Buffer, BufferLine, CacheKey, CacheKeyFlags, Family, FontSystem, LayoutGlyph,
-    Metrics, Shaping, SwashCache,
+    fontdb, Attrs, AttrsList, Buffer, BufferLine, CacheKey, CacheKeyFlags, Family, FontSystem,
+    LayoutGlyph, Metrics, Shaping, SwashCache,
 };
 
-/// Returns true for Unicode Private Use Area codepoints where Nerd Font icons live.
+use crate::config::schema::FontConfig;
+use crate::font::freetype_lcd::{FreeTypeLcdRasterizer, LcdAtlasEntry};
+use crate::renderer::atlas::{AtlasEntry, GlyphAtlas};
+use crate::renderer::lcd_atlas::LcdGlyphAtlas;
+
+// ── PUA detection ─────────────────────────────────────────────────────────────
+
+/// Returns true for Unicode Private Use Area and other symbol ranges used by Nerd Fonts.
 #[inline]
 fn is_pua(ch: char) -> bool {
     let c = ch as u32;
     matches!(c,
-        0xE000..=0xF8FF |   // BMP PUA — main Nerd Font icon range
-        0xF0000..=0xFFFFF | // Supplementary PUA-A
-        0x100000..=0x10FFFF // Supplementary PUA-B
+        0xE000..=0xF8FF |    // BMP PUA — main Nerd Font icon range
+        0xF0000..=0xFFFFF |  // Supplementary PUA-A
+        0x100000..=0x10FFFF | // Supplementary PUA-B
+        0x23FB..=0x23FE |    // Power Symbols
+        0x2B58 |             // Power Symbol
+        0x2665 | 0x26A1 |    // Octicons
+        0x2190..=0x2199 |    // Arrows
+        0x2714 | 0x2716 | 0x2728 | 0x2764 | // Symbols
+        0x2B06..=0x2B07 |    // Arrows
+        0xE700..=0xE7C5 |    // Devicons
+        0xF000..=0xF2E0 |    // Font Awesome
+        0xE200..=0xE2A9 |    // Font Logotypes
+        0xE5FA..=0xE62B |    // Seti-UI
+        0xE300..=0xE3E3      // Weather Icons
     )
 }
 
-/// Build an `AttrsList` where PUA codepoints are forced to `nf_family`
-/// (the bundled JBM Nerd Font, as queried from fontdb at startup) while all
-/// other codepoints use the configured primary family.
-fn build_attr_list<'a>(text: &str, default_attrs: &'a Attrs<'a>, nf_family: &'a str) -> AttrsList {
+#[inline]
+fn should_use_lcd(cache_key: CacheKey, primary_font_id: fontdb::ID, ch: char) -> bool {
+    cache_key.font_id == primary_font_id && ch.is_ascii()
+}
+
+/// Build an AttrsList where PUA codepoints get an explicit span forcing the
+/// user's own font. Without this, cosmic-text may route PUA to a fallback that
+/// doesn't exist (no system fonts loaded) and return glyph_id=0.
+fn build_attr_list<'a>(text: &str, default_attrs: &'a Attrs<'a>, family: &'a str) -> AttrsList {
     let mut attr_list = AttrsList::new(default_attrs);
-    let nf_attrs = Attrs::new().family(Family::Name(nf_family));
+    let pua_attrs = default_attrs.clone().family(Family::Name(family));
     let mut byte_idx = 0;
     for ch in text.chars() {
         let ch_len = ch.len_utf8();
         if is_pua(ch) {
-            attr_list.add_span(byte_idx..byte_idx + ch_len, &nf_attrs);
+            attr_list.add_span(byte_idx..byte_idx + ch_len, &pua_attrs);
         }
         byte_idx += ch_len;
     }
     attr_list
 }
 
-use crate::config::schema::FontConfig;
-use crate::font::freetype_lcd::{FreeTypeLcdRasterizer, LcdAtlasEntry};
-use crate::renderer::atlas::{AtlasEntry, GlyphAtlas};
-use crate::renderer::lcd_atlas::LcdGlyphAtlas;
+// ── FreeType cmap lookup ──────────────────────────────────────────────────────
+
+/// Minimal FreeType handle used only for direct cmap glyph-index lookup.
+///
+/// fontdb determines font coverage from the OS/2 Unicode Range bits. Nerd Font
+/// patchers often don't set the PUA bit (0xE000-0xF8FF), so fontdb reports no
+/// coverage and cosmic-text returns glyph_id=0 for PUA characters even when the
+/// font actually has those glyphs.
+///
+/// FreeType's FT_Get_Char_Index reads the cmap directly, bypassing the OS/2
+/// check. When cosmic-text gives us glyph_id=0 for a PUA char, we use this to
+/// get the real glyph_id and construct the correct CacheKey so swash can
+/// rasterize the actual icon.
+struct FreeTypeCmapLookup {
+    library: freetype::freetype::FT_Library,
+    face: freetype::freetype::FT_Face,
+}
+
+impl FreeTypeCmapLookup {
+    fn new(font_path: &std::path::Path, font_size: f32) -> Option<Self> {
+        use freetype::freetype as ft;
+
+        let mut library: ft::FT_Library = std::ptr::null_mut();
+        let err = unsafe { ft::FT_Init_FreeType(&mut library) };
+        if err != 0 || library.is_null() {
+            log::warn!("PUA lookup: FT_Init_FreeType failed ({err})");
+            return None;
+        }
+
+        let path_str = match font_path.to_str() {
+            Some(s) => s,
+            None => {
+                unsafe { ft::FT_Done_FreeType(library) };
+                return None;
+            }
+        };
+        let c_path = match std::ffi::CString::new(path_str) {
+            Ok(s) => s,
+            Err(_) => {
+                unsafe { ft::FT_Done_FreeType(library) };
+                return None;
+            }
+        };
+
+        let mut face: ft::FT_Face = std::ptr::null_mut();
+        let err = unsafe { ft::FT_New_Face(library, c_path.as_ptr(), 0, &mut face) };
+        if err != 0 || face.is_null() {
+            unsafe { ft::FT_Done_FreeType(library) };
+            log::warn!("PUA lookup: FT_New_Face failed ({err})");
+            return None;
+        }
+
+        let err = unsafe { ft::FT_Set_Char_Size(face, 0, (font_size * 64.0) as ft::FT_F26Dot6, 72, 72) };
+        if err != 0 {
+            unsafe {
+                ft::FT_Done_Face(face);
+                ft::FT_Done_FreeType(library);
+            }
+            log::warn!("PUA lookup: FT_Set_Char_Size failed ({err})");
+            return None;
+        }
+
+        log::debug!("FreeType cmap lookup ready for PUA glyph resolution.");
+        Some(Self { library, face })
+    }
+
+    /// Returns the glyph index for `ch` from the font's cmap, or None if the
+    /// character is not in the font.
+    fn get_glyph_index(&self, ch: char) -> Option<u32> {
+        use freetype::freetype as ft;
+        let idx = unsafe { ft::FT_Get_Char_Index(self.face, ch as ft::FT_ULong) };
+        if idx == 0 || idx > u16::MAX as u32 {
+            None
+        } else {
+            Some(idx as u32)
+        }
+    }
+
+    fn cell_metrics(&self) -> Option<(f32, f32)> {
+        use freetype::freetype as ft;
+
+        let size_metrics = unsafe {
+            let size = (*self.face).size;
+            if size.is_null() {
+                return None;
+            }
+            (*size).metrics
+        };
+
+        let mut width = 0.0f32;
+        for codepoint in 32u32..128u32 {
+            let glyph_idx = unsafe { ft::FT_Get_Char_Index(self.face, codepoint as ft::FT_ULong) };
+            if glyph_idx == 0 {
+                continue;
+            }
+
+            let err = unsafe { ft::FT_Load_Glyph(self.face, glyph_idx, ft::FT_LOAD_DEFAULT as ft::FT_Int32) };
+            if err != 0 {
+                continue;
+            }
+
+            let advance = unsafe { (*(*self.face).glyph).metrics.horiAdvance } as f32 / 64.0;
+            width = width.max(advance);
+        }
+
+        if width <= 0.0 {
+            return None;
+        }
+
+        let height = size_metrics.height as f32 / 64.0;
+        Some((width.round(), height.round()))
+    }
+}
+
+impl Drop for FreeTypeCmapLookup {
+    fn drop(&mut self) {
+        use freetype::freetype as ft;
+        unsafe {
+            if !self.face.is_null() {
+                ft::FT_Done_Face(self.face);
+            }
+            if !self.library.is_null() {
+                ft::FT_Done_FreeType(self.library);
+            }
+        }
+    }
+}
+
+// ── Public types ──────────────────────────────────────────────────────────────
 
 /// A shaped text run ready for rendering.
 #[derive(Debug, Clone)]
@@ -49,42 +197,35 @@ pub struct ShapedRun {
 
 #[derive(Debug, Clone)]
 pub struct ShapedGlyph {
-    /// Column index in the terminal grid.
     pub col: usize,
-    /// Number of terminal columns this glyph covers (>1 for ligatures / wide chars).
     pub span: usize,
-    /// The UTF-8 character for this glyph (for LCD AA rasterization).
     pub ch: char,
-    /// cosmic-text cache key for atlas lookup / rasterization.
     pub cache_key: CacheKey,
-    /// X advance in pixels.
     pub advance: f32,
-    /// X bearing within the cell.
     pub bearing_x: f32,
-    /// Y bearing (baseline offset).
     pub bearing_y: f32,
-    /// Foreground RGBA.
     pub fg: [f32; 4],
-    /// Background RGBA.
     pub bg: [f32; 4],
 }
 
-/// Text shaper using cosmic-text + HarfBuzz.
+// ── TextShaper ────────────────────────────────────────────────────────────────
+
 pub struct TextShaper {
     pub font_system: FontSystem,
     pub swash_cache: SwashCache,
     pub metrics: Metrics,
     pub cell_width: f32,
     pub cell_height: f32,
-    /// Reusable shaping buffer — avoids a Buffer allocation on every shape_line call.
     shape_buf: Buffer,
-    /// FreeType LCD rasterizer (holds Rc clone of lcd_atlas), available when lcd_antialiasing is enabled.
     pub lcd_rasterizer: Option<FreeTypeLcdRasterizer>,
-    /// LCD glyph atlas (Rc clone, shared with GpuRenderer via set_lcd_atlas).
     pub lcd_atlas: Option<Rc<RefCell<LcdGlyphAtlas>>>,
-    /// Actual family name of the bundled Nerd Font (queried from fontdb at startup).
-    /// Used to route PUA codepoints (powerline separators, icons) to the correct face.
-    nf_family: String,
+    /// Queried family name (internal to the font file, may differ from config).
+    family: String,
+    /// fontdb face ID for the loaded font — used when overriding PUA glyph_ids.
+    font_id: fontdb::ID,
+    /// FreeType cmap lookup — always initialized (not just for LCD) to resolve
+    /// PUA glyph_ids that cosmic-text can't find via fontdb coverage.
+    ft_cmap: Option<FreeTypeCmapLookup>,
 }
 
 unsafe impl Send for TextShaper {}
@@ -94,18 +235,18 @@ impl TextShaper {
     pub fn new(
         device: &wgpu::Device,
         font_system: FontSystem,
-        nf_family: String,
+        actual_family: String,
+        font_id: fontdb::ID,
+        font_path: std::path::PathBuf,
         font_config: &FontConfig,
         lcd_atlas: Option<Rc<RefCell<LcdGlyphAtlas>>>,
     ) -> Self {
         let line_height = font_config.size * font_config.line_height;
         let metrics = Metrics::new(font_config.size, line_height);
 
-        // Create the reusable buffer before moving font_system into the struct.
         let mut font_system = font_system;
         let shape_buf = Buffer::new(&mut font_system, metrics);
 
-        // Create LCD rasterizer using the provided atlas (from GpuRenderer)
         let lcd_rasterizer = if font_config.lcd_antialiasing {
             if let Some(atlas) = &lcd_atlas {
                 match FreeTypeLcdRasterizer::new(device, font_config, Rc::clone(atlas)) {
@@ -114,9 +255,7 @@ impl TextShaper {
                         Some(r)
                     }
                     Err(e) => {
-                        log::warn!(
-                            "Failed to initialize FreeType LCD rasterizer: {e}. LCD AA disabled."
-                        );
+                        log::warn!("Failed to initialize FreeType LCD rasterizer: {e}. LCD AA disabled.");
                         None
                     }
                 }
@@ -128,6 +267,11 @@ impl TextShaper {
             None
         };
 
+        let ft_cmap = FreeTypeCmapLookup::new(&font_path, font_config.size);
+        if ft_cmap.is_none() {
+            log::warn!("FreeType cmap lookup unavailable — Nerd Font PUA icons may not render.");
+        }
+
         let mut shaper = Self {
             font_system,
             swash_cache: SwashCache::new(),
@@ -137,22 +281,38 @@ impl TextShaper {
             shape_buf,
             lcd_rasterizer,
             lcd_atlas,
-            nf_family,
+            family: actual_family,
+            font_id,
+            ft_cmap,
         };
 
         shaper.measure_cell(font_config);
         shaper
     }
 
-    /// Measure the cell dimensions by shaping the reference character "M".
     fn measure_cell(&mut self, font_config: &FontConfig) {
-        let attrs = Self::make_attrs(font_config);
+        if let Some((width, height)) = self.ft_cmap.as_ref().and_then(|ft| ft.cell_metrics()) {
+            self.cell_width = width;
+            self.cell_height = height.max((font_config.size * font_config.line_height).round());
+            log::info!(
+                "Cell size from FreeType: {:.1}x{:.1}px (font: '{}' {}pt, family: '{}')",
+                self.cell_width,
+                self.cell_height,
+                font_config.family,
+                font_config.size,
+                self.family,
+            );
+            return;
+        }
+
+        let attrs = Self::make_attrs(&self.family, font_config);
         let mut buffer = Buffer::new(&mut self.font_system, self.metrics);
         buffer.set_size(&mut self.font_system, Some(1000.0), Some(1000.0));
 
         let attr_list = AttrsList::new(&attrs);
+        let sample = "MMMMMMMMMMMMMMMM";
         buffer.lines = vec![BufferLine::new(
-            "M",
+            sample,
             cosmic_text::LineEnding::None,
             attr_list,
             Shaping::Advanced,
@@ -160,10 +320,17 @@ impl TextShaper {
         buffer.shape_until_scroll(&mut self.font_system, false);
 
         for run in buffer.layout_runs() {
-            if let Some(glyph) = run.glyphs.first() {
-                // Round to integer physical pixels so every column boundary
-                // lands on an exact pixel, preventing sub-pixel seams between
-                // adjacent cell background rects.
+            if run.glyphs.len() >= 2 {
+                let mut total_advance = 0.0f32;
+                let mut count = 0usize;
+                for pair in run.glyphs.windows(2) {
+                    total_advance += pair[1].x - pair[0].x;
+                    count += 1;
+                }
+                if count > 0 {
+                    self.cell_width = (total_advance / count as f32).round();
+                }
+            } else if let Some(glyph) = run.glyphs.first() {
                 self.cell_width = glyph.w.round();
             }
             self.cell_height = run.line_height.round();
@@ -171,29 +338,24 @@ impl TextShaper {
         }
 
         log::info!(
-            "Cell size: {:.1}x{:.1}px (font: '{}' {}pt)",
+            "Cell size: {:.1}x{:.1}px (font: '{}' {}pt, family: '{}')",
             self.cell_width,
             self.cell_height,
             font_config.family,
-            font_config.size
+            font_config.size,
+            self.family,
         );
     }
 
-    /// Shape a line of terminal text into glyph runs.
-    ///
-    /// `text` — UTF-8 string of the terminal line.
-    /// `colors` — per-column (fg, bg) RGBA pairs.
     pub fn shape_line(
         &mut self,
         text: &str,
         colors: &[([f32; 4], [f32; 4])],
         font_config: &FontConfig,
     ) -> ShapedRun {
-        let attrs = Self::make_attrs(font_config);
-        let attr_list = build_attr_list(text, &attrs, &self.nf_family);
+        let attrs = Self::make_attrs(&self.family, font_config);
+        let attr_list = build_attr_list(text, &attrs, &self.family);
 
-        // Reuse the stored buffer: replace lines and re-shape in-place.
-        // This avoids a Buffer heap allocation on every call (~5 000–7 000/s at 60 fps).
         self.shape_buf
             .set_size(&mut self.font_system, None, Some(self.cell_height));
         self.shape_buf.lines = vec![BufferLine::new(
@@ -214,25 +376,51 @@ impl TextShaper {
             line_height = run.line_height;
 
             for glyph in run.glyphs {
-                // Use the cluster's start byte index to determine the correct column.
-                // glyph.x / cell_width can be unreliable for ligatures because
-                // cosmic-text may report the position at the last char of the cluster.
                 let tlen = text.len();
                 let start = glyph.start.min(tlen);
                 let end = glyph.end.min(tlen);
                 let col = text[..start].chars().count();
-                // span = number of terminal columns the cluster occupies (>=1).
                 let span = text[start..end].chars().count().max(1);
-
-                // Extract the first character from the glyph cluster for LCD AA.
                 let ch = text[start..end].chars().next().unwrap_or(' ');
+                
+                log::debug!("Shaping char '{}' (U+{:04X}), font_id: {:?}, glyph_id: {}", ch, ch as u32, glyph.font_id, glyph.glyph_id);
 
                 let (fg, bg) = colors
                     .get(col)
                     .copied()
                     .unwrap_or(([1.0; 4], [0.0, 0.0, 0.0, 1.0]));
 
-                let cache_key = glyph_to_cache_key(glyph, font_config.size);
+                // Use FreeType to resolve glyph IDs for Nerd Font symbols. 
+                // Many Nerd Font patchers don't set the OS/2 Unicode Range bits, causing 
+                // cosmic-text to return glyph_id=0 or fall back to system fonts (like Noto) 
+                // that don't have the icon.
+                //
+                // We override the glyph if:
+                // 1. cosmic-text returned glyph_id=0 (not found)
+                // 2. The character is a Nerd Font symbol AND cosmic-text routed it to 
+                //    a DIFFERENT font (fallback).
+                let should_override = glyph.glyph_id == 0 || (is_pua(ch) && glyph.font_id != self.font_id);
+
+                let cache_key = if should_override {
+                    if let Some(real_id) = self.ft_cmap.as_ref().and_then(|ft| ft.get_glyph_index(ch)) {
+                        log::debug!("Overriding glyph {} -> ID {}", ch, real_id);
+                        let (key, _, _) = CacheKey::new(
+                            self.font_id,
+                            real_id as u16,
+                            font_config.size,
+                            (glyph.x.fract(), 0.0),
+                            glyph.font_weight,
+                            CacheKeyFlags::empty(),
+                        );
+                        key
+                    } else {
+                        log::debug!("No override for {} (not in cmap)", ch);
+                        // Truly not in the font — use original key (will render .notdef or blank).
+                        glyph_to_cache_key(glyph, font_config.size)
+                    }
+                } else {
+                    glyph_to_cache_key(glyph, font_config.size)
+                };
 
                 glyphs.push(ShapedGlyph {
                     col,
@@ -248,14 +436,9 @@ impl TextShaper {
             }
         }
 
-        ShapedRun {
-            glyphs,
-            ascent,
-            line_height,
-        }
+        ShapedRun { glyphs, ascent, line_height }
     }
 
-    /// Rasterize a glyph via swash and upload it to the GPU atlas.
     pub fn rasterize_to_atlas(
         &mut self,
         cache_key: CacheKey,
@@ -269,23 +452,19 @@ impl TextShaper {
         let image = self
             .swash_cache
             .get_image_uncached(&mut self.font_system, cache_key)
-            .ok_or_else(|| crate::renderer::atlas::AtlasError::Other("Swash failed to rasterize glyph".into()))?;
+            .ok_or_else(|| {
+                crate::renderer::atlas::AtlasError::Other(
+                    "Swash failed to rasterize glyph".into(),
+                )
+            })?;
 
         let width = image.placement.width;
         let height = image.placement.height;
 
         if width == 0 || height == 0 {
-            // Return a dummy entry for empty glyphs (like space) so we don't try to re-rasterize.
-            return Ok(AtlasEntry {
-                uv: [0.0; 4],
-                width: 0,
-                height: 0,
-                bearing_x: 0,
-                bearing_y: 0,
-            });
+            return Ok(AtlasEntry { uv: [0.0; 4], width: 0, height: 0, bearing_x: 0, bearing_y: 0 });
         }
 
-        // Convert swash image content to RGBA8.
         let rgba: Vec<u8> = match image.content {
             cosmic_text::SwashContent::Mask => {
                 image.data.iter().flat_map(|&a| [a, a, a, 255u8]).collect()
@@ -296,34 +475,91 @@ impl TextShaper {
             }
         };
 
-        atlas.upload(
-            queue,
-            cache_key,
-            &rgba,
-            width,
-            height,
-            image.placement.left,
-            image.placement.top,
-        )
+        atlas.upload(queue, cache_key, &rgba, width, height, image.placement.left, image.placement.top)
     }
 
-    /// Rasterize a character using the FreeType LCD rasterizer and upload to the LCD atlas.
-    /// Returns the LCD atlas entry, or None if the character has no LCD representation.
     pub fn rasterize_lcd_to_atlas(
         &mut self,
-        c: char,
+        cache_key: CacheKey,
+        ch: char,
         queue: &wgpu::Queue,
     ) -> Option<LcdAtlasEntry> {
+        if !should_use_lcd(cache_key, self.font_id, ch) {
+            return None;
+        }
+
         let rasterizer = self.lcd_rasterizer.as_mut()?;
-        rasterizer.rasterize_char(c, queue)
+        rasterizer.rasterize(cache_key.glyph_id as u32, queue)
     }
 
-    fn make_attrs(font_config: &FontConfig) -> Attrs<'_> {
-        Attrs::new().family(Family::Name(&font_config.family))
+    fn make_attrs<'a>(family: &'a str, _font_config: &FontConfig) -> Attrs<'a> {
+        Attrs::new().family(Family::Name(family))
     }
 }
 
-/// Build a cosmic-text CacheKey from a layout glyph.
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cosmic_text::Attrs;
+
+    #[test]
+    fn test_is_pua() {
+        // Main Nerd Font PUA
+        assert!(is_pua('\u{e0a0}')); // Branch icon
+        assert!(is_pua('\u{f418}')); // Git branch
+        // Powerline / Symbols
+        assert!(is_pua('\u{23fb}')); 
+        assert!(is_pua('\u{2b58}'));
+        // Devicons / FontAwesome
+        assert!(is_pua('\u{e700}'));
+        assert!(is_pua('\u{f000}'));
+        // Seti / Weather
+        assert!(is_pua('\u{e5fa}'));
+        assert!(is_pua('\u{e300}'));
+        // Regular text
+        assert!(!is_pua('A'));
+        assert!(!is_pua(' '));
+    }
+
+    #[test]
+    fn test_build_attr_list() {
+        let family = "TestFont";
+        let default_attrs = Attrs::new();
+        let text = "A \u{e0a0} B";
+        let list = build_attr_list(text, &default_attrs, family);
+        
+        // "A " is 2 bytes, "\u{e0a0}" is 3 bytes, " B" is 2 bytes
+        // Total bytes: 7
+        
+        // We can't easily inspect the spans in AttrsList without shaping,
+        // but we can at least verify it doesn't panic and the logic runs.
+        assert_eq!(text.len(), 7);
+    }
+
+    #[test]
+    fn test_should_use_lcd_only_for_ascii_in_primary_font() {
+        let font_id = fontdb::ID::dummy();
+        let (ascii_key, _, _) = CacheKey::new(
+            font_id,
+            b'A' as u16,
+            16.0,
+            (0.0, 0.0),
+            fontdb::Weight::NORMAL,
+            CacheKeyFlags::empty(),
+        );
+        let (symbol_key, _, _) = CacheKey::new(
+            font_id,
+            0x21E1,
+            16.0,
+            (0.0, 0.0),
+            fontdb::Weight::NORMAL,
+            CacheKeyFlags::empty(),
+        );
+        assert!(should_use_lcd(ascii_key, font_id, 'A'));
+        assert!(!should_use_lcd(symbol_key, font_id, '⇡'));
+    }
+}
+
 fn glyph_to_cache_key(glyph: &LayoutGlyph, font_size: f32) -> CacheKey {
     let (key, _, _) = CacheKey::new(
         glyph.font_id,
