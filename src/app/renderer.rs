@@ -623,9 +623,8 @@ impl RenderContext {
     /// Render the tab bar at grid row -1 (one cell row above the terminal).
     /// Requires `set_padding` to have shifted padding.y up by one cell_height.
     ///
-    /// Each tab is a rounded-rectangle pill built from Nerd Font powerline glyphs:
-    ///   [gap] [E0B4 fg=badge bg=bar] [" N " badge_bg] [E0B4 fg=tab bg=badge]
-    ///          [" title " tab_bg] [E0B6 fg=tab bg=bar]
+    /// Each tab: [1-cell gap BAR_BG] [" N " BADGE_BG] [" title " TAB_BG]
+    /// No powerline glyphs — clean rectangular segments, badge darker than body.
     pub fn build_tab_bar_instances(
         &mut self,
         tabs: &[Tab],
@@ -644,22 +643,11 @@ impl RenderContext {
         const INACTIVE_BADGE_BG: [f32; 4] = [0.16, 0.16, 0.22, 1.0]; // darker gray badge
         const INACTIVE_FG:       [f32; 4] = [0.61, 0.64, 0.75, 1.0]; // comment gray
 
-        // Nerd Font powerline rounded separators (single-width glyphs)
-        // U+E0B4: right-pointing rounded cap (bg=outer, fg=inner fills right)
-        // U+E0B6: left-pointing rounded cap  (fg=inner fills left, bg=outer)
-        const RCAP: &str = "\u{E0B4}";
-        const LCAP: &str = "\u{E0B6}";
-
-        // Helper: push text at `col` on tab-bar row then patch all new instances to y=-1.
-        macro_rules! push {
+        macro_rules! push_bar {
             ($text:expr, $fg:expr, $bg:expr, $col:expr, $w:expr) => {{
-                if $col >= total_cols { break; }
-                let w = ($w).min(total_cols - $col);
-                if w == 0 { break; }
                 let start = self.instances.len();
-                self.push_shaped_row($text, $fg, $bg, 0, $col, w, font);
+                self.push_shaped_row($text, $fg, $bg, 0, $col, $w, font);
                 for inst in &mut self.instances[start..] { inst.grid_pos[1] = -1.0; }
-                w
             }};
         }
 
@@ -673,35 +661,30 @@ impl RenderContext {
             let badge_bg  = if is_active { ACTIVE_BADGE_BG } else { INACTIVE_BADGE_BG };
             let fg        = if is_active { ACTIVE_FG }        else { INACTIVE_FG };
 
-            // 1-cell dark gap before the pill
-            col += push!(" ", [0.0; 4], BAR_BG, col, 1);
+            // 1-cell dark gap before each tab
+            let gap_w = 1.min(total_cols - col);
+            push_bar!(" ", [0.0; 4], BAR_BG, col, gap_w);
+            col += gap_w;
+            if col >= total_cols { break; }
 
-            // Left rounded cap: bar → badge (E0B4 fg=badge_bg, bg=bar)
-            col += push!(RCAP, badge_bg, BAR_BG, col, 1);
-
-            // Number badge: " N "
+            // Number badge: " N " with darker background
             let badge = format!(" {} ", i + 1);
-            let bw = badge.chars().count();
-            col += push!(&badge, fg, badge_bg, col, bw);
+            let badge_w = badge.chars().count().min(total_cols - col);
+            push_bar!(&badge, fg, badge_bg, col, badge_w);
+            col += badge_w;
+            if col >= total_cols { break; }
 
-            // Inner cap: badge → tab body (E0B4 fg=tab_bg, bg=badge_bg)
-            col += push!(RCAP, tab_bg, badge_bg, col, 1);
-
-            // Tab title: " name "
+            // Tab title: " name " with tab background
             let raw = format!(" {} ", tab.title);
             let title: String = raw.chars().take(14).collect();
-            let tw = title.chars().count();
-            col += push!(&title, fg, tab_bg, col, tw);
-
-            // Right rounded cap: tab → bar (E0B6 fg=tab_bg, bg=bar)
-            col += push!(LCAP, tab_bg, BAR_BG, col, 1);
+            let title_w = title.chars().count().min(total_cols - col);
+            push_bar!(&title, fg, tab_bg, col, title_w);
+            col += title_w;
         }
 
         // Fill remainder with bar background
         if col < total_cols {
-            let start = self.instances.len();
-            self.push_shaped_row("", [0.0; 4], BAR_BG, 0, col, total_cols - col, font);
-            for inst in &mut self.instances[start..] { inst.grid_pos[1] = -1.0; }
+            push_bar!("", [0.0; 4], BAR_BG, col, total_cols - col);
         }
     }
 
