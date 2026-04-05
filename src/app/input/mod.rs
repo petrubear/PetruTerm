@@ -26,6 +26,10 @@ pub struct InputHandler {
     pub mouse_pos: (f64, f64),
     pub mouse_left_pressed: bool,
     pub scroll_pixel_accum: f64,
+    /// Consecutive click count (1 = single, 2 = double, 3+ = triple) for selection type.
+    pub click_count: u32,
+    pub last_click_time: Instant,
+    pub last_click_cell: (usize, usize),
 
     // Cursor blink state
     pub cursor_blink_on: bool,
@@ -51,9 +55,23 @@ impl InputHandler {
             mouse_pos: (0.0, 0.0),
             mouse_left_pressed: false,
             scroll_pixel_accum: 0.0,
+            click_count: 0,
+            last_click_time: Instant::now(),
+            last_click_cell: (usize::MAX, usize::MAX),
             cursor_blink_on: true,
             cursor_last_blink: Instant::now(),
         }
+    }
+
+    /// Update click count for multi-click detection. Returns 1 / 2 / 3+ based on timing and position.
+    pub fn register_click(&mut self, cell: (usize, usize)) -> u32 {
+        const DOUBLE_CLICK_MS: u128 = 500;
+        let same_cell = self.last_click_cell == cell;
+        let within_time = self.last_click_time.elapsed().as_millis() < DOUBLE_CLICK_MS;
+        self.click_count = if same_cell && within_time { (self.click_count + 1).min(3) } else { 1 };
+        self.last_click_time = Instant::now();
+        self.last_click_cell = cell;
+        self.click_count
     }
 
     pub fn update_cursor_blink(&mut self) -> bool {

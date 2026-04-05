@@ -190,7 +190,7 @@ impl App {
                     let () = msg_send![ns_win, setStyleMask: current_mask | (1_usize << 15)];
                     let () = msg_send![ns_win, setTitlebarAppearsTransparent: Bool::YES];
                     let () = msg_send![ns_win, setTitleVisibility: 1_i64];
-                    let () = msg_send![ns_win, setMovableByWindowBackground: Bool::NO];
+                    let () = msg_send![ns_win, setMovableByWindowBackground: Bool::YES];
                 }
             }
         }
@@ -410,8 +410,14 @@ impl ApplicationHandler<()> for App {
                             if self.ui.is_panel_visible() { self.ui.panel_focused = false; }
                             self.input.mouse_left_pressed = true;
                             if !self.mux.active_terminal().map(|t| t.mouse_mode_flags().0).unwrap_or(false) {
+                                let clicks = self.input.register_click((col, row));
+                                let sel_type = match clicks {
+                                    2 => SelectionType::Semantic,
+                                    3 => SelectionType::Lines,
+                                    _ => SelectionType::Simple,
+                                };
                                 if let Some(terminal) = self.mux.active_terminal() {
-                                    terminal.start_selection(col, row, SelectionType::Simple);
+                                    terminal.start_selection(col, row, sel_type);
                                 }
                             }
                             self.input.send_mouse_report(0, col, row, true, &self.mux);
