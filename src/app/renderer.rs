@@ -355,6 +355,7 @@ impl RenderContext {
         const ERR_FG:    [f32; 4] = [1.00, 0.33, 0.33, 1.0]; // red
         const SEP_FG:    [f32; 4] = [0.27, 0.28, 0.36, 1.0]; // current-line
         const DIM_FG:    [f32; 4] = [0.50, 0.47, 0.60, 1.0]; // dimmed input
+        const RUN_FG:    [f32; 4] = [0.50, 0.98, 0.60, 1.0]; // green — run bar
 
         // Braille spinner cycles as streaming buffer grows
         const SPIN: [&str; 8] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"];
@@ -423,6 +424,22 @@ impl RenderContext {
             }
         }
 
+        // Run bar — shown when Idle and the last assistant message contains a shell command.
+        // Pressing Enter (with empty input) will execute this command via the PTY.
+        if panel.is_idle() {
+            if let Some(cmd) = panel.last_assistant_command() {
+                // "│ ⏎  " = 5 chars prefix, leave space for the command
+                let max_cmd_w = panel_cols.saturating_sub(5);
+                let display_cmd = if cmd.chars().count() > max_cmd_w {
+                    format!("{}…", cmd.chars().take(max_cmd_w.saturating_sub(1)).collect::<String>())
+                } else {
+                    cmd
+                };
+                all_lines.push(("│".to_string(), SEP_FG));
+                all_lines.push((format!("│ \u{23ce}  {}", display_cmd), RUN_FG)); // ⏎
+            }
+        }
+
         // ── Render visible history ────────────────────────────────────────────
         let visible_start = all_lines.len()
             .saturating_sub(history_rows + panel.scroll_offset);
@@ -457,19 +474,19 @@ impl RenderContext {
         // ── Key hints ────────────────────────────────────────────────────────
         let has_assistant = panel.messages.iter().any(|m| matches!(m.role, ChatRole::Assistant));
         let hints = if !panel_focused {
-            "│ Cmd+Shift+A: focus / close"
+            "│ <Leader>a: focus   Esc: close"
         } else {
             match &panel.state {
                 PanelState::Idle if !panel.input.trim().is_empty()
                     => "│ Enter: send   Esc: close",
                 PanelState::Idle if has_assistant
-                    => "│ Enter: run last cmd   Esc: close",
+                    => "│ Enter: run \u{23ce}   or type a new query",
                 PanelState::Idle
                     => "│ Enter: send   Esc: close",
                 PanelState::Loading | PanelState::Streaming
-                    => "│ streaming\u{2026}   Cmd+Shift+A: close",
+                    => "│ streaming\u{2026}   <Leader>a: close",
                 PanelState::Error(_)
-                    => "│ Esc: dismiss   Cmd+Shift+A: close",
+                    => "│ Esc: dismiss   <Leader>a: close",
                 PanelState::Hidden => "│",
             }
         };

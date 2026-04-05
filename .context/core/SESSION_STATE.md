@@ -1,87 +1,60 @@
 # Session State
 
-**Last Updated:** 2026-04-03
-**Session Focus:** Bug fixes (mouse selection, typing delay, font memory) + TD-040 Leader Key (COMPLETE)
+**Last Updated:** 2026-04-04
+**Session Focus:** Context audit — empate de tareas completadas vs build_phases.md
 
 ## Branch: `master`
 
-## Session Close Notes (2026-04-03)
+## Session Notes (2026-04-04)
 
-### Bug Fixes (commit 096f41f)
+Full codebase audit performed. `build_phases.md` updated to reflect actual implementation state.
+`ACTIVE_CONTEXT.md` updated with prioritized Phase 2 backlog.
 
-**Mouse selection** (`src/term/mod.rs`, `src/app/mod.rs`)
-- `start_selection`/`update_selection` now lock the term once and subtract
-  `display_offset` from the viewport row, anchoring selections in buffer space.
-  This fixes incorrect selection highlighting when scrolled.
-- `MouseWheel` handler calls `update_selection` when `mouse_left_pressed`,
-  so dragging into scrollback history works.
+### Audit Findings
 
-**Typing delay** (`src/app/mod.rs`)
-- `user_event` now checks `has_data` from `poll_pty_events()` and calls
-  `request_redraw()` immediately when PTY output arrives. Previously characters
-  only appeared on the next independent event (mouse move, 530ms blink tick).
+**Phase 1:** All MVP exit criteria met. 3 non-blocking polish items remain (title bar drag, scroll bar render, double/triple-click selection). No TD items open.
 
-**Font memory** (`src/app/renderer.rs`, `src/font/locator.rs`)
-- Removed `locate_font_for_lcd` call from per-frame `scaled_font_config()`.
-  This was allocating ~200 KB (`JBM_REGULAR.to_vec()`) every frame for JBM
-  Nerd Font users — ~12 MB/s of unnecessary heap churn.
-- `locate_via_font_kit` now uses `source.select_best_match()` instead of
-  loading every font variant to find the Regular weight — much lower memory.
+**Phase 2:** ~60% complete. Core LLM infrastructure solid. Remaining work is UX-focused.
 
-### TD-040: Leader Key Action Dispatch (commit 8e55d0f)
+### Phase 2 Remaining (prioritized)
 
-All custom terminal keybinds now route through the leader key (default: Ctrl+B).
+| # | Item | Effort | Files |
+|---|------|--------|-------|
+| 1 | Wire `<leader>e` and `<leader>f` keybinds | XS | `keybinds.lua`, `actions.rs` |
+| 2 | Shell integration zsh script | S | `scripts/shell-integration.zsh` |
+| 3 | `[⏎ Run]` button for AI command suggestions | M | `app/renderer.rs`, `app/ui.rs` |
+| 4 | Per-pane chat history | M | `llm/chat_panel.rs`, `ui/mux.rs` |
+| 5 | `Ctrl+Space` AI mode keybind | XS | `app/input/mod.rs` |
+| 6 | Inline AI block rendering | L | `llm/ai_block.rs`, `app/renderer.rs` |
 
-- `schema.rs`: `KeyBind` struct + `keys: Vec<KeyBind>` field on `Config`
-- `lua.rs`: parses `config.leader` and `config.keys` tables from Lua;
-  `petruterm.action` table now includes all action names
-- `actions.rs`: added `CommandPalette` + `ToggleAiPanel` variants; `FromStr`
-  impl maps action name strings → `Action` values
-- `ui.rs`: `CommandPalette` opens the palette; `ToggleAiPanel`/`ToggleAiMode`
-  do the full open → focus → close cycle
-- `input/mod.rs`: `InputHandler::new(&Config)` builds `leader_map` from config;
-  removed hardcoded `Cmd+Shift+P`, `Cmd+Shift+A`, `Ctrl+Shift+E/F`, `Cmd+T/W`
-- `keybinds.lua`: single source of truth — all custom binds via `LEADER`
+### Phase 1 Polish Backlog (non-blocking)
 
-**New default bindings** (all after Ctrl+B):
-| Key | Action |
-|-----|--------|
-| p   | Command Palette |
-| a   | Toggle AI Panel (open → focus → close) |
-| e   | Explain Last Output |
-| f   | Fix Last Error |
-| t   | New Tab |
-| w   | Close Tab |
-| %   | Split Horizontal |
-| "   | Split Vertical |
-| x   | Close Pane |
-
-**System keybinds kept hardcoded (not leader):**
-- `Cmd+C/V` — clipboard copy/paste
-- `Cmd+Q` — quit
-- `Cmd+1-9` — switch to tab N
+| Item | Gap | File |
+|------|-----|------|
+| Title bar window dragging | `setMovableByWindowBackground:NO` | `app/mod.rs:143` |
+| Scroll bar render | No GPU draw code | `config/schema.rs:11` |
+| Double/triple-click selection | `SelectionType::Word/Line` not wired | `app/mod.rs:290` |
+| OSC 52 clipboard read | `ClipboardLoad` not wired in `mux.rs` | `app/mux.rs:107` |
 
 ## Build Status
-- **cargo check:** PASS — 0 errors.
-- **branch:** master (stable).
+- **cargo check:** PASS (last verified 2026-04-03)
+- **branch:** master (stable)
 
-## Key Technical Decisions
-
-### Modular Architecture
-- **Managers:** `renderer`, `mux`, `ui`, and `input` — drastically improved
-  compile times and testability.
-- **Shader Synchronization:** `vs_bg` and `vs_main` share `floor` + `epsilon`
-  rounding to avoid pixel-seams.
-- **Standard Input:** xterm-style modifier encoding for CLI tool compatibility.
+## Key Technical Decisions (standing)
 
 ### Leader Key Architecture
-- `leader_map: HashMap<String, Action>` built once at startup from `config.keys`.
-- Leader trigger: `ctrl && !shift && !cmd && s == config.leader.key`.
-- Dispatch: looks up pressed char in `leader_map`, falls back to lowercase.
-- `Action::Quit` handled before `handle_palette_action` (needs `event_loop`).
-- Adding a new binding requires only a Lua change — no Rust recompile.
+- `leader_map: HashMap<String, Action>` built once at startup from `config.keys`
+- Adding a new keybind = 1 line in `keybinds.lua`, no Rust recompile
+- System keybinds hardcoded: `Cmd+C/V` (clipboard), `Cmd+Q` (quit), `Cmd+1-9` (tabs)
 
 ### AI Panel Architecture
-- Panel instances appended after terminal instances — full GPU upload required.
-- `resize_terminals_for_panel()` called whenever panel visibility changes.
+- Panel instances appended after terminal instances — full GPU upload required when panel visible
+- `resize_terminals_for_panel()` called whenever panel visibility changes
 - Keybind: `<leader>a` (open → focus → close cycle). Esc closes when focused.
+- Shell context (CWD, exit code, last command) injected as system message per query
+
+### Render Loop Architecture
+- `GpuRenderer` owns: `CellPipeline`, `GlyphAtlas`, uniform_buffer, instance_buffer (32768 max)
+- Per-frame: `collect_grid_cells()` → `build_instances()` → `upload_instances()` → `render()`
+- Cursor appended last with `FLAG_CURSOR = 0x08`
+- Blink: 530ms toggle in `about_to_wait`; reset on keypress
