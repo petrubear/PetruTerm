@@ -73,15 +73,15 @@ Config hot-reloads without restart.
 - [x] OpenRouter provider (`https://openrouter.ai/api/v1`, any model) — `llm/openrouter.rs`, full HTTP + streaming
 - [x] Ollama provider (`http://localhost:11434`, OpenAI-compat) — `llm/openai_compat.rs`, `ollama()` factory
 - [x] LMStudio provider (`http://localhost:1234/v1`, OpenAI-compat) — `llm/openai_compat.rs`, `lmstudio()` factory
-- [ ] AI mode toggle keybind: `Ctrl+Space` (configurable) — not wired; accessible via command palette only
-- [ ] Inline AI block UI: `⚡ AI >` prompt, streaming response renders token-by-token — `llm/ai_block.rs` exists but is dead code; not rendered
-- [~] **Feature 1 — NL → Shell Command:** LLM query + streaming response works (`app/ui.rs:70–104`); `last_assistant_command()` extracts command (`llm/chat_panel.rs:132–142`); Run bar rendered in history (`app/renderer.rs` — green `│ ⏎ cmd` line); Enter with empty input executes via PTY. **missing:** `[Edit]` `[Explain]` buttons (secondary UX)
-- [~] **Feature 2 — Explain Last Output:** `explain_last_output()` scaffolded (`app/ui.rs:106–115`), wired to palette; **missing:** `<leader>e` keybind not connected
-- [~] **Feature 3 — Fix Last Error:** `fix_last_error()` scaffolded (`app/ui.rs:117–130`), wired to palette; **missing:** `<leader>f` keybind not connected
-- [~] **Feature 4 — Context-Aware Chat:** CWD + exit code + last command injected as system message (`app/ui.rs:77–82`, `llm/shell_context.rs`); **missing:** per-pane chat history persistence (currently global)
+- [x] AI mode toggle keybind: `Ctrl+Space` — `app/input/mod.rs`; 4-row inline AI block overlay
+- [x] Inline AI block UI: state machine (Typing→Loading→Streaming→Done/Error), streaming token-by-token — `llm/ai_block.rs` + `build_ai_block_instances` in `app/renderer.rs`
+- [x] **Feature 1 — NL → Shell Command:** LLM query + streaming works; Run bar (green `│ ⏎ cmd`); Enter executes via PTY — `app/ui.rs`, `app/renderer.rs`
+- [x] **Feature 2 — Explain Last Output:** `explain_last_output()` wired to palette + `<leader>e` — `app/ui.rs`
+- [x] **Feature 3 — Fix Last Error:** `fix_last_error()` wired to palette + `<leader>f` — `app/ui.rs`
+- [x] **Feature 4 — Context-Aware Chat:** CWD + exit code + last command injected as system message; per-pane history via `HashMap<usize, ChatPanel>` — `app/ui.rs`, `llm/shell_context.rs`
 - [x] Command palette: "Enable AI Features" / "Disable AI Features" master toggle — `app/ui.rs:193–197`
 - [x] `llm.lua` config module: `provider`, `model`, `api_key`, `base_url`, `features`, `enabled` — `config/lua.rs`
-- [~] Shell integration script (`shell-integration.zsh`): exists at `scripts/shell-integration.zsh` but minimal; **missing:** full CWD/exit-code/history tracking writing to `~/.cache/petruterm/shell-context.json`
+- [x] Shell integration script (`shell-integration.zsh`): `preexec`/`precmd` hooks write CWD/exit-code/last-command to `~/.cache/petruterm/shell-context.json` — `scripts/shell-integration.zsh`
 - [x] `config.llm.enabled = false` disables all AI features cleanly — checked in `app/ui.rs:33–37`
 
 ### Exit Criteria
@@ -89,34 +89,55 @@ Can type natural language and get a shell command. Can ask "why did that
 fail?" after a non-zero exit. Can toggle AI off entirely from command
 palette. Works with OpenRouter, Ollama, and LMStudio.
 
-> **Status:** ~60% complete. Providers + config solid. Remaining: Ctrl+Space hotkey, Run/Edit/Explain buttons (Feature 1 UX), keybinds for Features 2 & 3, per-pane history, shell integration script.
+> **Status:** COMPLETE (2026-04-04). All Phase 2 deliverables shipped. Commit b815320 closed the final three items: per-pane history, Ctrl+Space inline block, and inline rendering.
 
 ---
 
-## Phase 3: Ecosystem
-**Goal:** Extensible plugin platform, status bar, snippets, Starship support.
+## Phase 3: Polish & UI Chrome
+**Goal:** Complete visual chrome — tab bar, scroll bar, status bar, snippets, Starship support.
+
+### Deliverables
+
+#### Priority — Visual Chrome (P1)
+- [x] **Tab bar:** renders at grid row -1 (above terminal); active tab highlighted; Dracula Pro colors — `build_tab_bar_instances()` in `app/renderer.rs`; GPU padding shifted via `renderer.set_padding()`
+- [x] **Scroll bar:** 6px right-edge overlay using FLAG_CURSOR; thumb proportional to `screen_rows / total_lines`; gated by `config.enable_scroll_bar` — `build_scroll_bar_instances()` in `app/renderer.rs`; `Terminal::scrollback_info()` in `term/mod.rs`
+
+#### Status Bar (P2)
+- [ ] Status bar engine (lua-line style): enable/disable from Lua + command palette
+- [ ] Built-in status bar widgets: `mode`, `cwd`, `git_branch`, `time`, `exit_code`
+- [ ] Status bar widget Lua API: `petruterm.statusbar.register_widget({ name, render })`
+- [ ] Status bar position: `top` or `bottom` (Lua config)
+
+#### Snippets & Compatibility (P3)
+- [ ] Snippets: `config.snippets` table in Lua, expand via command palette
+- [ ] Snippet keybind: optional `trigger` field per snippet
+- [ ] Starship compatibility: detect `STARSHIP_SHELL`, defer left prompt
+- [ ] Powerline support: Nerd Font glyphs in custom widget strings
+- [ ] Built-in themes as Lua files in `assets/themes/`
+
+### Exit Criteria
+Tab bar renders and reflects active tab. Scroll bar visible when scrollback is active.
+Status bar renders with at least 3 widgets. Snippets expand via command palette.
+Starship prompt works when enabled.
+
+> **Status:** Not started.
+
+---
+
+## Phase 4: Plugin Ecosystem
+**Goal:** Extensible plugin platform — third-party Lua plugins can extend palette, status bar, and events.
 
 ### Deliverables
 - [ ] Plugin loader: auto-scan `~/.config/petruterm/plugins/*.lua`
 - [ ] lazy.nvim-style plugin spec: `{ "id", enabled=bool, config = function() ... end }`
 - [ ] Plugin Lua API: `petruterm.palette.register()`, `petruterm.on()`, `petruterm.notify()`
 - [ ] Plugin event system: `tab_created`, `tab_closed`, `pane_split`, `ai_response`, `command_run`
-- [ ] Status bar engine (lua-line style): enable/disable from Lua + command palette
-- [ ] Built-in status bar widgets: `mode`, `cwd`, `git_branch`, `time`, `exit_code`
-- [ ] Status bar widget Lua API: `petruterm.statusbar.register_widget({ name, render })`
-- [ ] Status bar position: `top` or `bottom` (Lua config)
-- [ ] Snippets: `config.snippets` table in Lua, expand via command palette
-- [ ] Snippet keybind: optional `trigger` field per snippet
-- [ ] Starship compatibility: detect `STARSHIP_SHELL`, defer left prompt
-- [ ] Powerline support: Nerd Font glyphs in custom widget strings
 - [ ] `petruterm.plugins.install("user/repo")` — git clone helper
 - [ ] Plugin hot-reload (re-source plugin file on change)
-- [ ] Built-in themes as Lua files in `assets/themes/`
 - [ ] Example plugin + documentation
 
 ### Exit Criteria
-Status bar renders with at least 3 widgets. A third-party Lua plugin can
-register a command palette action and a status bar widget. Snippets expand
-via command palette. Starship prompt works when enabled.
+A third-party Lua plugin can register a command palette action and a status bar widget.
+Plugin hot-reload works. `install()` clones a repo into the plugins directory.
 
 > **Status:** Not started.

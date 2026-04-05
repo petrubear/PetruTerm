@@ -109,18 +109,12 @@ impl PaneNode {
 pub struct PaneManager {
     pub root: PaneNode,
     pub focused_terminal: usize,
-    next_terminal_id: usize,
 }
 
 impl PaneManager {
-    pub fn new(viewport: Rect) -> Self {
-        let terminal_id = 0;
+    pub fn new(viewport: Rect, terminal_id: usize) -> Self {
         let root = PaneNode::leaf(terminal_id, viewport);
-        Self {
-            root,
-            focused_terminal: terminal_id,
-            next_terminal_id: 1,
-        }
+        Self { root, focused_terminal: terminal_id }
     }
 
     /// Relayout the tree to fill the given viewport.
@@ -128,16 +122,12 @@ impl PaneManager {
         self.root.layout(viewport);
     }
 
-    /// Split the focused pane. Returns the new terminal ID.
-    pub fn split(&mut self, dir: SplitDir) -> usize {
-        let new_id = self.next_terminal_id;
-        self.next_terminal_id += 1;
-
+    /// Split the focused pane using a caller-supplied terminal ID (from Mux.next_terminal_id).
+    pub fn split(&mut self, dir: SplitDir, new_id: usize) {
         let focused = self.focused_terminal;
         split_node(&mut self.root, focused, dir, new_id);
         self.root.layout(self.root.rect());
         self.focused_terminal = new_id;
-        new_id
     }
 
     /// Close the focused pane. Returns the terminal ID that was closed (if any).

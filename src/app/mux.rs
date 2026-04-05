@@ -85,8 +85,7 @@ impl Mux {
     ) -> Result<()> {
         let tab_id = self.tabs.new_tab("zsh");
         let terminal_id = self.open_terminal(config, cols, rows, cell_w, cell_h, wakeup_proxy)?;
-        let pane_mgr = PaneManager::new(viewport);
-        self.panes.push(pane_mgr);
+        self.panes.push(PaneManager::new(viewport, terminal_id));
         log::info!("Opened initial tab {tab_id}, terminal {terminal_id}");
         Ok(())
     }
@@ -167,9 +166,12 @@ impl Mux {
     }
 
     pub fn cmd_new_tab(&mut self, config: &Config, viewport: Rect, cols: u16, rows: u16, cell_w: u16, cell_h: u16, wakeup_proxy: EventLoopProxy<()>) {
-        let _tab_id = self.tabs.new_tab("zsh");
-        if self.open_terminal(config, cols, rows, cell_w, cell_h, wakeup_proxy).is_ok() {
-            self.panes.push(PaneManager::new(viewport));
+        match self.open_terminal(config, cols, rows, cell_w, cell_h, wakeup_proxy) {
+            Ok(terminal_id) => {
+                self.tabs.new_tab("zsh");
+                self.panes.push(PaneManager::new(viewport, terminal_id));
+            }
+            Err(e) => log::error!("Failed to open terminal for new tab: {e}"),
         }
     }
 
@@ -181,9 +183,11 @@ impl Mux {
 
     pub fn cmd_split(&mut self, config: &Config, dir: crate::ui::SplitDir, cols: u16, rows: u16, cell_w: u16, cell_h: u16, wakeup_proxy: EventLoopProxy<()>) {
         let active = self.tabs.active_index();
+        let new_id = self.next_terminal_id;
         if let Some(pane_mgr) = self.panes.get_mut(active) {
-            let new_id = pane_mgr.split(dir);
+            pane_mgr.split(dir, new_id);
             if let Ok(terminal) = Terminal::new(config, cols, rows, cell_w, cell_h, wakeup_proxy) {
+                self.next_terminal_id += 1;
                 if self.terminals.len() <= new_id { self.terminals.resize_with(new_id + 1, || None); }
                 self.terminals[new_id] = Some(terminal);
             }
