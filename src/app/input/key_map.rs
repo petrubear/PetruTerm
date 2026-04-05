@@ -92,8 +92,20 @@ pub fn translate_key(
             NamedKey::F11 => Some(format_tilde(23, mod_code)),
             NamedKey::F12 => Some(format_tilde(24, mod_code)),
 
-            NamedKey::Tab => Some(b"\t".to_vec()),
-            NamedKey::Enter => Some(b"\r".to_vec()),
+            NamedKey::Tab => {
+                if shift {
+                    Some(b"\x1b[Z".to_vec())  // Shift+Tab → reverse-tab (CSI Z)
+                } else {
+                    Some(b"\t".to_vec())
+                }
+            }
+            NamedKey::Enter => {
+                if shift {
+                    Some(b"\x1b[13;2u".to_vec())  // Shift+Enter → xterm modified key sequence
+                } else {
+                    Some(b"\r".to_vec())
+                }
+            }
             NamedKey::Escape => Some(b"\x1b".to_vec()),
             NamedKey::Backspace => Some(b"\x7f".to_vec()),
             NamedKey::Space => Some(b" ".to_vec()),

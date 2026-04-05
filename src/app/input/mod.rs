@@ -221,7 +221,9 @@ impl InputHandler {
                     else if !ui.panel().is_streaming() { ui.panel_mut().close(); ui.panel_focused = false; }
                 }
                 Key::Named(NamedKey::Enter) => {
-                    if ui.panel().is_idle() {
+                    if shift {
+                        ui.panel_mut().type_char('\n');
+                    } else if ui.panel().is_idle() {
                         if ui.panel().input.trim().is_empty() { ui.chat_panel_run_command(mux); }
                         else { ui.submit_ai_query(wakeup_proxy); }
                     }

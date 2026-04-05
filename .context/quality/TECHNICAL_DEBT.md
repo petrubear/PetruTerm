@@ -45,6 +45,8 @@ _None_
 
 _Clean — no open items as of 2026-04-05._
 
+> **TD-015** (resolved 2026-04-05): `Shift+Enter` now sends `\x1b[13;2u` to PTY (xterm modified key sequence) instead of `\r`. Chat panel handles `Shift+Enter` as `\n` insertion. `Shift+Tab` also fixed to send `\x1b[Z` (reverse-tab). Files: `src/app/input/key_map.rs`, `src/app/input/mod.rs`.
+>
 > **TD-013** (resolved 2026-04-05): `RoundedRectPipeline` + SDF WGSL shader added in `src/renderer/rounded_rect.rs`. Tab pills now rendered as GPU rounded rects before the cell pass; `fs_bg` discards transparent-bg cells so text composites cleanly on top.
 >
 > **TD-014** (resolved 2026-04-05): Tab bar background now inherits the window clear color (= `config.colors.background`), removing the hardcoded dark constant.
