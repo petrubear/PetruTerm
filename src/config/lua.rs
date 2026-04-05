@@ -54,8 +54,39 @@ pub fn load_config_str(src: &str, name: &str, preloaded: &[(&str, &str)]) -> Res
 fn inject_petruterm_global(lua: &Lua) -> LuaResult<()> {
     let petruterm = lua.create_table()?;
 
-    // petruterm.font("Family Name") → returns a font descriptor string
-    let font_fn = lua.create_function(|_, family: String| Ok(family))?;
+    // petruterm.font("Family1, Family2, ...") → resolves and returns the first available family.
+    // Falls back to the first monospace font found on the system if none match.
+    let font_fn = lua.create_function(|_, families_str: String| {
+        use crate::font::locator::FontLocator;
+        use font_kit::source::SystemSource;
+
+        let locator = FontLocator::new();
+
+        for family in families_str.split(',').map(|s| s.trim()) {
+            if !family.is_empty() && locator.locate_font(family).is_some() {
+                log::info!("petruterm.font: resolved '{family}'");
+                return Ok(family.to_string());
+            }
+        }
+
+        // None found — try to pick the first monospace family from the system.
+        log::warn!("petruterm.font: none of [{}] found on system, scanning for monospace fallback", families_str);
+        let source = SystemSource::new();
+        if let Ok(families) = source.all_families() {
+            if let Some(fb) = families.into_iter().find(|name| {
+                let n = name.to_lowercase();
+                n.contains("mono") || n.contains("code") || n.contains("courier") || n.contains("consol")
+            }) {
+                log::warn!("petruterm.font: using system fallback '{fb}'");
+                return Ok(fb);
+            }
+        }
+
+        // Absolute last resort: return the first entry and let build_font_system error clearly.
+        let first = families_str.split(',').next().map(|s| s.trim().to_string()).unwrap_or_default();
+        log::warn!("petruterm.font: no monospace font found, using '{first}' (may fail at startup)");
+        Ok(first)
+    })?;
     petruterm.set("font", font_fn)?;
 
     // petruterm.action — table of action name strings.

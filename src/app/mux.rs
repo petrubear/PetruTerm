@@ -90,17 +90,20 @@ impl Mux {
         Ok(())
     }
 
-    pub fn poll_pty_events(&mut self) -> (bool, bool) {
+    /// Poll PTY events for all terminals.
+    /// Returns `(has_data, exited_terminal_ids)`.
+    pub fn poll_pty_events(&mut self) -> (bool, Vec<usize>) {
         let mut has_data = false;
-        let mut shell_exited = false;
-        for terminal in self.terminals.iter_mut().flatten() {
+        let mut exited: Vec<usize> = Vec::new();
+        for (id, terminal_slot) in self.terminals.iter_mut().enumerate() {
+            let Some(terminal) = terminal_slot else { continue };
             loop {
                 use crossbeam_channel::TryRecvError;
                 match terminal.pty.rx.try_recv() {
                     Ok(event) => match event {
                         PtyEvent::DataReady => { has_data = true; }
                         PtyEvent::TitleChanged(t) => { log::debug!("PTY title: {t}"); }
-                        PtyEvent::Exit => { log::info!("PTY shell exited."); shell_exited = true; }
+                        PtyEvent::Exit => { log::info!("PTY shell exited (terminal {id})."); exited.push(id); }
                         PtyEvent::Bell => {}
                         PtyEvent::ClipboardStore(text) => { if let Ok(mut cb) = arboard::Clipboard::new() { let _ = cb.set_text(text); } }
                         PtyEvent::ClipboardLoad(fmt) => {
@@ -114,7 +117,20 @@ impl Mux {
                 }
             }
         }
-        (has_data, shell_exited)
+        (has_data, exited)
+    }
+
+    /// Close the tab that owns `terminal_id`. Returns `true` if no tabs remain.
+    pub fn close_terminal(&mut self, terminal_id: usize) -> bool {
+        if let Some(tab_idx) = self.panes.iter().position(|p| p.focused_terminal == terminal_id) {
+            let tab_id = self.tabs.tabs().get(tab_idx).map(|t| t.id);
+            if let Some(tab_id) = tab_id {
+                self.tabs.close_tab(tab_id);
+            }
+            self.panes.remove(tab_idx);
+            if let Some(slot) = self.terminals.get_mut(terminal_id) { *slot = None; }
+        }
+        self.tabs.is_empty()
     }
 
     pub fn collect_grid_cells(&self) -> Vec<(String, Vec<(AnsiColor, AnsiColor)>)> {

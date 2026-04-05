@@ -128,6 +128,33 @@ impl App {
         self.ui.panel_mut().dirty = true;
     }
 
+    /// Close any terminals that exited. Returns true if the last tab closed (caller should exit).
+    fn close_exited_terminals(&mut self, exited: Vec<usize>) -> bool {
+        if exited.is_empty() { return false; }
+        for tid in exited {
+            if self.mux.close_terminal(tid) { return true; }
+        }
+        self.apply_tab_bar_padding();
+        self.resize_terminals_for_panel();
+        false
+    }
+
+    /// Given a pixel x coordinate, return which tab index is under the cursor in the tab bar.
+    fn hit_test_tab_bar(&self, x_px: f64) -> Option<usize> {
+        let (cell_w, _) = self.cell_dims();
+        let pad_left = self.config.window.padding.left as f64;
+        let click_col = ((x_px - pad_left) / cell_w as f64).floor() as usize;
+        let mut col = 0usize;
+        for (i, tab) in self.mux.tabs.tabs().iter().enumerate() {
+            col += 1; // gap
+            col += format!(" {} ", i + 1).chars().count(); // badge
+            let raw = format!(" {} ", tab.title);
+            col += raw.chars().take(14).count(); // title (capped at 14)
+            if click_col < col { return Some(i); }
+        }
+        None
+    }
+
     fn check_config_reload(&mut self) {
         if let Some(watcher) = &self.config_watcher {
             if watcher.poll().is_some() {
@@ -172,8 +199,8 @@ impl App {
 
 impl ApplicationHandler<()> for App {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, _event: ()) {
-        let (has_data, shell_exited) = self.mux.poll_pty_events();
-        if shell_exited { event_loop.exit(); return; }
+        let (has_data, exited) = self.mux.poll_pty_events();
+        if self.close_exited_terminals(exited) { event_loop.exit(); return; }
         let needs_redraw = has_data
             || self.ui.poll_ai_events()
             || self.ui.poll_ai_block_events();
@@ -215,8 +242,8 @@ impl ApplicationHandler<()> for App {
             WindowEvent::CloseRequested => { event_loop.exit(); }
             WindowEvent::RedrawRequested => {
                 self.check_config_reload();
-                let (_, shell_exited) = self.mux.poll_pty_events();
-                if shell_exited { event_loop.exit(); return; }
+                let (_, exited) = self.mux.poll_pty_events();
+                if self.close_exited_terminals(exited) { event_loop.exit(); return; }
                 self.ui.poll_ai_events();
                 self.ui.poll_ai_block_events();
 
@@ -368,6 +395,15 @@ impl ApplicationHandler<()> for App {
                             if let Some(w) = &self.window { let _ = w.drag_window(); }
                             return;
                         }
+                        // Tab bar click — switch tab without passing event to terminal.
+                        let tab_h = self.tab_bar_height_px() as f64;
+                        if tab_h > 0.0 && self.input.mouse_pos.1 < self.config.window.padding.top as f64 + tab_h {
+                            if let Some(idx) = self.hit_test_tab_bar(self.input.mouse_pos.0) {
+                                self.mux.tabs.switch_to_index(idx);
+                            }
+                            if let Some(w) = &self.window { w.request_redraw(); }
+                            return;
+                        }
                         if in_panel {
                             self.ui.panel_focused = true;
                         } else {
@@ -428,8 +464,8 @@ impl ApplicationHandler<()> for App {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        let (_, shell_exited) = self.mux.poll_pty_events();
-        if shell_exited { event_loop.exit(); return; }
+        let (_, exited) = self.mux.poll_pty_events();
+        if self.close_exited_terminals(exited) { event_loop.exit(); return; }
         if self.ui.poll_ai_events()       { if let Some(w) = &self.window { w.request_redraw(); } }
         if self.ui.poll_ai_block_events() { if let Some(w) = &self.window { w.request_redraw(); } }
         if self.input.update_cursor_blink() {
