@@ -1,23 +1,31 @@
 # Active Context
 
 **Current Focus:** Phase 3 — Polish & UI Chrome
-**Last Active:** 2026-04-04
+**Last Active:** 2026-04-05
 **Priority:** P2 (Status Bar)
 
 ## Current State
 
-**Phase 1 COMPLETE. Phase 2 COMPLETE. Phase 3 P1 COMPLETE (2026-04-04).**
+**Phase 1 COMPLETE. Phase 2 COMPLETE. Phase 3 P1 COMPLETE. All TD items resolved. (2026-04-05)**
 
-### Phase 3 P1 Verified ✓ (2026-04-04)
+### Phase 3 P1 Verified ✓ (2026-04-05)
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Tab bar | ✅ | Rectangular pill: badge + title segments; active=purple, inactive=gray |
-| Scroll bar | ✅ | 6px right-edge overlay, proportional thumb, `build_scroll_bar_instances` |
-| Tab bar rounded pills | ⏳ | TD-013 — needs GPU rounded-rect render pass |
-| Tab bar bg transparency | ⏳ | TD-014 — BAR_BG should inherit `config.colors.background` |
+| Tab bar | ✅ | Rounded pill tabs via `RoundedRectPipeline` + SDF WGSL shader |
+| Scroll bar | ✅ | 6px right-edge overlay, proportional thumb |
+| Tab bar rounded pills | ✅ | TD-013 resolved — `src/renderer/rounded_rect.rs` |
+| Tab bar bg transparency | ✅ | TD-014 resolved — inherits `config.colors.background` (clear color) |
+| Title bar drag | ✅ | `setMovableByWindowBackground:YES` |
+| Double/triple-click selection | ✅ | `Semantic`/`Lines` via `InputHandler::register_click()` |
+| Tab bar mouse click | ✅ | `hit_test_tab_bar()` in `app/mod.rs` |
+| Shell exit closes tab | ✅ | `close_terminal()` in `app/mux.rs` |
+| Font fallback chain | ✅ | `petruterm.font("A, B, C")` resolved at config load time |
 
-### Keybinds (tmux-aligned, both embedded + user config updated)
+### Technical Debt
+Clean — 0 open items.
+
+### Keybinds (tmux-aligned)
 
 | Key | Action |
 |-----|--------|
@@ -32,15 +40,6 @@
 | `leader+p` | Command palette |
 | `Ctrl+Space` | Inline AI block |
 
-### Phase 1 Polish Backlog (non-blocking)
-
-| Item | Gap | File |
-|------|-----|------|
-| Title bar drag | `setMovableByWindowBackground:NO` | `app/mod.rs:143` |
-| Scroll bar render | Config field exists, no GPU draw code | `config/schema.rs:11` |
-| Double/triple-click selection | `SelectionType::Word/Line` not wired | `app/mod.rs:290` |
-| OSC 52 clipboard read | `ClipboardLoad` not wired | `app/mux.rs:107` |
-
 ## Phase 3 Next Steps (ordered by priority)
 
 1. **Status bar engine (P2)** — enable/disable from Lua + command palette
@@ -51,10 +50,9 @@
 6. **Starship compatibility** — detect `STARSHIP_SHELL`, defer left prompt
 
 ## Files to Reference
+- `src/renderer/rounded_rect.rs` — `RoundedRectInstance`, `RoundedRectPipeline`, SDF shader
 - `src/app/renderer.rs` — `build_tab_bar_instances`, `build_scroll_bar_instances`
-- `src/app/mod.rs` — `tab_bar_visible()`, `tab_bar_height_px()`, `apply_tab_bar_padding()`
+- `src/app/mod.rs` — `tab_bar_visible()`, `tab_bar_height_px()`, `hit_test_tab_bar()`
 - `src/app/ui.rs` — `handle_palette_action`, AI feature handlers
-- `src/app/input/mod.rs` — leader dispatch, system keybinds
+- `src/app/input/mod.rs` — leader dispatch, `register_click()` for multi-click selection
 - `config/default/keybinds.lua` — embedded keybind defaults
-- `~/.config/petruterm/keybinds.lua` — user keybind overrides
-- `.context/quality/TECHNICAL_DEBT.md` — TD-013, TD-014 (tab bar polish)

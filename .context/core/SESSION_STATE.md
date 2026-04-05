@@ -1,7 +1,7 @@
 # Session State
 
 **Last Updated:** 2026-04-05
-**Session Focus:** Phase 1 polish complete; Phase 3 P2 (status bar) is next
+**Session Focus:** TD-013/014 resolved (rounded pill tabs); Phase 3 P2 (status bar) is next
 
 ## Branch: `master`
 
