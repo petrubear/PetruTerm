@@ -1,28 +1,36 @@
 # Active Context
 
-**Current Focus:** Phase 3 — Ecosystem
+**Current Focus:** Phase 3 — Polish & UI Chrome
 **Last Active:** 2026-04-04
-**Priority:** P1
+**Priority:** P2 (Status Bar)
 
 ## Current State
 
-**Phase 1 COMPLETE. Phase 2 COMPLETE (2026-04-04).** Phase 3 not started.
+**Phase 1 COMPLETE. Phase 2 COMPLETE. Phase 3 P1 COMPLETE (2026-04-04).**
 
-### Phase 2 Verified ✓ (2026-04-04)
-All Phase 2 deliverables met. Commit b815320 completed the final three items.
+### Phase 3 P1 Verified ✓ (2026-04-04)
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| LLM providers (OpenRouter / Ollama / LMStudio) | ✅ | |
-| `llm.lua` config + `config.llm.enabled` toggle | ✅ | |
-| Command palette AI toggle | ✅ | |
-| Shell context injection (CWD / exit code / last command) | ✅ | `llm/shell_context.rs` |
-| NL→Shell (Feature 1): streaming query + Run bar | ✅ | Enter executes command |
-| Explain last output (`<leader>e`) | ✅ | wired in `app/ui.rs` |
-| Fix last error (`<leader>f`) | ✅ | wired in `app/ui.rs` |
-| Per-pane chat history | ✅ | `HashMap<usize, ChatPanel>` in `UiManager` |
-| `Ctrl+Space` inline AI block | ✅ | 4-row overlay, state machine |
-| Inline AI block rendering | ✅ | `build_ai_block_instances` in `renderer.rs` |
+| Tab bar | ✅ | Rectangular pill: badge + title segments; active=purple, inactive=gray |
+| Scroll bar | ✅ | 6px right-edge overlay, proportional thumb, `build_scroll_bar_instances` |
+| Tab bar rounded pills | ⏳ | TD-013 — needs GPU rounded-rect render pass |
+| Tab bar bg transparency | ⏳ | TD-014 — BAR_BG should inherit `config.colors.background` |
+
+### Keybinds (tmux-aligned, both embedded + user config updated)
+
+| Key | Action |
+|-----|--------|
+| `leader+c` | New tab |
+| `leader+&` | Close tab |
+| `leader+n` | Next tab |
+| `leader+p` | Prev tab |
+| `leader+%` | Split horizontal |
+| `leader+"` | Split vertical |
+| `leader+x` | Close pane |
+| `leader+a` | AI panel |
+| `leader+p` | Command palette |
+| `Ctrl+Space` | Inline AI block |
 
 ### Phase 1 Polish Backlog (non-blocking)
 
@@ -35,18 +43,18 @@ All Phase 2 deliverables met. Commit b815320 completed the final three items.
 
 ## Phase 3 Next Steps (ordered by priority)
 
-1. **Plugin loader** — auto-scan `~/.config/petruterm/plugins/*.lua`
-2. **Plugin Lua API** — `petruterm.palette.register()`, `petruterm.on()`, `petruterm.notify()`
-3. **Plugin event system** — `tab_created`, `tab_closed`, `pane_split`, `ai_response`, `command_run`
-4. **Status bar engine** — enable/disable from Lua + palette; built-in widgets: `mode`, `cwd`, `git_branch`, `time`, `exit_code`
-5. **Snippets** — `config.snippets` Lua table, expand via palette, optional `trigger` field
+1. **Status bar engine (P2)** — enable/disable from Lua + command palette
+2. **Built-in status bar widgets** — `mode`, `cwd`, `git_branch`, `time`, `exit_code`
+3. **Status bar widget Lua API** — `petruterm.statusbar.register_widget({ name, render })`
+4. **Status bar position** — `top` or `bottom` (Lua config)
+5. **Snippets (P3)** — `config.snippets` table, expand via palette, optional `trigger`
 6. **Starship compatibility** — detect `STARSHIP_SHELL`, defer left prompt
 
 ## Files to Reference
-- `src/plugins/` — plugin loader + Lua API (scaffolded)
-- `src/snippets/` — snippet manager (scaffolded)
+- `src/app/renderer.rs` — `build_tab_bar_instances`, `build_scroll_bar_instances`
+- `src/app/mod.rs` — `tab_bar_visible()`, `tab_bar_height_px()`, `apply_tab_bar_padding()`
 - `src/app/ui.rs` — `handle_palette_action`, AI feature handlers
-- `src/app/input/mod.rs` — system keybinds, leader dispatch
-- `src/llm/ai_block.rs` — inline AI block state machine + rendering data
-- `src/llm/chat_panel.rs` — chat history, `last_assistant_command()`
-- `config/default/keybinds.lua` — single source of truth for custom keybinds
+- `src/app/input/mod.rs` — leader dispatch, system keybinds
+- `config/default/keybinds.lua` — embedded keybind defaults
+- `~/.config/petruterm/keybinds.lua` — user keybind overrides
+- `.context/quality/TECHNICAL_DEBT.md` — TD-013, TD-014 (tab bar polish)
