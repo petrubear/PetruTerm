@@ -31,7 +31,7 @@ All three spikes produce working proof-of-concept code. A single window opens, s
 - [x] Glyph atlas on GPU (rasterize once, cache as texture) — `GlyphAtlas` with shelf packing + `TexelCopyTextureInfo` upload
 - [x] Lua config DSL: `petruterm` global, `apply_to_config` module pattern — `src/config/lua.rs` fully implemented
 - [x] Config hot-reload via `notify` watcher — `ConfigWatcher` implemented, polled in `about_to_wait()`
-- [~] Custom title bar with `borderless` option — style mask + transparency done (`app/mod.rs:128–147`); **missing:** `setMovableByWindowBackground:YES` for window dragging
+- [x] Custom title bar with `borderless` option — style mask + transparency done, `setMovableByWindowBackground:YES` wired (`app/mod.rs`)
 - [x] Window config: `initial_width`, `initial_height`, `start_maximized` — all in `WindowConfig` schema + applied in `resumed()`
 - [x] Tab bar: create, close, switch (Cmd+1–9) — `TabManager` implemented, keybinds wired, renders in UI
 - [x] Split panes: horizontal (Leader+%), vertical (Leader+"), binary tree layout — `PaneManager` + binary tree implemented
@@ -44,8 +44,8 @@ All three spikes produce working proof-of-concept code. A single window opens, s
 - [x] Default config files shipped in `config/default/` and embedded in binary — `include_str!` in `config/mod.rs`
 - [x] `.app` bundle script in `scripts/bundle.sh` — complete: builds binary, creates .app structure, writes Info.plist, signs ad-hoc
 - [x] Mouse handling: click-to-focus, click-to-place cursor, drag selection, scroll wheel, SGR + X10 mouse reporting — `app/mod.rs:266–325`, `app/input/mod.rs:80–93`
-- [~] Clipboard: Cmd+C copy, Cmd+V paste, OSC 52 — Cmd+C/V fully working (`app/input/mod.rs:167–187`); **missing:** OSC 52 read path (store works, load not fully wired in `mux.rs`)
-- [~] Text selection: click-drag, double-click word select, triple-click line select — drag selection works; **missing:** double-click (`SelectionType::Word`) and triple-click (`SelectionType::Line`) not implemented
+- [x] Clipboard: Cmd+C copy, Cmd+V paste, OSC 52 read/write — all complete (`app/input/mod.rs`, `app/mux.rs` ClipboardLoad/ClipboardStore handlers)
+- [x] Text selection: click-drag, double-click word select (Semantic), triple-click line select (Lines) — all wired via `InputHandler::register_click()` in `app/mod.rs`
 - [x] Cursor rendering: block/underline/beam shapes, blinking, cursor colors from theme — `app/renderer.rs:237–248`, 530ms blink, `cursor_bg`/`cursor_fg` from config
 - [x] Resize handling: window resize → pane layout recalc → `Term::resize()` → content reflow — wired in `WindowEvent::Resized`
 - [x] Run extractor: grid cell → text run grouping for `cosmic-text` ligature shaping — `font/shaper.rs:350–440` `shape_line()` fully integrated

@@ -1,7 +1,7 @@
 # Session State
 
-**Last Updated:** 2026-04-04
-**Session Focus:** Phase 3 P1 complete — tab bar polish + keybind alignment
+**Last Updated:** 2026-04-05
+**Session Focus:** Phase 1 polish complete; Phase 3 P2 (status bar) is next
 
 ## Branch: `master`
 
@@ -60,11 +60,10 @@ See archived notes: per-pane chat history, Ctrl+Space inline AI block, AI block 
 ### AI Panel Performance
 - `ChatPanel.dirty` flag + `RenderContext.panel_instances_cache` gates HarfBuzz reshape
 
-## Phase 1 Polish Backlog (non-blocking)
+## Phase 1 Polish — COMPLETE (2026-04-05)
 
-| Item | Gap | File |
-|------|-----|------|
-| Title bar window dragging | `setMovableByWindowBackground:NO` | `app/mod.rs:143` |
-| Scroll bar render | Config field exists, no GPU draw code | `config/schema.rs:11` |
-| Double/triple-click selection | `SelectionType::Word/Line` not wired | `app/mod.rs:290` |
-| OSC 52 clipboard read | `ClipboardLoad` not wired | `app/mux.rs:107` |
+All polish items resolved:
+- Title bar drag: `setMovableByWindowBackground:YES` (commit e9b5af9)
+- Double/triple-click: `Semantic`/`Lines` via `InputHandler::register_click()` (commit e9b5af9)
+- OSC 52 read: was already wired (context note was stale)
+- Scroll bar: was already wired in Phase 3 P1 (context note was stale)
