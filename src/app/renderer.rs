@@ -621,8 +621,11 @@ impl RenderContext {
 
 impl RenderContext {
     /// Render the tab bar at grid row -1 (one cell row above the terminal).
-    /// Requires `set_padding` to have shifted padding.y up by one cell_height
-    /// so that row -1 maps to the correct on-screen pixel position.
+    /// Requires `set_padding` to have shifted padding.y up by one cell_height.
+    ///
+    /// Each tab is a rounded-rectangle pill built from Nerd Font powerline glyphs:
+    ///   [gap] [E0B4 fg=badge bg=bar] [" N " badge_bg] [E0B4 fg=tab bg=badge]
+    ///          [" title " tab_bg] [E0B6 fg=tab bg=bar]
     pub fn build_tab_bar_instances(
         &mut self,
         tabs: &[Tab],
@@ -632,40 +635,66 @@ impl RenderContext {
     ) {
         if tabs.is_empty() || total_cols == 0 { return; }
 
-        const BAR_BG:     [f32; 4] = [0.16, 0.15, 0.22, 1.0]; // dark bar bg
-        const ACTIVE_BG:  [f32; 4] = [0.27, 0.28, 0.35, 1.0]; // current-line
-        const ACTIVE_FG:  [f32; 4] = [0.97, 0.97, 0.95, 1.0]; // bright fg
-        const INACTIVE_FG:[f32; 4] = [0.38, 0.45, 0.64, 1.0]; // comment gray
-        const SEP_FG:     [f32; 4] = [0.30, 0.29, 0.40, 1.0]; // dim separator
+        // Dracula Pro palette
+        const BAR_BG:            [f32; 4] = [0.10, 0.10, 0.15, 1.0]; // very dark bar
+        const ACTIVE_TAB_BG:     [f32; 4] = [0.74, 0.58, 0.98, 1.0]; // Dracula purple #bd93f9
+        const ACTIVE_BADGE_BG:   [f32; 4] = [0.51, 0.36, 0.71, 1.0]; // darker purple badge
+        const ACTIVE_FG:         [f32; 4] = [0.97, 0.97, 0.95, 1.0]; // near-white
+        const INACTIVE_TAB_BG:   [f32; 4] = [0.27, 0.28, 0.35, 1.0]; // Dracula current-line
+        const INACTIVE_BADGE_BG: [f32; 4] = [0.16, 0.16, 0.22, 1.0]; // darker gray badge
+        const INACTIVE_FG:       [f32; 4] = [0.61, 0.64, 0.75, 1.0]; // comment gray
 
-        const MAX_TAB_WIDTH: usize = 22;
+        // Nerd Font powerline rounded separators (single-width glyphs)
+        // U+E0B4: right-pointing rounded cap (bg=outer, fg=inner fills right)
+        // U+E0B6: left-pointing rounded cap  (fg=inner fills left, bg=outer)
+        const RCAP: &str = "\u{E0B4}";
+        const LCAP: &str = "\u{E0B6}";
+
+        // Helper: push text at `col` on tab-bar row then patch all new instances to y=-1.
+        macro_rules! push {
+            ($text:expr, $fg:expr, $bg:expr, $col:expr, $w:expr) => {{
+                if $col >= total_cols { break; }
+                let w = ($w).min(total_cols - $col);
+                if w == 0 { break; }
+                let start = self.instances.len();
+                self.push_shaped_row($text, $fg, $bg, 0, $col, w, font);
+                for inst in &mut self.instances[start..] { inst.grid_pos[1] = -1.0; }
+                w
+            }};
+        }
 
         let mut col = 0usize;
+
         for (i, tab) in tabs.iter().enumerate() {
             if col >= total_cols { break; }
+
             let is_active = i == active_idx;
-            let bg = if is_active { ACTIVE_BG } else { BAR_BG };
-            let fg = if is_active { ACTIVE_FG } else { INACTIVE_FG };
+            let tab_bg    = if is_active { ACTIVE_TAB_BG }   else { INACTIVE_TAB_BG };
+            let badge_bg  = if is_active { ACTIVE_BADGE_BG } else { INACTIVE_BADGE_BG };
+            let fg        = if is_active { ACTIVE_FG }        else { INACTIVE_FG };
 
-            // Label: " N: title " capped to MAX_TAB_WIDTH
-            let raw = format!(" {}: {} ", i + 1, tab.title);
-            let label: String = raw.chars().take(MAX_TAB_WIDTH).collect();
-            let width = label.chars().count().min(total_cols - col);
+            // 1-cell dark gap before the pill
+            col += push!(" ", [0.0; 4], BAR_BG, col, 1);
 
-            // Separator " │ " before non-first tabs
-            if i > 0 && col < total_cols {
-                let sep_w = 1usize.min(total_cols - col);
-                let start = self.instances.len();
-                self.push_shaped_row("│", SEP_FG, BAR_BG, 0, col, sep_w, font);
-                for inst in &mut self.instances[start..] { inst.grid_pos[1] = -1.0; }
-                col += sep_w;
-                if col >= total_cols { break; }
-            }
+            // Left rounded cap: bar → badge (E0B4 fg=badge_bg, bg=bar)
+            col += push!(RCAP, badge_bg, BAR_BG, col, 1);
 
-            let start = self.instances.len();
-            self.push_shaped_row(&label, fg, bg, 0, col, width, font);
-            for inst in &mut self.instances[start..] { inst.grid_pos[1] = -1.0; }
-            col += width;
+            // Number badge: " N "
+            let badge = format!(" {} ", i + 1);
+            let bw = badge.chars().count();
+            col += push!(&badge, fg, badge_bg, col, bw);
+
+            // Inner cap: badge → tab body (E0B4 fg=tab_bg, bg=badge_bg)
+            col += push!(RCAP, tab_bg, badge_bg, col, 1);
+
+            // Tab title: " name "
+            let raw = format!(" {} ", tab.title);
+            let title: String = raw.chars().take(14).collect();
+            let tw = title.chars().count();
+            col += push!(&title, fg, tab_bg, col, tw);
+
+            // Right rounded cap: tab → bar (E0B6 fg=tab_bg, bg=bar)
+            col += push!(LCAP, tab_bg, BAR_BG, col, 1);
         }
 
         // Fill remainder with bar background

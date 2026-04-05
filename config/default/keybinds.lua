@@ -25,11 +25,11 @@ function module.apply_to_config(config)
     { mods = "LEADER", key = "e",  action = petruterm.action.ExplainLastOutput },
     { mods = "LEADER", key = "f",  action = petruterm.action.FixLastError },
 
-    -- ── Tabs ───────────────────────────────────────────────────────────────
-    { mods = "LEADER", key = "t",  action = petruterm.action.NewTab },
-    { mods = "LEADER", key = "w",  action = petruterm.action.CloseTab },
+    -- ── Tabs (tmux-style) ─────────────────────────────────────────────────
+    { mods = "LEADER", key = "c",  action = petruterm.action.NewTab },
+    { mods = "LEADER", key = "&",  action = petruterm.action.CloseTab },
     { mods = "LEADER", key = "n",  action = petruterm.action.NextTab },
-    { mods = "LEADER", key = "b",  action = petruterm.action.PrevTab },
+    { mods = "LEADER", key = "p",  action = petruterm.action.PrevTab },
 
     -- ── Pane splits (tmux-style) ───────────────────────────────────────────
     { mods = "LEADER", key = "%",  action = petruterm.action.SplitHorizontal },
