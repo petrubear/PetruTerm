@@ -95,6 +95,8 @@ pub struct Pty {
     pub rx: crossbeam_channel::Receiver<PtyEvent>,
     /// Handle to the PTY reader thread for clean shutdown.
     thread_handle: Option<Box<dyn PtyJoinHandle>>,
+    /// PID of the shell child process (captured before the EventLoop takes ownership).
+    pub child_pid: u32,
 }
 
 impl Pty {
@@ -136,6 +138,9 @@ impl Pty {
         let pty = tty::new(&pty_options, window_size, 0)
             .context("Failed to spawn PTY")?;
 
+        // Capture child PID before the pty is consumed by the EventLoop.
+        let child_pid = pty.child().id();
+
         let pty_event_loop = PtyEventLoop::new(
             Arc::clone(&term),
             proxy,
@@ -151,8 +156,8 @@ impl Pty {
 
         let thread_handle = pty_event_loop.spawn();
 
-        log::info!("PTY spawned: shell={}", config.shell);
-        Ok(Self { notifier, rx, thread_handle: Some(Box::new(thread_handle)) })
+        log::info!("PTY spawned: shell={} pid={}", config.shell, child_pid);
+        Ok(Self { notifier, rx, thread_handle: Some(Box::new(thread_handle)), child_pid })
     }
 
     /// Cleanly shut down the PTY thread.

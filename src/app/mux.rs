@@ -46,6 +46,13 @@ impl Mux {
         self.terminals.get_mut(tid)?.as_mut()
     }
 
+    /// Returns the current working directory of the active terminal's shell process.
+    /// Uses OS proc APIs (macOS: proc_pidinfo; Linux: /proc/pid/cwd).
+    pub fn active_cwd(&self) -> Option<std::path::PathBuf> {
+        let pid = self.active_terminal()?.child_pid;
+        crate::term::process_cwd(pid)
+    }
+
     pub fn active_terminal_size(&self) -> (usize, usize) {
         if let Some(t) = self.active_terminal() {
             return (t.cols as usize, t.rows as usize);

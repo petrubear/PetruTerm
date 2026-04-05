@@ -57,6 +57,8 @@ pub struct Terminal {
     /// Current terminal dimensions.
     pub cols: u16,
     pub rows: u16,
+    /// PID of the shell child process (for CWD resolution).
+    pub child_pid: u32,
 }
 
 impl Terminal {
@@ -101,8 +103,9 @@ impl Terminal {
 
         let term = Arc::new(FairMutex::new(Term::new(term_config, &size, proxy)));
         let pty = Pty::spawn(config, Arc::clone(&term), cols, rows, cell_width, cell_height, wakeup, direct_notifier)?;
+        let child_pid = pty.child_pid;
 
-        Ok(Self { term, pty, cols, rows })
+        Ok(Self { term, pty, cols, rows, child_pid })
     }
 
     /// Resize the terminal grid and PTY.
@@ -203,5 +206,40 @@ impl Terminal {
         F: FnOnce(&Term<PtyEventProxy>) -> R,
     {
         f(&self.term.lock())
+    }
+}
+
+// ── CWD resolution ────────────────────────────────────────────────────────────
+
+/// Returns the current working directory of a process by PID.
+/// On macOS uses `proc_pidinfo`; on Linux reads `/proc/{pid}/cwd`.
+pub fn process_cwd(pid: u32) -> Option<std::path::PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::mem;
+        let mut info: libc::proc_vnodepathinfo = unsafe { mem::zeroed() };
+        let size = mem::size_of::<libc::proc_vnodepathinfo>() as libc::c_int;
+        let ret = unsafe {
+            libc::proc_pidinfo(
+                pid as libc::pid_t,
+                libc::PROC_PIDVNODEPATHINFO,
+                0,
+                &mut info as *mut _ as *mut libc::c_void,
+                size,
+            )
+        };
+        if ret <= 0 { return None; }
+        // vip_path is [[c_char; 32]; 32] = 1024 bytes; flatten and find null.
+        let path_bytes: Vec<u8> = info.pvi_cdir.vip_path.iter()
+            .flat_map(|chunk| chunk.iter().map(|&c| c as u8))
+            .collect();
+        let end = path_bytes.iter().position(|&b| b == 0).unwrap_or(path_bytes.len());
+        let s = std::str::from_utf8(&path_bytes[..end]).ok()?;
+        if s.is_empty() { return None; }
+        Some(std::path::PathBuf::from(s))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        std::fs::read_link(format!("/proc/{}/cwd", pid)).ok()
     }
 }

@@ -136,19 +136,14 @@ impl UiManager {
 
     // ── Chat panel operations ─────────────────────────────────────────────────
 
-    /// Open the panel for `terminal_id`, auto-attaching `AGENTS.md` from CWD.
-    pub fn open_panel_with_context(&mut self, terminal_id: usize) {
+    /// Open the panel for `terminal_id`, auto-attaching `AGENTS.md` from `cwd`.
+    pub fn open_panel_with_context(&mut self, terminal_id: usize, cwd: std::path::PathBuf) {
         self.set_active_terminal(terminal_id);
         if !self.panel().is_visible() {
             self.panel_mut().open();
         }
         self.panel_focused = true;
         self.file_picker_focused = false;
-        // Auto-attach AGENTS.md from CWD (idempotent).
-        let cwd = ShellContext::load()
-            .and_then(|c| if c.cwd.is_empty() { None } else { Some(std::path::PathBuf::from(c.cwd)) })
-            .or_else(|| std::env::current_dir().ok())
-            .unwrap_or_default();
         self.panel_mut().init_default_files(&cwd);
     }
 
@@ -352,12 +347,14 @@ impl UiManager {
                         self.panel_focused = true;
                     }
                 } else {
-                    self.open_panel_with_context(terminal_id);
+                    let cwd = mux.active_cwd().or_else(|| std::env::current_dir().ok()).unwrap_or_default();
+                    self.open_panel_with_context(terminal_id, cwd);
                 }
             }
             Action::EnableAiFeatures => {
                 let terminal_id = mux.focused_terminal_id();
-                self.open_panel_with_context(terminal_id);
+                let cwd = mux.active_cwd().or_else(|| std::env::current_dir().ok()).unwrap_or_default();
+                self.open_panel_with_context(terminal_id, cwd);
             }
             Action::DisableAiFeatures => {
                 self.panel_mut().close();

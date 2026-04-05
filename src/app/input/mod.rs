@@ -223,8 +223,7 @@ impl InputHandler {
                         ui.file_picker_focused = false;
                     }
                     Key::Named(NamedKey::Enter) => {
-                        let cwd = crate::llm::shell_context::ShellContext::load()
-                            .and_then(|c| if c.cwd.is_empty() { None } else { Some(std::path::PathBuf::from(c.cwd)) })
+                        let cwd = mux.active_cwd()
                             .or_else(|| std::env::current_dir().ok())
                             .unwrap_or_default();
                         let filtered = ui.panel().filtered_picker_items();
@@ -253,14 +252,22 @@ impl InputHandler {
                     if shift {
                         ui.panel_mut().type_char('\n');
                     } else if ui.panel().is_idle() {
-                        if ui.panel().input.trim().is_empty() { ui.chat_panel_run_command(mux); }
-                        else { ui.submit_ai_query(wakeup_proxy); }
+                        let input = ui.panel().input.trim().to_string();
+                        match input.as_str() {
+                            "/q" | "/quit" => {
+                                ui.panel_mut().close();
+                                ui.panel_focused = false;
+                                ui.file_picker_focused = false;
+                                mux.cmd_close_tab();
+                            }
+                            "" => { ui.chat_panel_run_command(mux); }
+                            _ => { ui.submit_ai_query(wakeup_proxy); }
+                        }
                     }
                 }
                 Key::Named(NamedKey::Tab) => {
-                    // Open file picker overlay.
-                    let cwd = crate::llm::shell_context::ShellContext::load()
-                        .and_then(|c| if c.cwd.is_empty() { None } else { Some(std::path::PathBuf::from(c.cwd)) })
+                    // Open file picker — CWD from the active terminal's shell process.
+                    let cwd = mux.active_cwd()
                         .or_else(|| std::env::current_dir().ok())
                         .unwrap_or_default();
                     ui.panel_mut().open_file_picker(&cwd);
