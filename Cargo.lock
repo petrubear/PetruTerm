@@ -2453,6 +2453,7 @@ dependencies = [
  "freetype",
  "futures-util",
  "fuzzy-matcher",
+ "libc",
  "log",
  "mlua",
  "notify",

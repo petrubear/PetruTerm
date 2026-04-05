@@ -100,15 +100,17 @@ The chat panel and agent panel are **one unified panel** (`leader+a`). When the 
 
 ### Deliverables
 
-#### P1 — File Context Attachment
-- [ ] `ChatPanel` gains `attached_files: Vec<PathBuf>` — list of files injected into system context
-- [ ] Auto-load `AGENTS.md` from CWD on every panel open (if it exists)
-- [ ] File list section rendered at top of panel: `Selected (N files)` header + filenames
-- [ ] `Tab` key in panel toggles focus between file-picker and chat input
-- [ ] File picker: fuzzy-search files in CWD (reuse `fuzzy-matcher`), `Enter` to attach/detach
-- [ ] Attached file contents injected as `role: system` messages before user query
-- [ ] Token counter rendered in panel footer: `Tokens: NNNN`
-- [ ] Keybind: `<C-s>` submits (in addition to Enter); consistent with avante.nvim muscle memory
+#### P1 — File Context Attachment ✅ (2026-04-05)
+- [x] `ChatPanel` gains `attached_files: Vec<PathBuf>` — list of files injected into system context
+- [x] Auto-load `AGENTS.md` from CWD on every panel open (if it exists)
+- [x] File list section rendered at top of panel: `Selected (N files)` header + filenames
+- [x] `Tab` key in panel toggles focus between file-picker and chat input
+- [x] File picker: fuzzy-search files in CWD (reuse `fuzzy-matcher`), `Enter` to attach/detach
+- [x] Attached file contents injected as `role: system` messages before user query
+- [x] Token counter rendered in panel footer: `Tokens: NNNN`
+- [x] Keybind: `<C-s>` submits (in addition to Enter)
+- [x] CWD from real terminal process PID via `proc_pidinfo` (macOS) — no shell integration needed
+- [x] `/q` / `/quit` in panel input closes panel + current tab
 
 #### P2 — LLM Tool Use: Read & Explore
 - [ ] `AgentTool` enum: `ReadFile { path }`, `ListDir { path }` (OpenAI function-calling format)

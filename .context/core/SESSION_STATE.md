@@ -1,7 +1,7 @@
 # Session State
 
 **Last Updated:** 2026-04-05
-**Session Focus:** TD-013/014 resolved (rounded pill tabs); Phase 3 P2 (status bar) is next
+**Session Focus:** Phase 2.5 P1 complete (AI Agent Mode — file context attachment)
 
 ## Branch: `master`
 
@@ -34,8 +34,33 @@
 
 See archived notes: per-pane chat history, Ctrl+Space inline AI block, AI block rendering, performance fixes, leader key ordering.
 
+## Session Notes (2026-04-05)
+
+### TD-015 — Shift+Enter (resolved)
+- `key_map.rs`: `Shift+Enter` → `\x1b[13;2u` (xterm modified); `Shift+Tab` → `\x1b[Z`
+- `input/mod.rs`: chat panel `Shift+Enter` inserts `\n` without submitting
+
+### Phase 2.5 P1 — AI Agent Mode: File Context Attachment (complete)
+- `ChatPanel.attached_files: Vec<PathBuf>` + `attached_file_chars` for token estimation
+- `AGENTS.md` auto-loaded from terminal's real CWD on every panel open (idempotent)
+- `Tab` opens file picker overlay; fuzzy search via `fuzzy-matcher`; `Enter` attaches/detaches; `Tab`/`Esc` closes
+- File list section rendered at top of panel: `Selected (N files)` header + names
+- Attached file contents injected as `--- File: path ---\ncontent` in system message
+- Token counter in panel footer (`estimated chars/4`)
+- `Ctrl+S` as alternative submit keybind
+
+### CWD resolution (correct terminal directory)
+- `Pty::spawn` captures `pty.child().id()` before EventLoop consumes the pty
+- `Terminal.child_pid: u32` and `Mux::active_cwd()` expose it
+- macOS: `proc_pidinfo(PROC_PIDVNODEPATHINFO)` via `libc` — no shell integration needed
+- Linux: `/proc/{pid}/cwd` symlink
+- Files: `src/term/pty.rs`, `src/term/mod.rs`, `src/app/mux.rs`
+
+### /q and /quit commands
+- Typing `/q` or `/quit` in panel input + Enter → closes panel + `mux.cmd_close_tab()`
+
 ## Build Status
-- **cargo check:** PASS (0 errors — 2026-04-04)
+- **cargo check:** PASS (0 errors — 2026-04-05)
 - **branch:** master (stable)
 
 ## Key Technical Decisions (standing)

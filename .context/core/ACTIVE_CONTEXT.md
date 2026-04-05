@@ -23,9 +23,7 @@
 | Font fallback chain | ✅ | `petruterm.font("A, B, C")` resolved at config load time |
 
 ### Technical Debt
-| ID | Priority | Description |
-|----|----------|-------------|
-| TD-015 | P1 | Shift+Enter treated as regular Enter (input/PTY)
+Clean — 0 open items (TD-015 resolved 2026-04-05).
 
 ### Keybinds (tmux-aligned)
 
@@ -42,33 +40,35 @@
 | `leader+p` | Command palette |
 | `Ctrl+Space` | Inline AI block |
 
-## Phase 2.5 Next Steps (ordered by priority)
+## Phase 2.5 P1 — COMPLETE (2026-04-05)
 
-### TD-015 (fix first — P1)
-1. **Shift+Enter fix** — detect `Enter + SHIFT` in `InputHandler`, send `\n` not `\r`, no PTY exec
+All P1 deliverables shipped:
+- `ChatPanel.attached_files` + `AGENTS.md` auto-load ✅
+- File picker overlay (`Tab`) with fuzzy search ✅
+- File contents injected into LLM system message ✅
+- Token counter in footer ✅
+- `Ctrl+S` submit ✅
+- CWD from real terminal process (`proc_pidinfo` on macOS) ✅
+- `/q`/`/quit` closes panel + tab ✅
 
-### P1 — File Context Attachment
-2. **`ChatPanel.attached_files`** — `Vec<PathBuf>`, auto-populate with `AGENTS.md` from CWD on open
-3. **File list section** — render `Selected (N files)` header + filenames at top of panel
-4. **File picker** — `Tab` toggles focus; fuzzy search CWD files; `Enter` attach/detach
-5. **Context injection** — file contents as `role: system` messages before user query
-6. **Token counter** — footer: `Tokens: NNNN; <C-s>: submit`
+## Phase 2.5 Next Steps
 
 ### P2 — Tool Use (read & explore)
-7. **`AgentTool` enum** — `ReadFile`, `ListDir` in OpenAI function-calling format
-8. **Provider extension** — serialize tool defs, parse `tool_calls` in response
-9. **Tool execution loop** — call → inject result → re-query until done
-10. **Streaming UI** — `⟳ reading…` / `✓ done` inline
+1. **`AgentTool` enum** — `ReadFile`, `ListDir` in OpenAI function-calling format
+2. **Provider extension** — serialize tool defs, parse `tool_calls` in response
+3. **Tool execution loop** — call → inject result → re-query until done
+4. **Streaming UI** — `⟳ reading…` / `✓ done` inline
 
 ### P3 — Tool Use (write & run)
-11. **`WriteFile` / `ApplyDiff`** — diff preview inline, `[y]/[n]` confirm before disk write
-12. **`RunCommand`** — execute in PTY after confirm
-13. **Undo** — single-step file restore
+5. **`WriteFile` / `ApplyDiff`** — diff preview inline, `[y]/[n]` confirm before disk write
+6. **`RunCommand`** — execute in PTY after confirm
+7. **Undo** — single-step file restore
 
 ## Files to Reference
+- `src/llm/chat_panel.rs` — `ChatPanel`, `attached_files`, `file_picker_*`, `scan_files()`
+- `src/app/ui.rs` — `open_panel_with_context(id, cwd)`, `submit_ai_query` (file injection)
+- `src/app/input/mod.rs` — Tab picker, `/q`/`/quit`, `Ctrl+S`, `Shift+Enter`
+- `src/app/renderer.rs` — `build_chat_panel_instances` (file section + picker overlay)
+- `src/term/mod.rs` — `Terminal.child_pid`, `process_cwd(pid)`
+- `src/app/mux.rs` — `Mux::active_cwd()`
 - `src/renderer/rounded_rect.rs` — `RoundedRectInstance`, `RoundedRectPipeline`, SDF shader
-- `src/app/renderer.rs` — `build_tab_bar_instances`, `build_scroll_bar_instances`
-- `src/app/mod.rs` — `tab_bar_visible()`, `tab_bar_height_px()`, `hit_test_tab_bar()`
-- `src/app/ui.rs` — `handle_palette_action`, AI feature handlers
-- `src/app/input/mod.rs` — leader dispatch, `register_click()` for multi-click selection
-- `config/default/keybinds.lua` — embedded keybind defaults
