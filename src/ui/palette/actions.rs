@@ -16,6 +16,9 @@ pub enum Action {
     // Tabs
     NewTab,
     CloseTab,
+    NextTab,
+    PrevTab,
+    SwitchToTab(usize),
     // Panes
     SplitHorizontal,
     SplitVertical,
@@ -42,6 +45,10 @@ impl std::str::FromStr for Action {
             "ReloadConfig"      => Ok(Action::ReloadConfig),
             "NewTab"            => Ok(Action::NewTab),
             "CloseTab"          => Ok(Action::CloseTab),
+            "NextTab"           => Ok(Action::NextTab),
+            "PrevTab"           => Ok(Action::PrevTab),
+            s if s.starts_with("Tab") => s[3..].parse::<usize>()
+                .map(Action::SwitchToTab).map_err(|_| ()),
             "SplitHorizontal"   => Ok(Action::SplitHorizontal),
             "SplitVertical"     => Ok(Action::SplitVertical),
             "ClosePane"         => Ok(Action::ClosePane),

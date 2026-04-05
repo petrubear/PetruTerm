@@ -55,8 +55,22 @@ impl App {
         }
     }
 
+    fn tab_bar_visible(&self) -> bool {
+        self.mux.tabs.tab_count() > 1
+    }
+
     fn tab_bar_height_px(&self) -> f32 {
-        self.cell_dims().1 as f32
+        if self.tab_bar_visible() { self.cell_dims().1 as f32 } else { 0.0 }
+    }
+
+    /// Update the GPU uniform padding to account for the tab bar (or lack thereof).
+    /// Call whenever tab count crosses the 1↔2 boundary, or on initial setup.
+    fn apply_tab_bar_padding(&mut self) {
+        if let Some(rc) = &mut self.render_ctx {
+            let tab_h = if self.mux.tabs.tab_count() > 1 { rc.shaper.cell_height } else { 0.0 };
+            let pad = &self.config.window.padding;
+            rc.renderer.set_padding(pad.left as f32, pad.top as f32 + tab_h);
+        }
     }
 
     fn default_grid_size(&self) -> (u16, u16) {
@@ -192,13 +206,7 @@ impl ApplicationHandler<()> for App {
 
         self.window = Some(window);
         self.render_ctx = Some(render_ctx);
-        // Shift the GPU padding origin down by one cell row to make room for the tab bar.
-        // Tab bar renders at grid row -1: pixel_y = (pad.top + cell_h) - cell_h = pad.top. ✓
-        if let Some(rc) = &mut self.render_ctx {
-            let tab_h = rc.shaper.cell_height;
-            let pad = &self.config.window.padding;
-            rc.renderer.set_padding(pad.left as f32, pad.top as f32 + tab_h);
-        }
+        self.apply_tab_bar_padding(); // no-op here (0 tabs yet), but sets up for first tab
         if self.open_initial_tab().is_err() { event_loop.exit(); }
     }
 
@@ -232,15 +240,17 @@ impl ApplicationHandler<()> for App {
                         let _ = rc.build_instances(&cell_data, &self.config, &scaled_font, cursor.as_ref(), self.input.cursor_blink_on, terminal_id);
                     }
 
-                    // ── Tab bar (always rendered above terminal, row = -1) ──────────────
-                    let total_cols_for_tab = term_cols
-                        + if self.ui.is_panel_visible() { self.ui.panel().width_cols as usize } else { 0 };
-                    rc.build_tab_bar_instances(
-                        self.mux.tabs.tabs(),
-                        self.mux.tabs.active_index(),
-                        &scaled_font,
-                        total_cols_for_tab,
-                    );
+                    // ── Tab bar (only when 2+ tabs, renders at row = -1) ────────────────
+                    if self.mux.tabs.tab_count() > 1 {
+                        let total_cols_for_tab = term_cols
+                            + if self.ui.is_panel_visible() { self.ui.panel().width_cols as usize } else { 0 };
+                        rc.build_tab_bar_instances(
+                            self.mux.tabs.tabs(),
+                            self.mux.tabs.active_index(),
+                            &scaled_font,
+                            total_cols_for_tab,
+                        );
+                    }
 
                     // ── Scroll bar (overlays right edge of terminal) ─────────────────────
                     if self.config.enable_scroll_bar {
@@ -319,6 +329,7 @@ impl ApplicationHandler<()> for App {
             WindowEvent::KeyboardInput { event, is_synthetic, .. } => {
                 if !is_synthetic {
                     let panel_was_visible = self.ui.is_panel_visible();
+                    let tab_count_before = self.mux.tabs.tab_count();
                     self.ui.set_active_terminal(self.mux.focused_terminal_id());
                     self.input.handle_key_input(
                         &event, event_loop, &self.config,
@@ -327,6 +338,10 @@ impl ApplicationHandler<()> for App {
                         self.wakeup_proxy.clone(),
                     );
                     if self.ui.is_panel_visible() != panel_was_visible {
+                        self.resize_terminals_for_panel();
+                    }
+                    if self.mux.tabs.tab_count() != tab_count_before {
+                        self.apply_tab_bar_padding();
                         self.resize_terminals_for_panel();
                     }
                     if let Some(w) = &self.window { w.request_redraw(); }

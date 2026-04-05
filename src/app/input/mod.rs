@@ -71,8 +71,10 @@ impl InputHandler {
         let (cw, ch) = render_ctx.as_ref()
             .map(|rc| (rc.shaper.cell_width as f64, rc.shaper.cell_height as f64))
             .unwrap_or((8.0, 16.0));
+        // Offset y origin past the tab bar row when it is visible (2+ tabs).
+        let tab_h = if mux.tabs.tab_count() > 1 { ch } else { 0.0 };
         let col = ((x - pad.left as f64) / cw).floor().max(0.0) as usize;
-        let row = ((y - pad.top as f64) / ch).floor().max(0.0) as usize;
+        let row = ((y - (pad.top as f64 + tab_h)) / ch).floor().max(0.0) as usize;
         let (term_cols, term_rows) = mux.active_terminal_size();
         (col.min(term_cols.saturating_sub(1)), row.min(term_rows.saturating_sub(1)))
     }
@@ -137,6 +139,13 @@ impl InputHandler {
             self.leader_active = false;
             self.leader_timer = None;
             if let Key::Character(s) = &event.logical_key {
+                // Leader + 1-9: select tab by index (hardcoded, like Cmd+1-9)
+                if let Ok(n) = s.parse::<usize>() {
+                    if n >= 1 && n <= 9 {
+                        mux.tabs.switch_to_index(n - 1);
+                        return;
+                    }
+                }
                 let key = s.to_ascii_lowercase();
                 let action = self.leader_map.get(s.as_str())
                     .or_else(|| self.leader_map.get(key.as_str()))

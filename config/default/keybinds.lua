@@ -28,6 +28,8 @@ function module.apply_to_config(config)
     -- ── Tabs ───────────────────────────────────────────────────────────────
     { mods = "LEADER", key = "t",  action = petruterm.action.NewTab },
     { mods = "LEADER", key = "w",  action = petruterm.action.CloseTab },
+    { mods = "LEADER", key = "n",  action = petruterm.action.NextTab },
+    { mods = "LEADER", key = "b",  action = petruterm.action.PrevTab },
 
     -- ── Pane splits (tmux-style) ───────────────────────────────────────────
     { mods = "LEADER", key = "%",  action = petruterm.action.SplitHorizontal },

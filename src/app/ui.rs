@@ -288,7 +288,10 @@ impl UiManager {
                 let viewport = Rect { x: 0.0, y: 0.0, w: 800.0, h: 600.0 };
                 mux.cmd_new_tab(config, viewport, cols as u16, rows as u16, cell_w, cell_h, wakeup_proxy);
             }
-            Action::CloseTab  => mux.cmd_close_tab(),
+            Action::CloseTab     => mux.cmd_close_tab(),
+            Action::NextTab      => mux.tabs.next_tab(),
+            Action::PrevTab      => mux.tabs.prev_tab(),
+            Action::SwitchToTab(n) => { mux.tabs.switch_to_index(n.saturating_sub(1)); }
             Action::SplitHorizontal => {
                 let (cols, rows) = mux.active_terminal_size();
                 let (cell_w, cell_h) = (render_ctx.shaper.cell_width as u16, render_ctx.shaper.cell_height as u16);
