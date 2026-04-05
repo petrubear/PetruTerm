@@ -93,6 +93,48 @@ palette. Works with OpenRouter, Ollama, and LMStudio.
 
 ---
 
+## Phase 2.5: AI Agent Mode
+**Goal:** Upgrade the chat panel into a context-aware coding agent — similar to avante.nvim — where the user can attach files from the current working directory, have `AGENTS.md` loaded automatically as project context, and let the LLM read, propose edits, and apply changes to files.
+
+The chat panel and agent panel are **one unified panel** (`leader+a`). When the user asks a general question it responds as a chat assistant; when the user attaches files or the LLM needs file context, it operates as a file-aware agent.
+
+### Deliverables
+
+#### P1 — File Context Attachment
+- [ ] `ChatPanel` gains `attached_files: Vec<PathBuf>` — list of files injected into system context
+- [ ] Auto-load `AGENTS.md` from CWD on every panel open (if it exists)
+- [ ] File list section rendered at top of panel: `Selected (N files)` header + filenames
+- [ ] `Tab` key in panel toggles focus between file-picker and chat input
+- [ ] File picker: fuzzy-search files in CWD (reuse `fuzzy-matcher`), `Enter` to attach/detach
+- [ ] Attached file contents injected as `role: system` messages before user query
+- [ ] Token counter rendered in panel footer: `Tokens: NNNN`
+- [ ] Keybind: `<C-s>` submits (in addition to Enter); consistent with avante.nvim muscle memory
+
+#### P2 — LLM Tool Use: Read & Explore
+- [ ] `AgentTool` enum: `ReadFile { path }`, `ListDir { path }` (OpenAI function-calling format)
+- [ ] LLM provider extended to serialize tool definitions + parse `tool_calls` from response
+- [ ] Tool execution loop: call tool → inject result → re-query LLM until no more tool calls
+- [ ] Streaming UI: show tool call status inline (`⟳ reading src/main.rs…`, `✓ done`)
+- [ ] Safety: only allow paths within CWD (no `../` escapes)
+
+#### P3 — LLM Tool Use: Write & Run
+- [ ] `WriteFile { path, content }` tool: LLM proposes full file replacement
+- [ ] `ApplyDiff { path, diff }` tool: LLM proposes unified diff patch
+- [ ] Diff preview rendered inline in panel (before/after lines with `+`/`-` colors)
+- [ ] Confirmation prompt: `[y] Apply  [n] Reject` before writing to disk
+- [ ] `RunCommand { cmd }` tool: executes in active PTY after user confirmation
+- [ ] Undo: keep original file in memory for single-step undo (`<leader>z` restores)
+
+### Exit Criteria
+Panel opens and auto-loads `AGENTS.md`. User can fuzzy-attach additional files. Token count
+updates as files are added. LLM receives file contents as context and gives file-aware answers.
+LLM can request to read additional files via tool use. LLM can propose file edits with a diff
+preview; user confirms before any write happens.
+
+> **Status:** Not started.
+
+---
+
 ## Phase 3: Polish & UI Chrome
 **Goal:** Complete visual chrome — tab bar, scroll bar, status bar, snippets, Starship support.
 

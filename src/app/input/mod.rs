@@ -215,10 +215,39 @@ impl InputHandler {
 
         // ── Chat panel input ─────────────────────────────────────────────────
         if ui.is_panel_visible() && ui.panel_focused && !cmd {
+            // ── File picker mode ──────────────────────────────────────────────
+            if ui.file_picker_focused {
+                match &event.logical_key {
+                    Key::Named(NamedKey::Escape) | Key::Named(NamedKey::Tab) => {
+                        ui.panel_mut().close_file_picker();
+                        ui.file_picker_focused = false;
+                    }
+                    Key::Named(NamedKey::Enter) => {
+                        let cwd = crate::llm::shell_context::ShellContext::load()
+                            .and_then(|c| if c.cwd.is_empty() { None } else { Some(std::path::PathBuf::from(c.cwd)) })
+                            .or_else(|| std::env::current_dir().ok())
+                            .unwrap_or_default();
+                        let filtered = ui.panel().filtered_picker_items();
+                        ui.panel_mut().picker_confirm(&cwd, &filtered);
+                    }
+                    Key::Named(NamedKey::ArrowUp) => ui.panel_mut().picker_move_up(),
+                    Key::Named(NamedKey::ArrowDown) => {
+                        let len = ui.panel().filtered_picker_items().len();
+                        ui.panel_mut().picker_move_down(len);
+                    }
+                    Key::Named(NamedKey::Backspace) => ui.panel_mut().picker_backspace(),
+                    Key::Named(NamedKey::Space)     => ui.panel_mut().picker_type_char(' '),
+                    Key::Character(s) => { for ch in s.chars() { ui.panel_mut().picker_type_char(ch); } }
+                    _ => {}
+                }
+                return;
+            }
+
+            // ── Chat input mode ───────────────────────────────────────────────
             match &event.logical_key {
                 Key::Named(NamedKey::Escape) => {
                     if matches!(ui.panel().state, PanelState::Error(_)) { ui.panel_mut().dismiss_error(); }
-                    else if !ui.panel().is_streaming() { ui.panel_mut().close(); ui.panel_focused = false; }
+                    else if !ui.panel().is_streaming() { ui.panel_mut().close(); ui.panel_focused = false; ui.file_picker_focused = false; }
                 }
                 Key::Named(NamedKey::Enter) => {
                     if shift {
@@ -228,8 +257,23 @@ impl InputHandler {
                         else { ui.submit_ai_query(wakeup_proxy); }
                     }
                 }
+                Key::Named(NamedKey::Tab) => {
+                    // Open file picker overlay.
+                    let cwd = crate::llm::shell_context::ShellContext::load()
+                        .and_then(|c| if c.cwd.is_empty() { None } else { Some(std::path::PathBuf::from(c.cwd)) })
+                        .or_else(|| std::env::current_dir().ok())
+                        .unwrap_or_default();
+                    ui.panel_mut().open_file_picker(&cwd);
+                    ui.file_picker_focused = true;
+                }
                 Key::Named(NamedKey::Backspace) => ui.panel_mut().backspace(),
                 Key::Named(NamedKey::Space)     => ui.panel_mut().type_char(' '),
+                Key::Character(s) if ctrl && s.as_str() == "s" => {
+                    // Ctrl+S: submit query (alternative to Enter).
+                    if ui.panel().is_idle() && !ui.panel().input.trim().is_empty() {
+                        ui.submit_ai_query(wakeup_proxy);
+                    }
+                }
                 Key::Character(s) => { for ch in s.chars() { ui.panel_mut().type_char(ch); } }
                 _ => {}
             }

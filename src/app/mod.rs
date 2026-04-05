@@ -309,6 +309,7 @@ impl ApplicationHandler<()> for App {
                             rc.build_chat_panel_instances(
                                 self.ui.panel(),
                                 panel_focused,
+                                self.ui.file_picker_focused,
                                 &self.config,
                                 &scaled_font,
                                 term_cols,
@@ -411,7 +412,7 @@ impl ApplicationHandler<()> for App {
                         if in_panel {
                             self.ui.panel_focused = true;
                         } else {
-                            if self.ui.is_panel_visible() { self.ui.panel_focused = false; }
+                            if self.ui.is_panel_visible() { self.ui.panel_focused = false; self.ui.file_picker_focused = false; }
                             self.input.mouse_left_pressed = true;
                             if !self.mux.active_terminal().map(|t| t.mouse_mode_flags().0).unwrap_or(false) {
                                 let clicks = self.input.register_click((col, row));

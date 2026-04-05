@@ -338,13 +338,14 @@ impl RenderContext {
         &mut self,
         panel: &ChatPanel,
         panel_focused: bool,
+        file_picker_focused: bool,
         config: &Config,
         font: &crate::config::schema::FontConfig,
         term_cols: usize,
         screen_rows: usize,
         cursor_blink_on: bool,
     ) {
-        use crate::llm::chat_panel::{word_wrap, wrap_input};
+        use crate::llm::chat_panel::{word_wrap, wrap_input, MAX_FILE_ROWS};
         use crate::llm::ChatRole;
 
         let panel_cols = panel.width_cols as usize;
@@ -356,109 +357,170 @@ impl RenderContext {
         let asst_fg  = config.llm.ui.assistant_fg;
         let input_fg = config.llm.ui.input_fg;
 
-        const BORDER_FG: [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // purple
-        const BORDER_DIM:[f32; 4] = [0.32, 0.28, 0.50, 1.0]; // dimmed purple
-        const STREAM_FG: [f32; 4] = [0.95, 0.98, 0.55, 1.0]; // yellow
-        const HINT_FG:   [f32; 4] = [0.38, 0.44, 0.64, 1.0]; // comment gray
-        const ERR_FG:    [f32; 4] = [1.00, 0.33, 0.33, 1.0]; // red
-        const SEP_FG:    [f32; 4] = [0.27, 0.28, 0.36, 1.0]; // current-line
-        const DIM_FG:    [f32; 4] = [0.50, 0.47, 0.60, 1.0]; // dimmed input
-        const RUN_FG:    [f32; 4] = [0.50, 0.98, 0.60, 1.0]; // green — run bar
+        const BORDER_FG:  [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // purple
+        const BORDER_DIM: [f32; 4] = [0.32, 0.28, 0.50, 1.0]; // dimmed purple
+        const STREAM_FG:  [f32; 4] = [0.95, 0.98, 0.55, 1.0]; // yellow
+        const HINT_FG:    [f32; 4] = [0.38, 0.44, 0.64, 1.0]; // comment gray
+        const ERR_FG:     [f32; 4] = [1.00, 0.33, 0.33, 1.0]; // red
+        const SEP_FG:     [f32; 4] = [0.27, 0.28, 0.36, 1.0]; // current-line
+        const DIM_FG:     [f32; 4] = [0.50, 0.47, 0.60, 1.0]; // dimmed input
+        const RUN_FG:     [f32; 4] = [0.50, 0.98, 0.60, 1.0]; // green — run bar
+        const FILE_FG:    [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached files
+        const PICK_SEL:   [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // purple — picker highlight
+        const PICK_FG:    [f32; 4] = [0.80, 0.80, 0.90, 1.0]; // soft white — picker items
 
-        // Braille spinner cycles as streaming buffer grows
         const SPIN: [&str; 8] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"];
         let spin = SPIN[panel.streaming_buf.chars().count() % 8];
 
-        // ── Layout ───────────────────────────────────────────────────────────
-        // Bottom 4 rows: separator, input line 1, input line 2, hints
+        let co = term_cols; // grid column where panel begins
+        let border_fg = if panel_focused { BORDER_FG } else { BORDER_DIM };
+
+        // ── Fixed bottom rows (always present) ───────────────────────────────
         let hints_row  = screen_rows - 1;
         let input_row2 = screen_rows - 2;
         let input_row1 = screen_rows - 3;
         let sep_row    = screen_rows - 4;
-        // Rows 1..sep_row are the scrollable message history
-        let history_rows = sep_row.saturating_sub(1);
 
-        // "│  You  " / "│   AI  " prefix = 8 chars; inner content fills the rest
-        let msg_inner_w = panel_cols.saturating_sub(8);
-        let co = term_cols; // grid column where panel begins
+        // ── File section height (0 when no files attached) ───────────────────
+        // header row ("│ Selected (N files)") + one row per file, capped at MAX_FILE_ROWS
+        let file_count = panel.attached_files.len();
+        let file_section_rows = if file_count == 0 {
+            0
+        } else {
+            1 + file_count.min(MAX_FILE_ROWS)
+        };
 
-        let border_fg = if panel_focused { BORDER_FG } else { BORDER_DIM };
-
-        // ── Header ───────────────────────────────────────────────────────────
+        // ── Row 0: panel header ───────────────────────────────────────────────
         let title = " Petrubot ";
         let left  = "│───";
         let dashes = panel_cols.saturating_sub(left.chars().count() + title.chars().count());
         let header = format!("{}{}{}", left, title, "─".repeat(dashes));
         self.push_shaped_row(&header, border_fg, panel_bg, 0, co, panel_cols, font);
 
-        // ── Build message lines ───────────────────────────────────────────────
-        let mut all_lines: Vec<(String, [f32; 4])> = Vec::new();
-
-        for msg in &panel.messages {
-            let (first_p, cont_p, fg) = match msg.role {
-                ChatRole::User      => ("│  You  ", "│       ", user_fg),
-                ChatRole::Assistant => ("│   AI  ", "│       ", asst_fg),
-                ChatRole::System    => continue,
+        // ── File picker overlay (replaces history area) ───────────────────────
+        if panel.file_picker_open {
+            // Row 1: search input
+            let q = &panel.file_picker_query;
+            let q_display = if file_picker_focused && cursor_blink_on {
+                format!("│ > {}\u{258b}", q)
+            } else {
+                format!("│ > {}", q)
             };
-            let wrapped = word_wrap(&msg.content, msg_inner_w);
-            for (i, line) in wrapped.iter().enumerate() {
-                let p = if i == 0 { first_p } else { cont_p };
-                all_lines.push((format!("{}{}", p, line), fg));
-            }
-            // blank line between messages
-            all_lines.push(("│".to_string(), SEP_FG));
-        }
+            self.push_shaped_row(&q_display, input_fg, panel_bg, 1, co, panel_cols, font);
 
-        // Streaming tokens (in-flight assistant response)
-        if panel.is_streaming() && !panel.streaming_buf.is_empty() {
-            let wrapped = word_wrap(&panel.streaming_buf, msg_inner_w);
-            for (i, line) in wrapped.iter().enumerate() {
-                let p = if i == 0 { "│   AI  " } else { "│       " };
-                all_lines.push((format!("{}{}", p, line), STREAM_FG));
-            }
-        }
-
-        // Loading placeholder (waiting for first token)
-        if matches!(panel.state, PanelState::Loading) {
-            all_lines.push((format!("│   {}  Thinking\u{2026}", spin), STREAM_FG));
-        }
-
-        // Error
-        if let PanelState::Error(ref err) = panel.state {
-            let wrapped = word_wrap(err, msg_inner_w);
-            for (i, line) in wrapped.iter().enumerate() {
-                let p = if i == 0 { "│  \u{2717}    " } else { "│       " }; // ✗
-                all_lines.push((format!("{}{}", p, line), ERR_FG));
-            }
-        }
-
-        // Run bar — shown when Idle and the last assistant message contains a shell command.
-        // Pressing Enter (with empty input) will execute this command via the PTY.
-        if panel.is_idle() {
-            if let Some(cmd) = panel.last_assistant_command() {
-                // "│ ⏎  " = 5 chars prefix, leave space for the command
-                let max_cmd_w = panel_cols.saturating_sub(5);
-                let display_cmd = if cmd.chars().count() > max_cmd_w {
-                    format!("{}…", cmd.chars().take(max_cmd_w.saturating_sub(1)).collect::<String>())
+            // Rows 2..sep_row: filtered file list
+            let filtered = panel.filtered_picker_items();
+            let list_rows = sep_row.saturating_sub(2);
+            for i in 0..list_rows {
+                let row = 2 + i;
+                if let Some(path) = filtered.get(i) {
+                    let name = path.to_string_lossy();
+                    let max_w = panel_cols.saturating_sub(5);
+                    let trimmed = if name.chars().count() > max_w {
+                        format!("…{}", &name[name.len().saturating_sub(max_w - 1)..])
+                    } else {
+                        name.into_owned()
+                    };
+                    let attached = panel.attached_files.iter().any(|p| p.ends_with(path));
+                    let marker = if attached { "✓ " } else { "  " };
+                    let (text, fg) = if i == panel.file_picker_cursor {
+                        (format!("│ ▸ {}{}", marker, trimmed), PICK_SEL)
+                    } else {
+                        (format!("│   {}{}", marker, trimmed), PICK_FG)
+                    };
+                    self.push_shaped_row(&text, fg, panel_bg, row, co, panel_cols, font);
                 } else {
-                    cmd
-                };
-                all_lines.push(("│".to_string(), SEP_FG));
-                all_lines.push((format!("│ \u{23ce}  {}", display_cmd), RUN_FG)); // ⏎
+                    self.push_shaped_row("│", SEP_FG, panel_bg, row, co, panel_cols, font);
+                }
             }
-        }
+        } else {
+            // ── Normal view: file section + message history ───────────────────
 
-        // ── Render visible history ────────────────────────────────────────────
-        let visible_start = all_lines.len()
-            .saturating_sub(history_rows + panel.scroll_offset);
+            // File section (rows 1..1+file_section_rows)
+            if file_section_rows > 0 {
+                // Header: "│ Selected (N files)"
+                let fhdr = format!("│ Selected ({} file{})", file_count, if file_count == 1 { "" } else { "s" });
+                self.push_shaped_row(&fhdr, FILE_FG, panel_bg, 1, co, panel_cols, font);
+                // File list
+                for (i, path) in panel.attached_files.iter().take(MAX_FILE_ROWS).enumerate() {
+                    let name = path.file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| path.to_string_lossy().into_owned());
+                    let max_w = panel_cols.saturating_sub(6);
+                    let trimmed = if name.chars().count() > max_w {
+                        format!("{}…", name.chars().take(max_w.saturating_sub(1)).collect::<String>())
+                    } else { name };
+                    let line = format!("│   {}", trimmed);
+                    self.push_shaped_row(&line, DIM_FG, panel_bg, 2 + i, co, panel_cols, font);
+                }
+                // Thin separator after file section
+                let fsep = format!("│{}", "╌".repeat(panel_cols.saturating_sub(1)));
+                self.push_shaped_row(&fsep, SEP_FG, panel_bg, 1 + file_section_rows, co, panel_cols, font);
+            }
 
-        for i in 0..history_rows {
-            let row = 1 + i;
-            let (text, fg) = all_lines
-                .get(visible_start + i)
-                .map(|(t, f)| (t.as_str(), *f))
-                .unwrap_or(("│", SEP_FG));
-            self.push_shaped_row(text, fg, panel_bg, row, co, panel_cols, font);
+            // History area: rows after file section up to sep_row
+            let history_start_row = 1 + if file_section_rows > 0 { file_section_rows + 1 } else { 0 };
+            let history_rows = sep_row.saturating_sub(history_start_row);
+            let msg_inner_w = panel_cols.saturating_sub(8);
+
+            let mut all_lines: Vec<(String, [f32; 4])> = Vec::new();
+
+            for msg in &panel.messages {
+                let (first_p, cont_p, fg) = match msg.role {
+                    ChatRole::User      => ("│  You  ", "│       ", user_fg),
+                    ChatRole::Assistant => ("│   AI  ", "│       ", asst_fg),
+                    ChatRole::System    => continue,
+                };
+                let wrapped = word_wrap(&msg.content, msg_inner_w);
+                for (i, line) in wrapped.iter().enumerate() {
+                    let p = if i == 0 { first_p } else { cont_p };
+                    all_lines.push((format!("{}{}", p, line), fg));
+                }
+                all_lines.push(("│".to_string(), SEP_FG));
+            }
+
+            if panel.is_streaming() && !panel.streaming_buf.is_empty() {
+                let wrapped = word_wrap(&panel.streaming_buf, msg_inner_w);
+                for (i, line) in wrapped.iter().enumerate() {
+                    let p = if i == 0 { "│   AI  " } else { "│       " };
+                    all_lines.push((format!("{}{}", p, line), STREAM_FG));
+                }
+            }
+
+            if matches!(panel.state, PanelState::Loading) {
+                all_lines.push((format!("│   {}  Thinking\u{2026}", spin), STREAM_FG));
+            }
+
+            if let PanelState::Error(ref err) = panel.state {
+                let wrapped = word_wrap(err, msg_inner_w);
+                for (i, line) in wrapped.iter().enumerate() {
+                    let p = if i == 0 { "│  \u{2717}    " } else { "│       " };
+                    all_lines.push((format!("{}{}", p, line), ERR_FG));
+                }
+            }
+
+            if panel.is_idle() {
+                if let Some(cmd) = panel.last_assistant_command() {
+                    let max_cmd_w = panel_cols.saturating_sub(5);
+                    let display_cmd = if cmd.chars().count() > max_cmd_w {
+                        format!("{}…", cmd.chars().take(max_cmd_w.saturating_sub(1)).collect::<String>())
+                    } else { cmd };
+                    all_lines.push(("│".to_string(), SEP_FG));
+                    all_lines.push((format!("│ \u{23ce}  {}", display_cmd), RUN_FG));
+                }
+            }
+
+            let visible_start = all_lines.len()
+                .saturating_sub(history_rows + panel.scroll_offset);
+
+            for i in 0..history_rows {
+                let row = history_start_row + i;
+                let (text, fg) = all_lines
+                    .get(visible_start + i)
+                    .map(|(t, f)| (t.as_str(), *f))
+                    .unwrap_or(("│", SEP_FG));
+                self.push_shaped_row(text, fg, panel_bg, row, co, panel_cols, font);
+            }
         }
 
         // ── Separator ────────────────────────────────────────────────────────
@@ -466,39 +528,44 @@ impl RenderContext {
         self.push_shaped_row(&sep, SEP_FG, panel_bg, sep_row, co, panel_cols, font);
 
         // ── Input field ──────────────────────────────────────────────────────
-        // "│ ▸  " = 5 chars; remaining width for text
         let input_inner_w = panel_cols.saturating_sub(5);
         let mut input_display = panel.input.clone();
-        if panel_focused && cursor_blink_on && panel.is_idle() {
-            input_display.push('\u{258b}'); // ▋ block cursor
+        if panel_focused && !file_picker_focused && cursor_blink_on && panel.is_idle() {
+            input_display.push('\u{258b}');
         }
         let input_lines = wrap_input(&input_display, input_inner_w);
-        let inp_fg = if panel_focused { input_fg } else { DIM_FG };
-        let line1 = format!("│ \u{25b8}  {}", input_lines.first().cloned().unwrap_or_default()); // ▸
+        let inp_fg = if panel_focused && !file_picker_focused { input_fg } else { DIM_FG };
+        let line1 = format!("│ \u{25b8}  {}", input_lines.first().cloned().unwrap_or_default());
         let line2 = format!("│    {}", input_lines.get(1).cloned().unwrap_or_default());
         self.push_shaped_row(&line1, inp_fg, panel_bg, input_row1, co, panel_cols, font);
         self.push_shaped_row(&line2, inp_fg, panel_bg, input_row2, co, panel_cols, font);
 
-        // ── Key hints ────────────────────────────────────────────────────────
+        // ── Key hints + token count ───────────────────────────────────────────
+        let tokens = panel.estimated_tokens();
         let has_assistant = panel.messages.iter().any(|m| matches!(m.role, ChatRole::Assistant));
-        let hints = if !panel_focused {
-            "│ <Leader>a: focus   Esc: close"
+        let hints: String = if file_picker_focused {
+            format!("│ ↑↓ navigate   Enter: attach   Tab: close  Tokens: {tokens}")
+        } else if !panel_focused {
+            format!("│ <Leader>a: focus   Esc: close   Tokens: {tokens}")
         } else {
-            match &panel.state {
+            let base = match &panel.state {
                 PanelState::Idle if !panel.input.trim().is_empty()
-                    => "│ Enter: send   Esc: close",
+                    => "│ Enter: send   Tab: files   Esc: close",
                 PanelState::Idle if has_assistant
-                    => "│ Enter: run \u{23ce}   or type a new query",
+                    => "│ Enter: run \u{23ce}   Tab: files",
                 PanelState::Idle
-                    => "│ Enter: send   Esc: close",
+                    => "│ Enter: send   Tab: files   Esc: close",
                 PanelState::Loading | PanelState::Streaming
-                    => "│ streaming\u{2026}   <Leader>a: close",
+                    => "│ streaming\u{2026}",
                 PanelState::Error(_)
-                    => "│ Esc: dismiss   <Leader>a: close",
+                    => "│ Esc: dismiss",
                 PanelState::Hidden => "│",
-            }
+            };
+            format!("{base}   Tokens: {tokens}")
         };
-        self.push_shaped_row(hints, HINT_FG, panel_bg, hints_row, co, panel_cols, font);
+        // Truncate hints to panel width
+        let hints_display: String = hints.chars().take(panel_cols).collect();
+        self.push_shaped_row(&hints_display, HINT_FG, panel_bg, hints_row, co, panel_cols, font);
     }
 
     /// Render the inline AI block, overlaying the bottom `AI_BLOCK_ROWS` rows of the terminal.

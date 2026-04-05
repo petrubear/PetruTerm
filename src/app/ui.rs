@@ -20,6 +20,8 @@ pub struct UiManager {
     chat_panels: HashMap<usize, ChatPanel>,
     active_panel_id: usize,
     pub panel_focused: bool,
+    /// True when Tab has been pressed and focus is on the file picker overlay.
+    pub file_picker_focused: bool,
 
     // ── Inline AI block (Ctrl+Space, single-shot NL→command) ─────────────────
     pub ai_block: AiBlock,
@@ -56,6 +58,7 @@ impl UiManager {
             chat_panels,
             active_panel_id: 0,
             panel_focused: false,
+            file_picker_focused: false,
             ai_block: AiBlock::new(),
             block_tx,
             block_rx,
@@ -133,6 +136,22 @@ impl UiManager {
 
     // ── Chat panel operations ─────────────────────────────────────────────────
 
+    /// Open the panel for `terminal_id`, auto-attaching `AGENTS.md` from CWD.
+    pub fn open_panel_with_context(&mut self, terminal_id: usize) {
+        self.set_active_terminal(terminal_id);
+        if !self.panel().is_visible() {
+            self.panel_mut().open();
+        }
+        self.panel_focused = true;
+        self.file_picker_focused = false;
+        // Auto-attach AGENTS.md from CWD (idempotent).
+        let cwd = ShellContext::load()
+            .and_then(|c| if c.cwd.is_empty() { None } else { Some(std::path::PathBuf::from(c.cwd)) })
+            .or_else(|| std::env::current_dir().ok())
+            .unwrap_or_default();
+        self.panel_mut().init_default_files(&cwd);
+    }
+
     pub fn submit_ai_query(&mut self, wakeup_proxy: EventLoopProxy<()>) {
         let Some(_user_content) = self.panel_mut().submit_input() else { return };
         let Some(provider) = self.llm_provider.clone() else {
@@ -144,6 +163,16 @@ impl UiManager {
         if let Some(ctx) = ShellContext::load() {
             system_text.push_str(&format!("\n\nShell context:\n{}", ctx.format_for_system_message()));
         }
+
+        // Inject attached file contents into the system message.
+        let attached: Vec<_> = self.panel().attached_files.clone();
+        for path in &attached {
+            if let Ok(content) = std::fs::read_to_string(path) {
+                let name = path.display();
+                system_text.push_str(&format!("\n\n--- File: {name} ---\n{content}"));
+            }
+        }
+
         let mut messages = vec![crate::llm::ChatMessage::system(system_text)];
         messages.extend(self.panel().messages.iter().cloned());
 
@@ -313,21 +342,27 @@ impl UiManager {
                 }
             }
             Action::ToggleAiPanel | Action::ToggleAiMode => {
+                let terminal_id = mux.focused_terminal_id();
                 if self.panel().is_visible() {
-                    self.panel_mut().close();
-                    self.panel_focused = false;
+                    if self.panel_focused {
+                        self.panel_mut().close();
+                        self.panel_focused = false;
+                        self.file_picker_focused = false;
+                    } else {
+                        self.panel_focused = true;
+                    }
                 } else {
-                    self.panel_mut().open();
-                    self.panel_focused = true;
+                    self.open_panel_with_context(terminal_id);
                 }
             }
             Action::EnableAiFeatures => {
-                if !self.panel().is_visible() { self.panel_mut().open(); }
-                self.panel_focused = true;
+                let terminal_id = mux.focused_terminal_id();
+                self.open_panel_with_context(terminal_id);
             }
             Action::DisableAiFeatures => {
                 self.panel_mut().close();
                 self.panel_focused = false;
+                self.file_picker_focused = false;
             }
             Action::ExplainLastOutput => self.explain_last_output(mux, wakeup_proxy),
             Action::FixLastError      => self.fix_last_error(mux, wakeup_proxy),

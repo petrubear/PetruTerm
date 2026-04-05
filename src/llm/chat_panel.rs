@@ -1,7 +1,10 @@
+use std::path::{Path, PathBuf};
 use crate::llm::{ChatMessage, ChatRole};
 
 /// Default panel width in terminal cell columns.
 pub const PANEL_COLS: u16 = 55;
+/// Max number of file attachment rows shown in the panel header section.
+pub const MAX_FILE_ROWS: usize = 4;
 
 /// Events sent from the tokio streaming task to the main thread.
 pub enum AiEvent {
@@ -37,6 +40,22 @@ pub struct ChatPanel {
     /// Marks panel content as changed — renderer uses this to skip re-shaping
     /// unchanged frames (avoids HarfBuzz calls on every redraw).
     pub dirty: bool,
+
+    // ── File context ──────────────────────────────────────────────────────────
+    /// Files attached as context; injected into LLM system message at query time.
+    pub attached_files: Vec<PathBuf>,
+    /// Cached char counts for each attached file (index-parallel to attached_files).
+    attached_file_chars: Vec<usize>,
+
+    // ── File picker ───────────────────────────────────────────────────────────
+    /// Whether the file picker overlay is open.
+    pub file_picker_open: bool,
+    /// Fuzzy search query typed in the picker.
+    pub file_picker_query: String,
+    /// All scanned files available to pick from (relative paths under CWD).
+    pub file_picker_items: Vec<PathBuf>,
+    /// Index of the highlighted item in the filtered list.
+    pub file_picker_cursor: usize,
 }
 
 impl ChatPanel {
@@ -49,6 +68,12 @@ impl ChatPanel {
             scroll_offset: 0,
             width_cols: PANEL_COLS,
             dirty: true,
+            attached_files: Vec::new(),
+            attached_file_chars: Vec::new(),
+            file_picker_open: false,
+            file_picker_query: String::new(),
+            file_picker_items: Vec::new(),
+            file_picker_cursor: 0,
         }
     }
 
@@ -178,6 +203,154 @@ impl ChatPanel {
             s
         };
         if cmd.is_empty() { None } else { Some(cmd.to_string()) }
+    }
+
+    // ── File context ─────────────────────────────────────────────────────────
+
+    /// Auto-attach `AGENTS.md` from `cwd` if it exists (idempotent).
+    pub fn init_default_files(&mut self, cwd: &Path) {
+        let agents = cwd.join("AGENTS.md");
+        if agents.exists() {
+            self.attach_file(agents);
+        }
+    }
+
+    /// Attach a file, reading its char count once for token estimation.
+    /// No-op if already attached.
+    pub fn attach_file(&mut self, path: PathBuf) {
+        if self.attached_files.contains(&path) { return; }
+        let chars = std::fs::read_to_string(&path).map(|s| s.len()).unwrap_or(0);
+        self.attached_files.push(path);
+        self.attached_file_chars.push(chars);
+        self.dirty = true;
+    }
+
+    /// Remove an attached file by index.
+    pub fn detach_file(&mut self, idx: usize) {
+        if idx < self.attached_files.len() {
+            self.attached_files.remove(idx);
+            self.attached_file_chars.remove(idx);
+            self.dirty = true;
+        }
+    }
+
+    /// Estimated token count (chars / 4) across messages + attached files.
+    pub fn estimated_tokens(&self) -> usize {
+        let msg_chars: usize = self.messages.iter().map(|m| m.content.len()).sum::<usize>()
+            + self.input.len()
+            + self.streaming_buf.len();
+        let file_chars: usize = self.attached_file_chars.iter().sum();
+        (msg_chars + file_chars) / 4
+    }
+
+    // ── File picker ───────────────────────────────────────────────────────────
+
+    /// Open the file picker, scanning `cwd` for pickable files.
+    pub fn open_file_picker(&mut self, cwd: &Path) {
+        self.file_picker_items = scan_files(cwd, 3);
+        self.file_picker_items.sort();
+        self.file_picker_query.clear();
+        self.file_picker_cursor = 0;
+        self.file_picker_open = true;
+        self.dirty = true;
+    }
+
+    pub fn close_file_picker(&mut self) {
+        self.file_picker_open = false;
+        self.dirty = true;
+    }
+
+    pub fn picker_type_char(&mut self, c: char) {
+        self.file_picker_query.push(c);
+        self.file_picker_cursor = 0;
+        self.dirty = true;
+    }
+
+    pub fn picker_backspace(&mut self) {
+        self.file_picker_query.pop();
+        self.file_picker_cursor = 0;
+        self.dirty = true;
+    }
+
+    pub fn picker_move_up(&mut self) {
+        self.file_picker_cursor = self.file_picker_cursor.saturating_sub(1);
+        self.dirty = true;
+    }
+
+    pub fn picker_move_down(&mut self, filtered_len: usize) {
+        if self.file_picker_cursor + 1 < filtered_len {
+            self.file_picker_cursor += 1;
+        }
+        self.dirty = true;
+    }
+
+    /// Toggle attach/detach for the currently highlighted picker item, given the
+    /// pre-computed filtered list (avoids re-running the fuzzy match here).
+    pub fn picker_confirm(&mut self, cwd: &Path, filtered_items: &[PathBuf]) {
+        if let Some(rel) = filtered_items.get(self.file_picker_cursor) {
+            let abs = cwd.join(rel);
+            if let Some(idx) = self.attached_files.iter().position(|p| p == &abs) {
+                self.detach_file(idx);
+            } else {
+                self.attach_file(abs);
+            }
+        }
+    }
+
+    /// Returns filtered file picker items matching the current query (fuzzy).
+    pub fn filtered_picker_items(&self) -> Vec<PathBuf> {
+        if self.file_picker_query.is_empty() {
+            return self.file_picker_items.clone();
+        }
+        use fuzzy_matcher::FuzzyMatcher;
+        use fuzzy_matcher::skim::SkimMatcherV2;
+        let matcher = SkimMatcherV2::default();
+        let query = &self.file_picker_query;
+        let mut scored: Vec<(i64, PathBuf)> = self.file_picker_items.iter()
+            .filter_map(|p| {
+                matcher.fuzzy_match(&p.to_string_lossy(), query).map(|s| (s, p.clone()))
+            })
+            .collect();
+        scored.sort_by(|a, b| b.0.cmp(&a.0));
+        scored.into_iter().map(|(_, p)| p).collect()
+    }
+}
+
+// ── File scanning ─────────────────────────────────────────────────────────────
+
+/// Recursively collect source files under `dir` up to `max_depth`, returning
+/// paths relative to `dir`. Skips hidden entries and common non-source dirs.
+pub fn scan_files(dir: &Path, max_depth: usize) -> Vec<PathBuf> {
+    let mut result = Vec::new();
+    scan_dir(dir, dir, max_depth, &mut result);
+    result
+}
+
+fn scan_dir(base: &Path, dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
+    if depth == 0 { return; }
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+        if name_str.starts_with('.') { continue; }
+        if matches!(name_str.as_ref(), "target" | "node_modules" | "dist" | "build" | ".git") {
+            continue;
+        }
+        if path.is_dir() {
+            scan_dir(base, &path, depth - 1, out);
+        } else {
+            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+            if matches!(ext,
+                "rs" | "toml" | "lua" | "md" | "json" | "yaml" | "yml" |
+                "txt" | "sh" | "zsh" | "py" | "js" | "ts" | "go" |
+                "c" | "cpp" | "h" | "hpp" | "lock"
+            ) || ext.is_empty() {
+                if let Ok(rel) = path.strip_prefix(base) {
+                    out.push(rel.to_path_buf());
+                }
+            }
+        }
     }
 }
 

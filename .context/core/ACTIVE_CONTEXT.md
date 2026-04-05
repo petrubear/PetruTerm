@@ -1,8 +1,8 @@
 # Active Context
 
-**Current Focus:** Phase 3 — Polish & UI Chrome
+**Current Focus:** Phase 2.5 — AI Agent Mode
 **Last Active:** 2026-04-05
-**Priority:** P2 (Status Bar)
+**Priority:** P1 (File context attachment + panel upgrade)
 
 ## Current State
 
@@ -23,7 +23,9 @@
 | Font fallback chain | ✅ | `petruterm.font("A, B, C")` resolved at config load time |
 
 ### Technical Debt
-Clean — 0 open items.
+| ID | Priority | Description |
+|----|----------|-------------|
+| TD-015 | P1 | Shift+Enter treated as regular Enter (input/PTY)
 
 ### Keybinds (tmux-aligned)
 
@@ -40,14 +42,28 @@ Clean — 0 open items.
 | `leader+p` | Command palette |
 | `Ctrl+Space` | Inline AI block |
 
-## Phase 3 Next Steps (ordered by priority)
+## Phase 2.5 Next Steps (ordered by priority)
 
-1. **Status bar engine (P2)** — enable/disable from Lua + command palette
-2. **Built-in status bar widgets** — `mode`, `cwd`, `git_branch`, `time`, `exit_code`
-3. **Status bar widget Lua API** — `petruterm.statusbar.register_widget({ name, render })`
-4. **Status bar position** — `top` or `bottom` (Lua config)
-5. **Snippets (P3)** — `config.snippets` table, expand via palette, optional `trigger`
-6. **Starship compatibility** — detect `STARSHIP_SHELL`, defer left prompt
+### TD-015 (fix first — P1)
+1. **Shift+Enter fix** — detect `Enter + SHIFT` in `InputHandler`, send `\n` not `\r`, no PTY exec
+
+### P1 — File Context Attachment
+2. **`ChatPanel.attached_files`** — `Vec<PathBuf>`, auto-populate with `AGENTS.md` from CWD on open
+3. **File list section** — render `Selected (N files)` header + filenames at top of panel
+4. **File picker** — `Tab` toggles focus; fuzzy search CWD files; `Enter` attach/detach
+5. **Context injection** — file contents as `role: system` messages before user query
+6. **Token counter** — footer: `Tokens: NNNN; <C-s>: submit`
+
+### P2 — Tool Use (read & explore)
+7. **`AgentTool` enum** — `ReadFile`, `ListDir` in OpenAI function-calling format
+8. **Provider extension** — serialize tool defs, parse `tool_calls` in response
+9. **Tool execution loop** — call → inject result → re-query until done
+10. **Streaming UI** — `⟳ reading…` / `✓ done` inline
+
+### P3 — Tool Use (write & run)
+11. **`WriteFile` / `ApplyDiff`** — diff preview inline, `[y]/[n]` confirm before disk write
+12. **`RunCommand`** — execute in PTY after confirm
+13. **Undo** — single-step file restore
 
 ## Files to Reference
 - `src/renderer/rounded_rect.rs` — `RoundedRectInstance`, `RoundedRectPipeline`, SDF shader
