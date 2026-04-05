@@ -10,6 +10,7 @@ use crate::term::{CursorInfo, CursorShape};
 use crate::term::color::resolve_color;
 use alacritty_terminal::vte::ansi::Color as AnsiColor;
 use crate::llm::chat_panel::{ChatPanel, PanelState};
+use crate::llm::ai_block::{AiBlock, AiState, AI_BLOCK_ROWS};
 use crate::ui::CommandPalette;
 
 /// Cache for a single shaped row to avoid re-shaping every frame.
@@ -494,6 +495,87 @@ impl RenderContext {
             }
         };
         self.push_shaped_row(hints, HINT_FG, panel_bg, hints_row, co, panel_cols, font);
+    }
+
+    /// Render the inline AI block, overlaying the bottom `AI_BLOCK_ROWS` rows of the terminal.
+    /// Instances are appended after the terminal rows so they render on top.
+    pub fn build_ai_block_instances(
+        &mut self,
+        block: &AiBlock,
+        font: &crate::config::schema::FontConfig,
+        term_cols: usize,
+        screen_rows: usize,
+    ) {
+        use crate::llm::chat_panel::word_wrap;
+
+        if screen_rows < AI_BLOCK_ROWS + 1 || term_cols < 4 { return; }
+
+        let w = term_cols;
+        let sep_row   = screen_rows - AI_BLOCK_ROWS;
+        let input_row = screen_rows - AI_BLOCK_ROWS + 1;
+        let resp_row  = screen_rows - AI_BLOCK_ROWS + 2;
+        let hint_row  = screen_rows - AI_BLOCK_ROWS + 3;
+
+        const BLOCK_BG:  [f32; 4] = [0.11, 0.11, 0.18, 1.0]; // dark bg
+        const BORDER_FG: [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // purple
+        const INPUT_FG:  [f32; 4] = [0.95, 0.95, 0.95, 1.0]; // white
+        const RESP_FG:   [f32; 4] = [0.50, 0.98, 0.60, 1.0]; // green
+        const STREAM_FG: [f32; 4] = [0.95, 0.98, 0.55, 1.0]; // yellow
+        const HINT_FG:   [f32; 4] = [0.38, 0.44, 0.64, 1.0]; // dim gray
+        const ERR_FG:    [f32; 4] = [1.00, 0.33, 0.33, 1.0]; // red
+
+        const SPIN: [&str; 8] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"];
+        let spin = SPIN[block.response.chars().count() % 8];
+
+        // Separator
+        let title = " AI ";
+        let side = (w.saturating_sub(title.chars().count())) / 2;
+        let sep = format!("{}{}{}", "─".repeat(side), title, "─".repeat(w.saturating_sub(side + title.chars().count())));
+        self.push_shaped_row(&sep, BORDER_FG, BLOCK_BG, sep_row, 0, w, font);
+
+        // Input row: "⚡ > <query>[cursor]"
+        let cursor = if matches!(block.state, AiState::Typing) { "▋" } else { "" };
+        let query_row = format!("⚡ > {}{}", block.query, cursor);
+        self.push_shaped_row(&query_row, INPUT_FG, BLOCK_BG, input_row, 0, w, font);
+
+        // Response + hint rows
+        match &block.state {
+            AiState::Typing => {
+                self.push_shaped_row("", BLOCK_BG, BLOCK_BG, resp_row, 0, w, font);
+                self.push_shaped_row("  Enter: send   Esc: cancel", HINT_FG, BLOCK_BG, hint_row, 0, w, font);
+            }
+            AiState::Loading => {
+                self.push_shaped_row(&format!("  {} thinking\u{2026}", spin), STREAM_FG, BLOCK_BG, resp_row, 0, w, font);
+                self.push_shaped_row("  Esc: cancel", HINT_FG, BLOCK_BG, hint_row, 0, w, font);
+            }
+            AiState::Streaming => {
+                let lines = word_wrap(&block.response, w.saturating_sub(4));
+                let line = format!("  \u{2192} {}", lines.first().cloned().unwrap_or_default()); // →
+                self.push_shaped_row(&line, STREAM_FG, BLOCK_BG, resp_row, 0, w, font);
+                self.push_shaped_row(&format!("  {} streaming\u{2026}   Esc: cancel", spin), HINT_FG, BLOCK_BG, hint_row, 0, w, font);
+            }
+            AiState::Done => {
+                if let Some(cmd) = block.command_to_run() {
+                    let max_cmd = w.saturating_sub(5);
+                    let display = if cmd.chars().count() > max_cmd {
+                        format!("{}…", cmd.chars().take(max_cmd.saturating_sub(1)).collect::<String>())
+                    } else { cmd };
+                    self.push_shaped_row(&format!("  \u{2192} {}", display), RESP_FG, BLOCK_BG, resp_row, 0, w, font);
+                } else {
+                    let lines = word_wrap(&block.response, w.saturating_sub(4));
+                    let line = format!("  {}", lines.first().cloned().unwrap_or_default());
+                    self.push_shaped_row(&line, RESP_FG, BLOCK_BG, resp_row, 0, w, font);
+                }
+                self.push_shaped_row("  Enter: run \u{23ce}   Esc: dismiss", HINT_FG, BLOCK_BG, hint_row, 0, w, font);
+            }
+            AiState::Error(err) => {
+                let lines = word_wrap(err, w.saturating_sub(4));
+                let line = format!("  \u{2717} {}", lines.first().cloned().unwrap_or_default()); // ✗
+                self.push_shaped_row(&line, ERR_FG, BLOCK_BG, resp_row, 0, w, font);
+                self.push_shaped_row("  Esc: dismiss", HINT_FG, BLOCK_BG, hint_row, 0, w, font);
+            }
+            AiState::Hidden => {}
+        }
     }
 
     pub fn build_palette_instances(

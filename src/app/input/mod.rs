@@ -155,21 +155,53 @@ impl InputHandler {
             return;
         }
 
-        if ui.chat_panel.is_visible() && ui.panel_focused && !cmd {
+        // ── Ctrl+Space — toggle inline AI block ──────────────────────────────
+        if ctrl && !shift && !cmd {
+            if let Key::Named(NamedKey::Space) = &event.logical_key {
+                if ui.ai_block.is_visible() {
+                    ui.ai_block.close();
+                } else {
+                    ui.ai_block.open();
+                }
+                return;
+            }
+        }
+
+        // ── Inline AI block input ────────────────────────────────────────────
+        if ui.ai_block.is_visible() && !cmd {
+            match &event.logical_key {
+                Key::Named(NamedKey::Escape) => { ui.ai_block.close(); }
+                Key::Named(NamedKey::Enter) => {
+                    if ui.ai_block.is_typing() {
+                        ui.submit_ai_block_query(wakeup_proxy);
+                    } else if ui.ai_block.is_done() {
+                        ui.run_ai_block_command(mux);
+                    }
+                }
+                Key::Named(NamedKey::Backspace) => ui.ai_block.backspace(),
+                Key::Named(NamedKey::Space)     => ui.ai_block.type_char(' '),
+                Key::Character(s) => { for ch in s.chars() { ui.ai_block.type_char(ch); } }
+                _ => {}
+            }
+            return;
+        }
+
+        // ── Chat panel input ─────────────────────────────────────────────────
+        if ui.is_panel_visible() && ui.panel_focused && !cmd {
             match &event.logical_key {
                 Key::Named(NamedKey::Escape) => {
-                    if matches!(ui.chat_panel.state, PanelState::Error(_)) { ui.chat_panel.dismiss_error(); }
-                    else if !ui.chat_panel.is_streaming() { ui.chat_panel.close(); ui.panel_focused = false; }
+                    if matches!(ui.panel().state, PanelState::Error(_)) { ui.panel_mut().dismiss_error(); }
+                    else if !ui.panel().is_streaming() { ui.panel_mut().close(); ui.panel_focused = false; }
                 }
                 Key::Named(NamedKey::Enter) => {
-                    if ui.chat_panel.is_idle() {
-                        if ui.chat_panel.input.trim().is_empty() { ui.chat_panel_run_command(mux); }
+                    if ui.panel().is_idle() {
+                        if ui.panel().input.trim().is_empty() { ui.chat_panel_run_command(mux); }
                         else { ui.submit_ai_query(wakeup_proxy); }
                     }
                 }
-                Key::Named(NamedKey::Backspace) => ui.chat_panel.backspace(),
-                Key::Named(NamedKey::Space) => ui.chat_panel.type_char(' '),
-                Key::Character(s) => { for ch in s.chars() { ui.chat_panel.type_char(ch); } }
+                Key::Named(NamedKey::Backspace) => ui.panel_mut().backspace(),
+                Key::Named(NamedKey::Space)     => ui.panel_mut().type_char(' '),
+                Key::Character(s) => { for ch in s.chars() { ui.panel_mut().type_char(ch); } }
                 _ => {}
             }
             return;
