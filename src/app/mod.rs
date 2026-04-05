@@ -276,6 +276,9 @@ impl ApplicationHandler<()> for App {
                             self.mux.tabs.active_index(),
                             &scaled_font,
                             total_cols_for_tab,
+                            self.config.window.padding.left as f32,
+                            self.config.window.padding.top as f32,
+                            self.config.colors.background,
                         );
                     }
 
@@ -339,6 +342,7 @@ impl ApplicationHandler<()> for App {
                     // Tab bar + scroll bar instances are appended after terminal rows, so
                     // offset-based dirty-row upload no longer maps cleanly. Always do a
                     // full upload — at ~5000 instances × 48 bytes the cost is negligible.
+                    rc.renderer.upload_rect_instances(&rc.rect_instances);
                     rc.renderer.upload_instances(&rc.instances, 0);
                     rc.row_cache.dirty_rows.fill(false);
                     rc.renderer.set_cell_count(rc.instances.len());

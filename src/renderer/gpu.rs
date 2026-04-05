@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use std::cell::RefCell;
+use std::mem;
 use std::rc::Rc;
 use std::sync::Arc;
 use winit::window::Window;
@@ -9,9 +10,13 @@ use crate::renderer::atlas::GlyphAtlas;
 use crate::renderer::cell::{CellUniforms, CellVertex};
 use crate::renderer::lcd_atlas::LcdGlyphAtlas;
 use crate::renderer::pipeline::{CellPipeline, CellPipelineBgAware, CellPipelineLcd};
+use crate::renderer::rounded_rect::{RoundedRectInstance, RoundedRectPipeline};
 
 /// Maximum number of cell instances per frame (cols × rows + overdraw headroom).
 const MAX_INSTANCES: usize = 32_768;
+
+/// Maximum number of rounded rect instances per frame (tab bar pills + overdraw).
+const MAX_RECT_INSTANCES: usize = 256;
 
 /// Core wgpu renderer: owns the surface, device, queue, pipeline, and glyph atlas.
 pub struct GpuRenderer {
@@ -43,6 +48,11 @@ pub struct GpuRenderer {
     lcd_instance_buffer: wgpu::Buffer,
     lcd_instance_count: usize,
     lcd_ready: bool,
+
+    // Rounded rect pipeline (TD-013: pill tab bar)
+    rect_pipeline: RoundedRectPipeline,
+    rect_instance_buffer: wgpu::Buffer,
+    rect_instance_count: usize,
 }
 
 impl GpuRenderer {
@@ -220,6 +230,17 @@ impl GpuRenderer {
             mapped_at_creation: false,
         });
 
+        // Rounded rect pipeline (TD-013)
+        let rect_pipeline = RoundedRectPipeline::new(&device, format);
+        rect_pipeline.update_viewport(&queue, inner.width, inner.height);
+
+        let rect_instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("rect instances"),
+            size: (MAX_RECT_INSTANCES * mem::size_of::<RoundedRectInstance>()) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
         Ok(Self {
             _window: window,
             surface,
@@ -244,6 +265,9 @@ impl GpuRenderer {
             lcd_instance_buffer,
             lcd_instance_count: 0,
             lcd_ready: false,
+            rect_pipeline,
+            rect_instance_buffer,
+            rect_instance_count: 0,
         })
     }
 
@@ -259,6 +283,8 @@ impl GpuRenderer {
         // Update viewport_size in uniforms (partial write at offset 8)
         let vp = [width as f32, height as f32];
         self.queue.write_buffer(&self.uniform_buffer, 8, bytemuck::cast_slice(&vp));
+
+        self.rect_pipeline.update_viewport(&self.queue, width, height);
 
         log::debug!("Renderer resized to {width}x{height}");
     }
@@ -341,6 +367,14 @@ impl GpuRenderer {
                 multiview_mask: None,
             });
 
+            // Rounded rect pass (TD-013: pill tab bar) — drawn before cell backgrounds
+            if self.rect_instance_count > 0 {
+                pass.set_pipeline(&self.rect_pipeline.pipeline);
+                pass.set_bind_group(0, &self.rect_pipeline.uniform_bind_group, &[]);
+                pass.set_vertex_buffer(0, self.rect_instance_buffer.slice(..));
+                pass.draw(0..6, 0..self.rect_instance_count as u32);
+            }
+
             if self.cell_count > 0 {
                 // Backgrounds first
                 pass.set_pipeline(&self.pipeline.bg_pipeline);
@@ -393,6 +427,19 @@ impl GpuRenderer {
         } else {
             None
         }
+    }
+
+    /// Upload rounded rect instances for this frame (TD-013). Must be called before `render()`.
+    pub fn upload_rect_instances(&mut self, instances: &[RoundedRectInstance]) {
+        let count = instances.len().min(MAX_RECT_INSTANCES);
+        if count > 0 {
+            self.queue.write_buffer(
+                &self.rect_instance_buffer,
+                0,
+                bytemuck::cast_slice(&instances[..count]),
+            );
+        }
+        self.rect_instance_count = count;
     }
 
     /// Upload LCD cell instances for this frame. Must be called before `render()`.

@@ -5,6 +5,7 @@ use winit::window::Window;
 use crate::config::Config;
 use crate::font::{build_font_system, ShapedGlyph, TextShaper};
 use crate::renderer::cell::{CellVertex, FLAG_CURSOR, FLAG_LCD};
+use crate::renderer::rounded_rect::RoundedRectInstance;
 use crate::renderer::GpuRenderer;
 use crate::term::{CursorInfo, CursorShape};
 use crate::term::color::resolve_color;
@@ -52,6 +53,8 @@ pub struct RenderContext {
     pub lcd_instances: Vec<CellVertex>,
     /// Cached GPU instances for the AI chat panel — rebuilt only when `ChatPanel::dirty`.
     pub panel_instances_cache: Vec<CellVertex>,
+    /// Rounded rect instances for the tab bar pills (TD-013), cleared each frame.
+    pub rect_instances: Vec<RoundedRectInstance>,
 }
 
 impl RenderContext {
@@ -84,6 +87,7 @@ impl RenderContext {
             instances: Vec::new(),
             lcd_instances: Vec::new(),
             panel_instances_cache: Vec::new(),
+            rect_instances: Vec::new(),
         })
     }
 
@@ -623,33 +627,40 @@ impl RenderContext {
     /// Render the tab bar at grid row -1 (one cell row above the terminal).
     /// Requires `set_padding` to have shifted padding.y up by one cell_height.
     ///
-    /// Each tab: [1-cell gap BAR_BG] [" N " BADGE_BG] [" title " TAB_BG]
-    /// No powerline glyphs — clean rectangular segments, badge darker than body.
+    /// TD-013: Each tab is rendered as a rounded pill (via RoundedRectPipeline)
+    ///         with text overlaid using transparent-bg cell instances.
+    /// TD-014: The bar background comes from the window clear color (config.colors.background),
+    ///         so `bar_bg` is acknowledged here but not used directly for fill.
     pub fn build_tab_bar_instances(
         &mut self,
         tabs: &[Tab],
         active_idx: usize,
         font: &crate::config::schema::FontConfig,
         total_cols: usize,
+        pad_left: f32,
+        pad_top: f32,
+        bar_bg: [f32; 4],
     ) {
+        // bar_bg is applied via the renderer clear color (TD-014); no fill needed here.
+        let _ = bar_bg;
+
         if tabs.is_empty() || total_cols == 0 { return; }
 
-        // Dracula Pro palette
-        const BAR_BG:            [f32; 4] = [0.10, 0.10, 0.15, 1.0]; // very dark bar
-        const ACTIVE_TAB_BG:     [f32; 4] = [0.74, 0.58, 0.98, 1.0]; // Dracula purple #bd93f9
-        const ACTIVE_BADGE_BG:   [f32; 4] = [0.51, 0.36, 0.71, 1.0]; // darker purple badge
-        const ACTIVE_FG:         [f32; 4] = [0.97, 0.97, 0.95, 1.0]; // near-white
-        const INACTIVE_TAB_BG:   [f32; 4] = [0.27, 0.28, 0.35, 1.0]; // Dracula current-line
-        const INACTIVE_BADGE_BG: [f32; 4] = [0.16, 0.16, 0.22, 1.0]; // darker gray badge
-        const INACTIVE_FG:       [f32; 4] = [0.61, 0.64, 0.75, 1.0]; // comment gray
+        // Clear rect instances for this frame
+        self.rect_instances.clear();
 
-        macro_rules! push_bar {
-            ($text:expr, $fg:expr, $bg:expr, $col:expr, $w:expr) => {{
-                let start = self.instances.len();
-                self.push_shaped_row($text, $fg, $bg, 0, $col, $w, font);
-                for inst in &mut self.instances[start..] { inst.grid_pos[1] = -1.0; }
-            }};
-        }
+        // Dracula palette (pill colors)
+        const ACTIVE_PILL:   [f32; 4] = [0.74, 0.58, 0.98, 1.0]; // Dracula purple #bd93f9
+        const ACTIVE_FG:     [f32; 4] = [0.97, 0.97, 0.95, 1.0]; // near-white
+        const INACTIVE_PILL: [f32; 4] = [0.27, 0.28, 0.35, 1.0]; // Dracula current-line
+        const INACTIVE_FG:   [f32; 4] = [0.61, 0.64, 0.75, 1.0]; // comment gray
+        let transparent = [0.0f32; 4];
+
+        let cell_w = self.shaper.cell_width;
+        let cell_h = self.shaper.cell_height;
+        let radius = (cell_h / 3.0).round();
+        let pill_y = pad_top + 2.0;
+        let pill_h = cell_h - 4.0;
 
         let mut col = 0usize;
 
@@ -657,35 +668,55 @@ impl RenderContext {
             if col >= total_cols { break; }
 
             let is_active = i == active_idx;
-            let tab_bg    = if is_active { ACTIVE_TAB_BG }   else { INACTIVE_TAB_BG };
-            let badge_bg  = if is_active { ACTIVE_BADGE_BG } else { INACTIVE_BADGE_BG };
-            let fg        = if is_active { ACTIVE_FG }        else { INACTIVE_FG };
+            let pill_color = if is_active { ACTIVE_PILL } else { INACTIVE_PILL };
+            let fg = if is_active { ACTIVE_FG } else { INACTIVE_FG };
 
-            // 1-cell dark gap before each tab
-            let gap_w = 1.min(total_cols - col);
-            push_bar!(" ", [0.0; 4], BAR_BG, col, gap_w);
-            col += gap_w;
+            // 1-cell gap — window bg (clear color) shows through
+            col += 1;
             if col >= total_cols { break; }
 
-            // Number badge: " N " with darker background
+            // Badge text " N "
             let badge = format!(" {} ", i + 1);
             let badge_w = badge.chars().count().min(total_cols - col);
-            push_bar!(&badge, fg, badge_bg, col, badge_w);
-            col += badge_w;
-            if col >= total_cols { break; }
 
-            // Tab title: " name " with tab background
+            // Title text " name " (max 14 chars)
             let raw = format!(" {} ", tab.title);
             let title: String = raw.chars().take(14).collect();
-            let title_w = title.chars().count().min(total_cols - col);
-            push_bar!(&title, fg, tab_bg, col, title_w);
-            col += title_w;
-        }
+            let title_w = title.chars().count().min(total_cols.saturating_sub(col + badge_w));
 
-        // Fill remainder with bar background
-        if col < total_cols {
-            push_bar!("", [0.0; 4], BAR_BG, col, total_cols - col);
+            let pill_w = (badge_w + title_w) as f32 * cell_w;
+            let pill_x = pad_left + col as f32 * cell_w;
+
+            // Emit rounded rect for the pill background
+            if pill_w > 0.0 {
+                self.rect_instances.push(RoundedRectInstance {
+                    rect:   [pill_x, pill_y, pill_w, pill_h],
+                    color:  pill_color,
+                    radius,
+                    _pad:   [0.0; 3],
+                });
+            }
+
+            // Badge text with transparent bg
+            let badge_w_clamped = badge_w.min(total_cols - col);
+            if badge_w_clamped > 0 {
+                let start = self.instances.len();
+                self.push_shaped_row(&badge, fg, transparent, 0, col, badge_w_clamped, font);
+                for inst in &mut self.instances[start..] { inst.grid_pos[1] = -1.0; }
+            }
+            col += badge_w_clamped;
+            if col >= total_cols { break; }
+
+            // Title text with transparent bg
+            let title_w_clamped = title_w.min(total_cols - col);
+            if title_w_clamped > 0 {
+                let start = self.instances.len();
+                self.push_shaped_row(&title, fg, transparent, 0, col, title_w_clamped, font);
+                for inst in &mut self.instances[start..] { inst.grid_pos[1] = -1.0; }
+            }
+            col += title_w_clamped;
         }
+        // No trailing fill needed — window bg (clear color = bar_bg from TD-014) shows through
     }
 
     /// Render a scroll bar on the right edge of the terminal (overlays rightmost ~6px of the

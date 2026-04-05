@@ -168,6 +168,7 @@ fn vs_bg(@builtin(vertex_index) vi: u32, instance: InstanceIn) -> VertexOut {
 
 @fragment
 fn fs_bg(in: VertexOut) -> @location(0) vec4<f32> {
+    if in.bg.a < 0.01 { discard; }
     return in.bg;
 }
 "#;
@@ -308,6 +309,7 @@ fn vs_bg(@builtin(vertex_index) vi: u32, instance: InstanceIn) -> VertexOut {
 
 @fragment
 fn fs_bg(in: VertexOut) -> @location(0) vec4<f32> {
+    if in.bg.a < 0.01 { discard; }
     return in.bg;
 }
 "#;
