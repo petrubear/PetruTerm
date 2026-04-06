@@ -8,15 +8,16 @@ use crate::llm::ai_block::AiBlock;
 use crate::llm::LlmProvider;
 use crate::llm::shell_context::ShellContext;
 use crate::llm::tools::{AgentStepResult, AgentTool, execute_tool};
-use crate::ui::{CommandPalette, SplitDir, Rect};
+use crate::ui::{CommandPalette, ContextMenu, SplitDir, Rect};
 use winit::event_loop::EventLoopProxy;
 use winit::window::Window;
 use crate::app::mux::Mux;
 use crate::app::renderer::RenderContext;
 
-/// Manages UI overlays: command palette, per-pane chat panels, and the inline AI block.
+/// Manages UI overlays: command palette, context menu, per-pane chat panels, and the inline AI block.
 pub struct UiManager {
     pub palette: CommandPalette,
+    pub context_menu: ContextMenu,
 
     // ── Chat panel (side panel, per-pane history) ─────────────────────────────
     chat_panels: HashMap<usize, ChatPanel>,
@@ -56,7 +57,8 @@ impl UiManager {
         chat_panels.insert(0usize, ChatPanel::new());
 
         Self {
-            palette: CommandPalette::new(),
+            palette: CommandPalette::new(config),
+            context_menu: ContextMenu::new(),
             chat_panels,
             active_panel_id: 0,
             panel_focused: false,

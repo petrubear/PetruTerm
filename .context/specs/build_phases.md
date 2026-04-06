@@ -145,6 +145,7 @@ preview; user confirms before any write happens.
 #### Priority — Visual Chrome (P1)
 - [x] **Tab bar:** renders at grid row -1 (above terminal); active tab highlighted; Dracula Pro colors — `build_tab_bar_instances()` in `app/renderer.rs`; GPU padding shifted via `renderer.set_padding()`
 - [x] **Scroll bar:** 6px right-edge overlay using FLAG_CURSOR; thumb proportional to `screen_rows / total_lines`; gated by `config.enable_scroll_bar` — `build_scroll_bar_instances()` in `app/renderer.rs`; `Terminal::scrollback_info()` in `term/mod.rs`
+- [x] **Right-click context menu:** floating popup at click position; items: Copy (Cmd+C), Paste (Cmd+V), Clear; keybinds shown right-aligned; hover highlight; closes on click-outside, key press, or action — `src/ui/context_menu.rs`; `build_context_menu_instances()` in `app/renderer.rs`; mouse handling in `app/mod.rs`
 
 #### Status Bar (P2)
 - [ ] Status bar engine (lua-line style): enable/disable from Lua + command palette

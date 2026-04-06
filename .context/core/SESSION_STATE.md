@@ -1,117 +1,64 @@
 # Session State
 
-**Last Updated:** 2026-04-05
-**Session Focus:** Phase 2.5 P2 — LLM Tool Use (ReadFile, ListDir)
+**Last Updated:** 2026-04-06
+**Session Focus:** Bug fixes + UX polish (mouse selection, config, palette keybinds, context menu)
 
 ## Branch: `master`
 
-## Session Notes (2026-04-04)
+## Session Notes (2026-04-06)
 
-### Phase 3 P1 — Tab bar + Scroll bar (commits 000f8fb, bcb2d19, 7905178, 1e5b102, 54e8b83)
+### Bug: Mouse selection broken (fixed)
+- **Root cause:** `setMovableByWindowBackground: YES` in `apply_macos_custom_titlebar` made the entire window background draggable, overriding text selection drag.
+- **Fix:** Changed to `Bool::NO`. The explicit `drag_window()` call at `y < padding.top` already handles title bar area dragging.
+- File: `src/app/mod.rs`
 
-**Terminal ID ownership refactor**
-- `PaneManager` no longer owns `next_terminal_id`; `Mux` allocates IDs and passes them into `PaneManager::new` and `split(dir, new_id)`.
-- Fixes `cmd_split` using a stale ID before `Terminal::new` succeeded.
-- Files: `src/app/mux.rs`, `src/ui/panes.rs`
+### Default config — all fields now included
+- `config/default/ui.lua` — added `font_line_height`, `font_fallbacks`, `lcd_antialiasing`, commented initial_width/height
+- `config/default/llm.lua` — added full `ui` section (width_cols, background, user_fg, assistant_fg, input_fg)
+- `config/default/perf.lua` — added `shell`, `animation_fps`, `gpu_preference`
+- `src/config/mod.rs` — replaced `copy_default_configs` (ran only on first launch) with `ensure_default_configs` which writes any missing file on every startup without overwriting existing ones
 
-**Tab bar redesign**
-- Each tab renders as `[gap BAR_BG][" N " BADGE_BG][" title " TAB_BG]`.
-- Active: Dracula purple `#bd93f9` body + darker purple badge.
-- Inactive: Dracula current-line gray body + darker gray badge.
-- Powerline glyphs (E0B4/E0B6) were attempted for rounded caps but produce solid triangle arrows — removed. Rounded pills deferred to TD-013 (GPU render pass).
-- Tab bar background hardcoded; should match terminal bg — deferred to TD-014.
-- File: `src/app/renderer.rs` → `build_tab_bar_instances`
+### Command palette keybinds
+- `PaletteAction` gained `keybind: Option<String>` field
+- `built_in_actions(&Config)` now builds a leader shortcut lookup from `config.keys` (format: `^B c`, `Cmd+Q`, etc.)
+- Keybinds rendered right-aligned in a dimmed color (`[0.5, 0.5, 0.7, 1.0]`) in `build_palette_instances`
+- Hot-reload calls `palette.rebuild_keybinds(&config)` to reflect keybind changes
+- Files: `src/ui/palette/actions.rs`, `src/ui/palette/mod.rs`, `src/app/renderer.rs`
 
-**Keybinds — tmux alignment**
-- `leader+c` new tab (was `t`), `leader+&` close tab (was `w`), `leader+p` prev tab (was `b`), `leader+n` next tab (unchanged).
-- Updated both `config/default/keybinds.lua` (embedded) and `~/.config/petruterm/keybinds.lua` (user).
-
-**Technical Debt added**
-- TD-013: Tab bar rounded pills — requires wgpu rounded-rect render pass.
-- TD-014: Tab bar BAR_BG should inherit `config.colors.background`.
-
-### Previous session (2026-04-04) — Phase 2 + Phase 3 P1 base
-
-See archived notes: per-pane chat history, Ctrl+Space inline AI block, AI block rendering, performance fixes, leader key ordering.
-
-## Session Notes (2026-04-05)
-
-### TD-015 — Shift+Enter (resolved)
-- `key_map.rs`: `Shift+Enter` → `\x1b[13;2u` (xterm modified); `Shift+Tab` → `\x1b[Z`
-- `input/mod.rs`: chat panel `Shift+Enter` inserts `\n` without submitting
-
-### Phase 2.5 P1 — AI Agent Mode: File Context Attachment (complete)
-- `ChatPanel.attached_files: Vec<PathBuf>` + `attached_file_chars` for token estimation
-- `AGENTS.md` auto-loaded from terminal's real CWD on every panel open (idempotent)
-- `Tab` opens file picker overlay; fuzzy search via `fuzzy-matcher`; `Enter` attaches/detaches; `Tab`/`Esc` closes
-- File list section rendered at top of panel: `Selected (N files)` header + names
-- Attached file contents injected as `--- File: path ---\ncontent` in system message
-- Token counter in panel footer (`estimated chars/4`)
-- `Ctrl+S` as alternative submit keybind
-
-### CWD resolution (correct terminal directory)
-- `Pty::spawn` captures `pty.child().id()` before EventLoop consumes the pty
-- `Terminal.child_pid: u32` and `Mux::active_cwd()` expose it
-- macOS: `proc_pidinfo(PROC_PIDVNODEPATHINFO)` via `libc` — no shell integration needed
-- Linux: `/proc/{pid}/cwd` symlink
-- Files: `src/term/pty.rs`, `src/term/mod.rs`, `src/app/mux.rs`
-
-### /q and /quit commands
-- Typing `/q` or `/quit` in panel input + Enter → closes panel + `mux.cmd_close_tab()`
-
-## Session Notes (2026-04-05 — Phase 2.5 P2: Tool Use)
-
-### Tool use loop
-- `src/llm/tools.rs` — `AgentTool` (ReadFile, ListDir), `execute_tool()` with CWD sandbox
-- `src/llm/mod.rs` — `ChatRole::Tool(String)`, `ChatMessage::to_api_value()`, `agent_step()` in trait
-- `src/llm/openrouter.rs` + `openai_compat.rs` — `agent_step()` impl; both parse `tool_calls`
-- `src/llm/chat_panel.rs` — `AiEvent::ToolStatus { tool, path, done }`; `set_tool_status()`
-- `src/app/ui.rs` — `submit_ai_query(wakeup_proxy, cwd)` now runs tool loop (max 10 rounds)
-- `src/app/input/mod.rs` — pass CWD from `mux.active_cwd()` to submit
-
-## Session Notes (2026-04-05 — Emoji + TD audit)
-
-### Emoji rendering fix
-- Root cause: `fs_main` shader read only `.r` channel — broken for color (RGBA) emoji glyphs
-- Fix: `FLAG_COLOR_GLYPH = 0x20` flag; `AtlasEntry.is_color: bool`; shader branches on flag
-- Files: `src/renderer/cell.rs`, `src/renderer/atlas.rs`, `src/font/shaper.rs`, `src/app/renderer.rs`, `src/renderer/pipeline.rs`
-- Verified working ✅
-
-### TD audit (opencode items)
-- TD-OP-01 (P0 use-after-free) → **false positive** — Drop is correct, reclassified P2
-- TD-OP-02 (Nerd Font overrides) → **real** — confirmed in `shaper.rs`, kept P1
-- TD-OP-03 (atlas no eviction) → **real** — confirmed in `atlas.rs`, kept P2
+### Right-click context menu (new feature)
+- New `src/ui/context_menu.rs` — `ContextMenu`, `ContextAction`, `ContextMenuItem`
+- Items: **Copy** `Cmd+C`, **Paste** `Cmd+V`, **Clear` — same layout as palette (name left, keybind right)
+- Popup rendered at click cell position, clamped to terminal bounds
+- Hover highlight tracks `CursorMoved`; closes on click-outside, any key press, or item selection
+- In mouse-reporting mode (e.g. vim) right-click still passes through to the terminal app
+- Files: `src/ui/context_menu.rs`, `src/ui/mod.rs`, `src/app/ui.rs`, `src/app/mod.rs`, `src/app/renderer.rs`
 
 ## Build Status
-- **cargo check:** PASS (0 errors — 2026-04-05)
+- **cargo build:** PASS (0 errors — 2026-04-06)
 - **branch:** master (stable)
+
+## Previous Sessions
+
+### Phase 2.5 P2 — LLM Tool Use (2026-04-05) — COMPLETE
+Tool use loop: `AgentTool` (ReadFile, ListDir), `agent_step()` in providers, max-10 round loop, `ToolStatus` events.
+
+### Phase 2.5 P1 — AI Agent Mode (2026-04-05) — COMPLETE
+File picker, `AGENTS.md` auto-load, CWD from `proc_pidinfo`, Ctrl+S submit, /q/quit.
+
+### Phase 3 P1 — Tab bar + Scroll bar (2026-04-04) — COMPLETE
+Rounded pill tabs (SDF WGSL), proportional scroll bar, TD-013/TD-014 resolved.
 
 ## Key Technical Decisions (standing)
 
-### Tab Bar Architecture
-- Rendered at `grid_pos[1] = -1.0` (one row above terminal) via `build_tab_bar_instances`
-- Visible only when tab count > 1 (`tab_bar_visible()`)
-- Height = 1 cell height; padding shifted via `renderer.set_padding()`
-- Rounded corners deferred (TD-013); bg color transparency deferred (TD-014)
+### Mouse drag vs window drag
+- `y < padding.top` (60px physical) → `drag_window()` (title bar area only)
+- `setMovableByWindowBackground: NO` — rest of window is NOT draggable
 
-### Keybind Architecture (tmux-style)
-- Leader: `Ctrl+B`, 1000ms timeout
-- Tab: `c` new, `&` close, `n` next, `p` prev, `1-9` switch
-- Pane: `%` split-H, `"` split-V, `x` close, `hjkl` focus nav
-- AI: `a` panel, `e` explain, `f` fix, `Ctrl+Space` inline block
-- Command palette: `p`
+### Context menu architecture
+- `ContextMenu` stored in `UiManager.context_menu` (pub field)
+- Right-click in terminal area (not panel, not mouse-reporting mode) → opens menu
+- Mouse-reporting mode → right-click passes through as button 2 SGR/X10 report
 
-### Per-Pane Chat Architecture
-- `UiManager.chat_panels: HashMap<usize, ChatPanel>` keyed by `terminal_id`
-- `set_active_terminal(id)` called in `RedrawRequested` and `KeyboardInput`
-
-### AI Panel Performance
-- `ChatPanel.dirty` flag + `RenderContext.panel_instances_cache` gates HarfBuzz reshape
-
-## Phase 1 Polish — COMPLETE (2026-04-05)
-
-All polish items resolved:
-- Title bar drag: `setMovableByWindowBackground:YES` (commit e9b5af9)
-- Double/triple-click: `Semantic`/`Lines` via `InputHandler::register_click()` (commit e9b5af9)
-- OSC 52 read: was already wired (context note was stale)
-- Scroll bar: was already wired in Phase 3 P1 (context note was stale)
+### Palette keybind resolution
+- `built_in_actions(&Config)` builds leader map from `config.keys` at palette construction
+- `rebuild_keybinds(&Config)` called after hot-reload to keep labels in sync

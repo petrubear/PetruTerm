@@ -46,7 +46,8 @@ pub fn config_path() -> PathBuf {
 
 /// Load the user config, falling back to the embedded default if the file doesn't exist.
 ///
-/// On first launch, the default config is copied to ~/.config/petruterm/.
+/// On every launch, ensures all default config files exist in ~/.config/petruterm/.
+/// Files that already exist are never overwritten; only missing ones are created.
 pub fn load() -> Result<Config> {
     let dir = config_dir();
     let path = config_path();
@@ -54,8 +55,9 @@ pub fn load() -> Result<Config> {
     if !dir.exists() {
         log::info!("Config dir not found; creating {}", dir.display());
         std::fs::create_dir_all(&dir)?;
-        copy_default_configs(&dir)?;
     }
+    // Always ensure all config files exist (idempotent — skips files already present).
+    ensure_default_configs(&dir)?;
     install_shell_integration(&dir)?;
 
     update_managed_configs(&dir);
@@ -113,8 +115,9 @@ fn extract_lua_version(content: &str) -> Option<&str> {
         .map(|l| l.trim())
 }
 
-/// Copy all default config files to the user config directory on first launch.
-fn copy_default_configs(dir: &std::path::Path) -> Result<()> {
+/// Write default config files that don't yet exist. Already-present files are left untouched
+/// so user customisations are never overwritten. Safe to call on every launch.
+fn ensure_default_configs(dir: &std::path::Path) -> Result<()> {
     let files: &[(&str, &str)] = &[
         ("config.lua",   include_str!("../../config/default/config.lua")),
         ("ui.lua",       include_str!("../../config/default/ui.lua")),
@@ -125,8 +128,10 @@ fn copy_default_configs(dir: &std::path::Path) -> Result<()> {
 
     for (name, content) in files {
         let dest = dir.join(name);
-        std::fs::write(&dest, content)?;
-        log::info!("Wrote default config: {}", dest.display());
+        if !dest.exists() {
+            std::fs::write(&dest, content)?;
+            log::info!("Created default config: {}", dest.display());
+        }
     }
 
     Ok(())

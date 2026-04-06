@@ -1,3 +1,5 @@
+use crate::config::Config;
+
 /// A single command palette action.
 #[derive(Debug, Clone)]
 pub struct PaletteAction {
@@ -5,6 +7,8 @@ pub struct PaletteAction {
     pub name: String,
     /// Internal action tag for dispatch.
     pub action: Action,
+    /// Formatted keybind hint shown right-aligned (e.g. "^B c", "Cmd+Q").
+    pub keybind: Option<String>,
 }
 
 /// All built-in actions for Phase 1.
@@ -66,23 +70,37 @@ impl std::str::FromStr for Action {
     }
 }
 
-/// Build the built-in action registry.
-pub fn built_in_actions() -> Vec<PaletteAction> {
+/// Build the built-in action list with keybinds resolved from `config`.
+pub fn built_in_actions(config: &Config) -> Vec<PaletteAction> {
+    // Build a lookup: Action string → formatted keybind label.
+    let leader_label = format!("^{}", config.leader.key.to_uppercase());
+    let mut keybind_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    for kb in &config.keys {
+        if kb.mods.to_ascii_uppercase() == "LEADER" {
+            keybind_map.insert(kb.action.clone(), format!("{} {}", leader_label, kb.key));
+        }
+    }
+
+    let kb = |action: &str| -> Option<String> { keybind_map.get(action).cloned() };
+
     vec![
-        PaletteAction { name: "Open Config File".into(),        action: Action::OpenConfigFile },
-        PaletteAction { name: "Reload Config".into(),           action: Action::ReloadConfig },
-        PaletteAction { name: "New Tab".into(),                 action: Action::NewTab },
-        PaletteAction { name: "Close Tab".into(),               action: Action::CloseTab },
-        PaletteAction { name: "Split Pane Horizontal".into(),   action: Action::SplitHorizontal },
-        PaletteAction { name: "Split Pane Vertical".into(),     action: Action::SplitVertical },
-        PaletteAction { name: "Close Pane".into(),              action: Action::ClosePane },
-        PaletteAction { name: "Toggle Fullscreen".into(),       action: Action::ToggleFullscreen },
-        PaletteAction { name: "Quit PetruTerm".into(),          action: Action::Quit },
-        // Phase 2 stubs
-        PaletteAction { name: "Toggle AI Panel".into(),          action: Action::ToggleAiPanel },
-        PaletteAction { name: "Enable AI Features".into(),      action: Action::EnableAiFeatures },
-        PaletteAction { name: "Disable AI Features".into(),     action: Action::DisableAiFeatures },
-        PaletteAction { name: "Explain Last Output".into(),     action: Action::ExplainLastOutput },
-        PaletteAction { name: "Fix Last Error".into(),          action: Action::FixLastError },
+        PaletteAction { name: "Open Config File".into(),       action: Action::OpenConfigFile,    keybind: None },
+        PaletteAction { name: "Reload Config".into(),          action: Action::ReloadConfig,       keybind: None },
+        PaletteAction { name: "New Tab".into(),                action: Action::NewTab,             keybind: kb("NewTab") },
+        PaletteAction { name: "Close Tab".into(),              action: Action::CloseTab,           keybind: kb("CloseTab") },
+        PaletteAction { name: "Next Tab".into(),               action: Action::NextTab,            keybind: kb("NextTab") },
+        PaletteAction { name: "Previous Tab".into(),           action: Action::PrevTab,            keybind: kb("PrevTab") },
+        PaletteAction { name: "Split Pane Horizontal".into(),  action: Action::SplitHorizontal,    keybind: kb("SplitHorizontal") },
+        PaletteAction { name: "Split Pane Vertical".into(),    action: Action::SplitVertical,      keybind: kb("SplitVertical") },
+        PaletteAction { name: "Close Pane".into(),             action: Action::ClosePane,          keybind: kb("ClosePane") },
+        PaletteAction { name: "Command Palette".into(),        action: Action::CommandPalette,     keybind: kb("CommandPalette") },
+        PaletteAction { name: "Toggle Fullscreen".into(),      action: Action::ToggleFullscreen,   keybind: None },
+        PaletteAction { name: "Quit PetruTerm".into(),         action: Action::Quit,               keybind: Some("Cmd+Q".into()) },
+        // Phase 2 AI actions
+        PaletteAction { name: "Toggle AI Panel".into(),        action: Action::ToggleAiPanel,      keybind: kb("ToggleAiPanel") },
+        PaletteAction { name: "Enable AI Features".into(),     action: Action::EnableAiFeatures,   keybind: None },
+        PaletteAction { name: "Disable AI Features".into(),    action: Action::DisableAiFeatures,  keybind: None },
+        PaletteAction { name: "Explain Last Output".into(),    action: Action::ExplainLastOutput,  keybind: kb("ExplainLastOutput") },
+        PaletteAction { name: "Fix Last Error".into(),         action: Action::FixLastError,       keybind: kb("FixLastError") },
     ]
 }

@@ -677,18 +677,74 @@ impl RenderContext {
         let prompt = format!(" > {}▋", palette.query);
         self.push_shaped_row(&prompt, prompt_fg, bg, start_row, start_col, palette_width, font);
 
+        let keybind_fg = [0.5, 0.5, 0.7, 1.0];
+
         for i in 0..(palette_height - 1) {
             let row = start_row + 1 + i;
             let is_selected = i == palette.selected;
             let current_bg = if is_selected { highlight_bg } else { bg };
 
-            let text = if let Some(action) = palette.results.get(i) {
-                format!("  {}", action.name)
-            } else {
-                String::new()
-            };
+            if let Some(action) = palette.results.get(i) {
+                // Name on the left, keybind right-aligned.
+                let name_text = format!("  {}", action.name);
+                self.push_shaped_row(&name_text, fg, current_bg, row, start_col, palette_width, font);
 
-            self.push_shaped_row(&text, fg, current_bg, row, start_col, palette_width, font);
+                if let Some(kb) = &action.keybind {
+                    // Pad keybind to right edge with one space margin.
+                    let kb_display = format!("{} ", kb);
+                    let kb_len = kb_display.chars().count();
+                    if kb_len < palette_width {
+                        let kb_col = start_col + palette_width - kb_len;
+                        // Use transparent bg so name bg shows through.
+                        self.push_shaped_row(&kb_display, keybind_fg, current_bg, row, kb_col, kb_len, font);
+                    }
+                }
+            } else {
+                self.push_shaped_row("", fg, current_bg, row, start_col, palette_width, font);
+            }
+        }
+    }
+
+    /// Render the right-click context menu as a floating popup at `menu.col/row`.
+    pub fn build_context_menu_instances(
+        &mut self,
+        menu: &crate::ui::context_menu::ContextMenu,
+        font: &crate::config::schema::FontConfig,
+        total_cols: usize,
+        total_rows: usize,
+    ) {
+        use crate::ui::context_menu::CONTEXT_MENU_WIDTH;
+
+        if !menu.visible || menu.items.is_empty() { return; }
+
+        let width = CONTEXT_MENU_WIDTH;
+        let height = menu.items.len();
+
+        if menu.col + width > total_cols || menu.row + height > total_rows { return; }
+
+        let bg          = [0.05, 0.05, 0.10, 0.97];
+        let fg          = [1.0,  1.0,  1.0,  1.0];
+        let hover_bg    = [0.2,  0.2,  0.4,  1.0];
+        let keybind_fg  = [0.5,  0.5,  0.7,  1.0];
+
+        for (i, item) in menu.items.iter().enumerate() {
+            let row = menu.row + i;
+            let is_hovered = menu.hovered == Some(i);
+            let current_bg = if is_hovered { hover_bg } else { bg };
+
+            // Name on the left.
+            let name_text = format!("  {}", item.label);
+            self.push_shaped_row(&name_text, fg, current_bg, row, menu.col, width, font);
+
+            // Keybind right-aligned.
+            if let Some(kb) = &item.keybind {
+                let kb_display = format!("{} ", kb);
+                let kb_len = kb_display.chars().count();
+                if kb_len < width {
+                    let kb_col = menu.col + width - kb_len;
+                    self.push_shaped_row(&kb_display, keybind_fg, current_bg, row, kb_col, kb_len, font);
+                }
+            }
         }
     }
 }

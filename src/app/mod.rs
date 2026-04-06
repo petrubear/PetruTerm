@@ -10,7 +10,7 @@ use alacritty_terminal::selection::SelectionType;
 use crate::config::{self, Config};
 use crate::config::schema::TitleBarStyle;
 use crate::config::watcher::ConfigWatcher;
-use crate::ui::Rect;
+use crate::ui::{ContextAction, Rect};
 
 mod renderer;
 mod mux;
@@ -169,6 +169,7 @@ impl App {
                 if let Ok(new_cfg) = config::reload() {
                     self.config = new_cfg;
                     if let Some(rc) = &mut self.render_ctx { rc.renderer.update_bg_color(self.config.colors.background_wgpu()); }
+                    self.ui.palette.rebuild_keybinds(&self.config);
                     log::info!("Config hot-reloaded.");
                 }
             }
@@ -198,7 +199,7 @@ impl App {
                     let () = msg_send![ns_win, setStyleMask: current_mask | (1_usize << 15)];
                     let () = msg_send![ns_win, setTitlebarAppearsTransparent: Bool::YES];
                     let () = msg_send![ns_win, setTitleVisibility: 1_i64];
-                    let () = msg_send![ns_win, setMovableByWindowBackground: Bool::YES];
+                    let () = msg_send![ns_win, setMovableByWindowBackground: Bool::NO];
                 }
             }
         }
@@ -357,6 +358,11 @@ impl ApplicationHandler<()> for App {
                         rc.build_palette_instances(&self.ui.palette, &scaled_font, total_cols, term_rows);
                     }
 
+                    // ── Context menu (right-click) ────────────────────────────────────────
+                    if self.ui.context_menu.visible {
+                        rc.build_context_menu_instances(&self.ui.context_menu, &scaled_font, term_cols, term_rows);
+                    }
+
                     // ── GPU upload ───────────────────────────────────────────────────────
                     // Tab bar + scroll bar instances are appended after terminal rows, so
                     // offset-based dirty-row upload no longer maps cleanly. Always do a
@@ -399,8 +405,12 @@ impl ApplicationHandler<()> for App {
             }
             WindowEvent::CursorMoved { position, .. } => {
                 self.input.mouse_pos = (position.x, position.y);
+                let (col, row) = self.input.pixel_to_cell(position.x, position.y, &self.config, &self.render_ctx, &self.mux);
+                // Update context menu hover — redraw if hovered item changed.
+                if self.ui.context_menu.update_hover(col, row) {
+                    if let Some(w) = &self.window { w.request_redraw(); }
+                }
                 if self.input.mouse_left_pressed && !self.mouse_in_panel() {
-                    let (col, row) = self.input.pixel_to_cell(position.x, position.y, &self.config, &self.render_ctx, &self.mux);
                     if let Some(terminal) = self.mux.active_terminal() {
                         terminal.update_selection(col, row);
                         let (any_mouse, _, motion) = terminal.mouse_mode_flags();
@@ -414,6 +424,45 @@ impl ApplicationHandler<()> for App {
                 let (col, row) = self.input.pixel_to_cell(self.input.mouse_pos.0, self.input.mouse_pos.1, &self.config, &self.render_ctx, &self.mux);
                 match (button, state) {
                     (MouseButton::Left, ElementState::Pressed) => {
+                        // Context menu: consume click if it lands inside the menu.
+                        if self.ui.context_menu.visible {
+                            if let Some(action) = self.ui.context_menu.hit_test(col, row) {
+                                self.ui.context_menu.close();
+                                match action {
+                                    ContextAction::Copy => {
+                                        if let Some(terminal) = self.mux.active_terminal() {
+                                            if let Some(text) = terminal.selection_text() {
+                                                if let Ok(mut cb) = arboard::Clipboard::new() { let _ = cb.set_text(text); }
+                                            }
+                                        }
+                                    }
+                                    ContextAction::Paste => {
+                                        if let Some(terminal) = self.mux.active_terminal() {
+                                            if let Ok(text) = arboard::Clipboard::new().and_then(|mut cb| cb.get_text()) {
+                                                if terminal.bracketed_paste_mode() {
+                                                    let mut data = b"\x1b[200~".to_vec();
+                                                    data.extend_from_slice(text.as_bytes());
+                                                    data.extend_from_slice(b"\x1b[201~");
+                                                    terminal.write_input(&data);
+                                                } else { terminal.write_input(text.as_bytes()); }
+                                            }
+                                        }
+                                    }
+                                    ContextAction::Clear => {
+                                        if let Some(terminal) = self.mux.active_terminal() {
+                                            terminal.write_input(b"clear\n");
+                                        }
+                                    }
+                                }
+                                if let Some(w) = &self.window { w.request_redraw(); }
+                                return;
+                            } else {
+                                // Click outside menu closes it.
+                                self.ui.context_menu.close();
+                                if let Some(w) = &self.window { w.request_redraw(); }
+                            }
+                        }
+
                         if self.input.mouse_pos.1 < self.config.window.padding.top as f64 {
                             if let Some(w) = &self.window { let _ = w.drag_window(); }
                             return;
@@ -450,8 +499,27 @@ impl ApplicationHandler<()> for App {
                         self.input.mouse_left_pressed = false;
                         if !in_panel { self.input.send_mouse_report(0, col, row, false, &self.mux); }
                     }
-                    (MouseButton::Right, ElementState::Pressed)  => if !in_panel { self.input.send_mouse_report(2, col, row, true,  &self.mux) },
-                    (MouseButton::Right, ElementState::Released)  => if !in_panel { self.input.send_mouse_report(2, col, row, false, &self.mux) },
+                    (MouseButton::Right, ElementState::Pressed) => {
+                        // In mouse-reporting mode, pass right-click to the terminal app.
+                        // Otherwise, open the context menu.
+                        if !in_panel {
+                            let (any_mouse, _, _) = self.mux.active_terminal()
+                                .map(|t| t.mouse_mode_flags()).unwrap_or((false, false, false));
+                            if any_mouse {
+                                self.input.send_mouse_report(2, col, row, true, &self.mux);
+                            } else {
+                                let (term_cols, term_rows) = self.mux.active_terminal_size();
+                                self.ui.context_menu.open(col, row, term_cols, term_rows);
+                            }
+                        }
+                    }
+                    (MouseButton::Right, ElementState::Released) => {
+                        let (any_mouse, _, _) = self.mux.active_terminal()
+                            .map(|t| t.mouse_mode_flags()).unwrap_or((false, false, false));
+                        if !in_panel && any_mouse {
+                            self.input.send_mouse_report(2, col, row, false, &self.mux);
+                        }
+                    }
                     _ => {}
                 }
                 if let Some(w) = &self.window { w.request_redraw(); }

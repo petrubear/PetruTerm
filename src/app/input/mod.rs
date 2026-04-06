@@ -127,6 +127,11 @@ impl InputHandler {
         self.cursor_blink_on = true;
         self.cursor_last_blink = Instant::now();
 
+        // Close the context menu on any key press.
+        if ui.context_menu.visible {
+            ui.context_menu.close();
+        }
+
         if self.leader_active {
             if let Some(t) = self.leader_timer {
                 if t.elapsed().as_millis() > self.leader_timeout_ms as u128 {
