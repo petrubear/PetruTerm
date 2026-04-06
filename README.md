@@ -11,10 +11,12 @@ A developer-first GPU-accelerated terminal emulator written in Rust. Built for s
 - **GPU rendering** via wgpu (Metal on macOS) — 60 fps, low latency
 - **Full terminal emulation** — xterm-256color, truecolor, bracketed paste, SGR mouse, OSC 52 clipboard
 - **Font ligatures** — HarfBuzz shaping with `calt`, `liga`, `dlig` OpenType features
+- **Emoji & color glyphs** — full RGBA emoji rendering via Apple Color Emoji (and any color font)
 - **Tabs & split panes** — tmux-style keybinds, binary-tree layout
 - **AI agent panel** — context-aware chat with file attachment, NL→command, explain output, fix errors
+- **LLM tool use** — AI agent can autonomously read files and list directories (sandboxed to CWD)
 - **Inline AI block** — `Ctrl+Space` for quick NL→shell command without leaving the terminal
-- **Command palette** — fuzzy-search for all actions (`Leader+p`)
+- **Command palette** — fuzzy-search for all actions (`Leader+o`)
 - **Lua configuration** — hot-reload on save, no restart required
 - **Scrollback** — configurable depth with GPU scroll bar
 
@@ -203,14 +205,14 @@ Press `Ctrl+B`, release, then press the bound key within `timeout_ms` millisecon
 
 | Binding | Action |
 |---------|--------|
-| `Leader+p` | Open command palette |
+| `Leader+o` | Open command palette |
 | `Leader+a` | Toggle AI panel (open → focus → close) |
 | `Leader+e` | Explain last terminal output |
 | `Leader+f` | Fix last error |
 | `Leader+c` | New tab |
 | `Leader+&` | Close tab |
 | `Leader+n` | Next tab |
-| `Leader+p` | Previous tab |
+| `Leader+b` | Previous tab |
 | `Leader+1–9` | Switch to tab N |
 | `Leader+%` | Split pane horizontally |
 | `Leader+"` | Split pane vertically |
@@ -224,7 +226,7 @@ config.keys = {
     { mods = "LEADER", key = "a",  action = petruterm.action.ToggleAiPanel },
     { mods = "LEADER", key = "c",  action = petruterm.action.NewTab },
     { mods = "LEADER", key = "n",  action = petruterm.action.NextTab },
-    { mods = "LEADER", key = "p",  action = petruterm.action.PrevTab },
+    { mods = "LEADER", key = "b",  action = petruterm.action.PrevTab },
     { mods = "LEADER", key = "%",  action = petruterm.action.SplitHorizontal },
     { mods = "LEADER", key = '"',  action = petruterm.action.SplitVertical },
     { mods = "LEADER", key = "x",  action = petruterm.action.ClosePane },
@@ -343,6 +345,17 @@ Attached files are injected into the LLM system message before every query. The 
 | `Ctrl+S` | Submit query (alternative) |
 | `Esc` | Close panel / dismiss error |
 | `/q` or `/quit` | Close panel and close current tab |
+
+### LLM tool use
+
+When the LLM needs additional context it can autonomously call built-in tools (up to 10 rounds per query). Tool execution is sandboxed to the terminal's current working directory — no access outside of it.
+
+| Tool | Description |
+|------|-------------|
+| `ReadFile` | Read the contents of a file |
+| `ListDir` | List files in a directory |
+
+While a tool is running the panel shows `⟳ tool(path)`; after completion it shows `✓ tool(path)`. No user confirmation is required for read-only tools.
 
 ### Inline AI block (`Ctrl+Space`)
 

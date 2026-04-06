@@ -16,7 +16,7 @@ function module.apply_to_config(config)
 
   config.keys = {
     -- ── Overlays ──────────────────────────────────────────────────────────
-    { mods = "LEADER", key = "p",  action = petruterm.action.CommandPalette },
+    { mods = "LEADER", key = "o",  action = petruterm.action.CommandPalette },
 
     -- ── AI panel (open → focus → close cycle) ─────────────────────────────
     { mods = "LEADER", key = "a",  action = petruterm.action.ToggleAiPanel },
@@ -29,7 +29,7 @@ function module.apply_to_config(config)
     { mods = "LEADER", key = "c",  action = petruterm.action.NewTab },
     { mods = "LEADER", key = "&",  action = petruterm.action.CloseTab },
     { mods = "LEADER", key = "n",  action = petruterm.action.NextTab },
-    { mods = "LEADER", key = "p",  action = petruterm.action.PrevTab },
+    { mods = "LEADER", key = "b",  action = petruterm.action.PrevTab },
 
     -- ── Pane splits (tmux-style) ───────────────────────────────────────────
     { mods = "LEADER", key = "%",  action = petruterm.action.SplitHorizontal },
