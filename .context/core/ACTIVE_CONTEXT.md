@@ -2,7 +2,7 @@
 
 **Current Focus:** Phase 2.5 — AI Agent Mode
 **Last Active:** 2026-04-05
-**Priority:** P1 (File context attachment + panel upgrade)
+**Priority:** P3 (Write & Run tools)
 
 ## Current State
 
@@ -23,7 +23,7 @@
 | Font fallback chain | ✅ | `petruterm.font("A, B, C")` resolved at config load time |
 
 ### Technical Debt
-3 open items: TD-OP-02 (P1 Nerd Font override fragility), TD-OP-03 (P2 atlas eviction), TD-OP-01 (P2 unsafe Send on TextShaper).
+4 open items: TD-OP-02 (P1), TD-OP-03 (P2), TD-OP-01 (P2), TD-016 (P3 run bar shows tool status lines).
 
 ### Keybinds (tmux-aligned)
 
@@ -39,6 +39,9 @@
 | `leader+a` | AI panel |
 | `leader+p` | Command palette |
 | `Ctrl+Space` | Inline AI block |
+
+## Phase 2.5 P2 — COMPLETE (2026-04-05)
+Tool use loop verified working: `list_dir(.)` call shows ⟳/✓ status inline, LLM receives real filesystem listing and responds correctly.
 
 ## Phase 2.5 P1 — COMPLETE (2026-04-05)
 

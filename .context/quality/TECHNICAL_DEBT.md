@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-04-05
-**Open Items:** 3
-**Critical (P0):** 0 | **P1:** 1 | **P2:** 2 | **P3:** 0
+**Open Items:** 4
+**Critical (P0):** 0 | **P1:** 1 | **P2:** 2 | **P3:** 1
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -38,7 +38,7 @@
 
 ## P3 - Low Priority
 
-- _None_
+- **TD-016**: Run bar (`last_assistant_command()` in `src/llm/chat_panel.rs`) extracts content from `streaming_buf` raw — includes tool status lines (`⟳ list_dir(.) ✓ list_dir(.)`) prepended to the actual command. Fix: strip lines that start with `⟳` or `✓` before returning, or extract only the last non-status line.
 
 ---
 
@@ -47,6 +47,7 @@
 - **TD-OP-02**: Nerd Font Rendering Robustness (P1)
 - **TD-OP-03**: Glyph Atlas Eviction/Packing Strategy (P2)
 - **TD-OP-01**: FreeTypeCmapLookup unsafe Send (P2, was P0 false positive)
+- **TD-016**: Run bar polluted by tool status lines (P3)
 
 > **TD-015** (resolved 2026-04-05): `Shift+Enter` now sends `\x1b[13;2u` to PTY (xterm modified key sequence) instead of `\r`. Chat panel handles `Shift+Enter` as `\n` insertion. `Shift+Tab` also fixed to send `\x1b[Z` (reverse-tab). Files: `src/app/input/key_map.rs`, `src/app/input/mod.rs`.
 >
