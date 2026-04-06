@@ -39,6 +39,17 @@
 - Se mantuvo `unsafe impl Send` con bloque `// SAFETY:` que documenta el invariante: TextShaper vive exclusivamente en el main thread, nunca se aliasa concurrentemente.
 - Validación: `Arc::new(shaper)` debe rechazarse por el compilador (no-Send-Sync check manual).
 
+## Session Notes (2026-04-06 — multi-pane rendering)
+
+### Multi-pane splits COMPLETO
+- `PaneInfo` + `PaneSeparator` en `src/ui/panes.rs` — info de layout por pane.
+- `Mux::active_pane_infos()`, `active_pane_separators()`, `collect_grid_cells_for()`, `resize_all()`, `active_pane_count()`.
+- `RenderContext.row_caches: HashMap<usize, RowCache>` — cache por terminal.
+- `build_all_pane_instances()` en `app/mod.rs` — itera todos los panes, aplica col/row offset.
+- `build_pane_separators()` en `app/renderer.rs` — dibuja separadores con `FLAG_CURSOR`.
+- Detección de cambio de pane count en `KeyboardInput` → llama `resize_terminals_for_panel()`.
+- Keybinds: `^B %` (split horizontal), `^B "` (split vertical), `^B x` (close pane).
+
 ## Build & Tests
 - **cargo build:** PASS (0 errors — 2026-04-06)
 - **cargo test:** 16/16 PASS

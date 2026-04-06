@@ -1,4 +1,5 @@
 use anyhow::Result;
+use std::collections::HashMap;
 use std::sync::Arc;
 use winit::window::Window;
 
@@ -12,7 +13,7 @@ use crate::term::color::resolve_color;
 use alacritty_terminal::vte::ansi::Color as AnsiColor;
 use crate::llm::chat_panel::{ChatPanel, PanelState};
 use crate::llm::ai_block::{AiBlock, AiState, AI_BLOCK_ROWS};
-use crate::ui::{CommandPalette, Tab};
+use crate::ui::{CommandPalette, PaneSeparator, Tab};
 
 /// Cache for a single shaped row to avoid re-shaping every frame.
 #[derive(Clone)]
@@ -22,18 +23,18 @@ pub struct RowCacheEntry {
     pub lcd_instances: Vec<CellVertex>,
 }
 
-/// Tracks shaped data for every visible row in the active terminal viewport.
+/// Tracks shaped data for every visible row in one terminal's viewport.
 pub struct RowCache {
     pub rows: Vec<Option<RowCacheEntry>>,
     pub dirty_rows: Vec<bool>,
-    pub terminal_id: Option<usize>,
 }
 
 impl RowCache {
     pub fn new() -> Self {
-        Self { rows: Vec::new(), dirty_rows: Vec::new(), terminal_id: None }
+        Self { rows: Vec::new(), dirty_rows: Vec::new() }
     }
 
+    #[allow(dead_code)]
     pub fn clear(&mut self) {
         for r in &mut self.rows { *r = None; }
         for d in &mut self.dirty_rows { *d = true; }
@@ -46,7 +47,8 @@ pub struct RenderContext {
     pub shaper: TextShaper,
     pub scale_factor: f32,
     pub atlas_generation: usize,
-    pub row_cache: RowCache,
+    /// Per-terminal row caches, keyed by terminal_id.
+    pub row_caches: HashMap<usize, RowCache>,
     pub instances: Vec<CellVertex>,
     pub lcd_instances: Vec<CellVertex>,
     /// Cached GPU instances for the AI chat panel — rebuilt only when `ChatPanel::dirty`.
@@ -81,7 +83,7 @@ impl RenderContext {
             shaper,
             scale_factor,
             atlas_generation: 0,
-            row_cache: RowCache::new(),
+            row_caches: HashMap::new(),
             instances: Vec::new(),
             lcd_instances: Vec::new(),
             panel_instances_cache: Vec::new(),
@@ -96,6 +98,37 @@ impl RenderContext {
         cfg
     }
 
+    /// Clear per-frame instance buffers. Call once before rendering all panes.
+    pub fn begin_frame(&mut self) {
+        self.instances.clear();
+        self.lcd_instances.clear();
+        self.rect_instances.clear();
+    }
+
+    /// Mark every row in every terminal cache as dirty (forces reshape next frame).
+    pub fn mark_all_rows_dirty(&mut self) {
+        for cache in self.row_caches.values_mut() {
+            cache.dirty_rows.fill(true);
+        }
+    }
+
+    /// Drop all per-terminal row caches (used after atlas eviction).
+    pub fn clear_all_row_caches(&mut self) {
+        self.row_caches.clear();
+    }
+
+    /// Reset dirty flags after a completed frame for all cached terminals.
+    pub fn reset_row_dirty_flags(&mut self) {
+        for cache in self.row_caches.values_mut() {
+            cache.dirty_rows.fill(false);
+        }
+    }
+
+    /// Build and append cell instances for one pane's terminal.
+    ///
+    /// Instances are APPENDED to `self.instances` (not cleared); call `begin_frame()` first.
+    /// `col_offset` and `row_offset` position this pane within the global grid coordinate space.
+    #[allow(clippy::too_many_arguments)]
     pub fn build_instances(
         &mut self,
         cell_data: &[(String, Vec<(AnsiColor, AnsiColor)>)],
@@ -104,18 +137,14 @@ impl RenderContext {
         cursor: Option<&CursorInfo>,
         cursor_blink_on: bool,
         terminal_id: usize,
+        col_offset: usize,
+        row_offset: usize,
     ) -> Result<(), crate::renderer::atlas::AtlasError> {
-        self.instances.clear();
-        self.lcd_instances.clear();
-
-        if self.row_cache.rows.len() < cell_data.len() {
-            self.row_cache.rows.resize(cell_data.len(), None);
-            self.row_cache.dirty_rows.resize(cell_data.len(), true);
-        }
-
-        if self.row_cache.terminal_id != Some(terminal_id) {
-            self.row_cache.clear();
-            self.row_cache.terminal_id = Some(terminal_id);
+        // Retrieve or create the per-terminal row cache.
+        let cache = self.row_caches.entry(terminal_id).or_insert_with(RowCache::new);
+        if cache.rows.len() < cell_data.len() {
+            cache.rows.resize(cell_data.len(), None);
+            cache.dirty_rows.resize(cell_data.len(), true);
         }
 
         let mut colors_scratch: Vec<([f32; 4], [f32; 4])> = Vec::with_capacity(256);
@@ -132,39 +161,49 @@ impl RenderContext {
 
             let row_hash = calculate_row_hash(text, colors);
 
-            if let Some(Some(entry)) = self.row_cache.rows.get(row_idx) {
+            // Cache hit: copy local-coordinate instances and apply pane offset.
+            if let Some(Some(entry)) = self.row_caches.get(&terminal_id).and_then(|c| c.rows.get(row_idx)) {
                 if entry.hash == row_hash {
-                    self.instances.extend_from_slice(&entry.instances);
-                    self.lcd_instances.extend_from_slice(&entry.lcd_instances);
+                    let co = col_offset as f32;
+                    let ro = (row_offset + row_idx) as f32;
+                    for inst in &entry.instances {
+                        let mut v = *inst;
+                        v.grid_pos[0] += co;
+                        v.grid_pos[1] = ro;
+                        self.instances.push(v);
+                    }
+                    for inst in &entry.lcd_instances {
+                        let mut v = *inst;
+                        v.grid_pos[0] += co;
+                        v.grid_pos[1] = ro;
+                        self.lcd_instances.push(v);
+                    }
                     continue;
                 }
             }
 
-            self.row_cache.dirty_rows[row_idx] = true;
-            let mut row_instances = Vec::new();
-            let mut row_lcd_instances = Vec::new();
+            // Cache miss: shape and rasterize.
+            if let Some(cache) = self.row_caches.get_mut(&terminal_id) {
+                if row_idx < cache.dirty_rows.len() {
+                    cache.dirty_rows[row_idx] = true;
+                }
+            }
+            let mut row_instances: Vec<CellVertex> = Vec::new();
+            let mut row_lcd_instances: Vec<CellVertex> = Vec::new();
 
             let shaped = self.shaper.shape_line(text, colors, font);
 
             for glyph in &shaped.glyphs {
-                // Try LCD rasterization first (when LCD AA is enabled).
-                // If it succeeds, the LCD instance paints the glyph and the swash
-                // instance is reduced to background-only (glyph_size = 0) so we
-                // never double-render the same character.
                 let lcd_entry = if let Some(queue) = self.renderer.lcd_queue() {
-                    self.shaper
-                        .rasterize_lcd_to_atlas(glyph.cache_key, glyph.ch, queue)
+                    self.shaper.rasterize_lcd_to_atlas(glyph.cache_key, glyph.ch, queue)
                 } else {
                     None
                 };
 
-                // Swash instance — always emitted for the background color rect.
-                // Only carries glyph data when LCD did not produce an entry.
                 let (atlas, queue) = self.renderer.atlas_and_queue();
                 let swash_entry = self.shaper.rasterize_to_atlas(glyph.cache_key, atlas, queue)?;
 
                 let (atlas_uv, glyph_offset, glyph_size) = if lcd_entry.is_none() {
-                    // No LCD — use swash glyph.
                     let ox = swash_entry.bearing_x as f32;
                     let oy = shaped.ascent - swash_entry.bearing_y as f32;
                     let gw = swash_entry.width as f32;
@@ -180,11 +219,11 @@ impl RenderContext {
                         ([u0, v0 + fy0 * (v1 - v0), u1, v0 + fy1 * (v1 - v0)], [ox, y0], [gw, y1 - y0])
                     }
                 } else {
-                    // LCD handles the glyph — swash provides background only.
                     ([0.0f32; 4], [0.0; 2], [0.0; 2])
                 };
 
                 let color_flag = if swash_entry.is_color { FLAG_COLOR_GLYPH } else { 0 };
+                // Store LOCAL coordinates in the cache (col within pane, row within pane).
                 row_instances.push(CellVertex {
                     grid_pos: [glyph.col as f32, row_idx as f32],
                     atlas_uv,
@@ -196,7 +235,6 @@ impl RenderContext {
                     _pad: 0,
                 });
 
-                // LCD instance — emitted only when FreeType successfully rasterized the glyph.
                 if let Some(entry) = lcd_entry {
                     let ox = entry.bearing_x as f32;
                     let oy = shaped.ascent - entry.bearing_y as f32;
@@ -204,7 +242,6 @@ impl RenderContext {
                     let gh = entry.height as f32;
                     let y0 = oy.max(0.0);
                     let y1 = (oy + gh).min(self.shaper.cell_height);
-
                     if y1 > y0 && gw > 0.0 && gh > 0.0 {
                         let fy0 = (y0 - oy) / gh;
                         let fy1 = (y1 - oy) / gh;
@@ -223,38 +260,47 @@ impl RenderContext {
                 }
             }
 
-            self.instances.extend_from_slice(&row_instances);
-            self.lcd_instances.extend_from_slice(&row_lcd_instances);
+            // Emit with pane offset applied.
+            let co = col_offset as f32;
+            let ro = (row_offset + row_idx) as f32;
+            for inst in &row_instances {
+                let mut v = *inst;
+                v.grid_pos[0] += co;
+                v.grid_pos[1] = ro;
+                self.instances.push(v);
+            }
+            for inst in &row_lcd_instances {
+                let mut v = *inst;
+                v.grid_pos[0] += co;
+                v.grid_pos[1] = ro;
+                self.lcd_instances.push(v);
+            }
 
-            self.row_cache.rows[row_idx] = Some(RowCacheEntry {
-                hash: row_hash,
-                instances: row_instances,
-                lcd_instances: row_lcd_instances,
-            });
+            // Store local coordinates in cache.
+            if let Some(cache) = self.row_caches.get_mut(&terminal_id) {
+                if row_idx < cache.rows.len() {
+                    cache.rows[row_idx] = Some(RowCacheEntry {
+                        hash: row_hash,
+                        instances: row_instances,
+                        lcd_instances: row_lcd_instances,
+                    });
+                }
+            }
         }
 
-        self.row_cache.terminal_id = Some(terminal_id);
-
+        // Cursor (only for the focused pane, where cursor is Some).
         if let Some(info) = cursor {
             if info.visible && cursor_blink_on {
                 let cw = self.shaper.cell_width;
                 let ch = self.shaper.cell_height;
-
                 let (glyph_offset, glyph_size) = match info.shape {
-                    CursorShape::Block | CursorShape::HollowBlock => {
-                        ([0.0f32, 0.0], [cw, ch])
-                    }
-                    CursorShape::Underline => {
-                        ([0.0, (ch - 2.0).max(0.0)], [cw, 2.0])
-                    }
-                    CursorShape::Beam => {
-                        ([0.0, 0.0], [2.0, ch])
-                    }
-                    CursorShape::Hidden => ([0.0; 2], [0.0; 2]),
+                    CursorShape::Block | CursorShape::HollowBlock => ([0.0f32, 0.0], [cw, ch]),
+                    CursorShape::Underline => ([0.0, (ch - 2.0).max(0.0)], [cw, 2.0]),
+                    CursorShape::Beam      => ([0.0, 0.0], [2.0, ch]),
+                    CursorShape::Hidden    => ([0.0; 2], [0.0; 2]),
                 };
-
                 self.instances.push(CellVertex {
-                    grid_pos:     [info.col as f32, info.row as f32],
+                    grid_pos:     [(col_offset + info.col) as f32, (row_offset + info.row) as f32],
                     atlas_uv:     [0.0; 4],
                     fg:           config.colors.cursor_fg,
                     bg:           config.colors.cursor_bg,
@@ -266,6 +312,44 @@ impl RenderContext {
             }
         }
         Ok(())
+    }
+
+    /// Draw 1-pixel separator lines between panes.
+    pub fn build_pane_separators(&mut self, separators: &[PaneSeparator]) {
+        const SEP_COLOR: [f32; 4] = [0.35, 0.30, 0.48, 1.0]; // dim purple
+        let ch = self.shaper.cell_height;
+        let cw = self.shaper.cell_width;
+        for sep in separators {
+            if sep.vertical {
+                // 1px left edge at column `sep.col`, spanning `sep.length` rows.
+                for i in 0..sep.length {
+                    self.instances.push(CellVertex {
+                        grid_pos:     [sep.col as f32, (sep.row + i) as f32],
+                        atlas_uv:     [0.0; 4],
+                        fg:           [0.0; 4],
+                        bg:           SEP_COLOR,
+                        glyph_offset: [0.0, 0.0],
+                        glyph_size:   [1.0, ch],
+                        flags:        FLAG_CURSOR,
+                        _pad:         0,
+                    });
+                }
+            } else {
+                // 1px top edge at row `sep.row`, spanning `sep.length` columns.
+                for i in 0..sep.length {
+                    self.instances.push(CellVertex {
+                        grid_pos:     [(sep.col + i) as f32, sep.row as f32],
+                        atlas_uv:     [0.0; 4],
+                        fg:           [0.0; 4],
+                        bg:           SEP_COLOR,
+                        glyph_offset: [0.0, 0.0],
+                        glyph_size:   [cw, 1.0],
+                        flags:        FLAG_CURSOR,
+                        _pad:         0,
+                    });
+                }
+            }
+        }
     }
 
     #[allow(clippy::too_many_arguments)]

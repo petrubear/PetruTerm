@@ -218,3 +218,114 @@ fn find_rect(node: &PaneNode, target: usize) -> Option<Rect> {
         }
     }
 }
+
+// ── Multi-pane rendering helpers ─────────────────────────────────────────────
+
+/// Rendering info for a single leaf pane, relative to the terminal viewport origin.
+#[derive(Debug, Clone, Copy)]
+pub struct PaneInfo {
+    pub terminal_id: usize,
+    /// Column offset from the viewport left edge (in cell units).
+    pub col_offset: usize,
+    /// Row offset from the viewport top edge (in cell units).
+    pub row_offset: usize,
+    /// Width of this pane in terminal columns.
+    pub cols: usize,
+    /// Height of this pane in terminal rows.
+    pub rows: usize,
+    /// Whether this pane currently has keyboard focus.
+    pub focused: bool,
+}
+
+/// A separator line between two adjacent panes.
+#[derive(Debug, Clone, Copy)]
+pub struct PaneSeparator {
+    /// `true` = vertical divider (left|right split); `false` = horizontal (top/bottom).
+    pub vertical: bool,
+    /// For vertical: column where the divider sits. For horizontal: first column.
+    pub col: usize,
+    /// For horizontal: row where the divider sits. For vertical: first row.
+    pub row: usize,
+    /// Extent: rows (vertical) or columns (horizontal).
+    pub length: usize,
+}
+
+impl PaneManager {
+    /// Collect info for all leaf panes, including their viewport-relative cell offsets.
+    pub fn pane_infos(&self, viewport: Rect, cell_w: f32, cell_h: f32) -> Vec<PaneInfo> {
+        let mut result = Vec::new();
+        collect_leaf_infos_impl(&self.root, viewport, cell_w, cell_h, self.focused_terminal, &mut result);
+        result
+    }
+
+    /// Collect separator lines between panes (one per internal Split node).
+    pub fn pane_separators(&self, viewport: Rect, cell_w: f32, cell_h: f32) -> Vec<PaneSeparator> {
+        let mut result = Vec::new();
+        collect_separators_impl(&self.root, viewport, cell_w, cell_h, &mut result);
+        result
+    }
+}
+
+fn collect_leaf_infos_impl(
+    node: &PaneNode,
+    viewport: Rect,
+    cell_w: f32,
+    cell_h: f32,
+    focused: usize,
+    result: &mut Vec<PaneInfo>,
+) {
+    match node {
+        PaneNode::Leaf { terminal_id, rect } => {
+            let col_offset = ((rect.x - viewport.x) / cell_w).round() as usize;
+            let row_offset = ((rect.y - viewport.y) / cell_h).round() as usize;
+            let cols = (rect.w / cell_w).floor() as usize;
+            let rows = (rect.h / cell_h).floor() as usize;
+            result.push(PaneInfo {
+                terminal_id: *terminal_id,
+                col_offset, row_offset,
+                cols: cols.max(1),
+                rows: rows.max(1),
+                focused: *terminal_id == focused,
+            });
+        }
+        PaneNode::Split { left, right, .. } => {
+            collect_leaf_infos_impl(left, viewport, cell_w, cell_h, focused, result);
+            collect_leaf_infos_impl(right, viewport, cell_w, cell_h, focused, result);
+        }
+    }
+}
+
+fn collect_separators_impl(
+    node: &PaneNode,
+    viewport: Rect,
+    cell_w: f32,
+    cell_h: f32,
+    result: &mut Vec<PaneSeparator>,
+) {
+    match node {
+        PaneNode::Leaf { .. } => {}
+        PaneNode::Split { dir, left, right, rect, .. } => {
+            let rect = *rect;
+            match dir {
+                SplitDir::Horizontal => {
+                    // Vertical separator at the right edge of the left child.
+                    let left_rect = left.rect();
+                    let sep_col = ((left_rect.x + left_rect.w - viewport.x) / cell_w).round() as usize;
+                    let sep_row = ((rect.y - viewport.y) / cell_h).round() as usize;
+                    let length = (rect.h / cell_h).floor() as usize;
+                    result.push(PaneSeparator { vertical: true, col: sep_col, row: sep_row, length });
+                }
+                SplitDir::Vertical => {
+                    // Horizontal separator at the bottom edge of the top child.
+                    let left_rect = left.rect();
+                    let sep_row = ((left_rect.y + left_rect.h - viewport.y) / cell_h).round() as usize;
+                    let sep_col = ((rect.x - viewport.x) / cell_w).round() as usize;
+                    let length = (rect.w / cell_w).floor() as usize;
+                    result.push(PaneSeparator { vertical: false, col: sep_col, row: sep_row, length });
+                }
+            }
+            collect_separators_impl(left, viewport, cell_w, cell_h, result);
+            collect_separators_impl(right, viewport, cell_w, cell_h, result);
+        }
+    }
+}

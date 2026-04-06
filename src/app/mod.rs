@@ -129,9 +129,8 @@ impl App {
 
     fn resize_terminals_for_panel(&mut self) {
         let viewport = self.viewport_rect();
-        let (cols, rows) = self.default_grid_size();
         let (cell_w, cell_h) = self.cell_dims();
-        self.mux.resize_all(viewport, cols, rows, self.config.scrollback_lines as usize, cell_w, cell_h);
+        self.mux.resize_all(viewport, self.config.scrollback_lines as usize, cell_w, cell_h);
         // Panel layout depends on term_cols/screen_rows — rebuild instances after resize.
         self.ui.panel_mut().dirty = true;
     }
@@ -272,47 +271,62 @@ impl ApplicationHandler<()> for App {
                 let terminal_id = self.mux.focused_terminal_id();
                 self.ui.set_active_terminal(terminal_id);
 
-                let cell_data = self.mux.collect_grid_cells();
+                // Compute viewport and per-pane layout.
+                let viewport = self.viewport_rect();
+                let (cell_w, cell_h) = self.cell_dims();
+                let pane_infos = self.mux.active_pane_infos(viewport, cell_w as f32, cell_h as f32);
+                let pane_seps  = self.mux.active_pane_separators(viewport, cell_w as f32, cell_h as f32);
+
+                // Viewport-wide dimensions for overlay positioning.
+                let total_cols = (viewport.w / cell_w as f32).floor() as usize;
+                let total_rows = (viewport.h / cell_h as f32).floor() as usize;
+                // Focused pane dimensions (scroll bar, AI block anchor).
                 let (term_cols, term_rows) = self.mux.active_terminal_size();
-                let cursor = self.mux.active_terminal().map(|t| t.cursor_info());
 
                 if let Some(rc) = &mut self.render_ctx {
                     // Advance epoch once per frame so LRU eviction can age unused entries.
                     rc.renderer.atlas.next_epoch();
 
                     // Proactive eviction: when the atlas is 90% full, drop entries not
-                    // touched in the last 60 frames (~1 second at 60fps). This avoids a
-                    // full atlas clear during a frame that would cause a brief re-rasterize
-                    // stutter. After eviction the caller still re-rasterizes misses lazily.
+                    // touched in the last 60 frames (~1 second at 60fps).
                     if rc.renderer.atlas.is_near_full() {
                         let evicted = rc.renderer.atlas.evict_cold(60);
                         if evicted > 0 {
-                            rc.row_cache.clear();
+                            rc.clear_all_row_caches();
                             log::debug!("Atlas eviction: removed {} stale glyphs", evicted);
                         }
                     }
 
                     let scaled_font = rc.scaled_font_config(&self.config);
-                    let result = rc.build_instances(&cell_data, &self.config, &scaled_font, cursor.as_ref(), self.input.cursor_blink_on, terminal_id);
 
-                    if let Err(crate::renderer::atlas::AtlasError::Full) = result {
-                        // Eviction wasn't enough — full clear as last resort.
+                    // ── Build cell instances for every pane ──────────────────────────────
+                    let render_result = build_all_pane_instances(
+                        rc, &pane_infos, &self.mux, &self.config, &scaled_font, self.input.cursor_blink_on,
+                    );
+
+                    if let Err(crate::renderer::atlas::AtlasError::Full) = render_result {
+                        // Atlas full — clear everything and retry.
                         rc.renderer.atlas.clear(&rc.renderer.device());
                         if let Some(atlas) = rc.renderer.get_lcd_atlas() { atlas.borrow_mut().clear(&rc.renderer.device()); }
-                        rc.row_cache.clear();
+                        rc.clear_all_row_caches();
                         rc.atlas_generation += 1;
-                        let _ = rc.build_instances(&cell_data, &self.config, &scaled_font, cursor.as_ref(), self.input.cursor_blink_on, terminal_id);
+                        let _ = build_all_pane_instances(
+                            rc, &pane_infos, &self.mux, &self.config, &scaled_font, self.input.cursor_blink_on,
+                        );
                     }
+
+                    // Pane separator lines.
+                    rc.build_pane_separators(&pane_seps);
 
                     // ── Tab bar (only when 2+ tabs, renders at row = -1) ────────────────
                     if self.mux.tabs.tab_count() > 1 {
-                        let total_cols_for_tab = term_cols
+                        let tab_total_cols = total_cols
                             + if self.ui.is_panel_visible() { self.ui.panel().width_cols as usize } else { 0 };
                         rc.build_tab_bar_instances(
                             self.mux.tabs.tabs(),
                             self.mux.tabs.active_index(),
                             &scaled_font,
-                            total_cols_for_tab,
+                            tab_total_cols,
                             self.config.window.padding.left as f32,
                             self.config.window.padding.top as f32,
                             self.config.colors.background,
@@ -335,22 +349,15 @@ impl ApplicationHandler<()> for App {
                             let panel_start = rc.instances.len();
                             let panel_focused = self.ui.panel_focused;
                             let blink = self.input.cursor_blink_on;
-                            // Temporarily borrow the panel immutably for rendering
-                            // (panel_mut().dirty was already read above, so the mut borrow is released)
-                            {
-                                // We need &ChatPanel for build_chat_panel_instances.
-                                // Use a raw pointer dance to satisfy the borrow checker: panel_mut()
-                                // for the dirty clear + panel() for the render call are separate borrows.
-                                self.ui.panel_mut().dirty = false;
-                            }
+                            self.ui.panel_mut().dirty = false;
                             rc.build_chat_panel_instances(
                                 self.ui.panel(),
                                 panel_focused,
                                 self.ui.file_picker_focused,
                                 &self.config,
                                 &scaled_font,
-                                term_cols,
-                                term_rows,
+                                total_cols,
+                                total_rows,
                                 blink,
                             );
                             rc.panel_instances_cache = rc.instances[panel_start..].to_vec();
@@ -363,32 +370,32 @@ impl ApplicationHandler<()> for App {
                     let block_visible = self.ui.is_block_visible();
                     if block_visible && self.ui.ai_block.dirty {
                         self.ui.ai_block.dirty = false;
-                        rc.build_ai_block_instances(&self.ui.ai_block, &scaled_font, term_cols, term_rows);
+                        rc.build_ai_block_instances(&self.ui.ai_block, &scaled_font, total_cols, total_rows);
                     }
 
                     // ── Command palette ──────────────────────────────────────────────────
                     if self.ui.palette.visible {
-                        rc.row_cache.dirty_rows.fill(true);
-                        let total_cols = term_cols
+                        rc.mark_all_rows_dirty();
+                        let palette_cols = total_cols
                             + if panel_visible { self.ui.panel().width_cols as usize } else { 0 };
-                        rc.build_palette_instances(&self.ui.palette, &scaled_font, total_cols, term_rows);
+                        rc.build_palette_instances(&self.ui.palette, &scaled_font, palette_cols, total_rows);
                     }
 
                     // ── Context menu (right-click) ────────────────────────────────────────
                     if self.ui.context_menu.visible {
-                        rc.build_context_menu_instances(&self.ui.context_menu, &scaled_font, term_cols, term_rows);
+                        rc.build_context_menu_instances(&self.ui.context_menu, &scaled_font, total_cols, total_rows);
                     }
 
-                    // ── GPU upload ───────────────────────────────────────────────────────
-                    // Tab bar + scroll bar instances are appended after terminal rows, so
-                    // offset-based dirty-row upload no longer maps cleanly. Always do a
-                    // full upload — at ~5000 instances × 48 bytes the cost is negligible.
+                    // ── GPU upload ──────────────────────────────────────────────────────
                     rc.renderer.upload_rect_instances(&rc.rect_instances);
                     rc.renderer.upload_instances(&rc.instances, 0);
-                    rc.row_cache.dirty_rows.fill(false);
+                    rc.reset_row_dirty_flags();
                     rc.renderer.set_cell_count(rc.instances.len());
                     rc.renderer.upload_lcd_instances(&rc.lcd_instances);
                     let _ = rc.renderer.render();
+
+                    // Suppress unused warning for scroll-bar focused dimensions.
+                    let _ = (term_cols, term_rows);
                 }
             }
             WindowEvent::Resized(size) => {
@@ -402,6 +409,8 @@ impl ApplicationHandler<()> for App {
                 if !is_synthetic {
                     let panel_was_visible = self.ui.is_panel_visible();
                     let tab_count_before = self.mux.tabs.tab_count();
+                    let tab_idx_before = self.mux.active_tab_index();
+                    let pane_count_before = self.mux.active_pane_count();
                     self.ui.set_active_terminal(self.mux.focused_terminal_id());
                     self.input.handle_key_input(
                         &event, event_loop, &self.config,
@@ -414,6 +423,12 @@ impl ApplicationHandler<()> for App {
                     }
                     if self.mux.tabs.tab_count() != tab_count_before {
                         self.apply_tab_bar_padding();
+                        self.resize_terminals_for_panel();
+                    } else if self.mux.active_tab_index() != tab_idx_before {
+                        // Tab switched — resize the newly active tab's panes.
+                        self.resize_terminals_for_panel();
+                    } else if self.mux.active_pane_count() != pane_count_before {
+                        // Pane split or close — resize all panes in current tab.
                         self.resize_terminals_for_panel();
                     }
                     if let Some(w) = &self.window { w.request_redraw(); }
@@ -496,6 +511,16 @@ impl ApplicationHandler<()> for App {
                             self.ui.panel_focused = true;
                         } else {
                             if self.ui.is_panel_visible() { self.ui.panel_focused = false; self.ui.file_picker_focused = false; }
+                            // Multi-pane: focus the pane under the cursor.
+                            {
+                                let (px, py) = (self.input.mouse_pos.0 as f32, self.input.mouse_pos.1 as f32);
+                                let tab_idx = self.mux.active_tab_index();
+                                if let Some(pane_mgr) = self.mux.panes.get_mut(tab_idx) {
+                                    pane_mgr.focus_at(px, py);
+                                    let new_tid = self.mux.focused_terminal_id();
+                                    self.ui.set_active_terminal(new_tid);
+                                }
+                            }
                             self.input.mouse_left_pressed = true;
                             if !self.mux.active_terminal().map(|t| t.mouse_mode_flags().0).unwrap_or(false) {
                                 let clicks = self.input.register_click((col, row));
@@ -623,6 +648,41 @@ impl ApplicationHandler<()> for App {
         };
         event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(wake));
     }
+}
+
+/// Build and upload cell instances for every pane in the active tab.
+/// Calls `rc.begin_frame()` first to clear previous frame's instances.
+fn build_all_pane_instances(
+    rc: &mut RenderContext,
+    pane_infos: &[crate::ui::PaneInfo],
+    mux: &Mux,
+    config: &crate::config::Config,
+    font: &crate::config::schema::FontConfig,
+    cursor_blink_on: bool,
+) -> Result<(), crate::renderer::atlas::AtlasError> {
+    rc.begin_frame();
+    for info in pane_infos {
+        let cell_data = mux.collect_grid_cells_for(info.terminal_id);
+        let cursor = if info.focused {
+            mux.terminals
+                .get(info.terminal_id)
+                .and_then(|s| s.as_ref())
+                .map(|t| t.cursor_info())
+        } else {
+            None
+        };
+        rc.build_instances(
+            &cell_data,
+            config,
+            font,
+            cursor.as_ref(),
+            cursor_blink_on,
+            info.terminal_id,
+            info.col_offset,
+            info.row_offset,
+        )?;
+    }
+    Ok(())
 }
 
 impl Drop for App {

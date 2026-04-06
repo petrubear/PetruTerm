@@ -1,7 +1,7 @@
 use anyhow::Result;
 use crate::config::Config;
 use crate::term::{Terminal, PtyEvent};
-use crate::ui::{PaneManager, TabManager, Rect};
+use crate::ui::{PaneInfo, PaneSeparator, PaneManager, TabManager, Rect};
 use winit::event_loop::EventLoopProxy;
 use alacritty_terminal::vte::ansi::Color as AnsiColor;
 use alacritty_terminal::index::{Column, Line, Point};
@@ -29,6 +29,11 @@ impl Mux {
 
     pub fn active_tab_index(&self) -> usize {
         self.tabs.active_index()
+    }
+
+    pub fn active_pane_count(&self) -> usize {
+        let idx = self.active_tab_index();
+        self.panes.get(idx).map(|p| p.root.leaf_ids().len()).unwrap_or(0)
     }
 
     pub fn focused_terminal_id(&self) -> usize {
@@ -142,6 +147,7 @@ impl Mux {
         self.tabs.is_empty()
     }
 
+    #[allow(dead_code)]
     pub fn collect_grid_cells(&self) -> Vec<(String, Vec<(AnsiColor, AnsiColor)>)> {
         let Some(terminal) = self.active_terminal() else { return vec![]; };
 
@@ -242,23 +248,72 @@ impl Mux {
         }
     }
 
-    /// Resize all panes and terminals in response to a window resize or panel open/close.
-    /// Encapsulates iteration over `panes` and `terminals` so callers don't reach into internals.
+    /// Resize all panes and terminals. The active tab's panes are resized to their
+    /// individual rect-derived dimensions; inactive tabs keep their last layout.
     pub fn resize_all(
         &mut self,
         viewport: Rect,
-        cols: u16,
-        rows: u16,
         scrollback: usize,
         cell_w: u16,
         cell_h: u16,
     ) {
+        // Relayout every pane tree to the new viewport.
         for pane_mgr in &mut self.panes {
             pane_mgr.resize(viewport);
         }
-        for terminal in self.terminals.iter_mut().flatten() {
-            terminal.resize(cols, rows, scrollback, cell_w, cell_h);
+        // Active tab: resize each pane's terminal to its own pane dimensions.
+        let active = self.active_tab_index();
+        if let Some(pane_mgr) = self.panes.get(active) {
+            let infos = pane_mgr.pane_infos(viewport, cell_w as f32, cell_h as f32);
+            for info in infos {
+                if let Some(Some(t)) = self.terminals.get_mut(info.terminal_id) {
+                    t.resize(info.cols as u16, info.rows as u16, scrollback, cell_w, cell_h);
+                }
+            }
         }
+        // Inactive tabs: terminals are resized when their tab becomes active.
+    }
+
+    /// Return layout info for each leaf pane in the active tab.
+    pub fn active_pane_infos(&self, viewport: Rect, cell_w: f32, cell_h: f32) -> Vec<PaneInfo> {
+        let tab_idx = self.active_tab_index();
+        self.panes.get(tab_idx)
+            .map(|p| p.pane_infos(viewport, cell_w, cell_h))
+            .unwrap_or_default()
+    }
+
+    /// Return separator lines between panes in the active tab.
+    pub fn active_pane_separators(&self, viewport: Rect, cell_w: f32, cell_h: f32) -> Vec<PaneSeparator> {
+        let tab_idx = self.active_tab_index();
+        self.panes.get(tab_idx)
+            .map(|p| p.pane_separators(viewport, cell_w, cell_h))
+            .unwrap_or_default()
+    }
+
+    /// Read the terminal grid for a specific terminal ID (for multi-pane rendering).
+    pub fn collect_grid_cells_for(&self, terminal_id: usize) -> Vec<(String, Vec<(AnsiColor, AnsiColor)>)> {
+        let Some(Some(terminal)) = self.terminals.get(terminal_id) else { return vec![]; };
+        terminal.with_term(|term| {
+            let rows = term.screen_lines();
+            let cols = term.columns();
+            let display_offset = term.grid().display_offset() as i32;
+            let sel_range = term.selection.as_ref().and_then(|s| s.to_range(term));
+            let mut result = Vec::with_capacity(rows);
+            for row in 0..rows {
+                let mut text = String::with_capacity(cols);
+                let mut colors = Vec::with_capacity(cols);
+                let grid_line = Line(row as i32 - display_offset);
+                for col in 0..cols {
+                    let cell = &term.grid()[grid_line][Column(col)];
+                    text.push(if cell.c == '\0' { ' ' } else { cell.c });
+                    let (fg, bg) = if cell.flags.contains(Flags::INVERSE) { (cell.bg, cell.fg) } else { (cell.fg, cell.bg) };
+                    let (fg, bg) = if cell_in_selection(grid_line, Column(col), &sel_range) { (bg, fg) } else { (fg, bg) };
+                    colors.push((fg, bg));
+                }
+                result.push((text, colors));
+            }
+            result
+        })
     }
 
     pub fn shutdown(&mut self) {

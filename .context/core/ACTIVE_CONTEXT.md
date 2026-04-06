@@ -8,6 +8,7 @@
 **Phase 1 COMPLETE. Phase 2 COMPLETE. Phase 3 P1 implementada, pero con deuda abierta.**
 **Deuda técnica: 0 ítems abiertos. Todos resueltos (incluye auditoría Codex 2026-04-06).**
 **Tests: 16/16 passing. `cargo clippy --all-targets --all-features -- -D warnings` PASA limpio.**
+**Multi-pane rendering COMPLETO (splits horizontal/vertical, separadores, resize automático).**
 
 ### Features verificados (2026-04-06)
 
@@ -31,6 +32,7 @@
 | Emoji / color glyph rendering | ✅ |
 | Phase 2.5 P1 — file context attachment (AGENTS.md, file picker) | ✅ |
 | Phase 2.5 P2 — LLM tool use (ReadFile, ListDir) | ✅ |
+| Multi-pane splits (^B % / ^B ") + separadores + resize | ✅ |
 
 ### Deuda técnica — CERO ítems abiertos
 
