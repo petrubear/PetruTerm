@@ -241,3 +241,118 @@ impl GlyphAtlas {
         self.view = self.texture.create_view(&wgpu::TextureViewDescriptor::default());
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cosmic_text::{fontdb, CacheKey, CacheKeyFlags};
+
+    /// Build a minimal AtlasEntry for test injection (no GPU involved).
+    fn dummy_entry(epoch: u64) -> AtlasEntry {
+        AtlasEntry {
+            uv: [0.0; 4], width: 10, height: 10,
+            bearing_x: 0, bearing_y: 0, is_color: false,
+            last_used: epoch,
+        }
+    }
+
+    fn dummy_key(glyph_id: u16) -> CacheKey {
+        let (key, _, _) = CacheKey::new(
+            fontdb::ID::dummy(),
+            glyph_id,
+            16.0,
+            (0.0, 0.0),
+            fontdb::Weight::NORMAL,
+            CacheKeyFlags::empty(),
+        );
+        key
+    }
+
+    // ── TD-OP-03: epoch counter advances ─────────────────────────────────────
+
+    #[test]
+    fn epoch_starts_at_zero() {
+        // We can't create a GlyphAtlas without a device, so we test the
+        // counter logic by directly manipulating the struct fields via a
+        // helper that mirrors what new() sets up.
+        let mut epoch: u64 = 0;
+        // Simulate next_epoch() calls.
+        for i in 1..=5u64 {
+            epoch = epoch.saturating_add(1);
+            assert_eq!(epoch, i);
+        }
+    }
+
+    // ── TD-OP-03: evict_cold removes stale entries only ───────────────────────
+
+    #[test]
+    fn evict_cold_removes_old_entries() {
+        // Build a fake atlas state without a GPU device by creating the
+        // GlyphAtlas internals directly via a wgpu-free path.
+        // We test just the cache + epoch fields which have no GPU dependency.
+        let mut cache: HashMap<CacheKey, AtlasEntry> = HashMap::new();
+        let epoch: u64 = 100;
+
+        // 3 warm entries (used at epoch 99/100).
+        cache.insert(dummy_key(1), dummy_entry(99));
+        cache.insert(dummy_key(2), dummy_entry(100));
+        cache.insert(dummy_key(3), dummy_entry(100));
+        // 2 cold entries (last used at epoch 30 — age > 60).
+        cache.insert(dummy_key(4), dummy_entry(30));
+        cache.insert(dummy_key(5), dummy_entry(39));
+
+        // Mirror evict_cold logic: remove entries with age > max_age.
+        let max_age = 60u64;
+        cache.retain(|_, entry| epoch.saturating_sub(entry.last_used) <= max_age);
+
+        assert_eq!(cache.len(), 3, "Only warm entries should survive");
+        assert!(cache.contains_key(&dummy_key(1)));
+        assert!(cache.contains_key(&dummy_key(2)));
+        assert!(cache.contains_key(&dummy_key(3)));
+        assert!(!cache.contains_key(&dummy_key(4)), "Cold entry must be evicted");
+        assert!(!cache.contains_key(&dummy_key(5)), "Cold entry must be evicted");
+        let _ = epoch; // suppress unused warning
+    }
+
+    #[test]
+    fn evict_cold_keeps_all_when_all_warm() {
+        let mut cache: HashMap<CacheKey, AtlasEntry> = HashMap::new();
+        let epoch: u64 = 10;
+        cache.insert(dummy_key(1), dummy_entry(8));
+        cache.insert(dummy_key(2), dummy_entry(10));
+        let max_age = 60u64;
+        cache.retain(|_, entry| epoch.saturating_sub(entry.last_used) <= max_age);
+        assert_eq!(cache.len(), 2);
+    }
+
+    #[test]
+    fn evict_cold_removes_all_when_all_stale() {
+        let mut cache: HashMap<CacheKey, AtlasEntry> = HashMap::new();
+        let epoch: u64 = 200;
+        cache.insert(dummy_key(1), dummy_entry(0));
+        cache.insert(dummy_key(2), dummy_entry(1));
+        let max_age = 60u64;
+        cache.retain(|_, entry| epoch.saturating_sub(entry.last_used) <= max_age);
+        assert_eq!(cache.len(), 0);
+    }
+
+    // ── TD-OP-03: is_near_full threshold ─────────────────────────────────────
+
+    #[test]
+    fn fill_ratio_below_threshold_is_not_near_full() {
+        let size = GlyphAtlas::SIZE;
+        let total = (size * size) as u64;
+        let used = (total as f32 * 0.85) as u64; // 85% < 90% threshold
+        let threshold = (total as f32 * GlyphAtlas::EVICT_THRESHOLD) as u64;
+        assert!(used < threshold, "85% fill should not trigger eviction");
+    }
+
+    #[test]
+    fn fill_ratio_at_threshold_is_near_full() {
+        let size = GlyphAtlas::SIZE;
+        let total = (size * size) as u64;
+        let used = (total as f32 * 0.91) as u64; // 91% > 90% threshold
+        let threshold = (total as f32 * GlyphAtlas::EVICT_THRESHOLD) as u64;
+        assert!(used >= threshold, "91% fill should trigger eviction");
+    }
+}

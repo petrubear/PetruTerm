@@ -517,21 +517,54 @@ mod tests {
 
     #[test]
     fn test_is_pua() {
-        // Main Nerd Font PUA
-        assert!(is_pua('\u{e0a0}')); // Branch icon
-        assert!(is_pua('\u{f418}')); // Git branch
-        // Powerline / Symbols
-        assert!(is_pua('\u{23fb}')); 
-        assert!(is_pua('\u{2b58}'));
-        // Devicons / FontAwesome
-        assert!(is_pua('\u{e700}'));
-        assert!(is_pua('\u{f000}'));
-        // Seti / Weather
-        assert!(is_pua('\u{e5fa}'));
-        assert!(is_pua('\u{e300}'));
-        // Regular text
+        // ── BMP PUA (0xE000–0xF8FF) — covers all Nerd Font icon blocks ─────────
+        assert!(is_pua('\u{e0a0}')); // Powerline branch icon
+        assert!(is_pua('\u{f418}')); // Nerd Font git-branch
+        assert!(is_pua('\u{e000}')); // BMP PUA lower bound
+        assert!(is_pua('\u{f8ff}')); // BMP PUA upper bound
+
+        // Blocks previously listed as separate ranges (all within BMP PUA).
+        // Verifies the consolidation doesn't break coverage — TD-OP-02.
+        assert!(is_pua('\u{e700}')); // Devicons lower bound
+        assert!(is_pua('\u{e7c5}')); // Devicons upper bound
+        assert!(is_pua('\u{f000}')); // Font Awesome lower bound
+        assert!(is_pua('\u{f2e0}')); // Font Awesome upper bound
+        assert!(is_pua('\u{e200}')); // Font Logotypes lower bound
+        assert!(is_pua('\u{e2a9}')); // Font Logotypes upper bound
+        assert!(is_pua('\u{e5fa}')); // Seti-UI lower bound
+        assert!(is_pua('\u{e62b}')); // Seti-UI upper bound
+        assert!(is_pua('\u{e300}')); // Weather lower bound
+        assert!(is_pua('\u{e3e3}')); // Weather upper bound
+
+        // ── Supplementary PUA planes ──────────────────────────────────────────
+        assert!(is_pua('\u{F0000}')); // PUA-A lower bound
+        assert!(is_pua('\u{FFFFF}')); // PUA-A upper bound
+
+        // ── Symbol codepoints outside PUA (also patched by Nerd Fonts) ────────
+        assert!(is_pua('\u{23fb}')); // IEC Power Symbol
+        assert!(is_pua('\u{23fe}')); // IEC Power Symbol upper bound
+        assert!(is_pua('\u{2b58}')); // Heavy circle / power variant
+        assert!(is_pua('\u{2665}')); // Octicons heart ♥
+        assert!(is_pua('\u{26a1}')); // Lightning bolt ⚡
+        assert!(is_pua('\u{2190}')); // Arrow left ←
+        assert!(is_pua('\u{2199}')); // Arrow lower-left ↙
+        assert!(is_pua('\u{2714}')); // Heavy check ✔
+        assert!(is_pua('\u{2716}')); // Heavy cross ✖
+        assert!(is_pua('\u{2728}')); // Sparkles ✨
+        assert!(is_pua('\u{2764}')); // Heavy heart ❤
+        assert!(is_pua('\u{2b06}')); // Up arrow ⬆
+        assert!(is_pua('\u{2b07}')); // Down arrow ⬇
+
+        // ── Ordinary text — must NOT be flagged as PUA ────────────────────────
         assert!(!is_pua('A'));
         assert!(!is_pua(' '));
+        assert!(!is_pua('α')); // U+03B1 — Greek letter, outside all ranges
+        assert!(!is_pua('€')); // U+20AC — currency symbol
+        assert!(!is_pua('\u{D7FF}')); // Highest non-surrogate BMP char below PUA
+        assert!(!is_pua('ñ')); // U+00F1 — Latin extended, outside all ranges
+        // Note: arrows 0x2190–0x2199 ARE in the override list (Nerd Font patches);
+        // U+2192 → IS flagged intentionally.
+        assert!(is_pua('→')); // U+2192 — in the patched arrows range
     }
 
     #[test]

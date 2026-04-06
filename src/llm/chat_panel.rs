@@ -465,3 +465,64 @@ pub fn titled_separator(title: &str, width: usize) -> String {
     let right = width - inner_len - left;
     format!("{}{}{}", "─".repeat(left), inner, "─".repeat(right))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::llm::{ChatMessage, ChatRole};
+
+    // ── Helper: build a panel with a single assistant message ─────────────────
+
+    fn panel_with_assistant(content: &str) -> ChatPanel {
+        let mut p = ChatPanel::new();
+        p.state = PanelState::Idle;
+        p.messages.push(ChatMessage { role: ChatRole::Assistant, content: content.to_string() });
+        p
+    }
+
+    // ── TD-016: last_assistant_command strips tool-status lines ───────────────
+
+    #[test]
+    fn command_without_tool_lines_unchanged() {
+        let p = panel_with_assistant("git status");
+        assert_eq!(p.last_assistant_command(), Some("git status".into()));
+    }
+
+    #[test]
+    fn command_strips_in_progress_tool_line() {
+        let p = panel_with_assistant("⟳ list_dir(.)\ngit status");
+        assert_eq!(p.last_assistant_command(), Some("git status".into()));
+    }
+
+    #[test]
+    fn command_strips_done_tool_line() {
+        let p = panel_with_assistant("✓ read_file(src/main.rs)\ngit log --oneline");
+        assert_eq!(p.last_assistant_command(), Some("git log --oneline".into()));
+    }
+
+    #[test]
+    fn command_strips_multiple_tool_lines() {
+        let content = "⟳ list_dir(.)\n✓ list_dir(.)\n✓ read_file(Cargo.toml)\ncargo build";
+        let p = panel_with_assistant(content);
+        assert_eq!(p.last_assistant_command(), Some("cargo build".into()));
+    }
+
+    #[test]
+    fn command_returns_none_when_only_tool_lines() {
+        let p = panel_with_assistant("⟳ list_dir(.)\n✓ list_dir(.)");
+        assert_eq!(p.last_assistant_command(), None);
+    }
+
+    #[test]
+    fn command_strips_markdown_fence_after_tool_lines() {
+        let content = "✓ read_file(src/main.rs)\n```bash\ncargo test\n```";
+        let p = panel_with_assistant(content);
+        assert_eq!(p.last_assistant_command(), Some("cargo test".into()));
+    }
+
+    #[test]
+    fn command_returns_none_on_empty_panel() {
+        let p = ChatPanel::new();
+        assert_eq!(p.last_assistant_command(), None);
+    }
+}
