@@ -12,7 +12,7 @@ A developer-first GPU-accelerated terminal emulator written in Rust. Built for s
 - **Full terminal emulation** — xterm-256color, truecolor, bracketed paste, SGR mouse, OSC 52 clipboard
 - **Font ligatures** — HarfBuzz shaping with `calt`, `liga`, `dlig` OpenType features
 - **Emoji & color glyphs** — full RGBA emoji rendering via Apple Color Emoji (and any color font)
-- **Tabs & split panes** — tmux-style keybinds, binary-tree layout
+- **Tabs & split panes** — tmux-style keybinds, binary-tree layout; each pane has an independent PTY (SSH sessions work naturally); exiting a shell closes only that pane
 - **AI agent panel** — context-aware chat with file attachment, NL→command, explain output, fix errors
 - **LLM tool use** — AI agent can autonomously read files and list directories (sandboxed to CWD)
 - **Inline AI block** — `Ctrl+Space` for quick NL→shell command without leaving the terminal
@@ -214,10 +214,9 @@ Press `Ctrl+B`, release, then press the bound key within `timeout_ms` millisecon
 | `Leader+n` | Next tab |
 | `Leader+b` | Previous tab |
 | `Leader+1–9` | Switch to tab N |
-| `Leader+%` | Split pane horizontally |
-| `Leader+"` | Split pane vertically |
+| `Leader+%` | Split pane horizontally (left \| right) |
+| `Leader+"` | Split pane vertically (top / bottom) |
 | `Leader+x` | Close active pane |
-| `Leader+h/j/k/l` | Move focus between panes |
 
 #### Custom bindings
 

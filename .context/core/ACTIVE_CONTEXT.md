@@ -1,7 +1,7 @@
 # Active Context
 
 **Current Focus:** Phase 2.5 P3 — LLM Tool Use: Write & Run
-**Last Active:** 2026-04-06
+**Last Active:** 2026-04-07
 
 ## Estado actual del proyecto
 
@@ -33,6 +33,8 @@
 | Phase 2.5 P1 — file context attachment (AGENTS.md, file picker) | ✅ |
 | Phase 2.5 P2 — LLM tool use (ReadFile, ListDir) | ✅ |
 | Multi-pane splits (^B % / ^B ") + separadores + resize | ✅ |
+| Leader+Shift keys (%, ", &) — fix modifier key consuming leader | ✅ |
+| Pane exit closes solo el pane (no el tab completo) | ✅ |
 
 ### Deuda técnica — CERO ítems abiertos
 

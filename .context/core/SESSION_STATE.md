@@ -50,10 +50,30 @@
 - Detección de cambio de pane count en `KeyboardInput` → llama `resize_terminals_for_panel()`.
 - Keybinds: `^B %` (split horizontal), `^B "` (split vertical), `^B x` (close pane).
 
+## Session Notes (2026-04-07 — pane bug fixes)
+
+### Leader+Shift keys (%, ", &) not working (RESUELTO)
+- Raíz: el Shift keydown genera un `KeyboardInput` con `Key::Named(NamedKey::Shift)`.
+  Este evento entraba al bloque leader, ponía `leader_active = false` y retornaba sin
+  despachar acción — el leader quedaba consumido antes de que llegara el `%` o `"`.
+- Fix: al inicio del bloque leader, si `event.logical_key` es una tecla modificadora
+  (Shift/Ctrl/Alt/Super/Meta/Hyper) → `return` sin tocar `leader_active`.
+- Archivos: `src/app/input/mod.rs`
+
+### Exit cerraba el tab completo (RESUELTO)
+- Raíz 1: `close_terminal` buscaba el tab por `focused_terminal == terminal_id` — fallaba
+  si el terminal que salió no era el enfocado.
+- Raíz 2: siempre cerraba el tab entero aunque hubiera más panes.
+- Fix: buscar el tab por `leaf_ids().contains(&terminal_id)`. Si el tab tiene múltiples
+  panes → llamar `pane_mgr.close_specific(terminal_id)` (solo elimina ese pane del árbol).
+  Solo cerrar el tab si era el último pane.
+- Nuevo método: `PaneManager::close_specific(terminal_id)` en `src/ui/panes.rs`.
+- Archivos: `src/app/mux.rs`, `src/ui/panes.rs`
+
 ## Build & Tests
-- **cargo build:** PASS (0 errors — 2026-04-06)
+- **cargo build:** PASS (0 errors — 2026-04-07)
 - **cargo test:** 16/16 PASS
-- **cargo clippy --all-targets --all-features -- -D warnings:** PASS (0 errors, 0 warnings — 2026-04-06)
+- **cargo clippy --all-targets --all-features -- -D warnings:** PASS (0 errors, 0 warnings — 2026-04-07)
 - **branch:** master
 
 ## Session anterior (2026-04-06 — UX polish)
