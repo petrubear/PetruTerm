@@ -1,71 +1,83 @@
 # Active Context
 
-**Current Focus:** Phase 2.5 — AI Agent Mode (P3 next) + polish
+**Current Focus:** Phase 2.5 P3 — LLM Tool Use: Write & Run
 **Last Active:** 2026-04-06
-**Priority:** P3 (Write & Run tools)
 
-## Current State
+## Estado actual del proyecto
 
-**Phase 1 COMPLETE. Phase 2 COMPLETE. Phase 3 P1 COMPLETE. All TD items resolved. (2026-04-06)**
+**Phase 1 COMPLETE. Phase 2 COMPLETE. Phase 3 P1 COMPLETE.**
+**Deuda técnica: 0 ítems abiertos (todos resueltos 2026-04-06).**
+**Tests: 16/16 passing.**
 
-### Phase 3 P1 Verified ✓ (2026-04-06)
+### Features verificados (2026-04-06)
 
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Tab bar | ✅ | Rounded pill tabs via `RoundedRectPipeline` + SDF WGSL shader |
-| Scroll bar | ✅ | 6px right-edge overlay, proportional thumb |
-| Tab bar rounded pills | ✅ | TD-013 resolved — `src/renderer/rounded_rect.rs` |
-| Tab bar bg transparency | ✅ | TD-014 resolved — inherits `config.colors.background` (clear color) |
-| Title bar drag | ✅ | `drag_window()` at y < padding.top; `setMovableByWindowBackground: NO` |
-| Mouse text selection | ✅ | Fixed (was broken by `setMovableByWindowBackground: YES`) |
-| Double/triple-click selection | ✅ | `Semantic`/`Lines` via `InputHandler::register_click()` |
-| Tab bar mouse click | ✅ | `hit_test_tab_bar()` in `app/mod.rs` |
-| Shell exit closes tab | ✅ | `close_terminal()` in `app/mux.rs` |
-| Font fallback chain | ✅ | `petruterm.font("A, B, C")` resolved at config load time |
-| Right-click context menu | ✅ | Copy/Paste/Clear with keybind hints — `src/ui/context_menu.rs` |
-| Palette keybind hints | ✅ | Right-aligned `^B c` / `Cmd+Q` labels in command palette |
-| Default config — all fields | ✅ | All schema fields documented in shipped config files |
-| Missing configs auto-created | ✅ | `ensure_default_configs()` writes missing files on every startup |
+| Feature | Estado |
+|---------|--------|
+| Render, PTY, teclado, ratón, clipboard, cursor, resize | ✅ |
+| Custom title bar, .app bundle, icono | ✅ |
+| Scrollback + scroll bar | ✅ |
+| Ligatures, nvim/tmux verificados | ✅ |
+| AI panel + inline AI block (Ctrl+Space) | ✅ |
+| Leader key system | ✅ |
+| LLM providers (OpenRouter/Ollama/LMStudio) | ✅ |
+| Historial de chat por pane | ✅ |
+| Tab bar (pill shape, SDF shader) | ✅ |
+| Shell exit cierra tab | ✅ |
+| Selección doble/triple click | ✅ |
+| Selección con ratón (fix: `setMovableByWindowBackground: NO`) | ✅ |
+| Context menu (right-click: Copy/Paste/Clear) | ✅ |
+| Keybinds en command palette (alineados derecha) | ✅ |
+| Default configs con todos los campos del schema | ✅ |
+| Emoji / color glyph rendering | ✅ |
+| Phase 2.5 P1 — file context attachment (AGENTS.md, file picker) | ✅ |
+| Phase 2.5 P2 — LLM tool use (ReadFile, ListDir) | ✅ |
 
-### Technical Debt
-4 open items: TD-OP-02 (P1), TD-OP-03 (P2), TD-OP-01 (P2), TD-016 (P3 run bar shows tool status lines).
+### Deuda técnica — todos resueltos
 
-### Keybinds (tmux-aligned)
+| TD | Solución |
+|----|---------|
+| TD-OP-02 | `is_pua()` consolidada: BMP PUA cubre todos los subrangos |
+| TD-OP-03 | Atlas 4096 px + eviction LRU por epoch |
+| TD-OP-01 | Eliminado `unsafe impl Sync`; `Send` con SAFETY comment |
+| TD-016 | `last_assistant_command()` filtra líneas `⟳`/`✓` |
 
-| Key | Action |
-|-----|--------|
-| `leader+c` | New tab |
-| `leader+&` | Close tab |
-| `leader+n` | Next tab |
-| `leader+b` | Prev tab |
-| `leader+%` | Split horizontal |
-| `leader+"` | Split vertical |
-| `leader+x` | Close pane |
-| `leader+a` | AI panel |
-| `leader+o` | Command palette |
+## Siguiente: Phase 2.5 P3 — Tool Use: Write & Run
+
+### Deliverables pendientes
+- [ ] `WriteFile { path, content }` — LLM propone reemplazo completo de archivo
+- [ ] `ApplyDiff { path, diff }` — LLM propone patch unificado
+- [ ] Preview del diff inline en el panel (`+`/`-` con colores)
+- [ ] Confirmación `[y] Apply  [n] Reject` antes de escribir al disco
+- [ ] `RunCommand { cmd }` — ejecuta en PTY activo tras confirmación
+- [ ] Undo de un paso (`<leader>z` restaura el archivo original en memoria)
+
+## Keybinds (tmux-aligned)
+
+| Tecla | Acción |
+|-------|--------|
+| `^B c` | New tab |
+| `^B &` | Close tab |
+| `^B n` | Next tab |
+| `^B b` | Prev tab |
+| `^B %` | Split horizontal |
+| `^B "` | Split vertical |
+| `^B x` | Close pane |
+| `^B a` | AI panel |
+| `^B o` | Command palette |
 | `Ctrl+Space` | Inline AI block |
+| Right-click | Context menu (Copy/Paste/Clear) |
 
-## Phase 2.5 Status
+## Archivos clave
 
-### P2 — Tool Use (read & explore) — COMPLETE (2026-04-05)
-Tool use loop verified working: `list_dir(.)` shows ⟳/✓ status inline, LLM receives real listing and responds.
-
-### P1 — File Context — COMPLETE (2026-04-05)
-`ChatPanel.attached_files`, AGENTS.md auto-load, file picker, Ctrl+S submit, /q/quit, CWD from proc_pidinfo.
-
-## Phase 2.5 Next Steps
-
-### P3 — Tool Use (write & run)
-1. **`WriteFile` / `ApplyDiff`** — diff preview inline, `[y]/[n]` confirm before disk write
-2. **`RunCommand`** — execute in PTY after confirm
-3. **Undo** — single-step file restore
-
-## Files to Reference
-- `src/ui/context_menu.rs` — `ContextMenu`, `ContextAction`, `CONTEXT_MENU_WIDTH`
-- `src/ui/palette/actions.rs` — `PaletteAction` (+ `keybind` field), `built_in_actions(&Config)`
-- `src/ui/palette/mod.rs` — `CommandPalette::new(&Config)`, `rebuild_keybinds(&Config)`
-- `src/llm/chat_panel.rs` — `ChatPanel`, `attached_files`, file picker, `scan_files()`
-- `src/app/ui.rs` — `UiManager` (palette, context_menu, chat panels, ai_block)
-- `src/app/mod.rs` — right-click → context menu; left-click → menu hit-test
-- `src/app/renderer.rs` — `build_palette_instances`, `build_context_menu_instances`
-- `src/config/mod.rs` — `ensure_default_configs()` (idempotent, every startup)
+| Archivo | Propósito |
+|---------|-----------|
+| `src/llm/tools.rs` | `AgentTool`, `execute_tool()` (CWD sandbox) |
+| `src/llm/chat_panel.rs` | `ChatPanel`, historial, `last_assistant_command()` |
+| `src/app/ui.rs` | `UiManager` (palette, context_menu, panels, ai_block) |
+| `src/app/mod.rs` | Event loop, mouse handling, context menu dispatch |
+| `src/app/renderer.rs` | `build_palette_instances`, `build_context_menu_instances` |
+| `src/ui/context_menu.rs` | `ContextMenu`, `ContextAction` |
+| `src/ui/palette/actions.rs` | `PaletteAction` (+ `keybind`), `built_in_actions(&Config)` |
+| `src/renderer/atlas.rs` | `GlyphAtlas` (4096px, epoch LRU) |
+| `src/font/shaper.rs` | `TextShaper`, `is_pua()` (consolidada) |
+| `src/config/mod.rs` | `ensure_default_configs()` (idempotente, cada arranque) |
