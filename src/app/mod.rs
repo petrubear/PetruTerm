@@ -34,6 +34,12 @@ pub struct App {
     input: InputHandler,
 
     wakeup_proxy: EventLoopProxy<()>,
+
+    /// PTY render coalescing: when PTY data arrives, don't render immediately.
+    /// Instead, wait for a short quiet window so that multi-batch TUI updates
+    /// (erase + redraw) are coalesced into a single frame, preventing flickering.
+    pending_pty_redraw: bool,
+    last_pty_activity: std::time::Instant,
 }
 
 impl App {
@@ -52,6 +58,8 @@ impl App {
             ui: UiManager::new(&config),
             input: InputHandler::new(&config),
             wakeup_proxy,
+            pending_pty_redraw: false,
+            last_pty_activity: std::time::Instant::now(),
         }
     }
 
@@ -201,10 +209,20 @@ impl ApplicationHandler<()> for App {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, _event: ()) {
         let (has_data, exited) = self.mux.poll_pty_events();
         if self.close_exited_terminals(exited) { event_loop.exit(); return; }
-        let needs_redraw = has_data
-            || self.ui.poll_ai_events()
-            || self.ui.poll_ai_block_events();
-        if needs_redraw { if let Some(w) = &self.window { w.request_redraw(); } }
+
+        // PTY data: mark pending but do NOT request_redraw immediately.
+        // about_to_wait will fire the render after a short coalescing window (4ms),
+        // ensuring multi-batch TUI updates (erase + redraw) are shown as one frame.
+        if has_data {
+            self.pending_pty_redraw = true;
+            self.last_pty_activity = std::time::Instant::now();
+        }
+
+        // AI events are low-frequency; render immediately.
+        let ai_needs_redraw = self.ui.poll_ai_events() || self.ui.poll_ai_block_events();
+        if ai_needs_redraw {
+            if let Some(w) = &self.window { w.request_redraw(); }
+        }
     }
 
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
@@ -475,8 +493,16 @@ impl ApplicationHandler<()> for App {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        let (_, exited) = self.mux.poll_pty_events();
+        // Drain any PTY events that arrived since user_event last ran.
+        // This catches batches that slipped in after user_event drained the channel,
+        // and keeps last_pty_activity accurate for coalescing.
+        let (more_data, exited) = self.mux.poll_pty_events();
         if self.close_exited_terminals(exited) { event_loop.exit(); return; }
+        if more_data {
+            self.pending_pty_redraw = true;
+            self.last_pty_activity = std::time::Instant::now();
+        }
+
         if self.ui.poll_ai_events()       { if let Some(w) = &self.window { w.request_redraw(); } }
         if self.ui.poll_ai_block_events() { if let Some(w) = &self.window { w.request_redraw(); } }
         if self.input.update_cursor_blink() {
@@ -490,9 +516,28 @@ impl ApplicationHandler<()> for App {
             }
             if let Some(w) = &self.window { w.request_redraw(); }
         }
-        event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(
-            self.input.cursor_last_blink + std::time::Duration::from_millis(530),
-        ));
+
+        // PTY render coalescing: fire the deferred redraw once the PTY has been
+        // quiet for 4ms. This window is long enough to catch Gemini/TUI "erase +
+        // redraw" sequences (usually < 2ms apart) but short enough to be imperceptible.
+        const PTY_COALESCE_MS: u64 = 4;
+        let pty_deadline = self.last_pty_activity + std::time::Duration::from_millis(PTY_COALESCE_MS);
+        if self.pending_pty_redraw {
+            let now = std::time::Instant::now();
+            if now >= pty_deadline {
+                self.pending_pty_redraw = false;
+                if let Some(w) = &self.window { w.request_redraw(); }
+            }
+            // else: WaitUntil below will wake us at pty_deadline to retry.
+        }
+
+        let blink_deadline = self.input.cursor_last_blink + std::time::Duration::from_millis(530);
+        let wake = if self.pending_pty_redraw {
+            blink_deadline.min(pty_deadline)
+        } else {
+            blink_deadline
+        };
+        event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(wake));
     }
 }
 
