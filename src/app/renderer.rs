@@ -3,7 +3,7 @@ use std::sync::Arc;
 use winit::window::Window;
 
 use crate::config::Config;
-use crate::font::{build_font_system, ShapedGlyph, TextShaper};
+use crate::font::{build_font_system, TextShaper};
 use crate::renderer::cell::{CellVertex, FLAG_COLOR_GLYPH, FLAG_CURSOR, FLAG_LCD};
 use crate::renderer::rounded_rect::RoundedRectInstance;
 use crate::renderer::GpuRenderer;
@@ -18,7 +18,6 @@ use crate::ui::{CommandPalette, Tab};
 #[derive(Clone)]
 pub struct RowCacheEntry {
     pub hash: u64,
-    pub glyphs: Vec<ShapedGlyph>,
     pub instances: Vec<CellVertex>,
     pub lcd_instances: Vec<CellVertex>,
 }
@@ -28,12 +27,11 @@ pub struct RowCache {
     pub rows: Vec<Option<RowCacheEntry>>,
     pub dirty_rows: Vec<bool>,
     pub terminal_id: Option<usize>,
-    pub font_hash: u64,
 }
 
 impl RowCache {
     pub fn new() -> Self {
-        Self { rows: Vec::new(), dirty_rows: Vec::new(), terminal_id: None, font_hash: 0 }
+        Self { rows: Vec::new(), dirty_rows: Vec::new(), terminal_id: None }
     }
 
     pub fn clear(&mut self) {
@@ -146,7 +144,7 @@ impl RenderContext {
             let mut row_instances = Vec::new();
             let mut row_lcd_instances = Vec::new();
 
-            let shaped = self.shaper.shape_line(text, &colors, font);
+            let shaped = self.shaper.shape_line(text, colors, font);
 
             for glyph in &shaped.glyphs {
                 // Try LCD rasterization first (when LCD AA is enabled).
@@ -230,7 +228,6 @@ impl RenderContext {
 
             self.row_cache.rows[row_idx] = Some(RowCacheEntry {
                 hash: row_hash,
-                glyphs: shaped.glyphs,
                 instances: row_instances,
                 lcd_instances: row_lcd_instances,
             });
@@ -271,6 +268,7 @@ impl RenderContext {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn push_shaped_row(
         &mut self,
         text: &str,
@@ -287,7 +285,7 @@ impl RenderContext {
         let len = chars.len();
         let padded: String = chars
             .into_iter()
-            .chain(std::iter::repeat(' ').take(width.saturating_sub(len)))
+            .chain(std::iter::repeat_n(' ', width.saturating_sub(len)))
             .collect();
 
         let colors: Vec<([f32; 4], [f32; 4])> = (0..width).map(|_| (fg, bg)).collect();
@@ -337,6 +335,7 @@ impl RenderContext {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn build_chat_panel_instances(
         &mut self,
         panel: &ChatPanel,
@@ -758,6 +757,7 @@ impl RenderContext {
     ///         with text overlaid using transparent-bg cell instances.
     /// TD-014: The bar background comes from the window clear color (config.colors.background),
     ///         so `bar_bg` is acknowledged here but not used directly for fill.
+    #[allow(clippy::too_many_arguments)]
     pub fn build_tab_bar_instances(
         &mut self,
         tabs: &[Tab],

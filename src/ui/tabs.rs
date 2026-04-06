@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 /// A single terminal tab.
 #[derive(Debug)]
 pub struct Tab {

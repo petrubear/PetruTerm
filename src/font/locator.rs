@@ -3,6 +3,7 @@ use std::path::PathBuf;
 #[derive(Debug, Clone)]
 pub struct FontPath {
     pub path: PathBuf,
+    #[allow(dead_code)]
     pub index: u32,
 }
 

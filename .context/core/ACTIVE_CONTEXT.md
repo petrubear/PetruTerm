@@ -5,9 +5,9 @@
 
 ## Estado actual del proyecto
 
-**Phase 1 COMPLETE. Phase 2 COMPLETE. Phase 3 P1 COMPLETE.**
-**Deuda técnica: 0 ítems abiertos (todos resueltos 2026-04-06).**
-**Tests: 16/16 passing.**
+**Phase 1 COMPLETE. Phase 2 COMPLETE. Phase 3 P1 implementada, pero con deuda abierta.**
+**Deuda técnica: 0 ítems abiertos. Todos resueltos (incluye auditoría Codex 2026-04-06).**
+**Tests: 16/16 passing. `cargo clippy --all-targets --all-features -- -D warnings` PASA limpio.**
 
 ### Features verificados (2026-04-06)
 
@@ -32,7 +32,11 @@
 | Phase 2.5 P1 — file context attachment (AGENTS.md, file picker) | ✅ |
 | Phase 2.5 P2 — LLM tool use (ReadFile, ListDir) | ✅ |
 
-### Deuda técnica — todos resueltos
+### Deuda técnica — CERO ítems abiertos
+
+Todos los ítems de la auditoría Codex (TD-017..TD-022) resueltos el 2026-04-06.
+
+### Deuda técnica resuelta recientemente
 
 | TD | Solución |
 |----|---------|

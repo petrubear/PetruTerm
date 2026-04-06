@@ -91,6 +91,7 @@ impl CommandPalette {
     }
 
     /// Register an additional action (used by plugins in Phase 3).
+    #[allow(dead_code)]
     pub fn register(&mut self, action: PaletteAction) {
         self.all_actions.push(action);
         if self.visible {

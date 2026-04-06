@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 /// Split direction for pane splits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SplitDir {

@@ -1,9 +1,21 @@
 # Session State
 
 **Last Updated:** 2026-04-06
-**Session Focus:** Deuda técnica — resolución y tests de los 4 ítems abiertos
+**Session Focus:** Resolución completa de los 6 TDs de auditoría Codex + clippy limpio
 
 ## Branch: `master`
+
+## Session Notes (2026-04-06 — auditoría Codex)
+
+- Se añadieron 6 ítems nuevos al registro de deuda técnica (`TD-017`..`TD-022`).
+- Origen explícito de esos ítems: auditoría de Codex del 2026-04-06.
+- Hallazgos principales:
+  - `CloseTab` no limpia pane tree ni PTY asociados.
+  - `cmd_split()` deja estado inválido si falla la creación del terminal.
+  - El streaming del AI panel no está ligado al pane origen.
+  - `ReloadConfig` / hot reload no reconstruyen estado derivado de forma consistente.
+  - Parte del config documentado no se parsea o no se aplica.
+  - El contexto del proyecto afirmaba cero deuda abierta, pero `clippy -D warnings` falla.
 
 ## Session Notes (2026-04-06 — TD cleanup)
 
@@ -29,8 +41,9 @@
 
 ## Build & Tests
 - **cargo build:** PASS (0 errors — 2026-04-06)
-- **cargo test:** 16/16 PASS — 3 passes anteriores + 13 nuevos
-- **branch:** master (stable, 2 commits adelante de origin)
+- **cargo test:** 16/16 PASS
+- **cargo clippy --all-targets --all-features -- -D warnings:** PASS (0 errors, 0 warnings — 2026-04-06)
+- **branch:** master
 
 ## Session anterior (2026-04-06 — UX polish)
 

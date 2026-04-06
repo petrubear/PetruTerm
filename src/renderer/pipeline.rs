@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::renderer::cell::CellVertex;
 
 /// WGSL shader source for terminal cell rendering.

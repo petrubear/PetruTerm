@@ -81,27 +81,7 @@ struct ChatResponse {
 
 #[derive(Deserialize)]
 struct Choice {
-    message: Option<MessageOwned>,
     delta: Option<Delta>,
-}
-
-#[derive(Deserialize)]
-struct MessageOwned {
-    content: Option<String>,
-    #[serde(default)]
-    tool_calls: Vec<ToolCallResponse>,
-}
-
-#[derive(Deserialize)]
-struct ToolCallResponse {
-    id: String,
-    function: FunctionCallResponse,
-}
-
-#[derive(Deserialize)]
-struct FunctionCallResponse {
-    name: String,
-    arguments: String,
 }
 
 #[derive(Deserialize)]
@@ -144,35 +124,6 @@ fn parse_sse_chunk(chunk: &str) -> Result<Option<String>> {
 
 #[async_trait]
 impl LlmProvider for OpenAICompatProvider {
-    async fn complete(&self, messages: Vec<ChatMessage>) -> Result<String> {
-        let url = format!("{}/chat/completions", self.base_url);
-        let mut req = self.client.post(&url);
-        if let Some(key) = &self.api_key {
-            req = req.bearer_auth(key.expose_secret());
-        }
-        let resp = req
-            .json(&ChatRequest {
-                model: &self.model,
-                messages: build_api_messages(&messages),
-                stream: false,
-            })
-            .send()
-            .await
-            .context("Request failed")?
-            .error_for_status()
-            .context("Server returned an error status")?
-            .json::<ChatResponse>()
-            .await
-            .context("Failed to parse response")?;
-
-        resp.choices
-            .into_iter()
-            .next()
-            .and_then(|c| c.message)
-            .and_then(|m| m.content)
-            .context("Response contained no choices")
-    }
-
     async fn stream(&self, messages: Vec<ChatMessage>) -> Result<TokenStream> {
         let url = format!("{}/chat/completions", self.base_url);
         let mut req = self.client.post(&url);

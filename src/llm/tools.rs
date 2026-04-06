@@ -9,6 +9,7 @@ pub enum AgentTool {
 }
 
 impl AgentTool {
+    #[allow(dead_code)]
     pub fn name(&self) -> &'static str {
         match self {
             AgentTool::ReadFile => "read_file",

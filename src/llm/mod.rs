@@ -36,6 +36,7 @@ impl ChatMessage {
     }
 
     /// Create a tool-result message (response to an LLM tool call).
+    #[allow(dead_code)]
     pub fn tool_result(tool_call_id: impl Into<String>, content: impl Into<String>) -> Self {
         Self { role: ChatRole::Tool(tool_call_id.into()), content: content.into() }
     }
@@ -63,6 +64,7 @@ pub enum ChatRole {
     User,
     Assistant,
     /// Tool-result message. Inner string is the `tool_call_id` from the LLM's request.
+    #[allow(dead_code)]
     Tool(String),
 }
 
@@ -83,9 +85,6 @@ pub type TokenStream = Pin<Box<dyn Stream<Item = Result<String>> + Send>>;
 /// Core LLM provider interface. Implementors must be Send + Sync.
 #[async_trait]
 pub trait LlmProvider: Send + Sync {
-    /// Send messages and return the full assistant response.
-    async fn complete(&self, messages: Vec<ChatMessage>) -> Result<String>;
-
     /// Send messages and stream response tokens as they arrive.
     async fn stream(&self, messages: Vec<ChatMessage>) -> Result<TokenStream>;
 

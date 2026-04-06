@@ -28,6 +28,7 @@ impl ShellContext {
         serde_json::from_str(&data).ok()
     }
 
+    #[allow(dead_code)]
     pub fn has_failed_exit(&self) -> bool {
         self.last_exit_code != 0
     }

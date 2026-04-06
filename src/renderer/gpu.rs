@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use anyhow::{Context, Result};
 use std::cell::RefCell;
 use std::mem;
@@ -468,7 +469,7 @@ impl GpuRenderer {
 
     /// Returns a clone of the LCD atlas Rc for sharing with TextShaper.
     pub fn get_lcd_atlas(&self) -> Option<Rc<RefCell<LcdGlyphAtlas>>> {
-        self.lcd_atlas.as_ref().map(|rc| Rc::clone(rc))
+        self.lcd_atlas.as_ref().map(Rc::clone)
     }
 
     pub fn device(&self) -> wgpu::Device {
@@ -507,11 +508,11 @@ impl GpuRenderer {
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&atlas_view),
+                        resource: wgpu::BindingResource::TextureView(atlas_view),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&atlas_sampler),
+                        resource: wgpu::BindingResource::Sampler(atlas_sampler),
                     },
                 ],
             });

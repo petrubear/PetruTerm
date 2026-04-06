@@ -39,7 +39,7 @@ pub struct InputHandler {
 impl InputHandler {
     pub fn new(config: &Config) -> Self {
         let leader_map = config.keys.iter()
-            .filter(|kb| kb.mods.to_ascii_uppercase() == "LEADER")
+            .filter(|kb| kb.mods.eq_ignore_ascii_case("LEADER"))
             .filter_map(|kb| {
                 let action = kb.action.parse::<Action>().ok()?;
                 Some((kb.key.clone(), action))
@@ -106,12 +106,13 @@ impl InputHandler {
             terminal.write_input(format!("\x1b[<{button};{};{}{c}", col+1, row+1).as_bytes());
         } else if pressed {
             let b = button.saturating_add(32);
-            let x = ((col+1) as u8).saturating_add(32).min(255);
-            let y = ((row+1) as u8).saturating_add(32).min(255);
+            let x = ((col+1) as u8).saturating_add(32);
+            let y = ((row+1) as u8).saturating_add(32);
             terminal.write_input(&[0x1b, b'[', b'M', b, x, y]);
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn handle_key_input(
         &mut self,
         event: &KeyEvent,
@@ -164,7 +165,7 @@ impl InputHandler {
             if let Key::Character(s) = &event.logical_key {
                 // Leader + 1-9: select tab by index (hardcoded, like Cmd+1-9)
                 if let Ok(n) = s.parse::<usize>() {
-                    if n >= 1 && n <= 9 {
+                    if (1..=9).contains(&n) {
                         mux.tabs.switch_to_index(n - 1);
                         return;
                     }
@@ -346,7 +347,7 @@ impl InputHandler {
                         return;
                     }
                     // Cmd+1-9: switch tab by index (standard macOS pattern).
-                    _ => { if let Ok(n) = s.parse::<usize>() { if n >= 1 && n <= 9 { mux.tabs.switch_to_index(n-1); return; } } }
+                    _ => { if let Ok(n) = s.parse::<usize>() { if (1..=9).contains(&n) { mux.tabs.switch_to_index(n-1); return; } } }
                 }
             }
         }

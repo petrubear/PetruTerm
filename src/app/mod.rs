@@ -170,6 +170,8 @@ impl App {
                     self.config = new_cfg;
                     if let Some(rc) = &mut self.render_ctx { rc.renderer.update_bg_color(self.config.colors.background_wgpu()); }
                     self.ui.palette.rebuild_keybinds(&self.config);
+                    // TD-020: also rewire LLM provider so provider/width_cols stay in sync.
+                    self.ui.rewire_llm_provider(&self.config);
                     log::info!("Config hot-reloaded.");
                 }
             }
@@ -359,11 +361,9 @@ impl ApplicationHandler<()> for App {
 
                     // ── Inline AI block (overlays bottom rows) ──────────────────────────
                     let block_visible = self.ui.is_block_visible();
-                    if block_visible {
-                        if self.ui.ai_block.dirty {
-                            self.ui.ai_block.dirty = false;
-                            rc.build_ai_block_instances(&self.ui.ai_block, &scaled_font, term_cols, term_rows);
-                        }
+                    if block_visible && self.ui.ai_block.dirty {
+                        self.ui.ai_block.dirty = false;
+                        rc.build_ai_block_instances(&self.ui.ai_block, &scaled_font, term_cols, term_rows);
                     }
 
                     // ── Command palette ──────────────────────────────────────────────────

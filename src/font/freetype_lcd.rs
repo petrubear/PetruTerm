@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use freetype::freetype as ft;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -26,7 +27,7 @@ fn srgb8_to_linear(c: u8) -> f32 {
 }
 
 fn linear8_to_srgb(c: f32) -> u8 {
-    let c = c.max(0.0).min(1.0);
+    let c = c.clamp(0.0, 1.0);
     if c <= 0.0031308 {
         (c * 12.92 * 255.0).round() as u8
     } else {
@@ -149,7 +150,7 @@ impl FreeTypeLcdRasterizer {
 
         let width = bitmap.width;
         let height = bitmap.rows;
-        let pitch = bitmap.pitch as i32;
+        let pitch = bitmap.pitch;
 
         if width == 0 || height == 0 {
             return None;
@@ -169,8 +170,8 @@ impl FreeTypeLcdRasterizer {
 
         let rgba = unsafe { self.deinterleave_lcd(bitmap, lcd_width, height, pitch) };
 
-        let bearing_x = unsafe { (*slot).bitmap_left as i32 };
-        let bearing_y = unsafe { (*slot).bitmap_top as i32 };
+        let bearing_x = unsafe { (*slot).bitmap_left };
+        let bearing_y = unsafe { (*slot).bitmap_top };
 
         let entry = match self.lcd_atlas.borrow_mut().upload(
             queue, cache_key, &rgba, lcd_width, height, bearing_x, bearing_y,
@@ -211,9 +212,9 @@ impl FreeTypeLcdRasterizer {
                 let src_offset = ((y as isize) * (pitch as isize) + (x as isize) * 3) as usize;
 
                 // Raw FreeType coverage for R, G, B subpixels.
-                rgba[dest] = *buffer.offset(src_offset as isize);
-                rgba[dest + 1] = *buffer.offset(src_offset as isize + 1);
-                rgba[dest + 2] = *buffer.offset(src_offset as isize + 2);
+                rgba[dest] = *buffer.add(src_offset);
+                rgba[dest + 1] = *buffer.add(src_offset + 1);
+                rgba[dest + 2] = *buffer.add(src_offset + 2);
                 rgba[dest + 3] = 255;
             }
         }

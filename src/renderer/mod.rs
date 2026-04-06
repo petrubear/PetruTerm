@@ -6,4 +6,3 @@ pub mod pipeline;
 pub mod rounded_rect;
 
 pub use gpu::GpuRenderer;
-pub use rounded_rect::RoundedRectInstance;

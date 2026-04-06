@@ -157,13 +157,11 @@ impl ChatPanel {
         let icon = if done { "✓" } else { "⟳" };
         let line = format!("{icon} {tool}({path})\n");
         // Replace the last status line if it starts with ⟳ (in-progress).
-        if !done {
-            if self.streaming_buf.ends_with('\n') {
-                let prev = self.streaming_buf.trim_end_matches('\n');
-                if prev.contains('⟳') {
-                    let last_nl = prev.rfind('\n').map(|i| i + 1).unwrap_or(0);
-                    self.streaming_buf.truncate(last_nl);
-                }
+        if !done && self.streaming_buf.ends_with('\n') {
+            let prev = self.streaming_buf.trim_end_matches('\n');
+            if prev.contains('⟳') {
+                let last_nl = prev.rfind('\n').map(|i| i + 1).unwrap_or(0);
+                self.streaming_buf.truncate(last_nl);
             }
         }
         self.streaming_buf.push_str(&line);
@@ -226,7 +224,7 @@ impl ChatPanel {
             return None;
         }
         let cmd = if s.starts_with("```") {
-            s.splitn(3, '\n')
+            s.split('\n')
                 .nth(1)
                 .unwrap_or(s)
                 .trim_end_matches('`')
@@ -454,6 +452,7 @@ fn char_chunks(s: &str, width: usize) -> Vec<String> {
         .collect()
 }
 
+#[allow(dead_code)]
 /// Build a separator line with `title` centered: `── title ──────`.
 pub fn titled_separator(title: &str, width: usize) -> String {
     let inner = format!(" {} ", title);

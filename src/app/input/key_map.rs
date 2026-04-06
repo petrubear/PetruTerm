@@ -21,7 +21,7 @@ pub fn translate_key(
         // Ctrl + Key
         if ctrl && !alt && !logo {
             let byte = c.to_ascii_lowercase() as u8;
-            if (b'a'..=b'z').contains(&byte) {
+            if byte.is_ascii_lowercase() {
                 return Some(vec![byte - b'a' + 1]);
             }
             // Other common ctrl mappings

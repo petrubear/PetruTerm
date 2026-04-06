@@ -85,7 +85,7 @@ impl AiBlock {
         let s = self.response.trim();
         if s.is_empty() { return None; }
         let cmd = if s.starts_with("```") {
-            s.splitn(3, '\n')
+            s.split('\n')
                 .nth(1)
                 .unwrap_or(s)
                 .trim_end_matches('`')

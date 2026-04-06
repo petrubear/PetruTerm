@@ -85,29 +85,7 @@ struct ChatResponse {
 
 #[derive(Deserialize)]
 struct Choice {
-    // Non-streaming response
-    message: Option<MessageOwned>,
-    // Streaming delta
     delta: Option<Delta>,
-}
-
-#[derive(Deserialize)]
-struct MessageOwned {
-    content: Option<String>,
-    #[serde(default)]
-    tool_calls: Vec<ToolCallResponse>,
-}
-
-#[derive(Deserialize)]
-struct ToolCallResponse {
-    id: String,
-    function: FunctionCallResponse,
-}
-
-#[derive(Deserialize)]
-struct FunctionCallResponse {
-    name: String,
-    arguments: String,
 }
 
 #[derive(Deserialize)]
@@ -159,37 +137,6 @@ fn parse_sse_chunk(chunk: &str) -> anyhow::Result<Option<String>> {
 
 #[async_trait]
 impl LlmProvider for OpenRouterProvider {
-    async fn complete(&self, messages: Vec<ChatMessage>) -> Result<String> {
-        let url = format!("{}/chat/completions", self.base_url);
-
-        let resp = self
-            .client
-            .post(&url)
-            .bearer_auth(self.api_key.expose_secret())
-            .header("HTTP-Referer", "https://github.com/edisontim/petruterm")
-            .header("X-Title", "PetruTerm")
-            .json(&ChatRequest {
-                model: &self.model,
-                messages: build_api_messages(&messages),
-                stream: false,
-            })
-            .send()
-            .await
-            .context("OpenRouter request failed")?
-            .error_for_status()
-            .context("OpenRouter returned an error status")?
-            .json::<ChatResponse>()
-            .await
-            .context("Failed to parse OpenRouter response")?;
-
-        resp.choices
-            .into_iter()
-            .next()
-            .and_then(|c| c.message)
-            .and_then(|m| m.content)
-            .context("OpenRouter response contained no choices")
-    }
-
     async fn stream(&self, messages: Vec<ChatMessage>) -> Result<TokenStream> {
         let url = format!("{}/chat/completions", self.base_url);
 

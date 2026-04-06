@@ -65,6 +65,7 @@ impl LcdGlyphAtlas {
         self.cache.get(&key).copied()
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn upload(
         &mut self,
         queue: &wgpu::Queue,

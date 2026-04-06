@@ -7,7 +7,7 @@ use alacritty_terminal::vte::ansi::Color as AnsiColor;
 use alacritty_terminal::index::{Column, Line, Point};
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::term::cell::Flags;
-use alacritty_terminal::selection::{SelectionRange, SelectionType};
+use alacritty_terminal::selection::SelectionRange;
 
 /// Manages multiple terminal instances, tabs, and panes (Multiplexer).
 pub struct Mux {
@@ -41,6 +41,7 @@ impl Mux {
         self.terminals.get(tid)?.as_ref()
     }
 
+    #[allow(dead_code)]
     pub fn active_terminal_mut(&mut self) -> Option<&mut Terminal> {
         let tid = self.focused_terminal_id();
         self.terminals.get_mut(tid)?.as_mut()
@@ -80,6 +81,7 @@ impl Mux {
         Ok(id)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn open_initial_tab(
         &mut self,
         config: &Config,
@@ -188,6 +190,7 @@ impl Mux {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn cmd_new_tab(&mut self, config: &Config, viewport: Rect, cols: u16, rows: u16, cell_w: u16, cell_h: u16, wakeup_proxy: EventLoopProxy<()>) {
         match self.open_terminal(config, cols, rows, cell_w, cell_h, wakeup_proxy) {
             Ok(terminal_id) => {
@@ -198,22 +201,35 @@ impl Mux {
         }
     }
 
+    /// TD-017: Close the active tab and clean up its pane tree and all owned terminals.
     pub fn cmd_close_tab(&mut self) {
+        let active = self.tabs.active_index();
         if let Some(tab) = self.tabs.active_tab() {
             self.tabs.close_tab(tab.id);
         }
+        if active < self.panes.len() {
+            for tid in self.panes[active].root.leaf_ids() {
+                if let Some(slot) = self.terminals.get_mut(tid) { *slot = None; }
+            }
+            self.panes.remove(active);
+        }
     }
 
+    /// TD-018: Create the terminal first; only mutate the pane tree on success.
+    #[allow(clippy::too_many_arguments)]
     pub fn cmd_split(&mut self, config: &Config, dir: crate::ui::SplitDir, cols: u16, rows: u16, cell_w: u16, cell_h: u16, wakeup_proxy: EventLoopProxy<()>) {
-        let active = self.tabs.active_index();
-        let new_id = self.next_terminal_id;
-        if let Some(pane_mgr) = self.panes.get_mut(active) {
-            pane_mgr.split(dir, new_id);
-            if let Ok(terminal) = Terminal::new(config, cols, rows, cell_w, cell_h, wakeup_proxy) {
+        match Terminal::new(config, cols, rows, cell_w, cell_h, wakeup_proxy) {
+            Ok(terminal) => {
+                let new_id = self.next_terminal_id;
                 self.next_terminal_id += 1;
                 if self.terminals.len() <= new_id { self.terminals.resize_with(new_id + 1, || None); }
                 self.terminals[new_id] = Some(terminal);
+                let active = self.tabs.active_index();
+                if let Some(pane_mgr) = self.panes.get_mut(active) {
+                    pane_mgr.split(dir, new_id);
+                }
             }
+            Err(e) => log::error!("Failed to create terminal for split: {e}"),
         }
     }
 

@@ -21,7 +21,7 @@ impl ConfigWatcher {
                     EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_)
                 ) {
                     for path in event.paths {
-                        if path.extension().map_or(false, |e| e == "lua") {
+                        if path.extension().is_some_and(|e| e == "lua") {
                             let _ = tx.send(path);
                         }
                     }
@@ -46,6 +46,7 @@ impl ConfigWatcher {
     }
 
     /// Blocking wait for a change event, with timeout.
+    #[allow(dead_code)]
     pub fn wait_timeout(&self, timeout: Duration) -> Option<PathBuf> {
         self.rx.recv_timeout(timeout).ok()
     }

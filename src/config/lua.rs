@@ -2,7 +2,7 @@ use anyhow::Result;
 use mlua::prelude::*;
 use std::path::Path;
 
-use super::schema::Config;
+use super::schema::{Config, TitleBarStyle};
 
 fn parse_hex_linear(s: &str) -> [f32; 4] {
     let s = s.trim_start_matches('#');
@@ -228,6 +228,13 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
         if let Ok(h) = win.get::<u32>("initial_height") {
             config.window.initial_height = Some(h);
         }
+        if let Ok(style) = win.get::<String>("title_bar_style") {
+            config.window.title_bar_style = match style.as_str() {
+                "none" | "None" => TitleBarStyle::None,
+                "native" | "Native" => TitleBarStyle::Native,
+                _ => TitleBarStyle::Custom,
+            };
+        }
         if let Ok(pad) = win.get::<LuaTable>("padding") {
             if let Ok(l) = pad.get::<u32>("left") {
                 config.window.padding.left = l;
@@ -257,14 +264,12 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
     }
 
     if let Ok(keys_table) = table.get::<LuaTable>("keys") {
-        for pair in keys_table.sequence_values::<LuaTable>() {
-            if let Ok(entry) = pair {
-                let mods: String = entry.get("mods").unwrap_or_default();
-                let key: String = entry.get("key").unwrap_or_default();
-                let action: String = entry.get("action").unwrap_or_default();
-                if !mods.is_empty() && !key.is_empty() && !action.is_empty() {
-                    config.keys.push(super::schema::KeyBind { mods, key, action });
-                }
+        for entry in keys_table.sequence_values::<LuaTable>().flatten() {
+            let mods: String = entry.get("mods").unwrap_or_default();
+            let key: String = entry.get("key").unwrap_or_default();
+            let action: String = entry.get("action").unwrap_or_default();
+            if !mods.is_empty() && !key.is_empty() && !action.is_empty() {
+                config.keys.push(super::schema::KeyBind { mods, key, action });
             }
         }
     }

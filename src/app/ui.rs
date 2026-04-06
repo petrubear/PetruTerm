@@ -22,6 +22,8 @@ pub struct UiManager {
     // ── Chat panel (side panel, per-pane history) ─────────────────────────────
     chat_panels: HashMap<usize, ChatPanel>,
     active_panel_id: usize,
+    /// Width used when creating new ChatPanels (kept in sync with config.llm.ui.width_cols).
+    panel_width_cols: u16,
     pub panel_focused: bool,
     /// True when Tab has been pressed and focus is on the file picker overlay.
     pub file_picker_focused: bool,
@@ -33,9 +35,9 @@ pub struct UiManager {
 
     pub llm_provider: Option<Arc<dyn LlmProvider>>,
     pub tokio_rt: tokio::runtime::Runtime,
-    // Channel for chat panel streaming.
-    pub ai_tx: Sender<AiEvent>,
-    pub ai_rx: Receiver<AiEvent>,
+    /// TD-019: channel carries (panel_id, event) so tokens always reach the originating panel.
+    pub ai_tx: Sender<(usize, AiEvent)>,
+    pub ai_rx: Receiver<(usize, AiEvent)>,
 }
 
 impl UiManager {
@@ -53,14 +55,18 @@ impl UiManager {
             None
         };
 
+        let panel_width_cols = config.llm.ui.width_cols;
+        let mut initial_panel = ChatPanel::new();
+        initial_panel.width_cols = panel_width_cols;
         let mut chat_panels = HashMap::new();
-        chat_panels.insert(0usize, ChatPanel::new());
+        chat_panels.insert(0usize, initial_panel);
 
         Self {
             palette: CommandPalette::new(config),
             context_menu: ContextMenu::new(),
             chat_panels,
             active_panel_id: 0,
+            panel_width_cols,
             panel_focused: false,
             file_picker_focused: false,
             ai_block: AiBlock::new(),
@@ -80,7 +86,12 @@ impl UiManager {
     pub fn set_active_terminal(&mut self, id: usize) {
         if self.active_panel_id == id { return; }
         self.active_panel_id = id;
-        self.chat_panels.entry(id).or_insert_with(ChatPanel::new);
+        let width = self.panel_width_cols;
+        self.chat_panels.entry(id).or_insert_with(|| {
+            let mut p = ChatPanel::new();
+            p.width_cols = width;
+            p
+        });
     }
 
     pub fn panel(&self) -> &ChatPanel {
@@ -105,19 +116,22 @@ impl UiManager {
     // ── AI event polling ──────────────────────────────────────────────────────
 
     /// Poll streaming tokens for the chat panel. Returns true if content changed.
+    /// TD-019: routes each event to the panel that originated the request (by panel_id),
+    /// not the currently active panel — so tab-switching during streaming is safe.
     pub fn poll_ai_events(&mut self) -> bool {
         let mut changed = false;
-        while let Ok(event) = self.ai_rx.try_recv() {
+        while let Ok((panel_id, event)) = self.ai_rx.try_recv() {
             changed = true;
+            let panel = self.chat_panels.entry(panel_id).or_insert_with(ChatPanel::new);
             match event {
-                AiEvent::Token(tok) => self.panel_mut().append_token(&tok),
-                AiEvent::Done       => self.panel_mut().mark_done(),
+                AiEvent::Token(tok) => panel.append_token(&tok),
+                AiEvent::Done       => panel.mark_done(),
                 AiEvent::Error(e)   => {
                     log::error!("LLM error: {e}");
-                    self.panel_mut().mark_error(e);
+                    panel.mark_error(e);
                 }
                 AiEvent::ToolStatus { tool, path, done } => {
-                    self.panel_mut().set_tool_status(&tool, &path, done);
+                    panel.set_tool_status(&tool, &path, done);
                 }
             }
         }
@@ -157,6 +171,9 @@ impl UiManager {
 
     /// Submit the current panel input. `cwd` is used for tool sandboxing.
     pub fn submit_ai_query(&mut self, wakeup_proxy: EventLoopProxy<()>, cwd: PathBuf) {
+        // TD-019: capture the originating panel id before any await so tokens are
+        // routed back to the correct panel even if the user switches tabs mid-stream.
+        let panel_id = self.active_panel_id;
         let Some(_user_content) = self.panel_mut().submit_input() else { return };
         let Some(provider) = self.llm_provider.clone() else {
             self.panel_mut().mark_error("LLM not configured".into());
@@ -200,7 +217,7 @@ impl UiManager {
             for _round in 0..MAX_TOOL_ROUNDS {
                 match provider.agent_step(api_msgs.clone(), &tool_specs).await {
                     Err(e) => {
-                        let _ = tx.send(AiEvent::Error(e.to_string()));
+                        let _ = tx.send((panel_id, AiEvent::Error(e.to_string())));
                         let _ = wakeup_proxy.send_event(());
                         return;
                     }
@@ -208,8 +225,8 @@ impl UiManager {
                         // No tool calls — stream the final response normally by
                         // building a fresh stream from the completed messages.
                         // For simplicity, send the text as a single token.
-                        let _ = tx.send(AiEvent::Token(text));
-                        let _ = tx.send(AiEvent::Done);
+                        let _ = tx.send((panel_id, AiEvent::Token(text)));
+                        let _ = tx.send((panel_id, AiEvent::Done));
                         let _ = wakeup_proxy.send_event(());
                         return;
                     }
@@ -220,20 +237,20 @@ impl UiManager {
                         for call in &calls {
                             let path = call.path_arg().unwrap_or_default();
 
-                            let _ = tx.send(AiEvent::ToolStatus {
+                            let _ = tx.send((panel_id, AiEvent::ToolStatus {
                                 tool: call.name.clone(),
                                 path: path.clone(),
                                 done: false,
-                            });
+                            }));
                             let _ = wakeup_proxy.send_event(());
 
                             let result = execute_tool(call, &cwd);
 
-                            let _ = tx.send(AiEvent::ToolStatus {
+                            let _ = tx.send((panel_id, AiEvent::ToolStatus {
                                 tool: call.name.clone(),
                                 path: path.clone(),
                                 done: true,
-                            });
+                            }));
                             let _ = wakeup_proxy.send_event(());
 
                             // Add tool result to history.
@@ -265,16 +282,16 @@ impl UiManager {
                     })
                     .collect()
             ).await {
-                Err(e) => { let _ = tx.send(AiEvent::Error(e.to_string())); }
+                Err(e) => { let _ = tx.send((panel_id, AiEvent::Error(e.to_string()))); }
                 Ok(mut stream) => {
                     while let Some(result) = stream.next().await {
                         match result {
-                            Ok(tok) => { let _ = tx.send(AiEvent::Token(tok)); }
-                            Err(e)  => { let _ = tx.send(AiEvent::Error(e.to_string())); break; }
+                            Ok(tok) => { let _ = tx.send((panel_id, AiEvent::Token(tok))); }
+                            Err(e)  => { let _ = tx.send((panel_id, AiEvent::Error(e.to_string()))); break; }
                         }
                         let _ = wakeup_proxy.send_event(());
                     }
-                    let _ = tx.send(AiEvent::Done);
+                    let _ = tx.send((panel_id, AiEvent::Done));
                 }
             }
             let _ = wakeup_proxy.send_event(());
@@ -377,6 +394,17 @@ impl UiManager {
         }
     }
 
+    /// TD-020: Re-wire the LLM provider and panel width from a fresh config.
+    /// Call this on every config reload (both hot-reload and palette-triggered).
+    pub fn rewire_llm_provider(&mut self, config: &Config) {
+        self.llm_provider = if config.llm.enabled {
+            crate::llm::build_provider(&config.llm).ok()
+        } else {
+            None
+        };
+        self.panel_width_cols = config.llm.ui.width_cols;
+    }
+
     // ── Palette action dispatch ───────────────────────────────────────────────
 
     pub fn handle_palette_action(
@@ -394,6 +422,8 @@ impl UiManager {
             Action::ReloadConfig => if let Ok(new_cfg) = config::reload() {
                 *config = new_cfg;
                 render_ctx.renderer.update_bg_color(config.colors.background_wgpu());
+                self.palette.rebuild_keybinds(config);
+                self.rewire_llm_provider(config);
             },
             Action::OpenConfigFile => {
                 let _ = std::process::Command::new("open").arg(config::config_path()).spawn();

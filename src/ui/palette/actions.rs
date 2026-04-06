@@ -34,6 +34,7 @@ pub enum Action {
     Quit,
     // AI / Phase 2
     ToggleAiPanel,
+    #[allow(dead_code)]
     ToggleAiMode,   // legacy alias — same behaviour as ToggleAiPanel
     EnableAiFeatures,
     DisableAiFeatures,
@@ -76,7 +77,7 @@ pub fn built_in_actions(config: &Config) -> Vec<PaletteAction> {
     let leader_label = format!("^{}", config.leader.key.to_uppercase());
     let mut keybind_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     for kb in &config.keys {
-        if kb.mods.to_ascii_uppercase() == "LEADER" {
+        if kb.mods.eq_ignore_ascii_case("LEADER") {
             keybind_map.insert(kb.action.clone(), format!("{} {}", leader_label, kb.key));
         }
     }

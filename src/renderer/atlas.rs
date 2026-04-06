@@ -121,6 +121,7 @@ impl GlyphAtlas {
     }
 
     /// Look up a cached glyph and mark it as used in the current epoch.
+    #[allow(dead_code)]
     pub fn get_and_touch(&mut self, key: &CacheKey) -> Option<AtlasEntry> {
         if let Some(entry) = self.cache.get_mut(key) {
             entry.last_used = self.epoch;
@@ -162,6 +163,7 @@ impl GlyphAtlas {
     ///
     /// `data` must be RGBA8 bytes of size `width × height × 4`.
     /// Set `is_color` to true for color glyphs (e.g. emoji) whose pixels are pre-colored RGBA.
+    #[allow(clippy::too_many_arguments)]
     pub fn upload(
         &mut self,
         queue: &wgpu::Queue,

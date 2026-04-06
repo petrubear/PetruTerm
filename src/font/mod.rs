@@ -4,4 +4,4 @@ pub mod locator;
 pub mod shaper;
 
 pub use loader::build_font_system;
-pub use shaper::{ShapedGlyph, TextShaper};
+pub use shaper::TextShaper;

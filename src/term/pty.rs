@@ -58,6 +58,7 @@ pub enum PtyEvent {
     /// OSC 52 read — read clipboard, apply formatter, write result to PTY.
     ClipboardLoad(std::sync::Arc<dyn Fn(&str) -> String + Send + Sync + 'static>),
     /// Terminal parser response that must be forwarded to the shell process.
+    #[allow(dead_code)]
     PtyWrite(String),
 }
 
@@ -83,7 +84,7 @@ pub trait PtyJoinHandle: Send {
 
 impl<T: Send> PtyJoinHandle for std::thread::JoinHandle<T> {
     fn join(self: Box<Self>) -> Result<(), Box<dyn Any + Send>> {
-        (*self).join().map(|_| ()).map_err(|e| e)
+        (*self).join().map(|_| ())
     }
 }
 
@@ -101,6 +102,7 @@ pub struct Pty {
 
 impl Pty {
     /// Spawn a new PTY running the configured shell.
+    #[allow(clippy::too_many_arguments)]
     pub fn spawn(
         config: &Config,
         term: Arc<FairMutex<Term<PtyEventProxy>>>,

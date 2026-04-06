@@ -194,17 +194,22 @@ impl Drop for FreeTypeCmapLookup {
 pub struct ShapedRun {
     pub glyphs: Vec<ShapedGlyph>,
     pub ascent: f32,
+    #[allow(dead_code)]
     pub line_height: f32,
 }
 
 #[derive(Debug, Clone)]
 pub struct ShapedGlyph {
     pub col: usize,
+    #[allow(dead_code)]
     pub span: usize,
     pub ch: char,
     pub cache_key: CacheKey,
+    #[allow(dead_code)]
     pub advance: f32,
+    #[allow(dead_code)]
     pub bearing_x: f32,
+    #[allow(dead_code)]
     pub bearing_y: f32,
     pub fg: [f32; 4],
     pub bg: [f32; 4],
@@ -331,7 +336,7 @@ impl TextShaper {
         )];
         buffer.shape_until_scroll(&mut self.font_system, false);
 
-        for run in buffer.layout_runs() {
+        if let Some(run) = buffer.layout_runs().next() {
             if run.glyphs.len() >= 2 {
                 let mut total_advance = 0.0f32;
                 let mut count = 0usize;
@@ -346,7 +351,6 @@ impl TextShaper {
                 self.cell_width = glyph.w.round();
             }
             self.cell_height = run.line_height.round();
-            break;
         }
 
         log::info!(
@@ -510,6 +514,18 @@ impl TextShaper {
     }
 }
 
+fn glyph_to_cache_key(glyph: &LayoutGlyph, font_size: f32) -> CacheKey {
+    let (key, _, _) = CacheKey::new(
+        glyph.font_id,
+        glyph.glyph_id,
+        font_size,
+        (glyph.x.fract(), 0.0),
+        glyph.font_weight,
+        CacheKeyFlags::empty(),
+    );
+    key
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -572,7 +588,7 @@ mod tests {
         let family = "TestFont";
         let default_attrs = Attrs::new();
         let text = "A \u{e0a0} B";
-        let list = build_attr_list(text, &default_attrs, family);
+        let _list = build_attr_list(text, &default_attrs, family);
         
         // "A " is 2 bytes, "\u{e0a0}" is 3 bytes, " B" is 2 bytes
         // Total bytes: 7
@@ -606,14 +622,3 @@ mod tests {
     }
 }
 
-fn glyph_to_cache_key(glyph: &LayoutGlyph, font_size: f32) -> CacheKey {
-    let (key, _, _) = CacheKey::new(
-        glyph.font_id,
-        glyph.glyph_id,
-        font_size,
-        (glyph.x.fract(), 0.0),
-        glyph.font_weight,
-        CacheKeyFlags::empty(),
-    );
-    key
-}
