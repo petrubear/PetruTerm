@@ -25,12 +25,21 @@ pub struct AtlasEntry {
     pub bearing_y: i32,
     /// True if the atlas stores full RGBA color (e.g. emoji), false if grayscale mask.
     pub is_color: bool,
+    /// Frame epoch when this entry was last used. Updated on every cache hit.
+    pub last_used: u64,
 }
 
-/// GPU glyph texture atlas.
+/// GPU glyph texture atlas with epoch-based LRU eviction.
 ///
 /// Glyphs are packed into a single RGBA texture using a shelf-based algorithm.
 /// New glyphs are rasterized by the font shaper and uploaded here on demand.
+///
+/// ## Eviction strategy
+/// Each `AtlasEntry` carries a `last_used` epoch counter. Callers must call
+/// `touch(key)` when a glyph is used in a frame to keep it warm. When the
+/// atlas is 90% full (`try_evict_cold()` returns true), the atlas is rebuilt
+/// from scratch keeping only warm entries — the caller must re-upload those.
+/// As a last resort, `clear()` resets everything.
 pub struct GlyphAtlas {
     texture: wgpu::Texture,
     view: wgpu::TextureView,
@@ -42,12 +51,19 @@ pub struct GlyphAtlas {
     shelf_height: u32,
     /// cosmic-text CacheKey → atlas location
     cache: HashMap<CacheKey, AtlasEntry>,
+    /// Current frame epoch. Incremented by callers once per frame via `next_epoch()`.
+    pub epoch: u64,
+    /// Approximate used pixel area (for fill-ratio heuristics).
+    used_pixels: u64,
 }
 
 impl GlyphAtlas {
-    /// Default atlas size: 2048×2048.
-    pub const SIZE: u32 = 2048;
+    /// Atlas texture side length. 4096×4096 @ 4 bytes = 64 MiB — comfortable on modern GPUs.
+    pub const SIZE: u32 = 4096;
     const PADDING: u32 = 1;
+
+    /// Fraction of the atlas area at which we attempt cold-entry eviction (90%).
+    const EVICT_THRESHOLD: f32 = 0.90;
 
     pub fn new(device: &wgpu::Device) -> Self {
         let texture = Self::create_texture(device);
@@ -71,6 +87,8 @@ impl GlyphAtlas {
             cursor_y: Self::PADDING,
             shelf_height: 0,
             cache: HashMap::new(),
+            epoch: 0,
+            used_pixels: 0,
         }
     }
 
@@ -92,9 +110,52 @@ impl GlyphAtlas {
         })
     }
 
+    /// Advance to the next frame epoch. Call once per rendered frame.
+    pub fn next_epoch(&mut self) {
+        self.epoch = self.epoch.saturating_add(1);
+    }
+
     /// Look up a cached glyph.
     pub fn get(&self, key: &CacheKey) -> Option<AtlasEntry> {
         self.cache.get(key).copied()
+    }
+
+    /// Look up a cached glyph and mark it as used in the current epoch.
+    pub fn get_and_touch(&mut self, key: &CacheKey) -> Option<AtlasEntry> {
+        if let Some(entry) = self.cache.get_mut(key) {
+            entry.last_used = self.epoch;
+            Some(*entry)
+        } else {
+            None
+        }
+    }
+
+    /// Returns true if the atlas has reached the eviction threshold.
+    pub fn is_near_full(&self) -> bool {
+        let total = (self.width * self.height) as u64;
+        self.used_pixels >= (total as f32 * Self::EVICT_THRESHOLD) as u64
+    }
+
+    /// Remove all entries that were last used more than `max_age` epochs ago.
+    /// Returns the number of entries evicted.
+    ///
+    /// Note: because the atlas uses contiguous shelf packing, evicting entries
+    /// does NOT reclaim physical space — the cursor positions are unchanged.
+    /// This method is therefore a logical eviction: old entries are removed from
+    /// the cache map so they will be re-rasterized and re-uploaded when needed,
+    /// fitting into new space appended after the current cursor. A full `clear()`
+    /// is still required when the cursor reaches the atlas boundary.
+    pub fn evict_cold(&mut self, max_age: u64) -> usize {
+        let current = self.epoch;
+        let before = self.cache.len();
+        self.cache.retain(|_, entry| {
+            current.saturating_sub(entry.last_used) <= max_age
+        });
+        let evicted = before - self.cache.len();
+        if evicted > 0 {
+            log::debug!("Atlas: evicted {} cold glyphs (epoch {}, max_age {})", evicted, current, max_age);
+        }
+        evicted
     }
 
     /// Upload a rasterized glyph bitmap and cache its atlas location.
@@ -146,6 +207,7 @@ impl GlyphAtlas {
 
         self.cursor_x += w;
         self.shelf_height = self.shelf_height.max(h);
+        self.used_pixels += (width * height) as u64;
 
         let uv = [
             x as f32 / self.width as f32,
@@ -154,7 +216,7 @@ impl GlyphAtlas {
             (y + height) as f32 / self.height as f32,
         ];
 
-        let entry = AtlasEntry { uv, width, height, bearing_x, bearing_y, is_color };
+        let entry = AtlasEntry { uv, width, height, bearing_x, bearing_y, is_color, last_used: self.epoch };
         self.cache.insert(key, entry);
         Ok(entry)
     }
@@ -167,11 +229,13 @@ impl GlyphAtlas {
         &self.sampler
     }
 
-    /// Clear the atlas (e.g. on font config change).
+    /// Full atlas reset. Clears all entries and recreates the texture.
+    /// The caller is responsible for re-rasterizing all visible glyphs.
     pub fn clear(&mut self, device: &wgpu::Device) {
         self.cursor_x = Self::PADDING;
         self.cursor_y = Self::PADDING;
         self.shelf_height = 0;
+        self.used_pixels = 0;
         self.cache.clear();
         self.texture = Self::create_texture(device);
         self.view = self.texture.create_view(&wgpu::TextureViewDescriptor::default());

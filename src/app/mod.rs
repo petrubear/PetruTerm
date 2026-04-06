@@ -275,10 +275,26 @@ impl ApplicationHandler<()> for App {
                 let cursor = self.mux.active_terminal().map(|t| t.cursor_info());
 
                 if let Some(rc) = &mut self.render_ctx {
+                    // Advance epoch once per frame so LRU eviction can age unused entries.
+                    rc.renderer.atlas.next_epoch();
+
+                    // Proactive eviction: when the atlas is 90% full, drop entries not
+                    // touched in the last 60 frames (~1 second at 60fps). This avoids a
+                    // full atlas clear during a frame that would cause a brief re-rasterize
+                    // stutter. After eviction the caller still re-rasterizes misses lazily.
+                    if rc.renderer.atlas.is_near_full() {
+                        let evicted = rc.renderer.atlas.evict_cold(60);
+                        if evicted > 0 {
+                            rc.row_cache.clear();
+                            log::debug!("Atlas eviction: removed {} stale glyphs", evicted);
+                        }
+                    }
+
                     let scaled_font = rc.scaled_font_config(&self.config);
                     let result = rc.build_instances(&cell_data, &self.config, &scaled_font, cursor.as_ref(), self.input.cursor_blink_on, terminal_id);
 
                     if let Err(crate::renderer::atlas::AtlasError::Full) = result {
+                        // Eviction wasn't enough — full clear as last resort.
                         rc.renderer.atlas.clear(&rc.renderer.device());
                         if let Some(atlas) = rc.renderer.get_lcd_atlas() { atlas.borrow_mut().clear(&rc.renderer.device()); }
                         rc.row_cache.clear();

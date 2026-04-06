@@ -13,25 +13,27 @@ use crate::renderer::lcd_atlas::LcdGlyphAtlas;
 
 // ── PUA detection ─────────────────────────────────────────────────────────────
 
-/// Returns true for Unicode Private Use Area and other symbol ranges used by Nerd Fonts.
+/// Returns true for codepoints in the Unicode Private Use Areas or symbol ranges
+/// used by Nerd Fonts that are not reliably declared in font OS/2 coverage bits.
+///
+/// BMP PUA (0xE000–0xF8FF) covers all Nerd Font icon blocks: Devicons, Font Awesome,
+/// Font Logotypes, Seti-UI, Weather Icons, Powerline symbols, etc.
+/// The supplementary PUA planes cover emoji-style icons in some icon fonts.
+/// The additional symbol codepoints (Power, Octicons, Arrows) live outside PUA but
+/// are commonly patched into Nerd Fonts and also lack OS/2 coverage bits.
 #[inline]
 fn is_pua(ch: char) -> bool {
     let c = ch as u32;
     matches!(c,
-        0xE000..=0xF8FF |    // BMP PUA — main Nerd Font icon range
+        0xE000..=0xF8FF   |  // BMP PUA — all Nerd Font icon blocks (Devicons, FA, Seti, etc.)
         0xF0000..=0xFFFFF |  // Supplementary PUA-A
-        0x100000..=0x10FFFF | // Supplementary PUA-B
-        0x23FB..=0x23FE |    // Power Symbols
-        0x2B58 |             // Power Symbol
-        0x2665 | 0x26A1 |    // Octicons
-        0x2190..=0x2199 |    // Arrows
-        0x2714 | 0x2716 | 0x2728 | 0x2764 | // Symbols
-        0x2B06..=0x2B07 |    // Arrows
-        0xE700..=0xE7C5 |    // Devicons
-        0xF000..=0xF2E0 |    // Font Awesome
-        0xE200..=0xE2A9 |    // Font Logotypes
-        0xE5FA..=0xE62B |    // Seti-UI
-        0xE300..=0xE3E3      // Weather Icons
+        0x100000..=0x10FFFF| // Supplementary PUA-B
+        0x23FB..=0x23FE |    // IEC Power Symbols
+        0x2B58 |             // Heavy Circle (power symbol variant)
+        0x2665 | 0x26A1 |    // Octicons heart / lightning
+        0x2190..=0x2199 |    // Arrows block
+        0x2714 | 0x2716 | 0x2728 | 0x2764 | // Heavy check/cross/sparkles/heart
+        0x2B06..=0x2B07      // Up/down arrows
     )
 }
 
@@ -228,8 +230,18 @@ pub struct TextShaper {
     ft_cmap: Option<FreeTypeCmapLookup>,
 }
 
+// SAFETY: TextShaper owns a FreeType library + face handle (via FreeTypeCmapLookup)
+// and a FreeType-backed LCD rasterizer. FreeType's FT_Library is not thread-safe —
+// concurrent use from multiple threads would be UB. However, TextShaper lives
+// exclusively on the main (render) thread and is never aliased concurrently:
+//   • It is stored inside RenderContext which is owned by App (main thread only).
+//   • No Arc<TextShaper> or shared reference crosses thread boundaries.
+//   • It is only moved across threads (e.g. into a tokio::spawn) via ownership
+//     transfer, never while any other thread holds a reference.
+// Given this single-owner invariant, moving TextShaper between threads is sound.
+// Sync is intentionally NOT implemented: a shared &TextShaper from multiple threads
+// could lead to concurrent FreeType calls which would be unsound.
 unsafe impl Send for TextShaper {}
-unsafe impl Sync for TextShaper {}
 
 impl TextShaper {
     pub fn new(
@@ -462,7 +474,7 @@ impl TextShaper {
         let height = image.placement.height;
 
         if width == 0 || height == 0 {
-            return Ok(AtlasEntry { uv: [0.0; 4], width: 0, height: 0, bearing_x: 0, bearing_y: 0, is_color: false });
+            return Ok(AtlasEntry { uv: [0.0; 4], width: 0, height: 0, bearing_x: 0, bearing_y: 0, is_color: false, last_used: atlas.epoch });
         }
 
         let is_color = matches!(image.content, cosmic_text::SwashContent::Color);

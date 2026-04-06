@@ -302,6 +302,7 @@ impl RenderContext {
                 Err(_) => crate::renderer::atlas::AtlasEntry {
                     uv: [0.0; 4],
                     width: 0, height: 0, bearing_x: 0, bearing_y: 0, is_color: false,
+                    last_used: 0,
                 },
             };
 

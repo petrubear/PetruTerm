@@ -206,12 +206,22 @@ impl ChatPanel {
         self.dirty = true;
     }
 
-    /// Returns the last assistant message stripped of markdown fences,
-    /// suitable for writing directly to the PTY.
+    /// Returns the last assistant message stripped of markdown fences and
+    /// tool-status lines (⟳/✓), suitable for writing directly to the PTY.
     pub fn last_assistant_command(&self) -> Option<String> {
         let msg = self.messages.iter().rev()
             .find(|m| matches!(m.role, ChatRole::Assistant))?;
-        let s = msg.content.trim();
+
+        // Strip tool-status lines injected by the agent loop (⟳ in-progress, ✓ done).
+        let filtered: String = msg.content.lines()
+            .filter(|l| {
+                let t = l.trim();
+                !t.starts_with('⟳') && !t.starts_with('✓')
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let s = filtered.trim();
         if s.is_empty() {
             return None;
         }
