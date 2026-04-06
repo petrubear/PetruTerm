@@ -160,6 +160,18 @@ impl InputHandler {
 
         // ── Leader key dispatch ───────────────────────────────────────────────
         if self.leader_active {
+            // Modifier key presses (Shift, Ctrl, Alt, Super) must not consume the
+            // leader — otherwise pressing e.g. ^B % (which requires Shift) would
+            // have the Shift keydown event silently discard the pending leader.
+            if matches!(
+                &event.logical_key,
+                Key::Named(
+                    NamedKey::Shift | NamedKey::Alt | NamedKey::Control
+                    | NamedKey::Super | NamedKey::Meta | NamedKey::Hyper
+                )
+            ) {
+                return;
+            }
             self.leader_active = false;
             self.leader_timer = None;
             if let Key::Character(s) = &event.logical_key {

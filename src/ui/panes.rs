@@ -151,6 +151,25 @@ impl PaneManager {
         }
     }
 
+    /// Close a specific pane by terminal_id (e.g. after the shell process exits).
+    /// Returns true if the pane was found and removed.
+    /// If there is only one pane, returns false (caller must close the whole tab).
+    pub fn close_specific(&mut self, terminal_id: usize) -> bool {
+        let leaf_ids = self.root.leaf_ids();
+        if leaf_ids.len() <= 1 {
+            return false;
+        }
+        if remove_leaf(&mut self.root, terminal_id) {
+            self.root.layout(self.root.rect());
+            if self.focused_terminal == terminal_id {
+                self.focused_terminal = self.root.leaf_ids()[0];
+            }
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn focus_at(&mut self, px: f32, py: f32) {
         if let Some(id) = self.root.hit_test(px, py) {
             self.focused_terminal = id;

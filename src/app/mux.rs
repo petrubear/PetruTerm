@@ -134,14 +134,25 @@ impl Mux {
         (has_data, exited)
     }
 
-    /// Close the tab that owns `terminal_id`. Returns `true` if no tabs remain.
+    /// Handle a terminal exit: close just the pane if multiple panes exist in the tab,
+    /// or close the whole tab if it was the last pane.
+    /// Returns `true` if no tabs remain (caller should exit the app).
     pub fn close_terminal(&mut self, terminal_id: usize) -> bool {
-        if let Some(tab_idx) = self.panes.iter().position(|p| p.focused_terminal == terminal_id) {
-            let tab_id = self.tabs.tabs().get(tab_idx).map(|t| t.id);
-            if let Some(tab_id) = tab_id {
-                self.tabs.close_tab(tab_id);
+        // Find the tab by searching leaf IDs (not focused_terminal, which may differ).
+        let tab_idx = self.panes.iter().position(|p| p.root.leaf_ids().contains(&terminal_id));
+        if let Some(tab_idx) = tab_idx {
+            let has_other_panes = self.panes[tab_idx].root.leaf_ids().len() > 1;
+            if has_other_panes {
+                // Multiple panes: remove only the exited pane, keep the tab alive.
+                self.panes[tab_idx].close_specific(terminal_id);
+            } else {
+                // Last pane in this tab: close the whole tab.
+                if let Some(tab) = self.tabs.tabs().get(tab_idx) {
+                    let tab_id = tab.id;
+                    self.tabs.close_tab(tab_id);
+                }
+                self.panes.remove(tab_idx);
             }
-            self.panes.remove(tab_idx);
             if let Some(slot) = self.terminals.get_mut(terminal_id) { *slot = None; }
         }
         self.tabs.is_empty()
