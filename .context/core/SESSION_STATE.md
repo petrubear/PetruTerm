@@ -1,7 +1,7 @@
 # Session State
 
 **Last Updated:** 2026-04-05
-**Session Focus:** Phase 2.5 P1 complete (AI Agent Mode — file context attachment)
+**Session Focus:** Emoji rendering fix + TD audit
 
 ## Branch: `master`
 
@@ -58,6 +58,19 @@ See archived notes: per-pane chat history, Ctrl+Space inline AI block, AI block 
 
 ### /q and /quit commands
 - Typing `/q` or `/quit` in panel input + Enter → closes panel + `mux.cmd_close_tab()`
+
+## Session Notes (2026-04-05 — Emoji + TD audit)
+
+### Emoji rendering fix
+- Root cause: `fs_main` shader read only `.r` channel — broken for color (RGBA) emoji glyphs
+- Fix: `FLAG_COLOR_GLYPH = 0x20` flag; `AtlasEntry.is_color: bool`; shader branches on flag
+- Files: `src/renderer/cell.rs`, `src/renderer/atlas.rs`, `src/font/shaper.rs`, `src/app/renderer.rs`, `src/renderer/pipeline.rs`
+- Verified working ✅
+
+### TD audit (opencode items)
+- TD-OP-01 (P0 use-after-free) → **false positive** — Drop is correct, reclassified P2
+- TD-OP-02 (Nerd Font overrides) → **real** — confirmed in `shaper.rs`, kept P1
+- TD-OP-03 (atlas no eviction) → **real** — confirmed in `atlas.rs`, kept P2
 
 ## Build Status
 - **cargo check:** PASS (0 errors — 2026-04-05)

@@ -462,9 +462,10 @@ impl TextShaper {
         let height = image.placement.height;
 
         if width == 0 || height == 0 {
-            return Ok(AtlasEntry { uv: [0.0; 4], width: 0, height: 0, bearing_x: 0, bearing_y: 0 });
+            return Ok(AtlasEntry { uv: [0.0; 4], width: 0, height: 0, bearing_x: 0, bearing_y: 0, is_color: false });
         }
 
+        let is_color = matches!(image.content, cosmic_text::SwashContent::Color);
         let rgba: Vec<u8> = match image.content {
             cosmic_text::SwashContent::Mask => {
                 image.data.iter().flat_map(|&a| [a, a, a, 255u8]).collect()
@@ -475,7 +476,7 @@ impl TextShaper {
             }
         };
 
-        atlas.upload(queue, cache_key, &rgba, width, height, image.placement.left, image.placement.top)
+        atlas.upload(queue, cache_key, &rgba, width, height, image.placement.left, image.placement.top, is_color)
     }
 
     pub fn rasterize_lcd_to_atlas(

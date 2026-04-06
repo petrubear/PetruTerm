@@ -23,6 +23,8 @@ pub struct AtlasEntry {
     pub bearing_x: i32,
     /// Bearing Y offset (pixels from cell top to glyph baseline).
     pub bearing_y: i32,
+    /// True if the atlas stores full RGBA color (e.g. emoji), false if grayscale mask.
+    pub is_color: bool,
 }
 
 /// GPU glyph texture atlas.
@@ -98,6 +100,7 @@ impl GlyphAtlas {
     /// Upload a rasterized glyph bitmap and cache its atlas location.
     ///
     /// `data` must be RGBA8 bytes of size `width × height × 4`.
+    /// Set `is_color` to true for color glyphs (e.g. emoji) whose pixels are pre-colored RGBA.
     pub fn upload(
         &mut self,
         queue: &wgpu::Queue,
@@ -107,6 +110,7 @@ impl GlyphAtlas {
         height: u32,
         bearing_x: i32,
         bearing_y: i32,
+        is_color: bool,
     ) -> Result<AtlasEntry, AtlasError> {
         let w = width + Self::PADDING * 2;
         let h = height + Self::PADDING * 2;
@@ -150,7 +154,7 @@ impl GlyphAtlas {
             (y + height) as f32 / self.height as f32,
         ];
 
-        let entry = AtlasEntry { uv, width, height, bearing_x, bearing_y };
+        let entry = AtlasEntry { uv, width, height, bearing_x, bearing_y, is_color };
         self.cache.insert(key, entry);
         Ok(entry)
     }

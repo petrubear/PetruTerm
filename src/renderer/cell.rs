@@ -3,6 +3,8 @@
 pub const FLAG_CURSOR: u32 = 0x08;
 /// LCD subpixel AA glyph (3× horizontal resolution in atlas).
 pub const FLAG_LCD: u32 = 0x10;
+/// Color glyph (e.g. emoji) — atlas stores RGBA, not a grayscale mask.
+pub const FLAG_COLOR_GLYPH: u32 = 0x20;
 
 /// A single instanced vertex representing one terminal cell on the GPU.
 ///

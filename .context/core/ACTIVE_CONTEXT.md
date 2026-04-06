@@ -23,7 +23,7 @@
 | Font fallback chain | ✅ | `petruterm.font("A, B, C")` resolved at config load time |
 
 ### Technical Debt
-Clean — 0 open items (TD-015 resolved 2026-04-05).
+3 open items: TD-OP-02 (P1 Nerd Font override fragility), TD-OP-03 (P2 atlas eviction), TD-OP-01 (P2 unsafe Send on TextShaper).
 
 ### Keybinds (tmux-aligned)
 

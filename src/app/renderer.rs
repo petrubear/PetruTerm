@@ -4,7 +4,7 @@ use winit::window::Window;
 
 use crate::config::Config;
 use crate::font::{build_font_system, ShapedGlyph, TextShaper};
-use crate::renderer::cell::{CellVertex, FLAG_CURSOR, FLAG_LCD};
+use crate::renderer::cell::{CellVertex, FLAG_COLOR_GLYPH, FLAG_CURSOR, FLAG_LCD};
 use crate::renderer::rounded_rect::RoundedRectInstance;
 use crate::renderer::GpuRenderer;
 use crate::term::{CursorInfo, CursorShape};
@@ -186,6 +186,7 @@ impl RenderContext {
                     ([0.0f32; 4], [0.0; 2], [0.0; 2])
                 };
 
+                let color_flag = if swash_entry.is_color { FLAG_COLOR_GLYPH } else { 0 };
                 row_instances.push(CellVertex {
                     grid_pos: [glyph.col as f32, row_idx as f32],
                     atlas_uv,
@@ -193,7 +194,7 @@ impl RenderContext {
                     bg: glyph.bg,
                     glyph_offset,
                     glyph_size,
-                    flags: 0,
+                    flags: color_flag,
                     _pad: 0,
                 });
 
@@ -300,7 +301,7 @@ impl RenderContext {
                 Ok(e) => e,
                 Err(_) => crate::renderer::atlas::AtlasEntry {
                     uv: [0.0; 4],
-                    width: 0, height: 0, bearing_x: 0, bearing_y: 0,
+                    width: 0, height: 0, bearing_x: 0, bearing_y: 0, is_color: false,
                 },
             };
 
@@ -321,6 +322,7 @@ impl RenderContext {
                 ([u0, v0 + fy0 * (v1 - v0), u1, v0 + fy1 * (v1 - v0)], [ox, y0], [gw, y1 - y0])
             };
 
+            let color_flag = if entry.is_color { FLAG_COLOR_GLYPH } else { 0 };
             self.instances.push(CellVertex {
                 grid_pos: [(col_offset + glyph.col) as f32, row as f32],
                 atlas_uv,
@@ -328,7 +330,7 @@ impl RenderContext {
                 bg,
                 glyph_offset,
                 glyph_size,
-                flags: 0,
+                flags: color_flag,
                 _pad: 0,
             });
         }
