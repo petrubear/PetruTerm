@@ -112,12 +112,12 @@ The chat panel and agent panel are **one unified panel** (`leader+a`). When the 
 - [x] CWD from real terminal process PID via `proc_pidinfo` (macOS) — no shell integration needed
 - [x] `/q` / `/quit` in panel input closes panel + current tab
 
-#### P2 — LLM Tool Use: Read & Explore
-- [ ] `AgentTool` enum: `ReadFile { path }`, `ListDir { path }` (OpenAI function-calling format)
-- [ ] LLM provider extended to serialize tool definitions + parse `tool_calls` from response
-- [ ] Tool execution loop: call tool → inject result → re-query LLM until no more tool calls
-- [ ] Streaming UI: show tool call status inline (`⟳ reading src/main.rs…`, `✓ done`)
-- [ ] Safety: only allow paths within CWD (no `../` escapes)
+#### P2 — LLM Tool Use: Read & Explore ✅ (2026-04-05)
+- [x] `AgentTool` enum: `ReadFile`, `ListDir` in OpenAI function-calling format — `src/llm/tools.rs`
+- [x] `agent_step()` added to `LlmProvider` trait; both OpenRouter + OpenAI-compat implement it
+- [x] Tool execution loop (max 10 rounds): call → execute → inject result → re-query — `src/app/ui.rs`
+- [x] Streaming UI: `⟳ tool(path)` / `✓ tool(path)` inline via `AiEvent::ToolStatus` — `src/llm/chat_panel.rs`
+- [x] Safety: `canonicalize()` + `starts_with(cwd)` check before any file access — `src/llm/tools.rs`
 
 #### P3 — LLM Tool Use: Write & Run
 - [ ] `WriteFile { path, content }` tool: LLM proposes full file replacement

@@ -472,6 +472,7 @@ impl RenderContext {
                     ChatRole::User      => ("│  You  ", "│       ", user_fg),
                     ChatRole::Assistant => ("│   AI  ", "│       ", asst_fg),
                     ChatRole::System    => continue,
+                    ChatRole::Tool(_)   => continue,
                 };
                 let wrapped = word_wrap(&msg.content, msg_inner_w);
                 for (i, line) in wrapped.iter().enumerate() {

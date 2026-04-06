@@ -1,7 +1,7 @@
 # Session State
 
 **Last Updated:** 2026-04-05
-**Session Focus:** Emoji rendering fix + TD audit
+**Session Focus:** Phase 2.5 P2 — LLM Tool Use (ReadFile, ListDir)
 
 ## Branch: `master`
 
@@ -58,6 +58,16 @@ See archived notes: per-pane chat history, Ctrl+Space inline AI block, AI block 
 
 ### /q and /quit commands
 - Typing `/q` or `/quit` in panel input + Enter → closes panel + `mux.cmd_close_tab()`
+
+## Session Notes (2026-04-05 — Phase 2.5 P2: Tool Use)
+
+### Tool use loop
+- `src/llm/tools.rs` — `AgentTool` (ReadFile, ListDir), `execute_tool()` with CWD sandbox
+- `src/llm/mod.rs` — `ChatRole::Tool(String)`, `ChatMessage::to_api_value()`, `agent_step()` in trait
+- `src/llm/openrouter.rs` + `openai_compat.rs` — `agent_step()` impl; both parse `tool_calls`
+- `src/llm/chat_panel.rs` — `AiEvent::ToolStatus { tool, path, done }`; `set_tool_status()`
+- `src/app/ui.rs` — `submit_ai_query(wakeup_proxy, cwd)` now runs tool loop (max 10 rounds)
+- `src/app/input/mod.rs` — pass CWD from `mux.active_cwd()` to submit
 
 ## Session Notes (2026-04-05 — Emoji + TD audit)
 

@@ -11,6 +11,8 @@ pub enum AiEvent {
     Token(String),
     Done,
     Error(String),
+    /// Agent called a tool. `done=false` = started, `done=true` = finished.
+    ToolStatus { tool: String, path: String, done: bool },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -145,6 +147,26 @@ impl ChatPanel {
     pub fn append_token(&mut self, tok: &str) {
         self.state = PanelState::Streaming;
         self.streaming_buf.push_str(tok);
+        self.dirty = true;
+    }
+
+    /// Show a tool-call status line in the streaming buffer.
+    /// `done=false` replaces the last status line; `done=true` marks it finished.
+    pub fn set_tool_status(&mut self, tool: &str, path: &str, done: bool) {
+        self.state = PanelState::Streaming;
+        let icon = if done { "✓" } else { "⟳" };
+        let line = format!("{icon} {tool}({path})\n");
+        // Replace the last status line if it starts with ⟳ (in-progress).
+        if !done {
+            if self.streaming_buf.ends_with('\n') {
+                let prev = self.streaming_buf.trim_end_matches('\n');
+                if prev.contains('⟳') {
+                    let last_nl = prev.rfind('\n').map(|i| i + 1).unwrap_or(0);
+                    self.streaming_buf.truncate(last_nl);
+                }
+            }
+        }
+        self.streaming_buf.push_str(&line);
         self.dirty = true;
     }
 

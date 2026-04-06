@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::path::PathBuf;
 use crossbeam_channel::{Receiver, Sender};
 use crate::config::{self, Config};
 use crate::llm::chat_panel::{AiEvent, ChatPanel};
 use crate::llm::ai_block::AiBlock;
 use crate::llm::LlmProvider;
 use crate::llm::shell_context::ShellContext;
+use crate::llm::tools::{AgentStepResult, AgentTool, execute_tool};
 use crate::ui::{CommandPalette, SplitDir, Rect};
 use winit::event_loop::EventLoopProxy;
 use winit::window::Window;
@@ -112,6 +114,9 @@ impl UiManager {
                     log::error!("LLM error: {e}");
                     self.panel_mut().mark_error(e);
                 }
+                AiEvent::ToolStatus { tool, path, done } => {
+                    self.panel_mut().set_tool_status(&tool, &path, done);
+                }
             }
         }
         changed
@@ -129,6 +134,7 @@ impl UiManager {
                     log::error!("AI block error: {e}");
                     self.ai_block.mark_error(e);
                 }
+                AiEvent::ToolStatus { .. } => {} // AI block doesn't show tool status
             }
         }
         changed
@@ -147,14 +153,19 @@ impl UiManager {
         self.panel_mut().init_default_files(&cwd);
     }
 
-    pub fn submit_ai_query(&mut self, wakeup_proxy: EventLoopProxy<()>) {
+    /// Submit the current panel input. `cwd` is used for tool sandboxing.
+    pub fn submit_ai_query(&mut self, wakeup_proxy: EventLoopProxy<()>, cwd: PathBuf) {
         let Some(_user_content) = self.panel_mut().submit_input() else { return };
         let Some(provider) = self.llm_provider.clone() else {
             self.panel_mut().mark_error("LLM not configured".into());
             return;
         };
 
-        let mut system_text = String::from("You are a helpful terminal assistant.");
+        let mut system_text = String::from(
+            "You are a helpful terminal assistant. \
+             You have tools to read files and list directories within the working directory. \
+             Use them when the user asks about code or files."
+        );
         if let Some(ctx) = ShellContext::load() {
             system_text.push_str(&format!("\n\nShell context:\n{}", ctx.format_for_system_message()));
         }
@@ -168,13 +179,90 @@ impl UiManager {
             }
         }
 
-        let mut messages = vec![crate::llm::ChatMessage::system(system_text)];
-        messages.extend(self.panel().messages.iter().cloned());
+        // Build initial API-format messages (Vec<Value> for tool-use compatibility).
+        let mut api_msgs: Vec<serde_json::Value> = vec![
+            serde_json::json!({"role": "system", "content": system_text})
+        ];
+        for msg in &self.panel().messages {
+            api_msgs.push(msg.to_api_value());
+        }
 
+        let tool_specs = AgentTool::all_specs();
         let tx = self.ai_tx.clone();
+
         self.tokio_rt.spawn(async move {
             use futures_util::StreamExt;
-            match provider.stream(messages).await {
+
+            const MAX_TOOL_ROUNDS: usize = 10;
+
+            for _round in 0..MAX_TOOL_ROUNDS {
+                match provider.agent_step(api_msgs.clone(), &tool_specs).await {
+                    Err(e) => {
+                        let _ = tx.send(AiEvent::Error(e.to_string()));
+                        let _ = wakeup_proxy.send_event(());
+                        return;
+                    }
+                    Ok(AgentStepResult::Text(text)) => {
+                        // No tool calls — stream the final response normally by
+                        // building a fresh stream from the completed messages.
+                        // For simplicity, send the text as a single token.
+                        let _ = tx.send(AiEvent::Token(text));
+                        let _ = tx.send(AiEvent::Done);
+                        let _ = wakeup_proxy.send_event(());
+                        return;
+                    }
+                    Ok(AgentStepResult::ToolCalls { assistant_msg, calls }) => {
+                        // Add assistant's tool_calls message to history.
+                        api_msgs.push(assistant_msg);
+
+                        for call in &calls {
+                            let path = call.path_arg().unwrap_or_default();
+
+                            let _ = tx.send(AiEvent::ToolStatus {
+                                tool: call.name.clone(),
+                                path: path.clone(),
+                                done: false,
+                            });
+                            let _ = wakeup_proxy.send_event(());
+
+                            let result = execute_tool(call, &cwd);
+
+                            let _ = tx.send(AiEvent::ToolStatus {
+                                tool: call.name.clone(),
+                                path: path.clone(),
+                                done: true,
+                            });
+                            let _ = wakeup_proxy.send_event(());
+
+                            // Add tool result to history.
+                            api_msgs.push(serde_json::json!({
+                                "role": "tool",
+                                "tool_call_id": call.id,
+                                "content": result,
+                            }));
+                        }
+                        // Continue loop — LLM will get the tool results and respond.
+                    }
+                }
+            }
+
+            // Fallback: if tool rounds exhausted, do a final streaming call.
+            match provider.stream(
+                api_msgs.iter()
+                    .filter_map(|v| {
+                        let role = v.get("role")?.as_str()?;
+                        let content = v.get("content")?.as_str().unwrap_or("").to_string();
+                        Some(crate::llm::ChatMessage {
+                            role: match role {
+                                "user"      => crate::llm::ChatRole::User,
+                                "assistant" => crate::llm::ChatRole::Assistant,
+                                _           => crate::llm::ChatRole::System,
+                            },
+                            content,
+                        })
+                    })
+                    .collect()
+            ).await {
                 Err(e) => { let _ = tx.send(AiEvent::Error(e.to_string())); }
                 Ok(mut stream) => {
                     while let Some(result) = stream.next().await {
@@ -197,7 +285,8 @@ impl UiManager {
         if !self.panel().is_visible() { self.panel_mut().open(); }
         self.panel_focused = true;
         self.panel_mut().input = format!("Explain this terminal output:\n```\n{}\n```", output);
-        self.submit_ai_query(wakeup_proxy);
+        let cwd = mux.active_cwd().or_else(|| std::env::current_dir().ok()).unwrap_or_default();
+        self.submit_ai_query(wakeup_proxy, cwd);
     }
 
     pub fn fix_last_error(&mut self, mux: &Mux, wakeup_proxy: EventLoopProxy<()>) {
@@ -213,7 +302,8 @@ impl UiManager {
         if !self.panel().is_visible() { self.panel_mut().open(); }
         self.panel_focused = true;
         self.panel_mut().input = query;
-        self.submit_ai_query(wakeup_proxy);
+        let cwd = mux.active_cwd().or_else(|| std::env::current_dir().ok()).unwrap_or_default();
+        self.submit_ai_query(wakeup_proxy, cwd);
     }
 
     /// Execute the last AI-suggested command in the active terminal.

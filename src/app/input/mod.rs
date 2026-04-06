@@ -261,7 +261,12 @@ impl InputHandler {
                                 mux.cmd_close_tab();
                             }
                             "" => { ui.chat_panel_run_command(mux); }
-                            _ => { ui.submit_ai_query(wakeup_proxy); }
+                            _ => {
+                                let cwd = mux.active_cwd()
+                                    .or_else(|| std::env::current_dir().ok())
+                                    .unwrap_or_default();
+                                ui.submit_ai_query(wakeup_proxy, cwd);
+                            }
                         }
                     }
                 }
@@ -278,7 +283,10 @@ impl InputHandler {
                 Key::Character(s) if ctrl && s.as_str() == "s" => {
                     // Ctrl+S: submit query (alternative to Enter).
                     if ui.panel().is_idle() && !ui.panel().input.trim().is_empty() {
-                        ui.submit_ai_query(wakeup_proxy);
+                        let cwd = mux.active_cwd()
+                            .or_else(|| std::env::current_dir().ok())
+                            .unwrap_or_default();
+                        ui.submit_ai_query(wakeup_proxy, cwd);
                     }
                 }
                 Key::Character(s) => { for ch in s.chars() { ui.panel_mut().type_char(ch); } }
