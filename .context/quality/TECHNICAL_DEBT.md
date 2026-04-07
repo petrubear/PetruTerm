@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-04-07
-**Open Items:** 0
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0
+**Open Items:** 2
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 1 | **P3:** 1
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -31,15 +31,20 @@
 
 ## P2 - Medium Priority
 
-- _None_
+- **TD-026** (P2): Status bar (Phase 3 P2) — segmented right-aligned bar rendered by GPU. Segments (left→right): running command, current directory, leader-mode indicator (changes color when leader active), date/time. Each segment sourced from a Lua plugin. Reference screenshot: `~/Documents/ScreenShots/Screenshot 2026-04-07 at 10.36.37.png`.
 
 ---
 
 ## P3 - Low Priority
 
-- _None_
+- **TD-027** (P3): Tab rename via `<leader>,` — prompt user for a new label and replace the default `# zsh` title displayed in the tab pill. Mirrors tmux `prefix + ,` behavior.
 
 ---
+
+## Recently Resolved (2026-04-07)
+
+- **TD-025** (P0): Mouse tab-bar click called `switch_to_index()` without `resize_terminals_for_panel()`, so the newly-active tab's PTY kept the pre-tab-bar row count and content overflowed below the visible area. Fix: added `resize_terminals_for_panel()` after `switch_to_index()` in the `MouseButton::Left` tab-bar hit handler (`app/mod.rs`). Keyboard tab switching already triggered the resize via the `tab_idx != tab_idx_before` guard.
+- **TD-028** (P1): `MouseScrollDelta::PixelDelta.y` is in logical points on macOS but was divided by `cell_h` in physical pixels — giving ~0.5 lines/event on 2× Retina → very slow scroll. Fix: divide by `cell_h / scale_factor` (logical cell height). Auto-scroll to bottom on keypress: `send_key_to_active_terminal` now calls `terminal.scroll_to_bottom()` (`Scroll::Bottom`) before `write_input` so any keystroke while scrolled up jumps back to the prompt.
 
 ## Recently Resolved (2026-04-06)
 

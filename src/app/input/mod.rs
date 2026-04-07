@@ -381,9 +381,10 @@ impl InputHandler {
 
     pub fn send_key_to_active_terminal(&self, event: &KeyEvent, mux: &Mux) {
         let mode = mux.active_terminal().map(|t| *t.term.lock().mode()).unwrap_or(TermMode::empty());
-        
+
         if let Some(data) = key_map::translate_key(&event.logical_key, self.modifiers, mode) {
             if let Some(terminal) = mux.active_terminal() {
+                terminal.scroll_to_bottom();
                 terminal.write_input(&data);
             }
         }

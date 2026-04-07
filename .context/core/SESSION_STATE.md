@@ -1,9 +1,24 @@
 # Session State
 
 **Last Updated:** 2026-04-07
-**Session Focus:** Phase 2.5 P3 — LLM WriteFile / RunCommand tools con confirmación
+**Session Focus:** Bug fixes — tab bar viewport, scroll speed, auto-scroll on keypress
 
 ## Branch: `master`
+
+## Session Notes (2026-04-07 — bug fixes)
+
+### TD-025: Tab bar viewport overflow (RESUELTO)
+- Root cause: mouse click on tab bar called `switch_to_index()` without `resize_terminals_for_panel()` — PTY kept old row count, last rows rendered off-screen.
+- Fix: `app/mod.rs` — added `self.resize_terminals_for_panel()` after `switch_to_index(idx)` in the tab-bar mouse click handler.
+
+### TD-028: Scroll speed + auto-scroll on keypress (RESUELTO)
+- Scroll speed: `PixelDelta.y` is logical points; was divided by physical `cell_h` → ~0.5 lines/event on Retina. Fix: divide by `cell_h / scale_factor`.
+- Auto-scroll: `send_key_to_active_terminal` now calls `terminal.scroll_to_bottom()` before `write_input`.
+- Files: `app/mod.rs`, `app/input/mod.rs`, `term/mod.rs`.
+
+### Deuda técnica registrada (nuevas entradas)
+- TD-026 (P2): Status bar segmentado con plugins Lua
+- TD-027 (P3): Tab rename via `<leader>,`
 
 ## Session Notes (2026-04-07 — Phase 2.5 P3)
 

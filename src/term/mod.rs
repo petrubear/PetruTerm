@@ -160,6 +160,11 @@ impl Terminal {
         self.term.lock().scroll_display(Scroll::Delta(delta));
     }
 
+    /// Scroll the viewport to the bottom (display_offset = 0).
+    pub fn scroll_to_bottom(&self) {
+        self.term.lock().scroll_display(Scroll::Bottom);
+    }
+
     /// Return (display_offset, history_size) for scroll bar positioning.
     /// display_offset = 0 means at the bottom; display_offset = history_size means at the top.
     pub fn scrollback_info(&self) -> (usize, usize) {

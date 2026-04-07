@@ -6,7 +6,7 @@
 ## Estado actual del proyecto
 
 **Phase 1 COMPLETE. Phase 2 COMPLETE. Phase 2.5 COMPLETE (P1+P2+P3). Phase 3 P1 implementada.**
-**Deuda técnica: 0 ítems abiertos.**
+**Deuda técnica: 2 ítems abiertos (P2, P3). TD-025/TD-028 resueltos hoy.**
 **Tests: 16/16 passing. `cargo clippy --all-targets --all-features -- -D warnings` PASA limpio.**
 
 ### Features verificados (2026-04-07)

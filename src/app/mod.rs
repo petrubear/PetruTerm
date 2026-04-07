@@ -516,6 +516,7 @@ impl ApplicationHandler<()> for App {
                         if tab_h > 0.0 && self.input.mouse_pos.1 < self.config.window.padding.top as f64 + tab_h {
                             if let Some(idx) = self.hit_test_tab_bar(self.input.mouse_pos.0) {
                                 self.mux.tabs.switch_to_index(idx);
+                                self.resize_terminals_for_panel();
                             }
                             if let Some(w) = &self.window { w.request_redraw(); }
                             return;
@@ -579,9 +580,11 @@ impl ApplicationHandler<()> for App {
                 if let Some(w) = &self.window { w.request_redraw(); }
             }
             WindowEvent::MouseWheel { delta, .. } => {
+                let scale = self.render_ctx.as_ref().map(|rc| rc.scale_factor as f64).unwrap_or(1.0);
                 let delta_lines = match delta {
                     MouseScrollDelta::LineDelta(_, y) => y as f64,
-                    MouseScrollDelta::PixelDelta(pos) => -pos.y / self.cell_dims().1 as f64,
+                    // pos.y is in logical points; divide by logical cell height to get lines.
+                    MouseScrollDelta::PixelDelta(pos) => -pos.y / (self.cell_dims().1 as f64 / scale),
                 };
                 self.input.scroll_pixel_accum += delta_lines;
                 let lines = self.input.scroll_pixel_accum.trunc() as i32;
