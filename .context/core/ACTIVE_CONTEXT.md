@@ -5,12 +5,12 @@
 
 ## Estado actual del proyecto
 
-**Phase 1 COMPLETE. Phase 2 COMPLETE. Phase 3 P1 implementada, pero con deuda abierta.**
-**Deuda técnica: 0 ítems abiertos. Todos resueltos (incluye auditoría Codex 2026-04-06).**
+**Phase 1 COMPLETE. Phase 2 COMPLETE. Phase 2.5 P1+P2 COMPLETE. Phase 3 P1 implementada.**
+**Deuda técnica: 0 ítems abiertos.**
 **Tests: 16/16 passing. `cargo clippy --all-targets --all-features -- -D warnings` PASA limpio.**
 **Multi-pane rendering COMPLETO (splits horizontal/vertical, separadores, resize automático).**
 
-### Features verificados (2026-04-06)
+### Features verificados (2026-04-07)
 
 | Feature | Estado |
 |---------|--------|
@@ -35,19 +35,10 @@
 | Multi-pane splits (^B % / ^B ") + separadores + resize | ✅ |
 | Leader+Shift keys (%, ", &) — fix modifier key consuming leader | ✅ |
 | Pane exit closes solo el pane (no el tab completo) | ✅ |
+| **Leader+h/j/k/l — vim-style pane focus navigation (TD-024)** | ✅ |
+| **1-cell padding entre contenido y separadores de pane** | ✅ |
 
 ### Deuda técnica — CERO ítems abiertos
-
-Todos los ítems de la auditoría Codex (TD-017..TD-022) resueltos el 2026-04-06.
-
-### Deuda técnica resuelta recientemente
-
-| TD | Solución |
-|----|---------|
-| TD-OP-02 | `is_pua()` consolidada: BMP PUA cubre todos los subrangos |
-| TD-OP-03 | Atlas 4096 px + eviction LRU por epoch |
-| TD-OP-01 | Eliminado `unsafe impl Sync`; `Send` con SAFETY comment |
-| TD-016 | `last_assistant_command()` filtra líneas `⟳`/`✓` |
 
 ## Siguiente: Phase 2.5 P3 — Tool Use: Write & Run
 
@@ -70,6 +61,7 @@ Todos los ítems de la auditoría Codex (TD-017..TD-022) resueltos el 2026-04-06
 | `^B %` | Split horizontal |
 | `^B "` | Split vertical |
 | `^B x` | Close pane |
+| `^B h/j/k/l` | Focus pane left/down/up/right |
 | `^B a` | AI panel |
 | `^B o` | Command palette |
 | `Ctrl+Space` | Inline AI block |
@@ -79,13 +71,15 @@ Todos los ítems de la auditoría Codex (TD-017..TD-022) resueltos el 2026-04-06
 
 | Archivo | Propósito |
 |---------|-----------|
+| `src/ui/panes.rs` | `PaneManager`, `PanePad`, `focus_dir()`, `pane_infos()` con inset |
+| `src/ui/palette/actions.rs` | `Action::FocusPane(FocusDir)`, `built_in_actions()` |
 | `src/llm/tools.rs` | `AgentTool`, `execute_tool()` (CWD sandbox) |
 | `src/llm/chat_panel.rs` | `ChatPanel`, historial, `last_assistant_command()` |
 | `src/app/ui.rs` | `UiManager` (palette, context_menu, panels, ai_block) |
+| `src/app/mux.rs` | `cmd_focus_pane_dir()` |
 | `src/app/mod.rs` | Event loop, mouse handling, context menu dispatch |
 | `src/app/renderer.rs` | `build_palette_instances`, `build_context_menu_instances` |
 | `src/ui/context_menu.rs` | `ContextMenu`, `ContextAction` |
-| `src/ui/palette/actions.rs` | `PaletteAction` (+ `keybind`), `built_in_actions(&Config)` |
 | `src/renderer/atlas.rs` | `GlyphAtlas` (4096px, epoch LRU) |
 | `src/font/shaper.rs` | `TextShaper`, `is_pua()` (consolidada) |
 | `src/config/mod.rs` | `ensure_default_configs()` (idempotente, cada arranque) |
