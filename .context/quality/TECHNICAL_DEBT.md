@@ -25,7 +25,7 @@
 
 ## P1 - High Priority
 
-- **TD-023** (P1): Window drag interferes with text selection. `setMovableByWindowBackground: YES` is set on the custom title bar, which makes click-drag on the terminal area move the window instead of creating a text selection. Root: `setMovableByWindowBackground` applies to the entire window content area, not just the title bar region. Fix candidates: (a) set `setMovableByWindowBackground: NO` and implement a dedicated drag region (top ~60px) via `hitTest:withEvent:` override or a transparent drag-only NSView overlaid on the traffic-light area; (b) detect drag-start position in `MouseInput` — if `y < tab_bar_bottom`, initiate window drag via `window.drag_window()`; otherwise let it be a selection. **Priority: high** — the previous fix (`setMovableByWindowBackground: NO`) solved selection but broke title-bar dragging.
+- **TD-023** (P1): Window drag interferes with text selection. **Design decision: the terminal area NEVER moves the window — mouse is exclusively for text selection.** Window movement is only possible via the native title bar (the top strip where the traffic-light buttons live). Fix: set `setMovableByWindowBackground: NO` permanently. The native title bar strip remains draggable by default via macOS standard window chrome, so no additional drag-region implementation is needed.
 
 ---
 
