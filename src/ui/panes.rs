@@ -314,9 +314,12 @@ pub struct PaneSeparator {
 
 impl PaneManager {
     /// Collect info for all leaf panes, including their viewport-relative cell offsets.
+    /// Each pane insets its usable area by 1 cell on sides adjacent to a separator so that
+    /// content never renders flush against the divider line.
     pub fn pane_infos(&self, viewport: Rect, cell_w: f32, cell_h: f32) -> Vec<PaneInfo> {
         let mut result = Vec::new();
-        collect_leaf_infos_impl(&self.root, viewport, cell_w, cell_h, self.focused_terminal, &mut result);
+        collect_leaf_infos_impl(&self.root, viewport, cell_w, cell_h, self.focused_terminal,
+            PanePad::default(), &mut result);
         result
     }
 
@@ -328,20 +331,29 @@ impl PaneManager {
     }
 }
 
+/// 1-cell inset flags: which sides of a pane border an adjacent separator.
+#[derive(Clone, Copy, Default)]
+struct PanePad { left: bool, right: bool, top: bool, bottom: bool }
+
 fn collect_leaf_infos_impl(
     node: &PaneNode,
     viewport: Rect,
     cell_w: f32,
     cell_h: f32,
     focused: usize,
+    pad: PanePad,
     result: &mut Vec<PaneInfo>,
 ) {
     match node {
         PaneNode::Leaf { terminal_id, rect } => {
-            let col_offset = ((rect.x - viewport.x) / cell_w).round() as usize;
-            let row_offset = ((rect.y - viewport.y) / cell_h).round() as usize;
-            let cols = (rect.w / cell_w).floor() as usize;
-            let rows = (rect.h / cell_h).floor() as usize;
+            let pl = pad.left   as usize;
+            let pr = pad.right  as usize;
+            let pt = pad.top    as usize;
+            let pb = pad.bottom as usize;
+            let col_offset = ((rect.x - viewport.x) / cell_w).round() as usize + pl;
+            let row_offset = ((rect.y - viewport.y) / cell_h).round() as usize + pt;
+            let cols = ((rect.w / cell_w).floor() as usize).saturating_sub(pl + pr);
+            let rows = ((rect.h / cell_h).floor() as usize).saturating_sub(pt + pb);
             result.push(PaneInfo {
                 terminal_id: *terminal_id,
                 col_offset, row_offset,
@@ -350,9 +362,21 @@ fn collect_leaf_infos_impl(
                 focused: *terminal_id == focused,
             });
         }
-        PaneNode::Split { left, right, .. } => {
-            collect_leaf_infos_impl(left, viewport, cell_w, cell_h, focused, result);
-            collect_leaf_infos_impl(right, viewport, cell_w, cell_h, focused, result);
+        PaneNode::Split { dir, left, right, .. } => {
+            match dir {
+                SplitDir::Horizontal => {
+                    collect_leaf_infos_impl(left,  viewport, cell_w, cell_h, focused,
+                        PanePad { right: true, ..pad }, result);
+                    collect_leaf_infos_impl(right, viewport, cell_w, cell_h, focused,
+                        PanePad { left: true,  ..pad }, result);
+                }
+                SplitDir::Vertical => {
+                    collect_leaf_infos_impl(left,  viewport, cell_w, cell_h, focused,
+                        PanePad { bottom: true, ..pad }, result);
+                    collect_leaf_infos_impl(right, viewport, cell_w, cell_h, focused,
+                        PanePad { top: true,    ..pad }, result);
+                }
+            }
         }
     }
 }
