@@ -20,6 +20,17 @@ Ordered newest-first within each date group.
 
 ---
 
+## Resolved 2026-04-07
+
+### TD-024: Leader+h/j/k/l Vim-Style Pane Focus Navigation
+- **Files:** `src/ui/panes.rs`, `src/ui/palette/actions.rs`, `src/app/mux.rs`, `src/app/ui.rs`, `src/config/lua.rs`, `config/default/keybinds.lua`
+- **Resolution:** `PaneManager::focus_dir(dir: FocusDir)` uses center-point geometry to find the nearest pane in the given direction. `Action::FocusPane(FocusDir)` variant added with `FromStr` entries `FocusPaneLeft/Right/Up/Down`. `Mux::cmd_focus_pane_dir()` dispatches to the active tab's pane manager. Default keybinds wired in `keybinds.lua` (config version bump 2→3). Palette entries added for all four directions.
+
+### TD-023: setMovableByWindowBackground Already NO
+- **Resolution:** Already applied at `src/app/mod.rs:203` (`Bool::NO`). Registry was stale. No code change needed.
+
+---
+
 ## Resolved 2026-03-31
 
 ### TD-041: AI Panel Off-Screen + Broken GPU Upload

@@ -1,5 +1,5 @@
 -- PetruTerm keybinds configuration
--- petruterm-config-version: 2
+-- petruterm-config-version: 3
 -- Leader key: Ctrl+B (tmux-style), 1000ms timeout.
 -- After pressing Ctrl+B, press the bound key within the timeout window.
 --
@@ -35,6 +35,12 @@ function module.apply_to_config(config)
     { mods = "LEADER", key = "%",  action = petruterm.action.SplitHorizontal },
     { mods = "LEADER", key = '"',  action = petruterm.action.SplitVertical },
     { mods = "LEADER", key = "x",  action = petruterm.action.ClosePane },
+
+    -- ── Pane focus (vim-style) ─────────────────────────────────────────────
+    { mods = "LEADER", key = "h",  action = petruterm.action.FocusPaneLeft },
+    { mods = "LEADER", key = "j",  action = petruterm.action.FocusPaneDown },
+    { mods = "LEADER", key = "k",  action = petruterm.action.FocusPaneUp },
+    { mods = "LEADER", key = "l",  action = petruterm.action.FocusPaneRight },
   }
 end
 

@@ -259,6 +259,13 @@ impl Mux {
         }
     }
 
+    pub fn cmd_focus_pane_dir(&mut self, dir: crate::ui::panes::FocusDir) {
+        let active = self.tabs.active_index();
+        if let Some(pane_mgr) = self.panes.get_mut(active) {
+            pane_mgr.focus_dir(dir);
+        }
+    }
+
     /// Resize all panes and terminals. The active tab's panes are resized to their
     /// individual rect-derived dimensions; inactive tabs keep their last layout.
     pub fn resize_all(

@@ -449,6 +449,7 @@ impl UiManager {
                 mux.cmd_split(config, SplitDir::Vertical, cols as u16, rows as u16, cell_w, cell_h, wakeup_proxy);
             }
             Action::ClosePane => mux.cmd_close_pane(),
+            Action::FocusPane(dir) => mux.cmd_focus_pane_dir(dir),
             Action::ToggleFullscreen => if let Some(w) = window {
                 let is_fs = w.fullscreen().is_some();
                 w.set_fullscreen(if is_fs { None } else { Some(winit::window::Fullscreen::Borderless(None)) });

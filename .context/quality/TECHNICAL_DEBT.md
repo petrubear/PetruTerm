@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-04-07
-**Open Items:** 2
-**Critical (P0):** 0 | **P1:** 1 | **P2:** 0 | **P3:** 1
+**Open Items:** 0
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -25,7 +25,7 @@
 
 ## P1 - High Priority
 
-- **TD-023** (P1): Window drag interferes with text selection. **Design decision: the terminal area NEVER moves the window — mouse is exclusively for text selection.** Window movement is only possible via the native title bar (the top strip where the traffic-light buttons live). Fix: set `setMovableByWindowBackground: NO` permanently. The native title bar strip remains draggable by default via macOS standard window chrome, so no additional drag-region implementation is needed.
+- _None_
 
 ---
 
@@ -37,7 +37,7 @@
 
 ## P3 - Low Priority
 
-- **TD-024** (P3): Implement `Leader+h/j/k/l` vim-style pane focus navigation. Multi-pane rendering is now complete; the missing piece is focus movement by direction. The `FocusDir` enum (`Left/Right/Up/Down`) already exists in `src/ui/panes.rs`. Needs: (a) a `PaneManager::focus_dir(dir: FocusDir)` method that picks the nearest pane in the given direction using rect center-point geometry; (b) four keybinds (`h`, `j`, `k`, `l`) wired to a new `Action::FocusPane(FocusDir)` variant; (c) add to `petruterm.action` table in `lua.rs`; (d) default bindings in `config/default/keybinds.lua` with version bump.
+- _None_
 
 ---
 

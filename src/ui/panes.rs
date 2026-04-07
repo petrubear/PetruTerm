@@ -176,6 +176,49 @@ impl PaneManager {
         }
     }
 
+    /// Move focus to the nearest pane in `dir` using center-point geometry.
+    /// Does nothing if there is no pane in that direction.
+    pub fn focus_dir(&mut self, dir: FocusDir) {
+        let focused_rect = match self.rect_of(self.focused_terminal) {
+            Some(r) => r,
+            None => return,
+        };
+        let fc_x = focused_rect.x + focused_rect.w * 0.5;
+        let fc_y = focused_rect.y + focused_rect.h * 0.5;
+
+        let leaves = self.root.leaf_ids();
+        let mut best_id: Option<usize> = None;
+        let mut best_dist = f32::MAX;
+
+        for id in leaves {
+            if id == self.focused_terminal { continue; }
+            let rect = match find_rect(&self.root, id) {
+                Some(r) => r,
+                None => continue,
+            };
+            let cx = rect.x + rect.w * 0.5;
+            let cy = rect.y + rect.h * 0.5;
+
+            let in_dir = match dir {
+                FocusDir::Left  => cx < fc_x,
+                FocusDir::Right => cx > fc_x,
+                FocusDir::Up    => cy < fc_y,
+                FocusDir::Down  => cy > fc_y,
+            };
+            if !in_dir { continue; }
+
+            let dist = (cx - fc_x).powi(2) + (cy - fc_y).powi(2);
+            if dist < best_dist {
+                best_dist = dist;
+                best_id = Some(id);
+            }
+        }
+
+        if let Some(id) = best_id {
+            self.focused_terminal = id;
+        }
+    }
+
     pub fn rect_of(&self, terminal_id: usize) -> Option<Rect> {
         find_rect(&self.root, terminal_id)
     }
