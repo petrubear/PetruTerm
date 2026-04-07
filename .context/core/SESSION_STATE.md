@@ -1,55 +1,47 @@
 # Session State
 
 **Last Updated:** 2026-04-07
-**Session Focus:** TD-024 (Leader+h/j/k/l pane focus) + pane separator padding fix
+**Session Focus:** Phase 2.5 P3 — LLM WriteFile / RunCommand tools con confirmación
 
 ## Branch: `master`
 
-## Session Notes (2026-04-07 — pane focus + separator padding)
+## Session Notes (2026-04-07 — Phase 2.5 P3)
 
-### TD-024 (P3) — Leader+h/j/k/l vim-style pane focus (RESUELTO)
+### Phase 2.5 P3 COMPLETA
 
-- `PaneManager::focus_dir(dir: FocusDir)` en `src/ui/panes.rs`:
-  - Recorre todos los leaves, calcula centros de rect, filtra por dirección, elige el más cercano.
-- `Action::FocusPane(FocusDir)` en `src/ui/palette/actions.rs`:
-  - `FromStr`: `FocusPaneLeft`, `FocusPaneRight`, `FocusPaneUp`, `FocusPaneDown`.
-  - 4 entradas nuevas en `built_in_actions()`.
-- `Mux::cmd_focus_pane_dir(dir)` en `src/app/mux.rs`.
-- Match arm `Action::FocusPane(dir) => mux.cmd_focus_pane_dir(dir)` en `src/app/ui.rs`.
-- `petruterm.action.FocusPaneLeft/Right/Up/Down` en `src/config/lua.rs`.
-- Keybinds `^B h/j/k/l` en `config/default/keybinds.lua` (config version 3).
+#### Archivos nuevos
+- `src/llm/diff.rs` — LCS line diff + `compress_diff(ctx=2)`
 
-### Separator padding fix
-
-- `PanePad` struct (`left/right/top/bottom: bool`) en `src/ui/panes.rs`.
-- `collect_leaf_infos_impl` propaga `PanePad` recursivamente:
-  - `Horizontal` split: left child → `pad_right=true`; right child → `pad_left=true`.
-  - `Vertical` split: top child → `pad_bottom=true`; bottom child → `pad_top=true`.
-- En cada leaf, los flags reducen `col_offset`/`row_offset`/`cols`/`rows` en 1 celda por lado.
-- Resultado: 1 columna/fila de respiro entre contenido y separador en todos los panes.
-
-### TD-023 — Confirmado ya resuelto
-
-- `setMovableByWindowBackground: Bool::NO` ya estaba en `src/app/mod.rs:203`.
-- Registro desactualizado cerrado sin cambio de código.
+#### Cambios clave
+- `src/llm/tools.rs`: `AgentTool::WriteFile`, `RunCommand` + specs OpenAI + `content_arg()`, `cmd_arg()`, `requires_confirmation()`
+- `src/llm/chat_panel.rs`:
+  - `AiEvent::ConfirmWrite { path, new_content, result_tx }` / `ConfirmRun { cmd, result_tx }` / `UndoState { path, content }`
+  - `PanelState::AwaitingConfirm`
+  - `ConfirmDisplay::Write { path, diff, added, removed }` / `Run { cmd }` + `for_write()`
+  - `ChatPanel.confirm_display: Option<ConfirmDisplay>`
+  - `mark_awaiting_confirm()` / `resolve_confirm()`
+- `src/app/ui.rs`:
+  - `UiManager`: `pending_confirm_tx`, `undo_stack`, `pending_pty_run`
+  - `confirm_yes()` / `confirm_no()` / `cmd_undo_last_write()`
+  - Agent loop: `requires_confirmation()` branch → oneshot → await → write/run
+- `src/app/mod.rs`: `flush_pending_pty_run()` — envía cmd confirmado al PTY activo
+- `src/app/input/mod.rs`: y/Enter → `confirm_yes`, n/Esc → `confirm_no` en `AwaitingConfirm`
+- `src/app/renderer.rs`: confirmation view (diff lines +/-, prompt [y]/[n] rows, hints)
+- `src/ui/palette/actions.rs`: `Action::UndoLastWrite`
+- `config/default/keybinds.lua`: `<leader>z` → `UndoLastWrite`
 
 ## Build & Tests
 - **cargo build:** PASS (0 errors — 2026-04-07)
 - **cargo test:** 16/16 PASS
-- **cargo clippy --all-targets --all-features -- -D warnings:** PASS (0 errors, 0 warnings — 2026-04-07)
+- **cargo clippy --all-targets --all-features -- -D warnings:** PASS
 - **branch:** master
 
-## Session anterior (2026-04-07 — pane bug fixes)
+## Session anterior (2026-04-07 — pane focus + separator padding)
 
-### Leader+Shift keys (%, ", &) not working (RESUELTO)
-- Fix: al inicio del bloque leader, si `event.logical_key` es modificadora → `return` sin tocar `leader_active`.
+### TD-024 (P3) — Leader+h/j/k/l (RESUELTO)
+- `PaneManager::focus_dir(dir)` — centr-point geometry, nearest pane in direction.
+- `Action::FocusPane(FocusDir)` + `Mux::cmd_focus_pane_dir()`.
+- Keybinds `^B h/j/k/l` en `keybinds.lua` (config version 3).
 
-### Exit cerraba el tab completo (RESUELTO)
-- Fix: buscar el tab por `leaf_ids().contains(&terminal_id)`. Si hay múltiples panes → `close_specific(terminal_id)`.
-- Nuevo método: `PaneManager::close_specific(terminal_id)` en `src/ui/panes.rs`.
-
-## Session anterior (2026-04-06 — auditoría Codex + clippy clean)
-
-- TD-017..TD-022 resueltos (CloseTab cleanup, cmd_split atomicity, AI streaming por pane,
-  hot-reload consistente, config parsing completo, clippy -D warnings limpio).
-- TD-OP-01/02/03 resueltos (TextShaper Sync, atlas LRU, is_pua consolidada).
+### Separator padding fix
+- `PanePad` struct + `collect_leaf_infos_impl` — 1 celda de respiro en cada lado del separador.

@@ -1,14 +1,13 @@
 # Active Context
 
-**Current Focus:** Phase 2.5 P3 — LLM Tool Use: Write & Run
+**Current Focus:** Phase 3 P2 — Status Bar
 **Last Active:** 2026-04-07
 
 ## Estado actual del proyecto
 
-**Phase 1 COMPLETE. Phase 2 COMPLETE. Phase 2.5 P1+P2 COMPLETE. Phase 3 P1 implementada.**
+**Phase 1 COMPLETE. Phase 2 COMPLETE. Phase 2.5 COMPLETE (P1+P2+P3). Phase 3 P1 implementada.**
 **Deuda técnica: 0 ítems abiertos.**
 **Tests: 16/16 passing. `cargo clippy --all-targets --all-features -- -D warnings` PASA limpio.**
-**Multi-pane rendering COMPLETO (splits horizontal/vertical, separadores, resize automático).**
 
 ### Features verificados (2026-04-07)
 
@@ -23,63 +22,57 @@
 | LLM providers (OpenRouter/Ollama/LMStudio) | ✅ |
 | Historial de chat por pane | ✅ |
 | Tab bar (pill shape, SDF shader) | ✅ |
-| Shell exit cierra tab | ✅ |
+| Shell exit cierra tab (o solo el pane si hay más) | ✅ |
 | Selección doble/triple click | ✅ |
-| Selección con ratón (fix: `setMovableByWindowBackground: NO`) | ✅ |
 | Context menu (right-click: Copy/Paste/Clear) | ✅ |
-| Keybinds en command palette (alineados derecha) | ✅ |
-| Default configs con todos los campos del schema | ✅ |
+| Keybinds en command palette | ✅ |
+| Default configs completas | ✅ |
 | Emoji / color glyph rendering | ✅ |
-| Phase 2.5 P1 — file context attachment (AGENTS.md, file picker) | ✅ |
+| Phase 2.5 P1 — file context + AGENTS.md + file picker | ✅ |
 | Phase 2.5 P2 — LLM tool use (ReadFile, ListDir) | ✅ |
-| Multi-pane splits (^B % / ^B ") + separadores + resize | ✅ |
-| Leader+Shift keys (%, ", &) — fix modifier key consuming leader | ✅ |
-| Pane exit closes solo el pane (no el tab completo) | ✅ |
-| **Leader+h/j/k/l — vim-style pane focus navigation (TD-024)** | ✅ |
-| **1-cell padding entre contenido y separadores de pane** | ✅ |
+| Phase 2.5 P3 — WriteFile + RunCommand + undo | ✅ |
+| Multi-pane splits + separadores + padding | ✅ |
+| Leader+h/j/k/l — vim-style pane focus | ✅ |
 
-### Deuda técnica — CERO ítems abiertos
-
-## Siguiente: Phase 2.5 P3 — Tool Use: Write & Run
+## Siguiente: Phase 3 P2 — Status Bar
 
 ### Deliverables pendientes
-- [ ] `WriteFile { path, content }` — LLM propone reemplazo completo de archivo
-- [ ] `ApplyDiff { path, diff }` — LLM propone patch unificado
-- [ ] Preview del diff inline en el panel (`+`/`-` con colores)
-- [ ] Confirmación `[y] Apply  [n] Reject` antes de escribir al disco
-- [ ] `RunCommand { cmd }` — ejecuta en PTY activo tras confirmación
-- [ ] Undo de un paso (`<leader>z` restaura el archivo original en memoria)
+- [ ] Status bar engine (lua-line style): enable/disable desde Lua + command palette
+- [ ] Widgets built-in: `mode`, `cwd`, `git_branch`, `time`, `exit_code`
+- [ ] Lua API: `petruterm.statusbar.register_widget({ name, render })`
+- [ ] Posición configurable (`top` / `bottom`)
 
-## Keybinds (tmux-aligned)
+## Keybinds actuales
 
 | Tecla | Acción |
 |-------|--------|
 | `^B c` | New tab |
 | `^B &` | Close tab |
-| `^B n` | Next tab |
-| `^B b` | Prev tab |
+| `^B n/b` | Next/prev tab |
 | `^B %` | Split horizontal |
 | `^B "` | Split vertical |
 | `^B x` | Close pane |
 | `^B h/j/k/l` | Focus pane left/down/up/right |
 | `^B a` | AI panel |
+| `^B e/f` | Explain/Fix last output |
+| `^B z` | Undo last write |
 | `^B o` | Command palette |
 | `Ctrl+Space` | Inline AI block |
-| Right-click | Context menu (Copy/Paste/Clear) |
+| Right-click | Context menu |
 
-## Archivos clave
+## Archivos clave (Phase 2.5 P3)
 
 | Archivo | Propósito |
 |---------|-----------|
-| `src/ui/panes.rs` | `PaneManager`, `PanePad`, `focus_dir()`, `pane_infos()` con inset |
-| `src/ui/palette/actions.rs` | `Action::FocusPane(FocusDir)`, `built_in_actions()` |
-| `src/llm/tools.rs` | `AgentTool`, `execute_tool()` (CWD sandbox) |
-| `src/llm/chat_panel.rs` | `ChatPanel`, historial, `last_assistant_command()` |
-| `src/app/ui.rs` | `UiManager` (palette, context_menu, panels, ai_block) |
-| `src/app/mux.rs` | `cmd_focus_pane_dir()` |
-| `src/app/mod.rs` | Event loop, mouse handling, context menu dispatch |
-| `src/app/renderer.rs` | `build_palette_instances`, `build_context_menu_instances` |
-| `src/ui/context_menu.rs` | `ContextMenu`, `ContextAction` |
-| `src/renderer/atlas.rs` | `GlyphAtlas` (4096px, epoch LRU) |
-| `src/font/shaper.rs` | `TextShaper`, `is_pua()` (consolidada) |
-| `src/config/mod.rs` | `ensure_default_configs()` (idempotente, cada arranque) |
+| `src/llm/diff.rs` | LCS line diff + compress_diff |
+| `src/llm/tools.rs` | WriteFile, RunCommand + requires_confirmation() |
+| `src/llm/chat_panel.rs` | ConfirmWrite/ConfirmRun events, AwaitingConfirm state, ConfirmDisplay |
+| `src/app/ui.rs` | confirm_yes/no, undo_stack, pending_pty_run, agent loop |
+| `src/app/mod.rs` | flush_pending_pty_run() |
+| `src/app/renderer.rs` | Confirmation view con diff +/- coloreado |
+| `src/app/input/mod.rs` | y/n/Enter/Esc en AwaitingConfirm |
+
+## Pendiente después de Status Bar
+
+- Phase 3 P3: Snippets, Starship, temas built-in
+- Phase 4: Plugin ecosystem (lazy.nvim-style)
