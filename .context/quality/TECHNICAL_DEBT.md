@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-04-06
-**Open Items:** 0
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0
+**Last Updated:** 2026-04-07
+**Open Items:** 2
+**Critical (P0):** 0 | **P1:** 1 | **P2:** 0 | **P3:** 1
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -25,7 +25,7 @@
 
 ## P1 - High Priority
 
-- _None_
+- **TD-023** (P1): Window drag interferes with text selection. `setMovableByWindowBackground: YES` is set on the custom title bar, which makes click-drag on the terminal area move the window instead of creating a text selection. Root: `setMovableByWindowBackground` applies to the entire window content area, not just the title bar region. Fix candidates: (a) set `setMovableByWindowBackground: NO` and implement a dedicated drag region (top ~60px) via `hitTest:withEvent:` override or a transparent drag-only NSView overlaid on the traffic-light area; (b) detect drag-start position in `MouseInput` — if `y < tab_bar_bottom`, initiate window drag via `window.drag_window()`; otherwise let it be a selection. **Priority: high** — the previous fix (`setMovableByWindowBackground: NO`) solved selection but broke title-bar dragging.
 
 ---
 
@@ -37,7 +37,7 @@
 
 ## P3 - Low Priority
 
-- _None_
+- **TD-024** (P3): Implement `Leader+h/j/k/l` vim-style pane focus navigation. Multi-pane rendering is now complete; the missing piece is focus movement by direction. The `FocusDir` enum (`Left/Right/Up/Down`) already exists in `src/ui/panes.rs`. Needs: (a) a `PaneManager::focus_dir(dir: FocusDir)` method that picks the nearest pane in the given direction using rect center-point geometry; (b) four keybinds (`h`, `j`, `k`, `l`) wired to a new `Action::FocusPane(FocusDir)` variant; (c) add to `petruterm.action` table in `lua.rs`; (d) default bindings in `config/default/keybinds.lua` with version bump.
 
 ---
 
