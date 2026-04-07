@@ -11,7 +11,7 @@ use crate::renderer::GpuRenderer;
 use crate::term::{CursorInfo, CursorShape};
 use crate::term::color::resolve_color;
 use alacritty_terminal::vte::ansi::Color as AnsiColor;
-use crate::llm::chat_panel::{ChatPanel, PanelState};
+use crate::llm::chat_panel::ChatPanel;
 use crate::llm::ai_block::{AiBlock, AiState, AI_BLOCK_ROWS};
 use crate::ui::{CommandPalette, PaneSeparator, Tab};
 
@@ -431,7 +431,8 @@ impl RenderContext {
         screen_rows: usize,
         cursor_blink_on: bool,
     ) {
-        use crate::llm::chat_panel::{word_wrap, wrap_input, MAX_FILE_ROWS};
+        use crate::llm::chat_panel::{word_wrap, wrap_input, ConfirmDisplay, MAX_FILE_ROWS, PanelState};
+        use crate::llm::diff::DiffKind;
         use crate::llm::ChatRole;
 
         let panel_cols = panel.width_cols as usize;
@@ -517,6 +518,59 @@ impl RenderContext {
                     self.push_shaped_row(&text, fg, panel_bg, row, co, panel_cols, font);
                 } else {
                     self.push_shaped_row("│", SEP_FG, panel_bg, row, co, panel_cols, font);
+                }
+            }
+        } else if matches!(panel.state, PanelState::AwaitingConfirm) {
+            // ── Confirmation view: diff preview + [y]/[n] ────────────────────
+            const ADD_FG:  [f32; 4] = [0.50, 0.98, 0.60, 1.0]; // green
+            const REM_FG:  [f32; 4] = [1.00, 0.47, 0.47, 1.0]; // red
+            const CTX_FG2: [f32; 4] = [0.60, 0.60, 0.70, 1.0]; // dimmed context
+
+            match panel.confirm_display.as_ref() {
+                Some(ConfirmDisplay::Write { path, diff, added, removed }) => {
+                    // Row 1: title
+                    let rel_path = std::path::Path::new(path)
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or(path.as_str());
+                    let title_line = format!("│ Write: {} (+{added} -{removed})", rel_path);
+                    let title_trimmed: String = title_line.chars().take(panel_cols).collect();
+                    self.push_shaped_row(&title_trimmed, BORDER_FG, panel_bg, 1, co, panel_cols, font);
+
+                    // Rows 2..sep_row: diff lines
+                    let diff_rows = sep_row.saturating_sub(2);
+                    for i in 0..diff_rows {
+                        let row = 2 + i;
+                        if let Some(dl) = diff.get(i) {
+                            let (prefix, fg) = match dl.kind {
+                                DiffKind::Added   => ("│ + ", ADD_FG),
+                                DiffKind::Removed => ("│ - ", REM_FG),
+                                DiffKind::Context => ("│   ", CTX_FG2),
+                            };
+                            let max_w = panel_cols.saturating_sub(prefix.chars().count());
+                            let text: String = dl.text.chars().take(max_w).collect();
+                            let line = format!("{prefix}{text}");
+                            self.push_shaped_row(&line, fg, panel_bg, row, co, panel_cols, font);
+                        } else {
+                            self.push_shaped_row("│", SEP_FG, panel_bg, row, co, panel_cols, font);
+                        }
+                    }
+                }
+                Some(ConfirmDisplay::Run { cmd }) => {
+                    // Row 1: title
+                    self.push_shaped_row("│ Run command:", BORDER_FG, panel_bg, 1, co, panel_cols, font);
+                    // Row 2: command
+                    let cmd_line = format!("│   {}", cmd.chars().take(panel_cols.saturating_sub(5)).collect::<String>());
+                    self.push_shaped_row(&cmd_line, ADD_FG, panel_bg, 2, co, panel_cols, font);
+                    // Rest: empty
+                    for row in 3..sep_row {
+                        self.push_shaped_row("│", SEP_FG, panel_bg, row, co, panel_cols, font);
+                    }
+                }
+                None => {
+                    for row in 1..sep_row {
+                        self.push_shaped_row("│", SEP_FG, panel_bg, row, co, panel_cols, font);
+                    }
                 }
             }
         } else {
@@ -614,18 +668,37 @@ impl RenderContext {
         let sep = format!("│{}", "─".repeat(panel_cols.saturating_sub(1)));
         self.push_shaped_row(&sep, SEP_FG, panel_bg, sep_row, co, panel_cols, font);
 
-        // ── Input field ──────────────────────────────────────────────────────
-        let input_inner_w = panel_cols.saturating_sub(5);
-        let mut input_display = panel.input.clone();
-        if panel_focused && !file_picker_focused && cursor_blink_on && panel.is_idle() {
-            input_display.push('\u{258b}');
+        // ── Input field (or confirmation prompt) ─────────────────────────────
+        if matches!(panel.state, PanelState::AwaitingConfirm) {
+            // Show confirmation buttons instead of the normal input
+            let confirm_kind = match panel.confirm_display.as_ref() {
+                Some(ConfirmDisplay::Run { .. }) => "run",
+                _ => "write",
+            };
+            let (yes_label, no_label) = if confirm_kind == "run" {
+                ("[y] Run", "[n] Cancel")
+            } else {
+                ("[y] Apply", "[n] Reject")
+            };
+            const CONFIRM_YES: [f32; 4] = [0.50, 0.98, 0.60, 1.0]; // green
+            const CONFIRM_NO:  [f32; 4] = [1.00, 0.47, 0.47, 1.0]; // red
+            let yes_line = format!("│  {yes_label}");
+            let no_line  = format!("│  {no_label}");
+            self.push_shaped_row(&yes_line, CONFIRM_YES, panel_bg, input_row1, co, panel_cols, font);
+            self.push_shaped_row(&no_line,  CONFIRM_NO,  panel_bg, input_row2, co, panel_cols, font);
+        } else {
+            let input_inner_w = panel_cols.saturating_sub(5);
+            let mut input_display = panel.input.clone();
+            if panel_focused && !file_picker_focused && cursor_blink_on && panel.is_idle() {
+                input_display.push('\u{258b}');
+            }
+            let input_lines = wrap_input(&input_display, input_inner_w);
+            let inp_fg = if panel_focused && !file_picker_focused { input_fg } else { DIM_FG };
+            let line1 = format!("│ \u{25b8}  {}", input_lines.first().cloned().unwrap_or_default());
+            let line2 = format!("│    {}", input_lines.get(1).cloned().unwrap_or_default());
+            self.push_shaped_row(&line1, inp_fg, panel_bg, input_row1, co, panel_cols, font);
+            self.push_shaped_row(&line2, inp_fg, panel_bg, input_row2, co, panel_cols, font);
         }
-        let input_lines = wrap_input(&input_display, input_inner_w);
-        let inp_fg = if panel_focused && !file_picker_focused { input_fg } else { DIM_FG };
-        let line1 = format!("│ \u{25b8}  {}", input_lines.first().cloned().unwrap_or_default());
-        let line2 = format!("│    {}", input_lines.get(1).cloned().unwrap_or_default());
-        self.push_shaped_row(&line1, inp_fg, panel_bg, input_row1, co, panel_cols, font);
-        self.push_shaped_row(&line2, inp_fg, panel_bg, input_row2, co, panel_cols, font);
 
         // ── Key hints + token count ───────────────────────────────────────────
         let tokens = panel.estimated_tokens();
@@ -646,6 +719,8 @@ impl RenderContext {
                     => "│ streaming\u{2026}",
                 PanelState::Error(_)
                     => "│ Esc: dismiss",
+                PanelState::AwaitingConfirm
+                    => "│ y/Enter: confirm   n/Esc: reject",
                 PanelState::Hidden => "│",
             };
             format!("{base}   Tokens: {tokens}")

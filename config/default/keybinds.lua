@@ -24,6 +24,7 @@ function module.apply_to_config(config)
     -- ── AI context actions ─────────────────────────────────────────────────
     { mods = "LEADER", key = "e",  action = petruterm.action.ExplainLastOutput },
     { mods = "LEADER", key = "f",  action = petruterm.action.FixLastError },
+    { mods = "LEADER", key = "z",  action = petruterm.action.UndoLastWrite },
 
     -- ── Tabs (tmux-style) ─────────────────────────────────────────────────
     { mods = "LEADER", key = "c",  action = petruterm.action.NewTab },

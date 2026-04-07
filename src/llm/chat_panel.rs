@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use crate::llm::{ChatMessage, ChatRole};
+use crate::llm::diff::{DiffLine, diff_lines, compress_diff};
 
 /// Default panel width in terminal cell columns.
 pub const PANEL_COLS: u16 = 55;
@@ -13,6 +14,53 @@ pub enum AiEvent {
     Error(String),
     /// Agent called a tool. `done=false` = started, `done=true` = finished.
     ToolStatus { tool: String, path: String, done: bool },
+    /// LLM wants to write a file — show diff and ask user to confirm.
+    ConfirmWrite {
+        path: PathBuf,
+        new_content: String,
+        result_tx: tokio::sync::oneshot::Sender<bool>,
+    },
+    /// LLM wants to run a command — ask user to confirm.
+    ConfirmRun {
+        cmd: String,
+        result_tx: tokio::sync::oneshot::Sender<bool>,
+    },
+    /// Original file content to store for single-step undo (sent before writing).
+    UndoState { path: PathBuf, content: String },
+}
+
+/// Data displayed during a confirmation prompt (sender lives in UiManager).
+pub enum ConfirmDisplay {
+    Write {
+        /// Display path (relative or absolute as string).
+        path: String,
+        /// Pre-computed compressed diff for rendering.
+        diff: Vec<DiffLine>,
+        /// Number of added lines.
+        added: usize,
+        /// Number of removed lines.
+        removed: usize,
+    },
+    Run {
+        cmd: String,
+    },
+}
+
+impl ConfirmDisplay {
+    /// Build a `ConfirmDisplay::Write` by computing the diff against the current file.
+    pub fn for_write(path: &Path, new_content: &str) -> Self {
+        let old_content = std::fs::read_to_string(path).unwrap_or_default();
+        let full_diff = diff_lines(&old_content, new_content);
+        let added   = full_diff.iter().filter(|l| l.kind == crate::llm::diff::DiffKind::Added).count();
+        let removed = full_diff.iter().filter(|l| l.kind == crate::llm::diff::DiffKind::Removed).count();
+        let diff = compress_diff(&full_diff, 2);
+        ConfirmDisplay::Write {
+            path: path.display().to_string(),
+            diff,
+            added,
+            removed,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -25,6 +73,8 @@ pub enum PanelState {
     /// Tokens are arriving.
     Streaming,
     Error(String),
+    /// LLM proposed a file write or command — waiting for y/n from the user.
+    AwaitingConfirm,
 }
 
 pub struct ChatPanel {
@@ -49,6 +99,10 @@ pub struct ChatPanel {
     /// Cached char counts for each attached file (index-parallel to attached_files).
     attached_file_chars: Vec<usize>,
 
+    // ── Confirmation prompt ───────────────────────────────────────────────────
+    /// Display data for the current confirmation prompt (write/run). Cleared on accept/reject.
+    pub confirm_display: Option<ConfirmDisplay>,
+
     // ── File picker ───────────────────────────────────────────────────────────
     /// Whether the file picker overlay is open.
     pub file_picker_open: bool,
@@ -72,6 +126,7 @@ impl ChatPanel {
             dirty: true,
             attached_files: Vec::new(),
             attached_file_chars: Vec::new(),
+            confirm_display: None,
             file_picker_open: false,
             file_picker_query: String::new(),
             file_picker_items: Vec::new(),
@@ -190,6 +245,20 @@ impl ChatPanel {
             self.state = PanelState::Idle;
             self.dirty = true;
         }
+    }
+
+    /// Transition to confirmation mode with the given display data.
+    pub fn mark_awaiting_confirm(&mut self, display: ConfirmDisplay) {
+        self.state = PanelState::AwaitingConfirm;
+        self.confirm_display = Some(display);
+        self.dirty = true;
+    }
+
+    /// Clear confirmation state and return to Loading (tokio task will continue).
+    pub fn resolve_confirm(&mut self) {
+        self.confirm_display = None;
+        self.state = PanelState::Loading;
+        self.dirty = true;
     }
 
     /// Scroll history toward older messages (up).

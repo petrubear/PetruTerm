@@ -99,6 +99,7 @@ fn inject_petruterm_global(lua: &Lua) -> LuaResult<()> {
         "ToggleAiMode",   // legacy alias kept for compatibility
         "ExplainLastOutput",
         "FixLastError",
+        "UndoLastWrite",
         "SplitHorizontal",
         "SplitVertical",
         "ActivatePane",

@@ -99,6 +99,17 @@ impl App {
         self.ui.panel().width_cols as f32 * cell_w as f32
     }
 
+    /// Forward a `run_command` confirmation to the active PTY and clear the pending field.
+    fn flush_pending_pty_run(&mut self) {
+        if let Some(cmd) = self.ui.pending_pty_run.take() {
+            if let Some(terminal) = self.mux.active_terminal() {
+                let mut data = cmd.into_bytes();
+                data.push(b'\n');
+                terminal.write_input(&data);
+            }
+        }
+    }
+
     fn cell_dims(&self) -> (u16, u16) {
         self.render_ctx.as_ref()
             .map(|rc| (rc.shaper.cell_width as u16, rc.shaper.cell_height as u16))
@@ -222,6 +233,7 @@ impl ApplicationHandler<()> for App {
 
         // AI events are low-frequency; render immediately.
         let ai_needs_redraw = self.ui.poll_ai_events() || self.ui.poll_ai_block_events();
+        self.flush_pending_pty_run();
         if ai_needs_redraw {
             if let Some(w) = &self.window { w.request_redraw(); }
         }
@@ -266,6 +278,7 @@ impl ApplicationHandler<()> for App {
                 if self.close_exited_terminals(exited) { event_loop.exit(); return; }
                 self.ui.poll_ai_events();
                 self.ui.poll_ai_block_events();
+                self.flush_pending_pty_run();
 
                 // Sync per-pane chat panel to the focused terminal.
                 let terminal_id = self.mux.focused_terminal_id();
@@ -614,6 +627,7 @@ impl ApplicationHandler<()> for App {
 
         if self.ui.poll_ai_events()       { if let Some(w) = &self.window { w.request_redraw(); } }
         if self.ui.poll_ai_block_events() { if let Some(w) = &self.window { w.request_redraw(); } }
+        self.flush_pending_pty_run();
         if self.input.update_cursor_blink() {
             // Panel input cursor blinks — mark dirty so cached instances are rebuilt.
             if self.ui.is_panel_visible() && self.ui.panel_focused {

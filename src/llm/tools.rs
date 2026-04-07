@@ -6,14 +6,18 @@ use serde_json::Value;
 pub enum AgentTool {
     ReadFile,
     ListDir,
+    WriteFile,
+    RunCommand,
 }
 
 impl AgentTool {
     #[allow(dead_code)]
     pub fn name(&self) -> &'static str {
         match self {
-            AgentTool::ReadFile => "read_file",
-            AgentTool::ListDir  => "list_dir",
+            AgentTool::ReadFile  => "read_file",
+            AgentTool::ListDir   => "list_dir",
+            AgentTool::WriteFile => "write_file",
+            AgentTool::RunCommand => "run_command",
         }
     }
 
@@ -54,12 +58,50 @@ impl AgentTool {
                     }
                 }
             }),
+            AgentTool::WriteFile => serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": "write_file",
+                    "description": "Overwrite a file with new content. Always shows a diff preview and asks the user to confirm before writing.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "path": {
+                                "type": "string",
+                                "description": "Relative path to the file from the working directory."
+                            },
+                            "content": {
+                                "type": "string",
+                                "description": "Complete new content for the file."
+                            }
+                        },
+                        "required": ["path", "content"]
+                    }
+                }
+            }),
+            AgentTool::RunCommand => serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": "run_command",
+                    "description": "Run a shell command in the active terminal. Always asks the user to confirm before executing.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "cmd": {
+                                "type": "string",
+                                "description": "The shell command to execute."
+                            }
+                        },
+                        "required": ["cmd"]
+                    }
+                }
+            }),
         }
     }
 
     /// All available tools.
     pub fn all() -> Vec<AgentTool> {
-        vec![AgentTool::ReadFile, AgentTool::ListDir]
+        vec![AgentTool::ReadFile, AgentTool::ListDir, AgentTool::WriteFile, AgentTool::RunCommand]
     }
 
     /// Spec array ready to include in the API request.
@@ -78,11 +120,28 @@ pub struct ToolCall {
 }
 
 impl ToolCall {
+    fn args_json(&self) -> Option<Value> {
+        serde_json::from_str(&self.arguments).ok()
+    }
+
     /// Extract the `path` argument, if present.
     pub fn path_arg(&self) -> Option<String> {
-        serde_json::from_str::<Value>(&self.arguments)
-            .ok()
-            .and_then(|v| v.get("path").and_then(|p| p.as_str()).map(String::from))
+        self.args_json().and_then(|v| v.get("path").and_then(|p| p.as_str()).map(String::from))
+    }
+
+    /// Extract the `content` argument (for `write_file`), if present.
+    pub fn content_arg(&self) -> Option<String> {
+        self.args_json().and_then(|v| v.get("content").and_then(|p| p.as_str()).map(String::from))
+    }
+
+    /// Extract the `cmd` argument (for `run_command`), if present.
+    pub fn cmd_arg(&self) -> Option<String> {
+        self.args_json().and_then(|v| v.get("cmd").and_then(|p| p.as_str()).map(String::from))
+    }
+
+    /// Returns true if this tool call requires user confirmation before execution.
+    pub fn requires_confirmation(&self) -> bool {
+        matches!(self.name.as_str(), "write_file" | "run_command")
     }
 }
 
@@ -144,6 +203,10 @@ pub fn execute_tool(call: &ToolCall, cwd: &Path) -> String {
                 }
                 _ => format!("Error: path '{rel}' is outside the working directory"),
             }
+        }
+        // write_file and run_command are handled by the agent loop (require confirmation).
+        "write_file" | "run_command" => {
+            "Error: this tool must be handled by the agent loop, not execute_tool.".to_string()
         }
         other => format!("Error: unknown tool '{other}'"),
     }

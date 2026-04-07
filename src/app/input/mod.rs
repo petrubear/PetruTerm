@@ -233,6 +233,18 @@ impl InputHandler {
 
         // ── Chat panel input ─────────────────────────────────────────────────
         if ui.is_panel_visible() && ui.panel_focused && !cmd {
+            // ── Confirmation prompt mode ──────────────────────────────────────
+            if matches!(ui.panel().state, crate::llm::chat_panel::PanelState::AwaitingConfirm) {
+                match &event.logical_key {
+                    Key::Character(s) if s.as_str() == "y" => ui.confirm_yes(),
+                    Key::Named(NamedKey::Enter) => ui.confirm_yes(),
+                    Key::Character(s) if s.as_str() == "n" => ui.confirm_no(),
+                    Key::Named(NamedKey::Escape) => ui.confirm_no(),
+                    _ => {}
+                }
+                return;
+            }
+
             // ── File picker mode ──────────────────────────────────────────────
             if ui.file_picker_focused {
                 match &event.logical_key {

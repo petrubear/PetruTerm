@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::path::PathBuf;
 use crossbeam_channel::{Receiver, Sender};
 use crate::config::{self, Config};
-use crate::llm::chat_panel::{AiEvent, ChatPanel};
+use crate::llm::chat_panel::{AiEvent, ChatPanel, ConfirmDisplay};
 use crate::llm::ai_block::AiBlock;
 use crate::llm::LlmProvider;
 use crate::llm::shell_context::ShellContext;
@@ -38,6 +38,14 @@ pub struct UiManager {
     /// TD-019: channel carries (panel_id, event) so tokens always reach the originating panel.
     pub ai_tx: Sender<(usize, AiEvent)>,
     pub ai_rx: Receiver<(usize, AiEvent)>,
+
+    // ── Confirmation (write_file / run_command) ───────────────────────────────
+    /// Oneshot sender to complete a pending confirmation. Consumed on y/n.
+    pending_confirm_tx: Option<tokio::sync::oneshot::Sender<bool>>,
+    /// Undo stack: (path, original_content) pairs, newest first.
+    pub undo_stack: Vec<(PathBuf, String)>,
+    /// A confirmed run_command to forward to the active PTY. Consumed by app.rs.
+    pub pending_pty_run: Option<String>,
 }
 
 impl UiManager {
@@ -76,6 +84,9 @@ impl UiManager {
             tokio_rt,
             ai_tx,
             ai_rx,
+            pending_confirm_tx: None,
+            undo_stack: Vec::new(),
+            pending_pty_run: None,
         }
     }
 
@@ -133,6 +144,18 @@ impl UiManager {
                 AiEvent::ToolStatus { tool, path, done } => {
                     panel.set_tool_status(&tool, &path, done);
                 }
+                AiEvent::ConfirmWrite { path, new_content, result_tx } => {
+                    let display = ConfirmDisplay::for_write(&path, &new_content);
+                    panel.mark_awaiting_confirm(display);
+                    self.pending_confirm_tx = Some(result_tx);
+                }
+                AiEvent::ConfirmRun { cmd, result_tx } => {
+                    panel.mark_awaiting_confirm(ConfirmDisplay::Run { cmd });
+                    self.pending_confirm_tx = Some(result_tx);
+                }
+                AiEvent::UndoState { path, content } => {
+                    self.undo_stack.push((path, content));
+                }
             }
         }
         changed
@@ -150,10 +173,53 @@ impl UiManager {
                     log::error!("AI block error: {e}");
                     self.ai_block.mark_error(e);
                 }
-                AiEvent::ToolStatus { .. } => {} // AI block doesn't show tool status
+                AiEvent::ToolStatus { .. }
+                | AiEvent::ConfirmWrite { .. }
+                | AiEvent::ConfirmRun { .. }
+                | AiEvent::UndoState { .. } => {} // AI block doesn't handle these
             }
         }
         changed
+    }
+
+    // ── Confirmation helpers ──────────────────────────────────────────────────
+
+    /// User pressed [y] — apply the pending write/run.
+    pub fn confirm_yes(&mut self) {
+        if let Some(tx) = self.pending_confirm_tx.take() {
+            // If it's a run_command, extract the cmd and queue it for PTY.
+            if let Some(crate::llm::chat_panel::ConfirmDisplay::Run { cmd }) =
+                self.panel().confirm_display.as_ref()
+            {
+                self.pending_pty_run = Some(cmd.clone());
+            }
+            let _ = tx.send(true);
+            self.panel_mut().resolve_confirm();
+        }
+    }
+
+    /// User pressed [n] — reject the pending write/run.
+    pub fn confirm_no(&mut self) {
+        if let Some(tx) = self.pending_confirm_tx.take() {
+            let _ = tx.send(false);
+            self.panel_mut().resolve_confirm();
+        }
+    }
+
+    /// Undo the last file write by restoring the saved original content.
+    pub fn cmd_undo_last_write(&mut self) {
+        if let Some((path, content)) = self.undo_stack.pop() {
+            match std::fs::write(&path, &content) {
+                Ok(_) => {
+                    let msg = format!("↩ Restored {}", path.display());
+                    self.panel_mut().messages.push(crate::llm::ChatMessage::assistant(msg));
+                    self.panel_mut().dirty = true;
+                }
+                Err(e) => {
+                    self.panel_mut().mark_error(format!("Undo failed: {e}"));
+                }
+            }
+        }
     }
 
     // ── Chat panel operations ─────────────────────────────────────────────────
@@ -235,23 +301,72 @@ impl UiManager {
                         api_msgs.push(assistant_msg);
 
                         for call in &calls {
-                            let path = call.path_arg().unwrap_or_default();
+                            let path_str = call.path_arg().unwrap_or_default();
 
-                            let _ = tx.send((panel_id, AiEvent::ToolStatus {
-                                tool: call.name.clone(),
-                                path: path.clone(),
-                                done: false,
-                            }));
-                            let _ = wakeup_proxy.send_event(());
-
-                            let result = execute_tool(call, &cwd);
-
-                            let _ = tx.send((panel_id, AiEvent::ToolStatus {
-                                tool: call.name.clone(),
-                                path: path.clone(),
-                                done: true,
-                            }));
-                            let _ = wakeup_proxy.send_event(());
+                            let result = if call.requires_confirmation() {
+                                // ── Tools that need user confirmation ────────────────────
+                                if call.name == "write_file" {
+                                    match call.content_arg() {
+                                        None => "Error: missing 'content' argument.".to_string(),
+                                        Some(new_content) => {
+                                            let (confirm_tx, confirm_rx) =
+                                                tokio::sync::oneshot::channel::<bool>();
+                                            let abs = cwd.join(&path_str);
+                                            let _ = tx.send((panel_id, AiEvent::ConfirmWrite {
+                                                path: abs.clone(),
+                                                new_content: new_content.clone(),
+                                                result_tx: confirm_tx,
+                                            }));
+                                            let _ = wakeup_proxy.send_event(());
+                                            match confirm_rx.await {
+                                                Ok(true) => {
+                                                    let old = std::fs::read_to_string(&abs)
+                                                        .unwrap_or_default();
+                                                    let _ = tx.send((panel_id, AiEvent::UndoState {
+                                                        path: abs.clone(),
+                                                        content: old,
+                                                    }));
+                                                    match std::fs::write(&abs, &new_content) {
+                                                        Ok(_) => "File written successfully.".to_string(),
+                                                        Err(e) => format!("Error writing file: {e}"),
+                                                    }
+                                                }
+                                                _ => "Write rejected by user.".to_string(),
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    // run_command
+                                    let cmd = call.cmd_arg().unwrap_or_default();
+                                    let (confirm_tx, confirm_rx) =
+                                        tokio::sync::oneshot::channel::<bool>();
+                                    let _ = tx.send((panel_id, AiEvent::ConfirmRun {
+                                        cmd,
+                                        result_tx: confirm_tx,
+                                    }));
+                                    let _ = wakeup_proxy.send_event(());
+                                    match confirm_rx.await {
+                                        Ok(true) => "Command sent to terminal.".to_string(),
+                                        _ => "Command rejected by user.".to_string(),
+                                    }
+                                }
+                            } else {
+                                // ── Read-only tools — execute immediately ─────────────────
+                                let _ = tx.send((panel_id, AiEvent::ToolStatus {
+                                    tool: call.name.clone(),
+                                    path: path_str.clone(),
+                                    done: false,
+                                }));
+                                let _ = wakeup_proxy.send_event(());
+                                let r = execute_tool(call, &cwd);
+                                let _ = tx.send((panel_id, AiEvent::ToolStatus {
+                                    tool: call.name.clone(),
+                                    path: path_str.clone(),
+                                    done: true,
+                                }));
+                                let _ = wakeup_proxy.send_event(());
+                                r
+                            };
 
                             // Add tool result to history.
                             api_msgs.push(serde_json::json!({
@@ -486,6 +601,7 @@ impl UiManager {
             }
             Action::ExplainLastOutput => self.explain_last_output(mux, wakeup_proxy),
             Action::FixLastError      => self.fix_last_error(mux, wakeup_proxy),
+            Action::UndoLastWrite     => self.cmd_undo_last_write(),
         }
     }
 }

@@ -41,6 +41,7 @@ pub enum Action {
     DisableAiFeatures,
     ExplainLastOutput,
     FixLastError,
+    UndoLastWrite,
 }
 
 impl std::str::FromStr for Action {
@@ -71,6 +72,7 @@ impl std::str::FromStr for Action {
             "DisableAiFeatures" => Ok(Action::DisableAiFeatures),
             "ExplainLastOutput" => Ok(Action::ExplainLastOutput),
             "FixLastError"      => Ok(Action::FixLastError),
+            "UndoLastWrite"     => Ok(Action::UndoLastWrite),
             _                   => Err(()),
         }
     }
@@ -112,5 +114,6 @@ pub fn built_in_actions(config: &Config) -> Vec<PaletteAction> {
         PaletteAction { name: "Disable AI Features".into(),    action: Action::DisableAiFeatures,  keybind: None },
         PaletteAction { name: "Explain Last Output".into(),    action: Action::ExplainLastOutput,  keybind: kb("ExplainLastOutput") },
         PaletteAction { name: "Fix Last Error".into(),         action: Action::FixLastError,       keybind: kb("FixLastError") },
+        PaletteAction { name: "Undo Last Write".into(),        action: Action::UndoLastWrite,      keybind: kb("UndoLastWrite") },
     ]
 }
