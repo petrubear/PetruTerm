@@ -45,6 +45,7 @@ pub enum Action {
     UndoLastWrite,
     ToggleStatusBar,
     RenameTab,
+    GitCheckout(String),
 }
 
 impl std::str::FromStr for Action {

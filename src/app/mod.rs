@@ -608,6 +608,35 @@ impl ApplicationHandler<()> for App {
                             if let Some(w) = &self.window { w.request_redraw(); }
                             return;
                         }
+                        // Status bar click — hit-test segments.
+                        if self.config.status_bar.enabled {
+                            let sb_h = self.status_bar_height_px() as f64;
+                            let win_h = self.render_ctx.as_ref().map(|rc| rc.renderer.size().1 as f64).unwrap_or(0.0);
+                            let sb_bottom = win_h - self.config.window.padding.bottom as f64;
+                            let sb_top = sb_bottom - sb_h;
+                            if self.input.mouse_pos.1 >= sb_top && self.input.mouse_pos.1 < sb_bottom {
+                                let (cell_w, _) = self.cell_dims();
+                                let col = ((self.input.mouse_pos.0 - self.config.window.padding.left as f64) / cell_w as f64)
+                                    .floor().max(0.0) as usize;
+                                let total_cols = self.mux.active_terminal_size().0;
+                                let cwd = self.mux.active_cwd();
+                                let git_branch = self.ui.git_branch_cache.clone();
+                                let bar = crate::ui::status_bar::StatusBar::build(
+                                    false, false, &self.config.leader.key,
+                                    cwd.as_deref(), git_branch.as_deref(), None,
+                                );
+                                if let Some(crate::ui::status_bar::SegmentKind::GitBranch) = bar.click_kind(col, total_cols) {
+                                    if let Some(cwd_path) = self.mux.active_cwd()
+                                        .or_else(|| std::env::current_dir().ok())
+                                    {
+                                        self.ui.open_branch_picker(&cwd_path);
+                                        if let Some(w) = &self.window { w.request_redraw(); }
+                                    }
+                                }
+                                return;
+                            }
+                        }
+
                         // Separator drag: if click is within ±3px of a separator, start drag.
                         let sep_hit = if !in_panel {
                             self.separator_at_pixel(self.input.mouse_pos.0 as f32, self.input.mouse_pos.1 as f32)

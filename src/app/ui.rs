@@ -285,6 +285,36 @@ impl UiManager {
         updated
     }
 
+    /// Open the command palette in branch-picker mode.
+    /// Lists local git branches synchronously (fast) and pre-populates the palette.
+    pub fn open_branch_picker(&mut self, cwd: &std::path::Path) {
+        use crate::ui::palette::{PaletteAction, Action};
+        let branches = self.tokio_rt.block_on(list_git_branches(cwd));
+        if branches.is_empty() { return; }
+        let current = self.git_branch_cache.as_deref().unwrap_or("").trim_end_matches('*');
+        let items: Vec<PaletteAction> = branches.into_iter().map(|b| {
+            let label = if b == current { format!("  {b}  ✓") } else { format!("  {b}") };
+            PaletteAction { name: label, action: Action::GitCheckout(b), keybind: None }
+        }).collect();
+        self.palette.open_with_items(items);
+    }
+
+    /// Run `git checkout <branch>` in `cwd` and invalidate the branch cache.
+    pub fn git_checkout(&mut self, branch: &str, cwd: &std::path::Path) {
+        let status = std::process::Command::new("git")
+            .args(["-C", &cwd.to_string_lossy(), "checkout", branch])
+            .status();
+        match status {
+            Ok(s) if s.success() => {
+                // Invalidate cache so the status bar refreshes immediately.
+                self.git_branch_cache = None;
+                self.git_branch_fetched_at = None;
+            }
+            Ok(s) => log::warn!("git checkout {branch} exited with {s}"),
+            Err(e) => log::error!("git checkout {branch} failed: {e}"),
+        }
+    }
+
     /// Undo the last file write by restoring the saved original content.
     pub fn cmd_undo_last_write(&mut self) {
         if let Some((path, content)) = self.undo_stack.pop() {
@@ -750,6 +780,12 @@ impl UiManager {
                     .unwrap_or_default();
                 self.start_tab_rename(&current);
             }
+            Action::GitCheckout(branch) => {
+                let cwd = mux.active_cwd()
+                    .or_else(|| std::env::current_dir().ok())
+                    .unwrap_or_default();
+                self.git_checkout(&branch, &cwd);
+            }
         }
     }
 }
@@ -784,4 +820,24 @@ async fn fetch_git_branch(cwd: &std::path::Path) -> String {
         .unwrap_or(false);
 
     if dirty { format!("{branch}*") } else { branch }
+}
+
+/// Async helper: list local git branches for `cwd`.
+/// Returns branch names sorted alphabetically, empty vec if not a git repo.
+async fn list_git_branches(cwd: &std::path::Path) -> Vec<String> {
+    use tokio::process::Command;
+    let out = Command::new("git")
+        .args(["-C", &cwd.to_string_lossy(), "branch", "--format=%(refname:short)"])
+        .output()
+        .await
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .unwrap_or_default();
+    let mut branches: Vec<String> = out.lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect();
+    branches.sort();
+    branches
 }

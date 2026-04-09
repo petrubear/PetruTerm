@@ -12,6 +12,9 @@ use self::actions::built_in_actions;
 pub struct CommandPalette {
     /// All registered actions (built-in + plugin-registered in Phase 3).
     all_actions: Vec<PaletteAction>,
+    /// When Some, palette is in custom-items mode (e.g. branch picker).
+    /// Filter operates on this list instead of `all_actions`.
+    custom_items: Option<Vec<PaletteAction>>,
     /// Current search query.
     pub query: String,
     /// Filtered + scored results (sorted by score desc).
@@ -29,6 +32,7 @@ impl CommandPalette {
         let results = all_actions.clone();
         Self {
             all_actions,
+            custom_items: None,
             query: String::new(),
             results,
             selected: 0,
@@ -45,8 +49,19 @@ impl CommandPalette {
 
     /// Open the palette (reset state).
     pub fn open(&mut self) {
+        self.custom_items = None;
         self.query.clear();
         self.results = self.all_actions.clone();
+        self.selected = 0;
+        self.visible = true;
+    }
+
+    /// Open the palette pre-populated with a custom item list (e.g. git branches).
+    /// These items replace the normal action list for this session only.
+    pub fn open_with_items(&mut self, items: Vec<PaletteAction>) {
+        self.custom_items = Some(items.clone());
+        self.query.clear();
+        self.results = items;
         self.selected = 0;
         self.visible = true;
     }
@@ -55,6 +70,7 @@ impl CommandPalette {
     pub fn close(&mut self) {
         self.visible = false;
         self.query.clear();
+        self.custom_items = None;
     }
 
     /// Append a character to the search query and re-filter results.
@@ -100,13 +116,13 @@ impl CommandPalette {
     }
 
     fn filter(&mut self) {
+        let source = self.custom_items.as_ref().unwrap_or(&self.all_actions);
         if self.query.is_empty() {
-            self.results = self.all_actions.clone();
+            self.results = source.clone();
         } else {
             let query = &self.query;
             let matcher = &self.matcher;
-            let mut scored: Vec<(i64, &PaletteAction)> = self
-                .all_actions
+            let mut scored: Vec<(i64, &PaletteAction)> = source
                 .iter()
                 .filter_map(|a| matcher.fuzzy_match(&a.name, query).map(|s| (s, a)))
                 .collect();

@@ -1,11 +1,22 @@
 use std::time::SystemTime;
 
+/// Which logical widget a status bar segment represents.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SegmentKind {
+    Leader,
+    Cwd,
+    GitBranch,
+    ExitCode,
+    Time,
+}
+
 /// A single colored segment in the status bar.
 #[derive(Debug, Clone)]
 pub struct StatusBarSegment {
     pub text: String,
     pub fg: [f32; 4],
     pub bg: [f32; 4],
+    pub kind: SegmentKind,
 }
 
 /// Assembled status bar with left and right segment groups.
@@ -60,12 +71,12 @@ impl StatusBar {
         } else {
             (format!(" ^{} ", leader_key.to_uppercase()), BG_LEADER_INACTIVE)
         };
-        bar.left.push(StatusBarSegment { text: leader_text, fg: FG_DEFAULT, bg: leader_bg });
+        bar.left.push(StatusBarSegment { text: leader_text, fg: FG_DEFAULT, bg: leader_bg, kind: SegmentKind::Leader });
 
         // Current working directory (truncated).
         if let Some(path) = cwd {
             let display = truncate_path(path, 25);
-            bar.left.push(StatusBarSegment { text: format!("  {display} "), fg: FG_DEFAULT, bg: BG_CWD });
+            bar.left.push(StatusBarSegment { text: format!("  {display} "), fg: FG_DEFAULT, bg: BG_CWD, kind: SegmentKind::Cwd });
         }
 
         // Git branch.
@@ -75,6 +86,7 @@ impl StatusBar {
                     text: format!("  {branch} "),
                     fg: FG_DEFAULT,
                     bg: BG_GIT,
+                    kind: SegmentKind::GitBranch,
                 });
             }
         }
@@ -88,13 +100,14 @@ impl StatusBar {
                     text: format!(" ✘ {code} "),
                     fg: FG_DEFAULT,
                     bg: BG_ERROR,
+                    kind: SegmentKind::ExitCode,
                 });
             }
         }
 
         // Date + time.
         let time_str = format_time();
-        bar.right.push(StatusBarSegment { text: format!(" {time_str} "), fg: FG_DIM, bg: BG_TIME });
+        bar.right.push(StatusBarSegment { text: format!(" {time_str} "), fg: FG_DIM, bg: BG_TIME, kind: SegmentKind::Time });
 
         bar
     }
@@ -107,6 +120,38 @@ impl StatusBar {
 
     /// Separator used between right segments.
     pub fn right_sep() -> &'static str { " │ " }
+
+    /// Given a column click position and the total bar width, return which segment kind
+    /// was clicked (if any). Mirrors the layout produced by `build_status_bar_instances`.
+    pub fn click_kind(&self, col: usize, total_cols: usize) -> Option<SegmentKind> {
+        let sep_w = Self::left_sep().chars().count();
+        // Walk left segments.
+        let mut x = 0usize;
+        for (i, seg) in self.left.iter().enumerate() {
+            if i > 0 {
+                x += sep_w; // separator before this segment
+            }
+            let w = seg.text.chars().count();
+            if col >= x && col < x + w {
+                return Some(seg.kind.clone());
+            }
+            x += w;
+        }
+        // Walk right segments (right-aligned).
+        let rsep_w = Self::right_sep().chars().count();
+        let right_total: usize = self.right.iter().map(|s| s.text.chars().count()).sum::<usize>()
+            + self.right.len().saturating_sub(1) * rsep_w;
+        let mut rx = total_cols.saturating_sub(right_total);
+        for (i, seg) in self.right.iter().enumerate() {
+            if i > 0 { rx += rsep_w; }
+            let w = seg.text.chars().count();
+            if col >= rx && col < rx + w {
+                return Some(seg.kind.clone());
+            }
+            rx += w;
+        }
+        None
+    }
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
