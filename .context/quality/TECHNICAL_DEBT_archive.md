@@ -5,6 +5,131 @@ Ordered newest-first within each date group.
 
 ---
 
+## Resolved 2026-04-09
+
+### TD-042: Pane resize — keyboard + mouse drag
+- **Files:** `src/ui/panes.rs`, `src/app/mux.rs`, `src/app/input/mod.rs`, `src/app/mod.rs`
+- **Keyboard:** `PaneManager::adjust_ratio(focused_id, dir, delta)` — depth-first ancestor search finds the nearest Split whose `SplitDir` matches the arrow axis, adjusts `ratio ±0.05`, re-layouts. `Mux::cmd_adjust_pane_ratio` wired from leader dispatch (`<leader>+Option+←→↑↓`). `pane_ratio_adjusted` flag triggers `resize_terminals_for_panel` after key event.
+- **Mouse:** `SeparatorDragState { is_vert, key }` in `InputHandler`. `App::separator_at_pixel` detects ±3px hit. `Left::Pressed` starts drag; `CursorMoved` calls `drag_split_ratio` → `drag_separator` → `resize_terminals_for_panel` live; `Left::Released` finalises.
+- **Known remaining bugs:** TD-043 (AI input regression), TD-044 (mouse hit area too small), TD-045 (keyboard not triggering), TD-046 (no resize-mode indicator).
+
+### TD-041: Chat panel input row — display duplicado (fix 2)
+- **File:** `src/app/renderer.rs` ~l.709
+- **Bug:** `n.saturating_sub(2)` y `n.saturating_sub(1)` eran ambos `0` cuando `n==1` → ambas filas mostraban el mismo texto.
+- **Fix:** `vis1 = if n >= 2 { input_lines[n-2] } else { String::new() }` — cuando `n==1`, fila con ► queda vacía y el texto va en la fila inferior.
+- **Regression:** TD-043 — el texto debería ir en la fila con `►` (vis1), no en vis2.
+
+### TD-033: Fallback stream filtra mensajes tool inválidos
+- **File:** `src/llm/providers/` + `src/app/ui.rs`
+- **Fix:** Fallback stream tras agotar tool rounds filtra `role:"tool"` y mensajes assistant con content vacío (solo `tool_calls`) antes de enviar al LLM.
+
+### TD-030: File attachment size cap
+- **File:** `src/llm/chat_panel.rs`
+- **Fix:** 512 KB/archivo y 1 MB total; nota de truncado añadida al contexto del system message.
+
+### TD-029: cwd.canonicalize() en macOS
+- **File:** `src/app/ui.rs` (`submit_ai_query`)
+- **Fix:** `cwd.canonicalize()` llamado una vez antes del spawn para resolver `/var` → `/private/var` en macOS.
+
+### TD-031: EXPORT_REGEX + AUTH_REGEX como LazyLock
+- **File:** `src/llm/shell_context.rs`
+- **Fix:** `LazyLock<Regex>` estático — compilados una vez por proceso.
+
+### TD-035: Doble get_mut en render loop
+- **File:** `src/app/renderer.rs`
+- **Fix:** Dos `get_mut` separados (dirty marking + store) fusionados en uno solo.
+
+### TD-036: Hot-reload lee archivo completo para extraer versión
+- **File:** `src/config/watcher.rs` o similar
+- **Fix:** `update_managed_configs` lee solo los primeros 256 bytes para extraer el tag de versión.
+
+### TD-037: undo_stack sin límite
+- **File:** `src/llm/chat_panel.rs`
+- **Fix:** Limitado a 10 entradas con política FIFO.
+
+### TD-038: Errores LLM sin contexto accionable
+- **File:** `src/llm/providers/`
+- **Fix:** 401 → API key, 429 → rate limit, 404 → modelo no encontrado, 500 → server error, context length.
+
+### TD-034: run_command sin indicador de riesgo
+- **File:** `src/app/ui.rs` + renderer
+- **Fix:** Indicador ⚠ ámbar para patrones destructivos (`rm -rf`, `dd`, `curl|sh`, etc.) en confirmación.
+
+---
+
+## Resolved 2026-04-08
+
+### TD-026: Status bar — GPU-rendered segmented bar
+- **File:** `src/ui/status_bar.rs`, `src/app/mod.rs`, `src/app/renderer.rs`
+- **Implementation:** `StatusBar::build(...)` produces left/right segments rendered by GPU. Left: leader-mode indicator, CWD, git branch. Right: exit code, date/time. Git branch polled async con 5s TTL cache. Toggle via `ToggleStatusBar` palette action. Phase 3 P2 complete.
+
+### TD-027: Tab rename via `<leader>,`
+- **Files:** `src/ui/tabs.rs`, `src/app/ui.rs`, `src/app/input/mod.rs`, `src/app/renderer.rs`
+- **Implementation:** Inline rename prompt en el tab pill activo. El texto reemplaza el título con cursor `▌`; Enter confirma, Esc cancela. `TabManager::rename_active()` aplica la etiqueta.
+
+---
+
+## Resolved 2026-04-07
+
+### TD-025: Mouse tab-bar click omitía resize
+- **File:** `src/app/mod.rs`
+- **Bug:** `switch_to_index()` sin `resize_terminals_for_panel()` → PTY del tab nuevo mantenía row count anterior; contenido se desbordaba debajo del área visible.
+- **Fix:** `resize_terminals_for_panel()` añadido tras `switch_to_index()` en el hit handler del tab bar.
+
+### TD-028: Trackpad scroll muy lento en Retina
+- **File:** `src/app/mod.rs`
+- **Bug:** `MouseScrollDelta::PixelDelta.y` está en puntos lógicos; se dividía por `cell_h` en px físicos → ~0.5 líneas/evento en 2× Retina.
+- **Fix:** Dividir por `cell_h / scale_factor`. Auto-scroll al fondo en cada keypress (`scroll_to_bottom()` antes de `write_input`).
+
+---
+
+## Resolved 2026-04-06
+
+### TD-022: 36 clippy violations
+- **Fix:** `cargo clippy --all-targets --all-features -- -D warnings` ahora pasa limpio. 36 lints corregidos.
+
+### TD-021: title_bar_style + llm.ui.width_cols no propagados
+- **Fix:** `title_bar_style` parseado desde Lua. `llm.ui.width_cols` propagado a todos los nuevos `ChatPanel`.
+
+### TD-020: rewire_llm_provider en hot-reload
+- **Fix:** `check_config_reload()` y `ReloadConfig` palette action llaman `rewire_llm_provider()`.
+
+### TD-019: submit_ai_query panel_id race
+- **Fix:** `panel_id` capturado antes del spawn; todos los AI events tageados; `poll_ai_events()` enruta correctamente.
+
+### TD-018: cmd_split mutaba pane tree antes de crear terminal
+- **Fix:** `Terminal::new()` se llama primero; pane tree solo se muta si tiene éxito.
+
+### TD-017: cmd_close_tab dejaba terminal slots activos
+- **Fix:** Cada `terminal_id` de la tab se pone a `None` antes de `panes.remove`.
+
+### TD-OP-02: is_pua() subranges redundantes
+- **Fix:** Subranges redundantes eliminados; bloque BMP PUA cubre todos los Nerd Font icons.
+
+### TD-OP-03: GlyphAtlas sin evicción
+- **Fix:** Atlas 4096×4096 con epoch-based LRU eviction.
+
+### TD-OP-01: unsafe impl Sync en TextShaper
+- **Fix:** `unsafe impl Sync` eliminado; `Send` mantenido con comentario SAFETY.
+
+### TD-016: last_assistant_command() incluía tool-status lines
+- **Fix:** Filtra líneas con `⟳`/`✓` antes de retornar el comando.
+
+---
+
+## Resolved 2026-04-05
+
+### TD-015: Shift+Enter / Shift+Tab encoding
+- **Fix:** Shift+Enter → `\x1b[13;2u`, Shift+Tab → `\x1b[Z`.
+
+### TD-013: Rounded tab pills
+- **Fix:** `RoundedRectPipeline` + SDF WGSL shader para pills redondeados.
+
+### TD-014: Tab bar background
+- **Fix:** Background hereda `config.colors.background`.
+
+---
+
 ## Resolved 2026-04-03
 
 ### TD-042: Mouse Selection, Typing Delay, Font Memory
