@@ -145,6 +145,8 @@ preview; user confirms before any write happens.
 - [x] **Tab bar:** renders at grid row -1 (above terminal); active tab highlighted; Dracula Pro colors — `build_tab_bar_instances()` in `app/renderer.rs`; GPU padding shifted via `renderer.set_padding()`
 - [x] **Scroll bar:** 6px right-edge overlay using FLAG_CURSOR; thumb proportional to `screen_rows / total_lines`; gated by `config.enable_scroll_bar` — `build_scroll_bar_instances()` in `app/renderer.rs`; `Terminal::scrollback_info()` in `term/mod.rs`
 - [x] **Right-click context menu:** floating popup at click position; items: Copy (Cmd+C), Paste (Cmd+V), Clear; keybinds shown right-aligned; hover highlight; closes on click-outside, key press, or action — `src/ui/context_menu.rs`; `build_context_menu_instances()` in `app/renderer.rs`; mouse handling in `app/mod.rs`
+- [ ] **Pane resize — keyboard:** `<leader>` + `Option+←→↑↓` ajusta el `ratio` del Split padre del pane activo en pasos de 0.05. Implementar `PaneManager::adjust_ratio(focused_id, dir, delta)` en `src/ui/panes.rs` + 4 keybinds en `src/app/input/mod.rs`. Tras ajustar, llamar `resize_all()` para propagar a los PTYs.
+- [ ] **Pane resize — mouse drag:** arrastrar el separador entre panes. Extender `PaneSeparator` con un `node_id` para referenciar el Split dueño. En `InputHandler` agregar `dragging_separator: Option<SeparatorDragState>` (separador, posición inicial del mouse, ratio inicial). En `MouseMoved` calcular delta en celdas y actualizar ratio. En `MouseButtonLeft::Released` finalizar drag. Hit-test del separador: ±3px de la línea divisoria.
 
 #### Status Bar (P2) ✅ (2026-04-08)
 - [x] Status bar engine: enable/disable from Lua + command palette (`ToggleStatusBar`)

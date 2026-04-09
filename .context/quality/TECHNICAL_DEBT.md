@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-04-09
-**Open Items:** 0
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0
+**Open Items:** 1
+**Critical (P0):** 0 | **P1:** 1 | **P2:** 0 | **P3:** 0
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -14,6 +14,14 @@
 | P1 | Significant impact on velocity or correctness | This sprint |
 | P2 | Moderate impact, workaround exists | This quarter |
 | P3 | Minor, address when convenient | Backlog |
+
+---
+
+## P1 - High Priority
+
+- **TD-042** (P1): **Pane resize no implementado** (`src/ui/panes.rs`, `src/app/input/mod.rs`, `src/app/mod.rs`). Los panes creados con `%` / `"` no se pueden redimensionar. `PaneNode::Split` ya tiene `ratio: f32` — solo falta exponerlo. Dos sub-tareas:
+  - **Teclado:** `PaneManager::adjust_ratio(focused_id, dir, delta)` recorre el árbol buscando el Split padre cuya `SplitDir` coincide con la flecha y ajusta `ratio ±0.05`. Keybind: `<leader>+Option+←→↑↓` en `input/mod.rs`. Tras ajustar llamar `mux.resize_all()`.
+  - **Mouse drag:** extender `PaneSeparator` con `node_id: usize` para poder localizar el Split dueño. Agregar `dragging_separator: Option<SeparatorDragState>` en `InputHandler`. En `MouseMoved` detectar proximidad ±3px al separador, iniciar drag, calcular delta en celdas y actualizar ratio en vivo. Finalizar en `MouseButtonLeft::Released`.
 
 ---
 
