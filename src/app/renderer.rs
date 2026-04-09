@@ -1009,6 +1009,8 @@ impl RenderContext {
         pad_left: f32,
         pad_top: f32,
         bar_bg: [f32; 4],
+        // When `Some`, the active tab pill shows this input string with a cursor instead of its title.
+        rename_input: Option<&str>,
     ) {
         // bar_bg is applied via the renderer clear color (TD-014); no fill needed here.
         let _ = bar_bg;
@@ -1048,9 +1050,17 @@ impl RenderContext {
             let badge = format!(" {} ", i + 1);
             let badge_w = badge.chars().count().min(total_cols - col);
 
-            // Title text " name " (max 14 chars)
-            let raw = format!(" {} ", tab.title);
-            let title: String = raw.chars().take(14).collect();
+            // Title text " name " (max 14 chars); rename prompt replaces title for the active tab.
+            let raw = if is_active {
+                if let Some(input) = rename_input {
+                    format!(" {}▌ ", input)
+                } else {
+                    format!(" {} ", tab.title)
+                }
+            } else {
+                format!(" {} ", tab.title)
+            };
+            let title: String = raw.chars().take(16).collect(); // +2 for rename cursor
             let title_w = title.chars().count().min(total_cols.saturating_sub(col + badge_w));
 
             let pill_w = (badge_w + title_w) as f32 * cell_w;

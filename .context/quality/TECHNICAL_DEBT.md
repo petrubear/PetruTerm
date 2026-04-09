@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-04-07
-**Open Items:** 2
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 1 | **P3:** 1
+**Last Updated:** 2026-04-08
+**Open Items:** 0
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -31,15 +31,20 @@
 
 ## P2 - Medium Priority
 
-- **TD-026** (P2): Status bar (Phase 3 P2) — segmented right-aligned bar rendered by GPU. Segments (left→right): running command, current directory, leader-mode indicator (changes color when leader active), date/time. Each segment sourced from a Lua plugin. Reference screenshot: `~/Documents/ScreenShots/Screenshot 2026-04-07 at 10.36.37.png`.
+- _None_
 
 ---
 
 ## P3 - Low Priority
 
-- **TD-027** (P3): Tab rename via `<leader>,` — prompt user for a new label and replace the default `# zsh` title displayed in the tab pill. Mirrors tmux `prefix + ,` behavior.
+- _None_
 
 ---
+
+## Recently Resolved (2026-04-08)
+
+- **TD-026** (P2): Status bar — segmented bar rendered by GPU (`src/ui/status_bar.rs`). Segments: leader-mode indicator, CWD, git branch (left); exit code, date/time (right). Git branch polled async with 5s TTL cache. Toggle via `ToggleStatusBar` action + command palette. Phase 3 P2 complete.
+- **TD-027** (P3): Tab rename via `<leader>,` — inline rename prompt in the active tab pill. Typing replaces the title display with `input▌` cursor; Enter confirms, Esc cancels. `TabManager::rename_active()` applies the new label. Works with 1 or 2+ tabs (tab bar forced visible during rename).
 
 ## Recently Resolved (2026-04-07)
 

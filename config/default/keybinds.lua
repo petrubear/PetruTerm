@@ -32,6 +32,7 @@ function module.apply_to_config(config)
     { mods = "LEADER", key = "&",  action = petruterm.action.CloseTab },
     { mods = "LEADER", key = "n",  action = petruterm.action.NextTab },
     { mods = "LEADER", key = "b",  action = petruterm.action.PrevTab },
+    { mods = "LEADER", key = ",",  action = petruterm.action.RenameTab },
 
     -- ── Pane splits (tmux-style) ───────────────────────────────────────────
     { mods = "LEADER", key = "%",  action = petruterm.action.SplitHorizontal },

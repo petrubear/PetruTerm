@@ -57,6 +57,10 @@ pub struct UiManager {
     pub git_rx: crossbeam_channel::Receiver<String>,
     /// CWD used for the last git branch fetch (to detect CWD changes).
     git_branch_cwd: Option<PathBuf>,
+
+    // ── Tab rename prompt ─────────────────────────────────────────────────────
+    /// When `Some`, the user is typing a new name for the active tab.
+    pub tab_rename_input: Option<String>,
 }
 
 impl UiManager {
@@ -105,6 +109,7 @@ impl UiManager {
             git_tx: git_tx_init,
             git_rx: git_rx_init,
             git_branch_cwd: None,
+            tab_rename_input: None,
         }
     }
 
@@ -270,6 +275,39 @@ impl UiManager {
                 }
             }
         }
+    }
+
+    // ── Tab rename prompt ─────────────────────────────────────────────────────
+
+    /// Start the inline rename prompt, pre-filling with the current tab title.
+    pub fn start_tab_rename(&mut self, current_title: &str) {
+        self.tab_rename_input = Some(current_title.to_string());
+    }
+
+    pub fn tab_rename_type(&mut self, ch: char) {
+        if let Some(s) = &mut self.tab_rename_input { s.push(ch); }
+    }
+
+    pub fn tab_rename_backspace(&mut self) {
+        if let Some(s) = &mut self.tab_rename_input { s.pop(); }
+    }
+
+    /// Confirm the rename: applies to `mux` and clears the prompt.
+    pub fn tab_rename_confirm(&mut self, mux: &mut Mux) {
+        if let Some(input) = self.tab_rename_input.take() {
+            let trimmed = input.trim().to_string();
+            if !trimmed.is_empty() {
+                mux.tabs.rename_active(trimmed);
+            }
+        }
+    }
+
+    pub fn tab_rename_cancel(&mut self) {
+        self.tab_rename_input = None;
+    }
+
+    pub fn is_renaming_tab(&self) -> bool {
+        self.tab_rename_input.is_some()
     }
 
     // ── Chat panel operations ─────────────────────────────────────────────────
@@ -663,6 +701,12 @@ impl UiManager {
             Action::UndoLastWrite     => self.cmd_undo_last_write(),
             Action::ToggleStatusBar => {
                 config.status_bar.enabled = !config.status_bar.enabled;
+            }
+            Action::RenameTab => {
+                let current = mux.tabs.active_tab()
+                    .map(|t| t.title.clone())
+                    .unwrap_or_default();
+                self.start_tab_rename(&current);
             }
         }
     }

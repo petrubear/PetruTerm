@@ -146,13 +146,14 @@ preview; user confirms before any write happens.
 - [x] **Scroll bar:** 6px right-edge overlay using FLAG_CURSOR; thumb proportional to `screen_rows / total_lines`; gated by `config.enable_scroll_bar` — `build_scroll_bar_instances()` in `app/renderer.rs`; `Terminal::scrollback_info()` in `term/mod.rs`
 - [x] **Right-click context menu:** floating popup at click position; items: Copy (Cmd+C), Paste (Cmd+V), Clear; keybinds shown right-aligned; hover highlight; closes on click-outside, key press, or action — `src/ui/context_menu.rs`; `build_context_menu_instances()` in `app/renderer.rs`; mouse handling in `app/mod.rs`
 
-#### Status Bar (P2)
-- [ ] Status bar engine (lua-line style): enable/disable from Lua + command palette
-- [ ] Built-in status bar widgets: `mode`, `cwd`, `git_branch`, `time`, `exit_code`
-- [ ] Status bar widget Lua API: `petruterm.statusbar.register_widget({ name, render })`
-- [ ] Status bar position: `top` or `bottom` (Lua config)
+#### Status Bar (P2) ✅ (2026-04-08)
+- [x] Status bar engine: enable/disable from Lua + command palette (`ToggleStatusBar`)
+- [x] Built-in status bar widgets: `mode` (leader indicator), `cwd`, `git_branch`, `time`, `exit_code`
+- [x] Status bar position: `top` or `bottom` (Lua config `config.status_bar.position`)
+- [x] Git branch polled async with 5s TTL cache (`poll_git_branch` in `app/ui.rs`)
 
 #### Snippets & Compatibility (P3)
+- [x] Tab rename: `<leader>,` — inline prompt in tab pill, Enter confirms, Esc cancels (2026-04-08)
 - [ ] Snippets: `config.snippets` table in Lua, expand via command palette
 - [ ] Snippet keybind: optional `trigger` field per snippet
 - [ ] Starship compatibility: detect `STARSHIP_SHELL`, defer left prompt

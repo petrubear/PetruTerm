@@ -44,6 +44,7 @@ pub enum Action {
     FixLastError,
     UndoLastWrite,
     ToggleStatusBar,
+    RenameTab,
 }
 
 impl std::str::FromStr for Action {
@@ -77,6 +78,7 @@ impl std::str::FromStr for Action {
             "FixLastError"      => Ok(Action::FixLastError),
             "UndoLastWrite"     => Ok(Action::UndoLastWrite),
             "ToggleStatusBar"   => Ok(Action::ToggleStatusBar),
+            "RenameTab"         => Ok(Action::RenameTab),
             _                   => Err(()),
         }
     }
@@ -121,5 +123,6 @@ pub fn built_in_actions(config: &Config) -> Vec<PaletteAction> {
         PaletteAction { name: "Undo Last Write".into(),        action: Action::UndoLastWrite,      keybind: kb("UndoLastWrite") },
         // Phase 3 UI actions
         PaletteAction { name: "Toggle Status Bar".into(),      action: Action::ToggleStatusBar,     keybind: None },
+        PaletteAction { name: "Rename Tab".into(),              action: Action::RenameTab,           keybind: kb("RenameTab") },
     ]
 }

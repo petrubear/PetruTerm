@@ -146,6 +146,21 @@ impl InputHandler {
         let ctrl = self.modifiers.state().control_key();
         let shift = self.modifiers.state().shift_key();
 
+        // ── Tab rename prompt ────────────────────────────────────────────────
+        if ui.is_renaming_tab() {
+            match &event.logical_key {
+                Key::Named(NamedKey::Escape)    => { ui.tab_rename_cancel(); }
+                Key::Named(NamedKey::Enter)     => { ui.tab_rename_confirm(mux); }
+                Key::Named(NamedKey::Backspace) => { ui.tab_rename_backspace(); }
+                Key::Named(NamedKey::Space)     => { ui.tab_rename_type(' '); }
+                Key::Character(s) if !cmd && !ctrl => {
+                    for ch in s.chars() { ui.tab_rename_type(ch); }
+                }
+                _ => {}
+            }
+            return;
+        }
+
         // ── Leader key activation — checked BEFORE panel/palette handlers so that
         // Ctrl+B always activates the leader even when the AI panel is focused.
         if ctrl && !shift && !cmd {

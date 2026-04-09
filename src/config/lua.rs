@@ -114,6 +114,7 @@ fn inject_petruterm_global(lua: &Lua) -> LuaResult<()> {
         "CloseTab",
         "NextTab",
         "PrevTab",
+        "RenameTab",
         "ToggleFullscreen",
         "Quit",
     ] {

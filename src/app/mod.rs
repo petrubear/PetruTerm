@@ -337,10 +337,12 @@ impl ApplicationHandler<()> for App {
                     // Pane separator lines.
                     rc.build_pane_separators(&pane_seps);
 
-                    // ── Tab bar (only when 2+ tabs, renders at row = -1) ────────────────
-                    if self.mux.tabs.tab_count() > 1 {
+                    // ── Tab bar (2+ tabs, or while a rename prompt is active) ───────────
+                    let renaming = self.ui.is_renaming_tab();
+                    if self.mux.tabs.tab_count() > 1 || renaming {
                         let tab_total_cols = total_cols
                             + if self.ui.is_panel_visible() { self.ui.panel().width_cols as usize } else { 0 };
+                        let rename_input = self.ui.tab_rename_input.as_deref();
                         rc.build_tab_bar_instances(
                             self.mux.tabs.tabs(),
                             self.mux.tabs.active_index(),
@@ -349,6 +351,7 @@ impl ApplicationHandler<()> for App {
                             self.config.window.padding.left as f32,
                             self.config.window.padding.top as f32,
                             self.config.colors.background,
+                            rename_input,
                         );
                     }
 
