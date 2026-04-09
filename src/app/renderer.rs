@@ -694,8 +694,12 @@ impl RenderContext {
             }
             let input_lines = wrap_input(&input_display, input_inner_w);
             let inp_fg = if panel_focused && !file_picker_focused { input_fg } else { DIM_FG };
-            let line1 = format!("│ \u{25b8}  {}", input_lines.first().cloned().unwrap_or_default());
-            let line2 = format!("│    {}", input_lines.get(1).cloned().unwrap_or_default());
+            // Show the last two lines so the cursor is always visible when input is multiline.
+            let n = input_lines.len();
+            let vis1 = input_lines.get(n.saturating_sub(2)).cloned().unwrap_or_default();
+            let vis2 = input_lines.get(n.saturating_sub(1)).cloned().unwrap_or_default();
+            let line1 = format!("│ \u{25b8}  {}", vis1);
+            let line2 = format!("│    {}", vis2);
             self.push_shaped_row(&line1, inp_fg, panel_bg, input_row1, co, panel_cols, font);
             self.push_shaped_row(&line2, inp_fg, panel_bg, input_row2, co, panel_cols, font);
         }

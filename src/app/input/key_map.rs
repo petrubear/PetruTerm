@@ -99,13 +99,7 @@ pub fn translate_key(
                     Some(b"\t".to_vec())
                 }
             }
-            NamedKey::Enter => {
-                if shift {
-                    Some(b"\x1b[13;2u".to_vec())  // Shift+Enter → xterm modified key sequence
-                } else {
-                    Some(b"\r".to_vec())
-                }
-            }
+            NamedKey::Enter => Some(b"\r".to_vec()),
             NamedKey::Escape => Some(b"\x1b".to_vec()),
             NamedKey::Backspace => Some(b"\x7f".to_vec()),
             NamedKey::Space => Some(b" ".to_vec()),

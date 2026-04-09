@@ -463,18 +463,28 @@ fn scan_dir(base: &Path, dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
 
 // ── Text utilities ────────────────────────────────────────────────────────────
 
-/// Word-wrap `text` to at most `width` characters per line.
-/// Wrap an input string by characters (not words) into lines of `width` chars.
-/// Used for the input field so the user can always see what they're typing.
+/// Wrap an input string into display lines of at most `width` chars.
+/// Explicit `\n` characters (from Shift+Enter) create hard line breaks;
+/// each segment is then soft-wrapped by character count if it overflows.
 pub fn wrap_input(text: &str, width: usize) -> Vec<String> {
     if width == 0 {
         return vec![text.to_string()];
     }
-    let chars: Vec<char> = text.chars().collect();
-    if chars.is_empty() {
-        return vec![String::new()];
+    let mut result = Vec::new();
+    for segment in text.split('\n') {
+        let chars: Vec<char> = segment.chars().collect();
+        if chars.is_empty() {
+            result.push(String::new());
+        } else {
+            for chunk in chars.chunks(width) {
+                result.push(chunk.iter().collect());
+            }
+        }
     }
-    chars.chunks(width).map(|c| c.iter().collect()).collect()
+    if result.is_empty() {
+        result.push(String::new());
+    }
+    result
 }
 
 pub fn word_wrap(text: &str, width: usize) -> Vec<String> {
