@@ -414,6 +414,7 @@ impl ApplicationHandler<()> for App {
                         self.ui.poll_git_branch(cwd.as_deref());
                         let bar = crate::ui::status_bar::StatusBar::build(
                             self.input.leader_active,
+                            &self.config.leader.key,
                             cwd.as_deref(),
                             self.ui.git_branch_cache.as_deref(),
                             crate::llm::shell_context::ShellContext::load()

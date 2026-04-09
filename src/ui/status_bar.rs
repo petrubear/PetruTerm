@@ -39,6 +39,7 @@ impl StatusBar {
     /// - `last_exit_code`: last exit code from shell context (None if unavailable).
     pub fn build(
         leader_active: bool,
+        leader_key: &str,
         cwd: Option<&std::path::Path>,
         git_branch: Option<&str>,
         last_exit_code: Option<i32>,
@@ -49,7 +50,8 @@ impl StatusBar {
 
         // Leader-mode indicator.
         let leader_bg = if leader_active { BG_LEADER_ACTIVE } else { BG_LEADER_INACTIVE };
-        let leader_text = if leader_active { " LEADER " } else { " ^B " };
+        let leader_label = format!(" ^{} ", leader_key.to_uppercase());
+        let leader_text = if leader_active { " LEADER " } else { leader_label.as_str() };
         bar.left.push(StatusBarSegment { text: leader_text.into(), fg: FG_DEFAULT, bg: leader_bg });
 
         // Current working directory (truncated).
