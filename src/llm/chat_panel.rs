@@ -166,6 +166,14 @@ impl ChatPanel {
         }
     }
 
+    /// Replace the current input with `text` (e.g. from context menu "Ask AI").
+    pub fn set_input(&mut self, text: String) {
+        if self.is_idle() {
+            self.input = text;
+            self.dirty = true;
+        }
+    }
+
     pub fn backspace(&mut self) {
         if self.is_idle() {
             self.input.pop();

@@ -497,6 +497,20 @@ impl ApplicationHandler<()> for App {
                                             terminal.write_input(b"clear\n");
                                         }
                                     }
+                                    ContextAction::SendToChat => {
+                                        let selected = self.mux.active_terminal()
+                                            .and_then(|t| t.selection_text());
+                                        if let Some(text) = selected {
+                                            let terminal_id = self.mux.focused_terminal_id();
+                                            let cwd = self.mux.active_cwd()
+                                                .or_else(|| std::env::current_dir().ok())
+                                                .unwrap_or_default();
+                                            self.ui.open_panel_with_context(terminal_id, cwd);
+                                            self.ui.panel_mut().set_input(text);
+                                            self.resize_terminals_for_panel();
+                                        }
+                                    }
+                                    ContextAction::Separator => {}
                                 }
                                 if let Some(w) = &self.window { w.request_redraw(); }
                                 return;

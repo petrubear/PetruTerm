@@ -1,15 +1,15 @@
 # Active Context
 
 **Current Focus:** Phase 3 P2 — Status Bar
-**Last Active:** 2026-04-07
+**Last Active:** 2026-04-08
 
 ## Estado actual del proyecto
 
 **Phase 1 COMPLETE. Phase 2 COMPLETE. Phase 2.5 COMPLETE (P1+P2+P3). Phase 3 P1 implementada.**
-**Deuda técnica: 2 ítems abiertos (P2, P3). TD-025/TD-028 resueltos hoy.**
-**Tests: 16/16 passing. `cargo clippy --all-targets --all-features -- -D warnings` PASA limpio.**
+**Deuda técnica: 2 ítems abiertos (P2, P3).**
+**Tests: 16/16 passing. `cargo build` PASA limpio.**
 
-### Features verificados (2026-04-07)
+### Features verificados (2026-04-08)
 
 | Feature | Estado |
 |---------|--------|
@@ -24,7 +24,7 @@
 | Tab bar (pill shape, SDF shader) | ✅ |
 | Shell exit cierra tab (o solo el pane si hay más) | ✅ |
 | Selección doble/triple click | ✅ |
-| Context menu (right-click: Copy/Paste/Clear) | ✅ |
+| Context menu (right-click: Copy/Paste/Clear/───/Ask AI) | ✅ |
 | Keybinds en command palette | ✅ |
 | Default configs completas | ✅ |
 | Emoji / color glyph rendering | ✅ |
@@ -33,6 +33,10 @@
 | Phase 2.5 P3 — WriteFile + RunCommand + undo | ✅ |
 | Multi-pane splits + separadores + padding | ✅ |
 | Leader+h/j/k/l — vim-style pane focus | ✅ |
+| /quit solo cierra panel (no tabs) | ✅ |
+| System prompt abierto a preguntas generales | ✅ |
+| Ctrl+B a — abrir/cerrar panel | ✅ |
+| Ctrl+B A — mover focus terminal ↔ chat | ✅ |
 
 ## Siguiente: Phase 3 P2 — Status Bar
 
@@ -41,6 +45,7 @@
 - [ ] Widgets built-in: `mode`, `cwd`, `git_branch`, `time`, `exit_code`
 - [ ] Lua API: `petruterm.statusbar.register_widget({ name, render })`
 - [ ] Posición configurable (`top` / `bottom`)
+- Referencia visual: `~/Documents/ScreenShots/Screenshot 2026-04-07 at 10.36.37.png`
 
 ## Keybinds actuales
 
@@ -53,24 +58,13 @@
 | `^B "` | Split vertical |
 | `^B x` | Close pane |
 | `^B h/j/k/l` | Focus pane left/down/up/right |
-| `^B a` | AI panel |
+| `^B a` | Abrir / cerrar AI panel |
+| `^B A` | Mover focus terminal ↔ chat (sin cerrar) |
 | `^B e/f` | Explain/Fix last output |
 | `^B z` | Undo last write |
 | `^B o` | Command palette |
 | `Ctrl+Space` | Inline AI block |
-| Right-click | Context menu |
-
-## Archivos clave (Phase 2.5 P3)
-
-| Archivo | Propósito |
-|---------|-----------|
-| `src/llm/diff.rs` | LCS line diff + compress_diff |
-| `src/llm/tools.rs` | WriteFile, RunCommand + requires_confirmation() |
-| `src/llm/chat_panel.rs` | ConfirmWrite/ConfirmRun events, AwaitingConfirm state, ConfirmDisplay |
-| `src/app/ui.rs` | confirm_yes/no, undo_stack, pending_pty_run, agent loop |
-| `src/app/mod.rs` | flush_pending_pty_run() |
-| `src/app/renderer.rs` | Confirmation view con diff +/- coloreado |
-| `src/app/input/mod.rs` | y/n/Enter/Esc en AwaitingConfirm |
+| Right-click | Context menu (Copy/Paste/Clear/Ask AI) |
 
 ## Pendiente después de Status Bar
 

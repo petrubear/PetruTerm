@@ -97,6 +97,7 @@ fn inject_petruterm_global(lua: &Lua) -> LuaResult<()> {
         "CommandPalette",
         "ToggleAiPanel",
         "ToggleAiMode",   // legacy alias kept for compatibility
+        "FocusAiPanel",
         "ExplainLastOutput",
         "FixLastError",
         "UndoLastWrite",

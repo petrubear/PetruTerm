@@ -247,9 +247,10 @@ impl UiManager {
         };
 
         let mut system_text = String::from(
-            "You are a helpful terminal assistant. \
-             You have tools to read files and list directories within the working directory. \
-             Use them when the user asks about code or files."
+            "You are a helpful AI assistant embedded in PetruTerm, a terminal emulator. \
+             You can answer any question the user has — general knowledge, coding, writing, or anything else. \
+             You also have tools to read files, list directories, write files, and run commands within the working directory. \
+             Use those tools when the user asks about code or files in their project."
         );
         if let Some(ctx) = ShellContext::load() {
             system_text.push_str(&format!("\n\nShell context:\n{}", ctx.format_for_system_message()));
@@ -577,14 +578,22 @@ impl UiManager {
             Action::ToggleAiPanel | Action::ToggleAiMode => {
                 let terminal_id = mux.focused_terminal_id();
                 if self.panel().is_visible() {
-                    if self.panel_focused {
-                        self.panel_mut().close();
-                        self.panel_focused = false;
-                        self.file_picker_focused = false;
-                    } else {
-                        self.panel_focused = true;
-                    }
+                    self.panel_mut().close();
+                    self.panel_focused = false;
+                    self.file_picker_focused = false;
                 } else {
+                    let cwd = mux.active_cwd().or_else(|| std::env::current_dir().ok()).unwrap_or_default();
+                    self.open_panel_with_context(terminal_id, cwd);
+                }
+            }
+            Action::FocusAiPanel => {
+                if self.panel().is_visible() {
+                    // Panel abierto: alternar focus entre chat y terminal.
+                    self.panel_focused = !self.panel_focused;
+                    if !self.panel_focused { self.file_picker_focused = false; }
+                } else {
+                    // Panel cerrado: abrirlo y darle focus.
+                    let terminal_id = mux.focused_terminal_id();
                     let cwd = mux.active_cwd().or_else(|| std::env::current_dir().ok()).unwrap_or_default();
                     self.open_panel_with_context(terminal_id, cwd);
                 }

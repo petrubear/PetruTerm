@@ -886,8 +886,18 @@ impl RenderContext {
         let hover_bg    = [0.2,  0.2,  0.4,  1.0];
         let keybind_fg  = [0.5,  0.5,  0.7,  1.0];
 
+        let sep_fg = [0.3, 0.3, 0.5, 1.0];
+
         for (i, item) in menu.items.iter().enumerate() {
             let row = menu.row + i;
+
+            if item.is_separator() {
+                // Render a full-width horizontal rule.
+                let rule = "─".repeat(width);
+                self.push_shaped_row(&rule, sep_fg, bg, row, menu.col, width, font);
+                continue;
+            }
+
             let is_hovered = menu.hovered == Some(i);
             let current_bg = if is_hovered { hover_bg } else { bg };
 

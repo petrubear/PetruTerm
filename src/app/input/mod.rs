@@ -288,7 +288,6 @@ impl InputHandler {
                                 ui.panel_mut().close();
                                 ui.panel_focused = false;
                                 ui.file_picker_focused = false;
-                                mux.cmd_close_tab();
                             }
                             "" => { ui.chat_panel_run_command(mux); }
                             _ => {

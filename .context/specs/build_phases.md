@@ -119,13 +119,12 @@ The chat panel and agent panel are **one unified panel** (`leader+a`). When the 
 - [x] Streaming UI: `⟳ tool(path)` / `✓ tool(path)` inline via `AiEvent::ToolStatus` — `src/llm/chat_panel.rs`
 - [x] Safety: `canonicalize()` + `starts_with(cwd)` check before any file access — `src/llm/tools.rs`
 
-#### P3 — LLM Tool Use: Write & Run
-- [ ] `WriteFile { path, content }` tool: LLM proposes full file replacement
-- [ ] `ApplyDiff { path, diff }` tool: LLM proposes unified diff patch
-- [ ] Diff preview rendered inline in panel (before/after lines with `+`/`-` colors)
-- [ ] Confirmation prompt: `[y] Apply  [n] Reject` before writing to disk
-- [ ] `RunCommand { cmd }` tool: executes in active PTY after user confirmation
-- [ ] Undo: keep original file in memory for single-step undo (`<leader>z` restores)
+#### P3 — LLM Tool Use: Write & Run ✅ (2026-04-07)
+- [x] `WriteFile { path, content }` tool: LLM proposes full file replacement
+- [x] Diff preview rendered inline in panel (before/after lines with `+`/`-` colors)
+- [x] Confirmation prompt: `[y] Apply  [n] Reject` before writing to disk
+- [x] `RunCommand { cmd }` tool: executes in active PTY after user confirmation
+- [x] Undo: keep original file in memory for single-step undo (`<leader>z` restores)
 
 ### Exit Criteria
 Panel opens and auto-loads `AGENTS.md`. User can fuzzy-attach additional files. Token count
@@ -133,7 +132,7 @@ updates as files are added. LLM receives file contents as context and gives file
 LLM can request to read additional files via tool use. LLM can propose file edits with a diff
 preview; user confirms before any write happens.
 
-> **Status:** Not started.
+> **Status:** COMPLETE (2026-04-07). P1+P2+P3 shipped. WriteFile+RunCommand con diff preview y confirmación. Undo stack via `<leader>z`.
 
 ---
 

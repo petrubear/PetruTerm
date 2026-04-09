@@ -18,8 +18,9 @@ function module.apply_to_config(config)
     -- ── Overlays ──────────────────────────────────────────────────────────
     { mods = "LEADER", key = "o",  action = petruterm.action.CommandPalette },
 
-    -- ── AI panel (open → focus → close cycle) ─────────────────────────────
-    { mods = "LEADER", key = "a",  action = petruterm.action.ToggleAiPanel },
+    -- ── AI panel ──────────────────────────────────────────────────────────
+    { mods = "LEADER", key = "a",  action = petruterm.action.ToggleAiPanel },  -- abrir / cerrar
+    { mods = "LEADER", key = "A",  action = petruterm.action.FocusAiPanel  },  -- mover focus terminal ↔ chat
 
     -- ── AI context actions ─────────────────────────────────────────────────
     { mods = "LEADER", key = "e",  action = petruterm.action.ExplainLastOutput },

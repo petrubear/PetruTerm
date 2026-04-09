@@ -37,6 +37,7 @@ pub enum Action {
     ToggleAiPanel,
     #[allow(dead_code)]
     ToggleAiMode,   // legacy alias — same behaviour as ToggleAiPanel
+    FocusAiPanel,
     EnableAiFeatures,
     DisableAiFeatures,
     ExplainLastOutput,
@@ -68,6 +69,7 @@ impl std::str::FromStr for Action {
             "Quit"              => Ok(Action::Quit),
             "ToggleAiPanel"     => Ok(Action::ToggleAiPanel),
             "ToggleAiMode"      => Ok(Action::ToggleAiPanel), // alias
+            "FocusAiPanel"      => Ok(Action::FocusAiPanel),
             "EnableAiFeatures"  => Ok(Action::EnableAiFeatures),
             "DisableAiFeatures" => Ok(Action::DisableAiFeatures),
             "ExplainLastOutput" => Ok(Action::ExplainLastOutput),
