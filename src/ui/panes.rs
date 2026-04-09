@@ -415,3 +415,132 @@ fn collect_separators_impl(
         }
     }
 }
+
+// ── Pane resize helpers ───────────────────────────────────────────────────────
+
+impl PaneManager {
+    /// Adjust the ratio of the closest ancestor Split in `dir`'s axis.
+    /// `delta` is always positive; sign is inferred from `dir`:
+    ///   Right/Down → +delta (separator moves right/down).
+    ///   Left/Up    → -delta (separator moves left/up).
+    pub fn adjust_ratio(&mut self, focused_id: usize, dir: FocusDir, delta: f32) {
+        let target_dir = match dir {
+            FocusDir::Left | FocusDir::Right => SplitDir::Horizontal,
+            FocusDir::Up   | FocusDir::Down  => SplitDir::Vertical,
+        };
+        let signed = match dir {
+            FocusDir::Right | FocusDir::Down =>  delta,
+            FocusDir::Left  | FocusDir::Up   => -delta,
+        };
+        if adjust_parent_split(&mut self.root, focused_id, target_dir, signed) {
+            let r = self.root.rect();
+            self.root.layout(r);
+        }
+    }
+
+    /// Drag the separator identified by `(is_vert, sep_key)` to the current mouse position.
+    /// `is_vert`  = true  → vertical separator line (owns a Horizontal Split).
+    /// `sep_key`  = col (vertical sep) or row (horizontal sep).
+    #[allow(clippy::too_many_arguments)]
+    pub fn drag_separator(
+        &mut self,
+        is_vert: bool,
+        sep_key: usize,
+        mouse_x: f32,
+        mouse_y: f32,
+        viewport: Rect,
+        cell_w: f32,
+        cell_h: f32,
+    ) {
+        if drag_split_ratio(&mut self.root, is_vert, sep_key, mouse_x, mouse_y, &viewport, cell_w, cell_h) {
+            let r = self.root.rect();
+            self.root.layout(r);
+        }
+    }
+}
+
+/// Returns true if `node`'s subtree contains the leaf with `target` id.
+fn contains_leaf(node: &PaneNode, target: usize) -> bool {
+    match node {
+        PaneNode::Leaf { terminal_id, .. } => *terminal_id == target,
+        PaneNode::Split { left, right, .. } => {
+            contains_leaf(left, target) || contains_leaf(right, target)
+        }
+    }
+}
+
+/// Walk the tree and adjust the ratio of the nearest ancestor Split of `target`
+/// whose direction matches `target_dir`. Returns true if found and adjusted.
+fn adjust_parent_split(
+    node: &mut PaneNode,
+    target: usize,
+    target_dir: SplitDir,
+    delta: f32,
+) -> bool {
+    match node {
+        PaneNode::Leaf { .. } => false,
+        PaneNode::Split { dir, ratio, left, right, .. } => {
+            let in_left = contains_leaf(left, target);
+            if !in_left && !contains_leaf(right, target) {
+                return false;
+            }
+            // Prefer a deeper (closer) match first.
+            let child_found = if in_left {
+                adjust_parent_split(left, target, target_dir, delta)
+            } else {
+                adjust_parent_split(right, target, target_dir, delta)
+            };
+            if child_found { return true; }
+            // No closer match — try this node.
+            if *dir == target_dir {
+                *ratio = (*ratio + delta).clamp(0.1, 0.9);
+                return true;
+            }
+            false
+        }
+    }
+}
+
+/// Walk the tree, find the Split that owns separator `(is_vert, sep_key)`, and
+/// recompute its ratio so the divider tracks the mouse position.
+#[allow(clippy::too_many_arguments)]
+fn drag_split_ratio(
+    node: &mut PaneNode,
+    is_vert: bool,
+    sep_key: usize,
+    mouse_x: f32,
+    mouse_y: f32,
+    viewport: &Rect,
+    cell_w: f32,
+    cell_h: f32,
+) -> bool {
+    match node {
+        PaneNode::Leaf { .. } => false,
+        PaneNode::Split { dir, ratio, left, right, rect } => {
+            let rect_copy = *rect;
+            let this_dir  = *dir;
+            let matches_this = match (is_vert, this_dir) {
+                (true, SplitDir::Horizontal) => {
+                    let lr = left.rect();
+                    ((lr.x + lr.w - viewport.x) / cell_w).round() as usize == sep_key
+                }
+                (false, SplitDir::Vertical) => {
+                    let lr = left.rect();
+                    ((lr.y + lr.h - viewport.y) / cell_h).round() as usize == sep_key
+                }
+                _ => false,
+            };
+            if matches_this {
+                let new_ratio = if is_vert {
+                    (mouse_x - rect_copy.x) / rect_copy.w
+                } else {
+                    (mouse_y - rect_copy.y) / rect_copy.h
+                };
+                *ratio = new_ratio.clamp(0.1, 0.9);
+                return true;
+            }
+            drag_split_ratio(left,  is_vert, sep_key, mouse_x, mouse_y, viewport, cell_w, cell_h)
+                || drag_split_ratio(right, is_vert, sep_key, mouse_x, mouse_y, viewport, cell_w, cell_h)
+        }
+    }
+}

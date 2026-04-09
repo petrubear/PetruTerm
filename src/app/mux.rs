@@ -266,6 +266,33 @@ impl Mux {
         }
     }
 
+    /// Resize the focused pane by moving its nearest ancestor separator `delta` in `dir`.
+    pub fn cmd_adjust_pane_ratio(&mut self, dir: crate::ui::panes::FocusDir, delta: f32) {
+        let active  = self.tabs.active_index();
+        let focused = self.focused_terminal_id();
+        if let Some(pane_mgr) = self.panes.get_mut(active) {
+            pane_mgr.adjust_ratio(focused, dir, delta);
+        }
+    }
+
+    /// Drag the separator `(is_vert, sep_key)` to the current mouse position.
+    #[allow(clippy::too_many_arguments)]
+    pub fn cmd_drag_separator(
+        &mut self,
+        is_vert: bool,
+        sep_key: usize,
+        mouse_x: f32,
+        mouse_y: f32,
+        viewport: Rect,
+        cell_w: f32,
+        cell_h: f32,
+    ) {
+        let active = self.tabs.active_index();
+        if let Some(pane_mgr) = self.panes.get_mut(active) {
+            pane_mgr.drag_separator(is_vert, sep_key, mouse_x, mouse_y, viewport, cell_w, cell_h);
+        }
+    }
+
     /// Resize all panes and terminals. The active tab's panes are resized to their
     /// individual rect-derived dimensions; inactive tabs keep their last layout.
     pub fn resize_all(

@@ -202,6 +202,33 @@ impl App {
         self.input.mouse_pos.0 >= term_right_px
     }
 
+    /// If the pixel position `(px, py)` is within ±3 physical pixels of a pane
+    /// separator, returns the drag state identifying that separator.
+    fn separator_at_pixel(&self, px: f32, py: f32) -> Option<input::SeparatorDragState> {
+        let viewport = self.viewport_rect();
+        let (cell_w, cell_h) = self.cell_dims();
+        let (cw, ch) = (cell_w as f32, cell_h as f32);
+        let seps = self.mux.active_pane_separators(viewport, cw, ch);
+        for sep in &seps {
+            if sep.vertical {
+                let sep_x    = viewport.x + sep.col as f32 * cw;
+                let row_top  = viewport.y + sep.row as f32 * ch;
+                let row_bot  = row_top + sep.length as f32 * ch;
+                if (px - sep_x).abs() <= 3.0 && py >= row_top && py <= row_bot {
+                    return Some(input::SeparatorDragState { is_vert: true,  key: sep.col });
+                }
+            } else {
+                let sep_y    = viewport.y + sep.row as f32 * ch;
+                let col_lft  = viewport.x + sep.col as f32 * cw;
+                let col_rgt  = col_lft + sep.length as f32 * cw;
+                if (py - sep_y).abs() <= 3.0 && px >= col_lft && px <= col_rgt {
+                    return Some(input::SeparatorDragState { is_vert: false, key: sep.row });
+                }
+            }
+        }
+        None
+    }
+
     #[cfg(target_os = "macos")]
     unsafe fn apply_macos_custom_titlebar(&self, window: &Window) {
         use objc2::msg_send;
@@ -467,6 +494,10 @@ impl ApplicationHandler<()> for App {
                     } else if self.mux.active_pane_count() != pane_count_before {
                         // Pane split or close — resize all panes in current tab.
                         self.resize_terminals_for_panel();
+                    } else if self.input.pane_ratio_adjusted {
+                        // <leader>+Option+Arrow pane resize — resize with new ratio.
+                        self.input.pane_ratio_adjusted = false;
+                        self.resize_terminals_for_panel();
                     }
                     if let Some(w) = &self.window { w.request_redraw(); }
                 }
@@ -478,7 +509,21 @@ impl ApplicationHandler<()> for App {
                 if self.ui.context_menu.update_hover(col, row) {
                     if let Some(w) = &self.window { w.request_redraw(); }
                 }
-                if self.input.mouse_left_pressed && !self.mouse_in_panel() {
+                // Separator drag — update ratio live.
+                if let Some(drag) = &self.input.dragging_separator {
+                    let is_vert = drag.is_vert;
+                    let key     = drag.key;
+                    let viewport = self.viewport_rect();
+                    let (cell_w, cell_h) = self.cell_dims();
+                    self.mux.cmd_drag_separator(
+                        is_vert, key,
+                        position.x as f32, position.y as f32,
+                        viewport,
+                        cell_w as f32, cell_h as f32,
+                    );
+                    self.resize_terminals_for_panel();
+                    if let Some(w) = &self.window { w.request_redraw(); }
+                } else if self.input.mouse_left_pressed && !self.mouse_in_panel() {
                     if let Some(terminal) = self.mux.active_terminal() {
                         terminal.update_selection(col, row);
                         let (any_mouse, _, motion) = terminal.mouse_mode_flags();
@@ -559,6 +604,18 @@ impl ApplicationHandler<()> for App {
                             if let Some(w) = &self.window { w.request_redraw(); }
                             return;
                         }
+                        // Separator drag: if click is within ±3px of a separator, start drag.
+                        let sep_hit = if !in_panel {
+                            self.separator_at_pixel(self.input.mouse_pos.0 as f32, self.input.mouse_pos.1 as f32)
+                        } else {
+                            None
+                        };
+                        if let Some(drag_state) = sep_hit {
+                            self.input.dragging_separator = Some(drag_state);
+                            if let Some(w) = &self.window { w.request_redraw(); }
+                            return;
+                        }
+
                         if in_panel {
                             self.ui.panel_focused = true;
                         } else {
@@ -590,7 +647,12 @@ impl ApplicationHandler<()> for App {
                     }
                     (MouseButton::Left, ElementState::Released) => {
                         self.input.mouse_left_pressed = false;
-                        if !in_panel { self.input.send_mouse_report(0, col, row, false, &self.mux); }
+                        if self.input.dragging_separator.take().is_some() {
+                            // Separator drag ended — resize terminals to new pane dimensions.
+                            self.resize_terminals_for_panel();
+                        } else if !in_panel {
+                            self.input.send_mouse_report(0, col, row, false, &self.mux);
+                        }
                     }
                     (MouseButton::Right, ElementState::Pressed) => {
                         // In mouse-reporting mode, pass right-click to the terminal app.

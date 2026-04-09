@@ -13,6 +13,14 @@ use alacritty_terminal::term::TermMode;
 
 pub mod key_map;
 
+/// Active separator drag: identifies which Split is being resized via mouse.
+pub struct SeparatorDragState {
+    /// `true` = vertical separator line (a Horizontal split), `false` = horizontal line.
+    pub is_vert: bool,
+    /// Column (for vertical sep) or row (for horizontal sep) that identifies the separator.
+    pub key: usize,
+}
+
 /// Manages keyboard and mouse input state, including the leader key and cursor blinking.
 pub struct InputHandler {
     pub modifiers: Modifiers,
@@ -30,10 +38,16 @@ pub struct InputHandler {
     pub click_count: u32,
     pub last_click_time: Instant,
     pub last_click_cell: (usize, usize),
+    /// Active separator drag (mouse drag resize). Set on LMB press near a separator.
+    pub dragging_separator: Option<SeparatorDragState>,
 
     // Cursor blink state
     pub cursor_blink_on: bool,
     pub cursor_last_blink: Instant,
+
+    /// Set when a <leader>+Option+Arrow pane-resize keybind fires so that
+    /// `app/mod.rs` knows to call `resize_terminals_for_panel` afterward.
+    pub pane_ratio_adjusted: bool,
 }
 
 impl InputHandler {
@@ -58,8 +72,10 @@ impl InputHandler {
             click_count: 0,
             last_click_time: Instant::now(),
             last_click_cell: (usize::MAX, usize::MAX),
+            dragging_separator: None,
             cursor_blink_on: true,
             cursor_last_blink: Instant::now(),
+            pane_ratio_adjusted: false,
         }
     }
 
@@ -189,6 +205,27 @@ impl InputHandler {
             }
             self.leader_active = false;
             self.leader_timer = None;
+
+            // <leader> + Option/Alt + ←→↑↓ → resize pane (TD-042).
+            let alt = self.modifiers.state().alt_key();
+            if alt {
+                if let Key::Named(named) = &event.logical_key {
+                    use crate::ui::panes::FocusDir;
+                    let dir_opt = match named {
+                        NamedKey::ArrowLeft  => Some(FocusDir::Left),
+                        NamedKey::ArrowRight => Some(FocusDir::Right),
+                        NamedKey::ArrowUp    => Some(FocusDir::Up),
+                        NamedKey::ArrowDown  => Some(FocusDir::Down),
+                        _ => None,
+                    };
+                    if let Some(dir) = dir_opt {
+                        mux.cmd_adjust_pane_ratio(dir, 0.05);
+                        self.pane_ratio_adjusted = true;
+                        return;
+                    }
+                }
+            }
+
             if let Key::Character(s) = &event.logical_key {
                 // Leader + 1-9: select tab by index (hardcoded, like Cmd+1-9)
                 if let Ok(n) = s.parse::<usize>() {
