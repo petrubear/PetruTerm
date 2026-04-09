@@ -1,15 +1,15 @@
 # Active Context
 
-**Current Focus:** Phase 3 P2 — Status Bar
+**Current Focus:** Deuda técnica abierta / Phase 3 P3
 **Last Active:** 2026-04-08
 
 ## Estado actual del proyecto
 
-**Phase 1 COMPLETE. Phase 2 COMPLETE. Phase 2.5 COMPLETE (P1+P2+P3). Phase 3 P1 implementada.**
-**Deuda técnica: 2 ítems abiertos (P2, P3).**
-**Tests: 16/16 passing. `cargo build` PASA limpio.**
+**Phase 1 COMPLETE. Phase 2 COMPLETE. Phase 2.5 COMPLETE (P1+P2+P3). Phase 3 P1 COMPLETE. Phase 3 P2 COMPLETE. Phase 3 P3 parcial.**
+**Deuda técnica: 10 ítems abiertos (P0:1, P1:3, P2:5, P3:1). Triaje Kiro completado 2026-04-08.**
+**Tests: 16/16 passing. `cargo build` PASA limpio. `cargo clippy -D warnings` PASA limpio.**
 
-### Features verificados (2026-04-08)
+### Features verificados
 
 | Feature | Estado |
 |---------|--------|
@@ -17,74 +17,48 @@
 | Custom title bar, .app bundle, icono | ✅ |
 | Scrollback + scroll bar | ✅ |
 | Ligatures, nvim/tmux verificados | ✅ |
+| Emoji / color glyph rendering | ✅ |
 | AI panel + inline AI block (Ctrl+Space) | ✅ |
-| Leader key system | ✅ |
+| Leader key system (Ctrl+F) | ✅ |
 | LLM providers (OpenRouter/Ollama/LMStudio) | ✅ |
 | Historial de chat por pane | ✅ |
 | Tab bar (pill shape, SDF shader) | ✅ |
-| Shell exit cierra tab (o solo el pane si hay más) | ✅ |
+| Tab rename (`<leader>,`) | ✅ |
+| Shell exit cierra tab | ✅ |
 | Selección doble/triple click | ✅ |
 | Context menu (right-click: Copy/Paste/Clear/Ask AI) | ✅ |
-| Keybinds en command palette | ✅ |
-| Default configs completas | ✅ |
-| Emoji / color glyph rendering | ✅ |
+| Command palette con keybinds | ✅ |
 | Phase 2.5 P1 — file context + AGENTS.md + file picker | ✅ |
 | Phase 2.5 P2 — LLM tool use (ReadFile, ListDir) | ✅ |
 | Phase 2.5 P3 — WriteFile + RunCommand + undo | ✅ |
-| Multi-pane splits + separadores + padding | ✅ |
+| Multi-pane splits + separadores | ✅ |
 | Leader+h/j/k/l — vim-style pane focus | ✅ |
-| /quit solo cierra panel (no tabs) | ✅ |
-| System prompt abierto a preguntas generales | ✅ |
-| Ctrl+B a — abrir/cerrar panel | ✅ |
-| Ctrl+B A — mover focus terminal ↔ chat | ✅ |
+| Status bar — leader, CWD, git branch, exit code, time | ✅ |
 
-## Phase 3 P2 — Status Bar (EN PROGRESO)
+## Deuda técnica abierta (priorizada)
 
-### Diseño
+| ID | Prioridad | Esfuerzo | Descripción |
+|----|-----------|----------|-------------|
+| TD-030 | **P0** | ~30 min | Archivos adjuntos sin límite de tamaño → OOM |
+| TD-029 | P1 | ~15 min | `cwd` no canonicalizado rompe tool use en macOS |
+| TD-031 | P1 | ~20 min | Regex compilada en cada `sanitize_command` |
+| TD-033 | P1 | 1–2 h | Fallback de tool rounds mapea `tool` msgs a `System` |
+| TD-032 | P2 | ~2 h | `api_msgs.clone()` hasta 10x por query |
+| TD-035 | P2 | ~45 min | Doble lookup hashmap en render loop |
+| TD-036 | P2 | ~30 min | Hot-reload lee keybinds.lua completo para extraer versión |
+| TD-037 | P2 | ~10 min | Undo stack sin límite de tamaño |
+| TD-038 | P2 | ~1.5 h | Errores LLM sin contexto accionable |
+| TD-034 | P3 | ~1 h | `run_command` sin indicador de riesgo visual |
 
-**Layout visual:**
-```
-[ leader ] [ cwd ] [ git_branch ]          [ exit_code ] [ time ]
-  izquierda, separados por ›               derecha, separados por │
-```
+## Phase 3 P3 — Pendiente
 
-**Segmentos izquierda:**
-- `leader`: texto "LEADER", bg morado Dracula cuando activo, gris cuando inactivo
-- `cwd`: directorio truncado a ~20 chars (…/PetruTerm)
-- `git_branch`: rama + dirty flag `*` (vacío si no es repo)
-
-**Segmentos derecha:**
-- `exit_code`: solo visible si ≠ 0, bg rojo, texto "✘ N"
-- `time`: "2026-04-08 10:36"
-
-**Decisiones técnicas:**
-- Posición default: `bottom` (configurable top/bottom)
-- Altura: 1 fila del terminal (mismo mecanismo que tab bar)
-- Git branch: async tokio, cache TTL 5s, channel igual que AI events
-- Fondo entre segmentos: Dracula `current-line`
-
-### Subtareas
-
-| # | Tarea | Estado | Bloqueada por |
-|---|-------|--------|--------------|
-| 1 | `StatusBarConfig` + schema + ajuste de padding | 🔲 pendiente | — |
-| 2 | `StatusBar` struct + segmentos izquierda/derecha | 🔲 pendiente | #1 |
-| 3 | Git branch async con cache TTL 5s | 🔲 pendiente | #2 |
-| 4 | `build_status_bar_instances()` en renderer GPU | 🔲 pendiente | #2 |
-| 5 | Lua API + `ToggleStatusBar` en command palette | 🔲 pendiente | #3, #4 |
-
-### Archivos a crear/modificar
-
-| Archivo | Cambio |
-|---------|--------|
-| `src/ui/status_bar.rs` | NUEVO — StatusBar, StatusBarSegment, build() |
-| `src/config/schema.rs` | StatusBarConfig, StatusBarPosition |
-| `config/default/ui.lua` | config.status_bar = { enabled, position } |
-| `src/app/mod.rs` | status_bar_height_px(), resize ajustado |
-| `src/app/renderer.rs` | build_status_bar_instances() |
-| `src/app/ui.rs` | poll_status_bar_events(), git cache, ToggleStatusBar |
-| `src/ui/palette/actions.rs` | Action::ToggleStatusBar |
-| `src/config/lua.rs` | petruterm.statusbar.register_widget() |
+| Tarea | Estado |
+|-------|--------|
+| Tab rename `<leader>,` | ✅ (2026-04-08) |
+| Snippets: `config.snippets` tabla Lua, expandir via palette | 🔲 |
+| Starship compatibility: detectar `STARSHIP_SHELL` | 🔲 |
+| Powerline / Nerd Font glyphs en widgets | 🔲 |
+| Built-in themes en `assets/themes/` | 🔲 |
 
 ## Keybinds actuales
 
@@ -93,20 +67,23 @@
 | `^F c` | New tab |
 | `^F &` | Close tab |
 | `^F n/b` | Next/prev tab |
+| `^F ,` | Rename active tab |
 | `^F %` | Split horizontal |
 | `^F "` | Split vertical |
 | `^F x` | Close pane |
 | `^F h/j/k/l` | Focus pane left/down/up/right |
 | `^F a` | Abrir / cerrar AI panel |
-| `^F A` | Mover focus terminal ↔ chat (sin cerrar) |
-| `^F e/f` | Explain/Fix last output |
+| `^F A` | Mover focus terminal ↔ chat |
+| `^F e` | Explain last output |
+| `^F f` | Fix last error |
 | `^F z` | Undo last write |
 | `^F o` | Command palette |
 | `Ctrl+Space` | Inline AI block |
-| Right-click | Context menu (Copy/Paste/Clear/Ask AI) |
+| Right-click | Context menu |
 
-## Pendiente después de Status Bar
+## Próximos pasos recomendados
 
-- Phase 3 P3: Snippets, Starship, temas built-in
-- Phase 4: Plugin ecosystem (lazy.nvim-style)
-- TD-027 (P3): Tab rename con `<leader>,`
+1. **Sesión rápida (~1.5 h):** resolver TD-030 + TD-029 + TD-031 + TD-037 (4 fixes triviales)
+2. **Sesión media (~2 h):** TD-033 (extender ChatRole con Tool variant)
+3. **Phase 3 P3:** Snippets y Starship
+4. **Phase 4:** Plugin ecosystem

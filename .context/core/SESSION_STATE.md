@@ -1,47 +1,54 @@
 # Session State
 
 **Last Updated:** 2026-04-08
-**Session Focus:** Phase 3 P2 — Status Bar + UX fixes + leader key change
+**Session Focus:** Análisis y triaje de deuda técnica reportada por Kiro
 
 ## Branch: `master`
 
-## Session Notes (2026-04-08 — Phase 3 P2 + fixes)
+## Session Notes (2026-04-08 — Triaje de deuda técnica)
 
-### Phase 3 P2 — Status Bar (COMPLETA)
+### Trabajo realizado
 
-#### Archivos nuevos
-- `src/ui/status_bar.rs` — StatusBar, StatusBarSegment, build(), format_time(), truncate_path()
+Revisión completa de los 12 items reportados por Kiro (TD-029–TD-040) contra el código real.
 
-#### Cambios clave
-- `src/config/schema.rs`: `StatusBarConfig { enabled, position }`, `StatusBarPosition { Top, Bottom }`
-- `config/default/ui.lua`: `config.status_bar = { enabled=true, position="bottom" }`
-- `src/config/lua.rs`: parsing de `status_bar` table; `ToggleStatusBar` expuesto en `petruterm.action`
-- `src/app/mod.rs`: `status_bar_height_px()`, `default_grid_size` y `viewport_rect` restan `sb_h` del bottom
-- `src/app/ui.rs`: `poll_git_branch()` con cache TTL 5s; `fetch_git_branch()` async (tokio); `ToggleStatusBar` handler
-- `src/app/renderer.rs`: `build_status_bar_instances()` — left segments con `›`, right segments con `│`
-- `src/ui/palette/actions.rs`: `Action::ToggleStatusBar`, entry en palette
+#### Resultados del triaje
 
-#### Layout de la status bar
-```
-[ ^F ] [ ~/…/PetruTerm ] [ master* ]        [ ✘ 1 ] [ 2026-04-08 10:36 ]
-  izquierda (›)                               derecha (│)
-```
+| Item | Veredicto | Cambio |
+|------|-----------|--------|
+| TD-029 | Real — descripción corregida | P0 → P1; no es bypass sino bug macOS |
+| TD-030 | Real | Se mantiene P0 |
+| TD-031 | Real | Se mantiene P1 |
+| TD-032 | Real | P1 → P2 (eficiencia, no correctitud) |
+| TD-033 | Real — descripción corregida | Se mantiene P1; mensajes tool → System, no descartados |
+| TD-034 | Real | P1 → P3 (confirmación ya existe) |
+| TD-035 | Real | Se mantiene P2 |
+| TD-036 | Real | Se mantiene P2 |
+| TD-037 | Real | Se mantiene P2 |
+| TD-038 | Real | Se mantiene P2 |
+| TD-039 | **FALSO POSITIVO** | Cerrado; `attach_file` ya tiene dedup guard |
+| TD-040 | Duplicado | Consolidado en TD-029 |
 
-### Leader key: Ctrl+B → Ctrl+F
-- `config/default/keybinds.lua`: `key = "f"`
-- `~/.config/petruterm/keybinds.lua`: `key = "f"`
-- `src/config/schema.rs`: `LeaderConfig::default()` → `key: "f"`
+#### Estado final del registro
+- Items abiertos: **10** (de 12)
+- P0: 1 | P1: 3 | P2: 5 | P3: 1
 
-### Bug fixes y UX (commits anteriores)
-- `/quit` en chat solo cierra el panel (no el tab)
-- System prompt del chat ampliado (responde preguntas generales)
-- Context menu: separador + "Ask AI" (envía selección al chat)
-- `Ctrl+F a` / `Ctrl+F A` — toggle vs focus del AI panel (dos keybinds separados)
+#### Esfuerzo estimado total: ~9 h
+- Trivial (< 30 min): TD-029, TD-030, TD-031, TD-037
+- Bajo (30–60 min): TD-035, TD-036
+- Medio (1–2 h): TD-033, TD-034, TD-038
+- Alto: TD-032
+
+### Archivos modificados
+- `.context/quality/TECHNICAL_DEBT.md` — triaje aplicado, conteos corregidos
 
 ## Build & Tests
-- **cargo build:** PASS (2026-04-08)
+- **cargo build:** PASS (2026-04-08, sesión anterior)
 - **cargo test:** 16/16 PASS
-- **cargo clippy:** pendiente verificar
+- **cargo clippy:** PASS (TD-022 resuelto)
 
-## Session anterior (2026-04-08 — UX fixes)
-Ver commit b92cdeb.
+## Próxima sesión
+
+Opciones en orden de ROI:
+1. Resolver los 4 triviales en una sesión: TD-029, TD-030, TD-031, TD-037
+2. Continuar Phase 3 P3 — Snippets, Starship, temas built-in
+3. Resolver TD-033 (fallback de tool rounds — requiere extender ChatRole)

@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-04-08
-**Open Items:** 0
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0
+**Open Items:** 10
+**Critical (P0):** 1 | **P1:** 3 | **P2:** 5 | **P3:** 1
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -19,27 +19,44 @@
 
 ## P0 - Critical
 
-- _None_
+- **TD-030** (P0) [Kiro]: **Archivos adjuntos al LLM sin límite de tamaño** (`src/app/ui.rs:340-344`). `std::fs::read_to_string` se inyecta completo en el system message sin ningún cap. Un archivo de varios MB puede agotar memoria, exceder el context window del LLM silenciosamente, o ser explotado con prompt injection. Fix: limitar a un máximo configurable (ej. 512 KB por archivo, 1 MB total).
 
 ---
 
 ## P1 - High Priority
 
-- _None_
+- **TD-029** (P1) [Kiro]: **`cwd` no canonicalizado rompe `execute_tool` en macOS** (`src/llm/tools.rs:172`, `src/app/ui.rs`). El check `canon.starts_with(cwd)` compara una ruta canonicalizada contra `cwd` no canonicalizado. En macOS, `/var/folders/...` es symlink a `/private/var/...`, lo que hace que `starts_with` devuelva `false` para rutas legítimas dentro del proyecto — las herramientas `read_file` y `list_dir` fallan silenciosamente. Fix: canonicalizar `cwd` una vez antes del `spawn` en `submit_ai_query` y usar esa versión en `execute_tool`. Consolida TD-040.
+
+- **TD-031** (P1) [Kiro]: **Regex compilada en cada llamada a `sanitize_command`** (`src/llm/shell_context.rs:37-44`). Dos `Regex::new(...).unwrap()` se ejecutan en cada invocación. Deben ser `static` con `once_cell::sync::Lazy`.
+
+- **TD-033** (P1) [Kiro]: **Historial corrupto en el fallback de tool rounds agotados** (`src/app/ui.rs:480-503`). Cuando se agotan los 10 rounds, el fallback mapea mensajes con `role == "tool"` a `ChatRole::System` (brazo `_` del match), enviándolos con rol incorrecto al LLM. Los mensajes `assistant` que sólo contienen `tool_calls` quedan con `content: ""`. El LLM puede responder de forma incoherente sin que el usuario lo sepa. Fix: extender `ChatRole` con `Tool` o reutilizar el path `agent_step` en el fallback.
 
 ---
 
 ## P2 - Medium Priority
 
-- _None_
+- **TD-032** (P2) [Kiro]: **Clone masivo del historial en cada tool round** (`src/app/ui.rs:373`). `api_msgs.clone()` se llama hasta 10 veces por query, clonando el vector completo incluyendo el system message con archivos adjuntos. Con archivos grandes esto puede ser varios MB por clone. Considerar pasar por referencia o usar `Arc`.
+
+- **TD-035** (P2) [Kiro]: **Doble lookup al hashmap en el render loop** (`src/app/renderer.rs:144,165`). Se llama `entry()` para insertar y luego `get()` para leer en el mismo `row_caches` hashmap, resultando en dos lookups por fila. Refactorizar para usar la referencia retornada por `entry()` directamente.
+
+- **TD-036** (P2) [Kiro]: **`update_managed_configs` lee archivo completo del disco para comparar versión** (`src/config/mod.rs:89-109`). En cada hot-reload se lee todo `keybinds.lua` solo para extraer un número de versión. La versión debería cachearse en memoria tras la primera lectura.
+
+- **TD-037** (P2) [Kiro]: **Undo stack sin límite de tamaño** (`src/app/ui.rs:265`). `self.undo_stack` es un `Vec` que crece indefinidamente. Con muchas escrituras de archivos grandes en una sesión, acumula todo el contenido anterior en memoria. Fix: limitar a N entradas (ej. 10) con política FIFO.
+
+- **TD-038** (P2) [Kiro]: **Errores LLM sin contexto accionable para el usuario** (`src/app/ui.rs:163`). El mensaje crudo de `anyhow` se muestra directamente (ej. `"OpenRouter returned an error status"`). No se diferencia entre API key inválida, rate limit, sin conexión, o modelo no disponible. Cada caso debería tener un mensaje con acción clara.
 
 ---
 
 ## P3 - Low Priority
 
-- _None_
+- **TD-034** (P3) [Kiro]: **`run_command` sin indicador de riesgo visual** (`src/app/ui.rs:211-222`). El comando propuesto por el LLM ya requiere confirmación explícita (y/n), pero la UI no diferencia ni advierte sobre patrones potencialmente destructivos (ej. `rm -rf`, `curl | sh`). Fix: añadir un indicador de riesgo junto al prompt de confirmación para patrones conocidos peligrosos.
 
 ---
+
+## Closed / Invalid (2026-04-08)
+
+- **TD-039** (P3) [Kiro]: FALSO POSITIVO — `init_default_files` ya llama a `attach_file`, que tiene guard `if self.attached_files.contains(&path) { return; }` (`chat_panel.rs:328`). AGENTS.md no puede duplicarse.
+- **TD-040** (P3) [Kiro]: Consolidado en TD-029 — misma raíz (`cwd` no canonicalizado). Fix único en `submit_ai_query` antes del `spawn`.
 
 ## Recently Resolved (2026-04-08)
 
