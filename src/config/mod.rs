@@ -93,8 +93,12 @@ fn update_managed_configs(dir: &std::path::Path) {
     for (name, bundled) in managed {
         let dest = dir.join(name);
         let needs_update = if dest.exists() {
-            let existing = std::fs::read_to_string(&dest).unwrap_or_default();
-            extract_lua_version(&existing) != extract_lua_version(bundled)
+            // Read only the first 256 bytes — the version tag is always in the first line
+            // so we never read the whole file just to compare a version number (TD-036).
+            let bundled_ver = extract_lua_version(bundled);
+            let existing_ver = read_first_bytes(&dest, 256)
+                .and_then(|s| extract_lua_version(&s).map(|v| v.to_owned()));
+            existing_ver.as_deref() != bundled_ver
         } else {
             true
         };
@@ -106,6 +110,15 @@ fn update_managed_configs(dir: &std::path::Path) {
             }
         }
     }
+}
+
+/// Read up to `max_bytes` from a file and return as a String (lossy UTF-8).
+fn read_first_bytes(path: &std::path::Path, max_bytes: usize) -> Option<String> {
+    use std::io::Read;
+    let mut f = std::fs::File::open(path).ok()?;
+    let mut buf = vec![0u8; max_bytes];
+    let n = f.read(&mut buf).ok()?;
+    Some(String::from_utf8_lossy(&buf[..n]).into_owned())
 }
 
 /// Extract the `-- petruterm-config-version: N` tag from a Lua config file.

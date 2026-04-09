@@ -183,11 +183,6 @@ impl RenderContext {
             }
 
             // Cache miss: shape and rasterize.
-            if let Some(cache) = self.row_caches.get_mut(&terminal_id) {
-                if row_idx < cache.dirty_rows.len() {
-                    cache.dirty_rows[row_idx] = true;
-                }
-            }
             let mut row_instances: Vec<CellVertex> = Vec::new();
             let mut row_lcd_instances: Vec<CellVertex> = Vec::new();
 
@@ -276,8 +271,11 @@ impl RenderContext {
                 self.lcd_instances.push(v);
             }
 
-            // Store local coordinates in cache.
+            // Store local coordinates in cache; mark row dirty in the same lookup (TD-035).
             if let Some(cache) = self.row_caches.get_mut(&terminal_id) {
+                if row_idx < cache.dirty_rows.len() {
+                    cache.dirty_rows[row_idx] = true;
+                }
                 if row_idx < cache.rows.len() {
                     cache.rows[row_idx] = Some(RowCacheEntry {
                         hash: row_hash,
@@ -557,8 +555,19 @@ impl RenderContext {
                     }
                 }
                 Some(ConfirmDisplay::Run { cmd }) => {
+                    const WARN_FG: [f32; 4] = [1.00, 0.72, 0.20, 1.0]; // amber
+                    // Detect potentially destructive patterns (TD-034).
+                    let is_risky = ["rm ", "rm\t", "rm -", ":(){", "dd ", "mkfs",
+                                    "curl | sh", "curl|sh", "wget | sh", "wget|sh",
+                                    "chmod -R 777", "> /dev/"]
+                        .iter().any(|p| cmd.contains(p));
+                    let (title, title_fg) = if is_risky {
+                        ("│ \u{26a0} Run command (destructive):", WARN_FG)
+                    } else {
+                        ("│ Run command:", BORDER_FG)
+                    };
                     // Row 1: title
-                    self.push_shaped_row("│ Run command:", BORDER_FG, panel_bg, 1, co, panel_cols, font);
+                    self.push_shaped_row(title, title_fg, panel_bg, 1, co, panel_cols, font);
                     // Row 2: command
                     let cmd_line = format!("│   {}", cmd.chars().take(panel_cols.saturating_sub(5)).collect::<String>());
                     self.push_shaped_row(&cmd_line, ADD_FG, panel_bg, 2, co, panel_cols, font);

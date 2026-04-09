@@ -14,7 +14,27 @@ use winit::window::Window;
 use crate::app::mux::Mux;
 use crate::app::renderer::RenderContext;
 
-/// Manages UI overlays: command palette, context menu, per-pane chat panels, and the inline AI block.
+//// Convert a raw LLM error string into an actionable user message (TD-038).
+fn classify_llm_error(e: &str) -> String {
+    let e_lower = e.to_ascii_lowercase();
+    if e_lower.contains("401") || e_lower.contains("unauthorized") || e_lower.contains("invalid api key") {
+        "API key invalid or missing. Check llm.api_key in ~/.config/petruterm/llm.lua".to_string()
+    } else if e_lower.contains("429") || e_lower.contains("rate limit") || e_lower.contains("too many requests") {
+        "Rate limit reached. Wait a moment and try again, or switch to a different model.".to_string()
+    } else if e_lower.contains("connection") || e_lower.contains("connect") || e_lower.contains("network") || e_lower.contains("dns") {
+        "Cannot reach LLM provider. Check your internet connection or provider URL in llm.lua".to_string()
+    } else if e_lower.contains("404") || e_lower.contains("model not found") || e_lower.contains("no such model") {
+        "Model not found. Check llm.model in ~/.config/petruterm/llm.lua".to_string()
+    } else if e_lower.contains("500") || e_lower.contains("502") || e_lower.contains("503") || e_lower.contains("server error") {
+        "LLM provider returned a server error. Try again in a moment.".to_string()
+    } else if e_lower.contains("context") && (e_lower.contains("length") || e_lower.contains("limit") || e_lower.contains("exceed")) {
+        "Context window exceeded. Detach some files or start a new conversation.".to_string()
+    } else {
+        e.to_string()
+    }
+}
+
+// Manages UI overlays: command palette, context menu, per-pane chat panels, and the inline AI block.
 pub struct UiManager {
     pub palette: CommandPalette,
     pub context_menu: ContextMenu,
@@ -162,7 +182,7 @@ impl UiManager {
                 AiEvent::Done       => panel.mark_done(),
                 AiEvent::Error(e)   => {
                     log::error!("LLM error: {e}");
-                    panel.mark_error(e);
+                    panel.mark_error(classify_llm_error(&e));
                 }
                 AiEvent::ToolStatus { tool, path, done } => {
                     panel.set_tool_status(&tool, &path, done);
@@ -177,6 +197,10 @@ impl UiManager {
                     self.pending_confirm_tx = Some(result_tx);
                 }
                 AiEvent::UndoState { path, content } => {
+                    const MAX_UNDO: usize = 10;
+                    if self.undo_stack.len() >= MAX_UNDO {
+                        self.undo_stack.remove(0); // FIFO: drop oldest (TD-037)
+                    }
                     self.undo_stack.push((path, content));
                 }
             }
@@ -325,6 +349,9 @@ impl UiManager {
 
     /// Submit the current panel input. `cwd` is used for tool sandboxing.
     pub fn submit_ai_query(&mut self, wakeup_proxy: EventLoopProxy<()>, cwd: PathBuf) {
+        // Canonicalize once — on macOS /var is a symlink to /private/var; without this
+        // execute_tool's canon.starts_with(cwd) check always fails (TD-029).
+        let cwd = cwd.canonicalize().unwrap_or(cwd);
         // TD-019: capture the originating panel id before any await so tokens are
         // routed back to the correct panel even if the user switches tabs mid-stream.
         let panel_id = self.active_panel_id;
@@ -344,12 +371,22 @@ impl UiManager {
             system_text.push_str(&format!("\n\nShell context:\n{}", ctx.format_for_system_message()));
         }
 
-        // Inject attached file contents into the system message.
+        // Inject attached file contents — capped at 512 KB/file and 1 MB total (TD-030).
+        const MAX_FILE_BYTES: usize = 512 * 1024;
+        const MAX_TOTAL_BYTES: usize = 1024 * 1024;
+        let mut total_bytes = 0usize;
         let attached: Vec<_> = self.panel().attached_files.clone();
         for path in &attached {
-            if let Ok(content) = std::fs::read_to_string(path) {
+            if total_bytes >= MAX_TOTAL_BYTES { break; }
+            if let Ok(bytes) = std::fs::read(path) {
+                let cap = bytes.len().min(MAX_FILE_BYTES).min(MAX_TOTAL_BYTES - total_bytes);
+                let content = String::from_utf8_lossy(&bytes[..cap]);
                 let name = path.display();
                 system_text.push_str(&format!("\n\n--- File: {name} ---\n{content}"));
+                if cap < bytes.len() {
+                    system_text.push_str("\n[... truncated — file exceeds size limit ...]");
+                }
+                total_bytes += cap;
             }
         }
 
@@ -470,11 +507,16 @@ impl UiManager {
             }
 
             // Fallback: if tool rounds exhausted, do a final streaming call.
+            // Drop tool-result messages (role:"tool") and assistant messages whose content
+            // is empty (they only carried tool_calls) — both would be sent with the wrong
+            // role or corrupt the conversation history (TD-033).
             match provider.stream(
                 api_msgs.iter()
                     .filter_map(|v| {
                         let role = v.get("role")?.as_str()?;
+                        if role == "tool" { return None; }
                         let content = v.get("content")?.as_str().unwrap_or("").to_string();
+                        if role == "assistant" && content.is_empty() { return None; }
                         Some(crate::llm::ChatMessage {
                             role: match role {
                                 "user"      => crate::llm::ChatRole::User,

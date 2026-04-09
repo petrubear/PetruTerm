@@ -1,5 +1,14 @@
 use std::path::PathBuf;
+use std::sync::LazyLock;
+use regex::Regex;
 use serde::Deserialize;
+
+static EXPORT_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r##"(?i)(password|token|key|secret|auth|pass|pwd)=[^ \t\n\r|;&<>]+"##).unwrap()
+});
+static AUTH_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r##"(?i)(-H|--header)\s+['"]?(authorization|x-api-key):\s*[^ \t\n\r'"|;&<>]+['"]?"##).unwrap()
+});
 
 /// Shell state written by `scripts/shell-integration.zsh` after each command.
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -35,14 +44,8 @@ impl ShellContext {
 
     /// Redact sensitive information like API keys, tokens, and passwords from commands.
     pub fn sanitize_command(cmd: &str) -> String {
-        // Redact "export VAR=secret" or "VAR=secret command"
-        let export_regex = regex::Regex::new(r##"(?i)(password|token|key|secret|auth|pass|pwd)=[^ \t\n\r|;&<>]+"##).unwrap();
-        let cmd = export_regex.replace_all(cmd, "$1=[REDACTED]");
-
-        // Redact common auth headers/keys in curl or similar commands
-        let auth_regex = regex::Regex::new(r##"(?i)(-H|--header)\s+['"]?(authorization|x-api-key):\s*[^ \t\n\r'"|;&<>]+['"]?"##).unwrap();
-        let cmd = auth_regex.replace_all(&cmd, "$1 $2: [REDACTED]");
-
+        let cmd = EXPORT_REGEX.replace_all(cmd, "$1=[REDACTED]");
+        let cmd = AUTH_REGEX.replace_all(&cmd, "$1 $2: [REDACTED]");
         cmd.to_string()
     }
 
