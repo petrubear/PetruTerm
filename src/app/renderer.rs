@@ -937,11 +937,11 @@ impl RenderContext {
 }
 
 impl RenderContext {
-    /// Render the status bar as a 1-row strip.
+    /// Render the status bar as a 1-row strip with a visual height extension below it.
     ///
-    /// `row` is the terminal grid row index where the bar should appear:
-    ///   - position=Bottom: `total_rows` (one row below the last terminal row)
-    ///   - position=Top: not yet implemented (reserved)
+    /// `row` is the terminal grid row index where the bar text appears (= `total_rows`).
+    /// `pad_y` and `win_w` are used to render a full-width background rect that extends
+    /// `SB_EXTRA_PX` physical pixels below the cell row, making the bar look taller.
     ///
     /// Left segments are rendered with › separators; right segments are
     /// right-aligned with │ separators. The gap between them fills with `bar_bg`.
@@ -951,10 +951,28 @@ impl RenderContext {
         font: &crate::config::schema::FontConfig,
         total_cols: usize,
         row: usize,
+        pad_y: f32,
+        win_w: f32,
     ) {
         use crate::ui::status_bar::StatusBar;
 
+        const SB_EXTRA_PX: f32 = 8.0;
+
         let bar_bg  = StatusBar::bar_bg();
+
+        // Full-width background rect: covers the cell row + SB_EXTRA_PX extension below.
+        // Renders before cell backgrounds (rect pass is first), filling left/right padding
+        // areas and the extension strip with the bar's background color.
+        {
+            let cell_h = self.shaper.cell_height;
+            let bar_y  = pad_y + row as f32 * cell_h;
+            self.rect_instances.push(crate::renderer::rounded_rect::RoundedRectInstance {
+                rect:   [0.0, bar_y, win_w, cell_h + SB_EXTRA_PX],
+                color:  bar_bg,
+                radius: 0.0,
+                _pad:   [0.0; 3],
+            });
+        }
         let sep_fg  = [0.40, 0.40, 0.55, 1.0];
         let left_sep  = StatusBar::left_sep();
         let right_sep = StatusBar::right_sep();

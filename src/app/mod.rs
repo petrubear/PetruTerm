@@ -72,9 +72,7 @@ impl App {
     }
 
     fn status_bar_height_px(&self) -> f32 {
-        // TD-047: 4 extra physical px above the bar create a visual gap from terminal content.
-        const SB_PAD_PX: f32 = 4.0;
-        if self.config.status_bar.enabled { self.cell_dims().1 as f32 + SB_PAD_PX } else { 0.0 }
+        if self.config.status_bar.enabled { self.cell_dims().1 as f32 } else { 0.0 }
     }
 
     /// Update the GPU uniform padding to account for the tab bar (or lack thereof).
@@ -328,6 +326,8 @@ impl ApplicationHandler<()> for App {
                 // Viewport-wide dimensions for overlay positioning.
                 let total_cols = (viewport.w / cell_w as f32).floor() as usize;
                 let total_rows = (viewport.h / cell_h as f32).floor() as usize;
+                // Capture status bar layout values before the mutable borrow of render_ctx.
+                let sb_pad_y = self.config.window.padding.top as f32 + self.tab_bar_height_px();
                 // Focused pane dimensions (scroll bar, AI block anchor).
                 let (term_cols, term_rows) = self.mux.active_terminal_size();
 
@@ -454,7 +454,8 @@ impl ApplicationHandler<()> for App {
                             crate::llm::shell_context::ShellContext::load()
                                 .and_then(|ctx| if ctx.last_exit_code != 0 { Some(ctx.last_exit_code) } else { None }),
                         );
-                        rc.build_status_bar_instances(&bar, &scaled_font, total_cols + if panel_visible { self.ui.panel().width_cols as usize } else { 0 }, total_rows);
+                        let sb_win_w = rc.renderer.size().0 as f32;
+                        rc.build_status_bar_instances(&bar, &scaled_font, total_cols + if panel_visible { self.ui.panel().width_cols as usize } else { 0 }, total_rows, sb_pad_y, sb_win_w);
                     }
 
                     // ── GPU upload ──────────────────────────────────────────────────────

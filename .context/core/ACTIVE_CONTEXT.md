@@ -36,7 +36,7 @@
 | Status bar — leader, CWD, git branch, exit code, time | ✅ |
 | Pane resize (teclado + mouse drag) | ✅ (TD-042–045 resueltos) |
 | Status bar modo resize (naranja al presionar Option) | ✅ (TD-046) |
-| Padding visual terminal↔status bar (4px) | ✅ (TD-047) |
+| Status bar — altura visual extendida (rect 8px bajo la fila) | ✅ |
 
 ## Deuda técnica abierta
 
