@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-04-09
-**Open Items:** 1
-**Critical (P0):** 1 | **P1:** 0 | **P2:** 0 | **P3:** 0
+**Open Items:** 0
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -17,14 +17,9 @@
 
 ---
 
-## P0 - Critical
-
-- **TD-041** (P0): **Input del chat panel se duplica visualmente** (`src/app/renderer.rs`). Regresión introducida en commit `2cc93f0` (fix Shift+Enter). Cuando `input_lines.len() == 1`, `n.saturating_sub(2)` y `n.saturating_sub(1)` son ambos `0`, así que `vis1` y `vis2` apuntan al mismo índice y la línea se renderiza dos veces. Fix: cuando `n < 2`, `vis1` debe ser `String::new()` (línea anterior vacía) y `vis2` la única línea existente.
-
----
-
 ## Recently Resolved (2026-04-09)
 
+- **TD-041** (P0): Input del chat panel duplicado — `n.saturating_sub(2)` y `n.saturating_sub(1)` eran ambos `0` cuando `n==1`. Fix: `vis1 = if n >= 2 { input_lines[n-2] } else { String::new() }`.
 - **TD-030** (P0): Archivos adjuntos al LLM capeados a 512 KB/archivo y 1 MB total antes de inyectarlos en el system message. Nota de truncado añadida al contexto.
 - **TD-029** (P1): `cwd.canonicalize()` llamado una vez en `submit_ai_query` antes del spawn — fix para macOS donde `/var` es symlink a `/private/var`, rompiendo `starts_with` en `execute_tool`.
 - **TD-031** (P1): `EXPORT_REGEX` y `AUTH_REGEX` en `shell_context.rs` ahora son `LazyLock` estáticos — compilados una vez por proceso.
