@@ -1,7 +1,7 @@
 -- PetruTerm keybinds configuration
 -- petruterm-config-version: 3
--- Leader key: Ctrl+B (tmux-style), 1000ms timeout.
--- After pressing Ctrl+B, press the bound key within the timeout window.
+-- Leader key: Ctrl+F, 1000ms timeout.
+-- After pressing Ctrl+F, press the bound key within the timeout window.
 --
 -- System keybinds that remain hardcoded (not configurable here):
 --   Cmd+C / Cmd+V   — copy / paste (clipboard)
@@ -12,7 +12,7 @@ local petruterm = require("petruterm")
 local module    = {}
 
 function module.apply_to_config(config)
-  config.leader = { key = "b", mods = "CTRL", timeout_ms = 1000 }
+  config.leader = { key = "f", mods = "CTRL", timeout_ms = 1000 }
 
   config.keys = {
     -- ── Overlays ──────────────────────────────────────────────────────────

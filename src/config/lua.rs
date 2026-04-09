@@ -99,6 +99,7 @@ fn inject_petruterm_global(lua: &Lua) -> LuaResult<()> {
         "ToggleAiMode",   // legacy alias kept for compatibility
         "FocusAiPanel",
         "ExplainLastOutput",
+        "ToggleStatusBar",
         "FixLastError",
         "UndoLastWrite",
         "SplitHorizontal",
@@ -316,6 +317,18 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
             if let Ok(ifg) = ui_table.get::<String>("input_fg") {
                 config.llm.ui.input_fg = parse_hex_linear(&ifg);
             }
+        }
+    }
+
+    if let Ok(sb_table) = table.get::<LuaTable>("status_bar") {
+        if let Ok(e) = sb_table.get::<bool>("enabled") {
+            config.status_bar.enabled = e;
+        }
+        if let Ok(p) = sb_table.get::<String>("position") {
+            config.status_bar.position = match p.as_str() {
+                "top" | "Top" => crate::config::schema::StatusBarPosition::Top,
+                _ => crate::config::schema::StatusBarPosition::Bottom,
+            };
         }
     }
 

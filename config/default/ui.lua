@@ -59,6 +59,14 @@ function module.apply_to_config(config)
 
 	config.enable_tab_bar     = true
 	config.hide_tab_bar_if_one = true
+
+	-- ── Status bar ───────────────────────────────────────────────────────────
+	-- enabled: show/hide the status bar (also togglable via command palette).
+	-- position: "bottom" (default) or "top".
+	config.status_bar = {
+		enabled  = true,
+		position = "bottom",
+	}
 end
 
 return module

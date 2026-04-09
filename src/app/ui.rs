@@ -46,6 +46,17 @@ pub struct UiManager {
     pub undo_stack: Vec<(PathBuf, String)>,
     /// A confirmed run_command to forward to the active PTY. Consumed by app.rs.
     pub pending_pty_run: Option<String>,
+
+    // ── Status bar data ───────────────────────────────────────────────────────
+    /// Cached git branch string for the current CWD. None = not yet fetched or not a repo.
+    pub git_branch_cache: Option<String>,
+    /// Instant of the last git branch fetch, for TTL-based refresh.
+    git_branch_fetched_at: Option<std::time::Instant>,
+    /// Channel to receive async git branch results.
+    git_tx: crossbeam_channel::Sender<String>,
+    pub git_rx: crossbeam_channel::Receiver<String>,
+    /// CWD used for the last git branch fetch (to detect CWD changes).
+    git_branch_cwd: Option<PathBuf>,
 }
 
 impl UiManager {
@@ -62,6 +73,8 @@ impl UiManager {
         } else {
             None
         };
+
+        let (git_tx_init, git_rx_init) = crossbeam_channel::unbounded::<String>();
 
         let panel_width_cols = config.llm.ui.width_cols;
         let mut initial_panel = ChatPanel::new();
@@ -87,6 +100,11 @@ impl UiManager {
             pending_confirm_tx: None,
             undo_stack: Vec::new(),
             pending_pty_run: None,
+            git_branch_cache: None,
+            git_branch_fetched_at: None,
+            git_tx: git_tx_init,
+            git_rx: git_rx_init,
+            git_branch_cwd: None,
         }
     }
 
@@ -204,6 +222,38 @@ impl UiManager {
             let _ = tx.send(false);
             self.panel_mut().resolve_confirm();
         }
+    }
+
+    /// Poll for async git branch results and refresh the cache if due.
+    /// Returns true if the cache was updated (caller should redraw).
+    pub fn poll_git_branch(&mut self, cwd: Option<&std::path::Path>) -> bool {
+        // Drain any result that arrived from a previous spawn.
+        let mut updated = false;
+        while let Ok(branch) = self.git_rx.try_recv() {
+            self.git_branch_cache = Some(branch);
+            self.git_branch_fetched_at = Some(std::time::Instant::now());
+            updated = true;
+        }
+
+        // Decide whether to spawn a fresh fetch.
+        let cwd_changed = cwd.map(|p| p.to_path_buf()) != self.git_branch_cwd;
+        let ttl_expired = self.git_branch_fetched_at
+            .map(|t| t.elapsed() > std::time::Duration::from_secs(5))
+            .unwrap_or(true);
+
+        if cwd_changed || ttl_expired {
+            if let Some(cwd_path) = cwd {
+                self.git_branch_cwd = Some(cwd_path.to_path_buf());
+                let tx = self.git_tx.clone();
+                let cwd_owned = cwd_path.to_path_buf();
+                self.tokio_rt.spawn(async move {
+                    let branch = fetch_git_branch(&cwd_owned).await;
+                    let _ = tx.send(branch);
+                });
+            }
+        }
+
+        updated
     }
 
     /// Undo the last file write by restoring the saved original content.
@@ -611,6 +661,41 @@ impl UiManager {
             Action::ExplainLastOutput => self.explain_last_output(mux, wakeup_proxy),
             Action::FixLastError      => self.fix_last_error(mux, wakeup_proxy),
             Action::UndoLastWrite     => self.cmd_undo_last_write(),
+            Action::ToggleStatusBar => {
+                config.status_bar.enabled = !config.status_bar.enabled;
+            }
         }
     }
+}
+
+/// Async helper: fetch the current git branch for `cwd`.
+/// Returns the branch name (with dirty `*` suffix if uncommitted changes),
+/// or an empty string if `cwd` is not a git repo.
+async fn fetch_git_branch(cwd: &std::path::Path) -> String {
+    use tokio::process::Command;
+
+    let branch = Command::new("git")
+        .args(["-C", &cwd.to_string_lossy(), "branch", "--show-current"])
+        .output()
+        .await
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default();
+
+    if branch.is_empty() {
+        return String::new();
+    }
+
+    // Check for uncommitted changes.
+    let dirty = Command::new("git")
+        .args(["-C", &cwd.to_string_lossy(), "status", "--porcelain"])
+        .output()
+        .await
+        .ok()
+        .map(|o| !o.stdout.is_empty())
+        .unwrap_or(false);
+
+    if dirty { format!("{branch}*") } else { branch }
 }

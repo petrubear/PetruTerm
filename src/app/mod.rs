@@ -71,6 +71,10 @@ impl App {
         if self.tab_bar_visible() { self.cell_dims().1 as f32 } else { 0.0 }
     }
 
+    fn status_bar_height_px(&self) -> f32 {
+        if self.config.status_bar.enabled { self.cell_dims().1 as f32 } else { 0.0 }
+    }
+
     /// Update the GPU uniform padding to account for the tab bar (or lack thereof).
     /// Call whenever tab count crosses the 1↔2 boundary, or on initial setup.
     fn apply_tab_bar_padding(&mut self) {
@@ -88,8 +92,9 @@ impl App {
             let pad = &self.config.window.padding;
             let panel_px = if self.ui.is_panel_visible() { self.chat_panel_width_px() } else { 0.0 };
             let tab_h = self.tab_bar_height_px();
+            let sb_h = self.status_bar_height_px();
             let cols = ((w as f32 - pad.left as f32 - pad.right as f32 - panel_px) / cell_w as f32).max(1.0) as u16;
-            let rows = ((h as f32 - pad.top as f32 - pad.bottom as f32 - tab_h) / cell_h as f32).max(1.0) as u16;
+            let rows = ((h as f32 - pad.top as f32 - pad.bottom as f32 - tab_h - sb_h) / cell_h as f32).max(1.0) as u16;
             (cols, rows)
         } else { (120, 40) }
     }
@@ -126,6 +131,7 @@ impl App {
     fn viewport_rect(&self) -> Rect {
         let pad = &self.config.window.padding;
         let tab_h = self.tab_bar_height_px();
+        let sb_h = self.status_bar_height_px();
         if let Some(rc) = &self.render_ctx {
             let (w, h) = rc.renderer.size();
             let panel_px = if self.ui.is_panel_visible() { self.chat_panel_width_px() } else { 0.0 };
@@ -133,7 +139,7 @@ impl App {
                 x: pad.left as f32,
                 y: pad.top as f32 + tab_h,
                 w: (w as f32 - pad.left as f32 - pad.right as f32 - panel_px).max(0.0),
-                h: (h as f32 - pad.top as f32 - pad.bottom as f32 - tab_h).max(0.0),
+                h: (h as f32 - pad.top as f32 - pad.bottom as f32 - tab_h - sb_h).max(0.0),
             }
         } else { Rect { x: pad.left as f32, y: pad.top as f32 + tab_h, w: 800.0, h: 600.0 } }
     }
@@ -397,6 +403,20 @@ impl ApplicationHandler<()> for App {
                     // ── Context menu (right-click) ────────────────────────────────────────
                     if self.ui.context_menu.visible {
                         rc.build_context_menu_instances(&self.ui.context_menu, &scaled_font, total_cols, total_rows);
+                    }
+
+                    // ── Status bar ───────────────────────────────────────────────────────
+                    if self.config.status_bar.enabled {
+                        let cwd = self.mux.active_cwd();
+                        self.ui.poll_git_branch(cwd.as_deref());
+                        let bar = crate::ui::status_bar::StatusBar::build(
+                            self.input.leader_active,
+                            cwd.as_deref(),
+                            self.ui.git_branch_cache.as_deref(),
+                            crate::llm::shell_context::ShellContext::load()
+                                .and_then(|ctx| if ctx.last_exit_code != 0 { Some(ctx.last_exit_code) } else { None }),
+                        );
+                        rc.build_status_bar_instances(&bar, &scaled_font, total_cols + if panel_visible { self.ui.panel().width_cols as usize } else { 0 }, total_rows);
                     }
 
                     // ── GPU upload ──────────────────────────────────────────────────────

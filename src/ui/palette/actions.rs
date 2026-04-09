@@ -43,6 +43,7 @@ pub enum Action {
     ExplainLastOutput,
     FixLastError,
     UndoLastWrite,
+    ToggleStatusBar,
 }
 
 impl std::str::FromStr for Action {
@@ -75,6 +76,7 @@ impl std::str::FromStr for Action {
             "ExplainLastOutput" => Ok(Action::ExplainLastOutput),
             "FixLastError"      => Ok(Action::FixLastError),
             "UndoLastWrite"     => Ok(Action::UndoLastWrite),
+            "ToggleStatusBar"   => Ok(Action::ToggleStatusBar),
             _                   => Err(()),
         }
     }
@@ -117,5 +119,7 @@ pub fn built_in_actions(config: &Config) -> Vec<PaletteAction> {
         PaletteAction { name: "Explain Last Output".into(),    action: Action::ExplainLastOutput,  keybind: kb("ExplainLastOutput") },
         PaletteAction { name: "Fix Last Error".into(),         action: Action::FixLastError,       keybind: kb("FixLastError") },
         PaletteAction { name: "Undo Last Write".into(),        action: Action::UndoLastWrite,      keybind: kb("UndoLastWrite") },
+        // Phase 3 UI actions
+        PaletteAction { name: "Toggle Status Bar".into(),      action: Action::ToggleStatusBar,     keybind: None },
     ]
 }

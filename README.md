@@ -12,10 +12,12 @@ A developer-first GPU-accelerated terminal emulator written in Rust. Built for s
 - **Full terminal emulation** — xterm-256color, truecolor, bracketed paste, SGR mouse, OSC 52 clipboard
 - **Font ligatures** — HarfBuzz shaping with `calt`, `liga`, `dlig` OpenType features
 - **Emoji & color glyphs** — full RGBA emoji rendering via Apple Color Emoji (and any color font)
-- **Tabs & split panes** — tmux-style keybinds, binary-tree layout; each pane has an independent PTY (SSH sessions work naturally); exiting a shell closes only that pane
-- **AI agent panel** — context-aware chat with file attachment, NL→command, explain output, fix errors
-- **LLM tool use** — AI agent can autonomously read files and list directories (sandboxed to CWD)
+- **Tabs & split panes** — tmux-style keybinds, binary-tree layout; each pane has an independent PTY; exiting a shell closes only that pane
+- **Status bar** — GPU-rendered bottom bar with leader mode, CWD, git branch, exit code, and time
+- **AI agent panel** — context-aware chat with file attachment, NL→command, explain output, fix errors, write files
+- **LLM tool use** — AI agent can read files, list directories, write files, and run commands (sandboxed to CWD, with confirmation)
 - **Inline AI block** — `Ctrl+Space` for quick NL→shell command without leaving the terminal
+- **Right-click context menu** — Copy, Paste, Clear, and **Ask AI** (sends selection directly to chat panel)
 - **Command palette** — fuzzy-search for all actions (`Leader+o`)
 - **Lua configuration** — hot-reload on save, no restart required
 - **Scrollback** — configurable depth with GPU scroll bar
@@ -160,6 +162,22 @@ config.window = {
 | `config.enable_tab_bar` | bool | `true` | Show tab bar when more than one tab is open. |
 | `config.hide_tab_bar_if_one` | bool | `true` | Hide tab bar when only one tab exists. |
 
+#### Status bar
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `config.status_bar.enabled` | bool | `true` | Show the status bar. Also togglable via command palette. |
+| `config.status_bar.position` | string | `"bottom"` | `"bottom"` or `"top"`. |
+
+The status bar shows (left to right): **leader mode indicator** (turns purple when active), **current directory**, **git branch** (with `*` if dirty), and on the right: **last exit code** (only when non-zero, in red) and **date/time**.
+
+```lua
+config.status_bar = {
+    enabled  = true,
+    position = "bottom",
+}
+```
+
 ---
 
 ### `perf.lua` — Performance
@@ -169,8 +187,6 @@ config.window = {
 | `config.scrollback_lines` | number | `10000` | Maximum scrollback buffer depth per pane. |
 | `config.enable_scroll_bar` | bool | `true` | Show the 6 px scroll bar on the right edge when scrollback is active. |
 | `config.max_fps` | number | `60` | Target render frame rate. |
-| `config.animation_fps` | number | `1` | Animation tick rate. Set to `1` to disable smooth animations. |
-| `config.gpu_preference` | string | `"high_performance"` | GPU selection hint: `"high_performance"` or `"low_power"`. |
 | `config.shell_integration` | bool | `true` | Enable shell integration hooks (writes CWD/exit-code context for the AI panel). See [Shell Integration](#shell-integration). |
 
 ```lua
@@ -186,10 +202,10 @@ config.max_fps           = 120
 #### Leader key
 
 ```lua
-config.leader = { key = "b", mods = "CTRL", timeout_ms = 1000 }
+config.leader = { key = "f", mods = "CTRL", timeout_ms = 1000 }
 ```
 
-Press `Ctrl+B`, release, then press the bound key within `timeout_ms` milliseconds.
+Press `Ctrl+F`, release, then press the bound key within `timeout_ms` milliseconds.
 
 #### Hardcoded system bindings (not configurable)
 
@@ -206,26 +222,28 @@ Press `Ctrl+B`, release, then press the bound key within `timeout_ms` millisecon
 | Binding | Action |
 |---------|--------|
 | `Leader+o` | Open command palette |
-| `Leader+a` | Toggle AI panel (open → focus → close) |
+| `Leader+a` | Open / close AI panel |
+| `Leader+A` | Move focus between terminal and AI panel (without closing) |
 | `Leader+e` | Explain last terminal output |
 | `Leader+f` | Fix last error |
+| `Leader+z` | Undo last AI file write |
 | `Leader+c` | New tab |
 | `Leader+&` | Close tab |
 | `Leader+n` | Next tab |
 | `Leader+b` | Previous tab |
-| `Leader+1–9` | Switch to tab N |
 | `Leader+%` | Split pane horizontally (left \| right) |
 | `Leader+"` | Split pane vertically (top / bottom) |
 | `Leader+x` | Close active pane |
+| `Leader+h/j/k/l` | Focus pane left / down / up / right (vim-style) |
 
 #### Custom bindings
 
 ```lua
 config.keys = {
     { mods = "LEADER", key = "a",  action = petruterm.action.ToggleAiPanel },
+    { mods = "LEADER", key = "A",  action = petruterm.action.FocusAiPanel },
     { mods = "LEADER", key = "c",  action = petruterm.action.NewTab },
     { mods = "LEADER", key = "n",  action = petruterm.action.NextTab },
-    { mods = "LEADER", key = "b",  action = petruterm.action.PrevTab },
     { mods = "LEADER", key = "%",  action = petruterm.action.SplitHorizontal },
     { mods = "LEADER", key = '"',  action = petruterm.action.SplitVertical },
     { mods = "LEADER", key = "x",  action = petruterm.action.ClosePane },
@@ -237,9 +255,12 @@ config.keys = {
 | Action | Description |
 |--------|-------------|
 | `petruterm.action.CommandPalette` | Open command palette |
-| `petruterm.action.ToggleAiPanel` | Toggle AI agent panel |
+| `petruterm.action.ToggleAiPanel` | Open / close AI agent panel |
+| `petruterm.action.FocusAiPanel` | Move focus between terminal and AI panel |
 | `petruterm.action.ExplainLastOutput` | Send last terminal output to AI for explanation |
 | `petruterm.action.FixLastError` | Send last failed command to AI for a fix |
+| `petruterm.action.UndoLastWrite` | Undo last AI-proposed file write |
+| `petruterm.action.ToggleStatusBar` | Show / hide the status bar |
 | `petruterm.action.NewTab` | Open a new tab |
 | `petruterm.action.CloseTab` | Close the current tab |
 | `petruterm.action.NextTab` | Switch to the next tab |
@@ -247,6 +268,10 @@ config.keys = {
 | `petruterm.action.SplitHorizontal` | Split active pane horizontally |
 | `petruterm.action.SplitVertical` | Split active pane vertically |
 | `petruterm.action.ClosePane` | Close the active pane |
+| `petruterm.action.FocusPaneLeft` | Focus pane to the left |
+| `petruterm.action.FocusPaneRight` | Focus pane to the right |
+| `petruterm.action.FocusPaneUp` | Focus pane above |
+| `petruterm.action.FocusPaneDown` | Focus pane below |
 | `petruterm.action.ToggleFullscreen` | Toggle fullscreen mode |
 | `petruterm.action.ReloadConfig` | Hot-reload configuration |
 | `petruterm.action.OpenConfigFile` | Open config file in default editor |
@@ -320,7 +345,7 @@ model    = "lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"
 
 ## AI Agent Panel
 
-Open with `Leader+a`. The panel cycles through three states on repeated presses: **open** → **focused** → **closed**.
+Open with `Leader+a`. Press again to close. Use `Leader+A` to move focus between the terminal and the panel without closing it.
 
 ### File context
 
@@ -343,18 +368,26 @@ Attached files are injected into the LLM system message before every query. The 
 | `Shift+Enter` | Insert newline in input |
 | `Ctrl+S` | Submit query (alternative) |
 | `Esc` | Close panel / dismiss error |
-| `/q` or `/quit` | Close panel and close current tab |
+| `/q` or `/quit` | Close panel |
+
+### Ask AI from context menu
+
+Right-click any selected text and choose **Ask AI** to send it directly to the chat panel as input. The panel opens automatically if it was closed.
 
 ### LLM tool use
 
-When the LLM needs additional context it can autonomously call built-in tools (up to 10 rounds per query). Tool execution is sandboxed to the terminal's current working directory — no access outside of it.
+When the LLM needs additional context it can autonomously call built-in tools (up to 10 rounds per query). Filesystem tools are sandboxed to the terminal's current working directory.
 
-| Tool | Description |
-|------|-------------|
-| `ReadFile` | Read the contents of a file |
-| `ListDir` | List files in a directory |
+| Tool | Confirmation | Description |
+|------|-------------|-------------|
+| `ReadFile` | No | Read the contents of a file |
+| `ListDir` | No | List files in a directory |
+| `WriteFile` | **Yes** | Overwrite a file with a diff preview before writing |
+| `RunCommand` | **Yes** | Execute a shell command in the active PTY |
 
-While a tool is running the panel shows `⟳ tool(path)`; after completion it shows `✓ tool(path)`. No user confirmation is required for read-only tools.
+Write and run tools show a `[y] Apply  [n] Reject` prompt. Use `Leader+z` to undo the last file write.
+
+While a tool is running the panel shows `⟳ tool(path)`; after completion it shows `✓ tool(path)`.
 
 ### Inline AI block (`Ctrl+Space`)
 
@@ -407,7 +440,7 @@ Place an `AGENTS.md` file in your project root to give the AI panel automatic co
 ```
 ~/.config/petruterm/
 ├── config.lua            # Entry point — require and compose modules
-├── ui.lua                # Font, colors, window
+├── ui.lua                # Font, colors, window, status bar
 ├── perf.lua              # Scrollback, FPS, GPU
 ├── keybinds.lua          # Leader key and all bindings
 ├── llm.lua               # AI provider and features

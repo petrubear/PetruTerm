@@ -919,6 +919,79 @@ impl RenderContext {
 }
 
 impl RenderContext {
+    /// Render the status bar as a 1-row strip.
+    ///
+    /// `row` is the terminal grid row index where the bar should appear:
+    ///   - position=Bottom: `total_rows` (one row below the last terminal row)
+    ///   - position=Top: not yet implemented (reserved)
+    ///
+    /// Left segments are rendered with › separators; right segments are
+    /// right-aligned with │ separators. The gap between them fills with `bar_bg`.
+    pub fn build_status_bar_instances(
+        &mut self,
+        bar: &crate::ui::status_bar::StatusBar,
+        font: &crate::config::schema::FontConfig,
+        total_cols: usize,
+        row: usize,
+    ) {
+        use crate::ui::status_bar::StatusBar;
+
+        let bar_bg  = StatusBar::bar_bg();
+        let sep_fg  = [0.40, 0.40, 0.55, 1.0];
+        let left_sep  = StatusBar::left_sep();
+        let right_sep = StatusBar::right_sep();
+
+        // ── Left side ────────────────────────────────────────────────────────
+        let mut col = 0usize;
+        for (i, seg) in bar.left.iter().enumerate() {
+            let text = &seg.text;
+            let len = text.chars().count();
+            if col + len > total_cols { break; }
+            self.push_shaped_row(text, seg.fg, seg.bg, row, col, len, font);
+            col += len;
+
+            // Separator between segments (not after last).
+            if i + 1 < bar.left.len() {
+                let sep_len = left_sep.chars().count();
+                if col + sep_len > total_cols { break; }
+                // Use next segment's bg for the separator background.
+                let next_bg = bar.left[i + 1].bg;
+                self.push_shaped_row(left_sep, sep_fg, next_bg, row, col, sep_len, font);
+                col += sep_len;
+            }
+        }
+
+        // ── Right side (compute total width first, then render right-aligned) ─
+        let right_total: usize = bar.right.iter().enumerate().map(|(i, seg)| {
+            seg.text.chars().count()
+                + if i + 1 < bar.right.len() { right_sep.chars().count() } else { 0 }
+        }).sum();
+
+        let right_start = total_cols.saturating_sub(right_total);
+
+        // Fill gap between left and right with bar_bg.
+        if right_start > col {
+            let gap = right_start - col;
+            self.push_shaped_row(&" ".repeat(gap), bar_bg, bar_bg, row, col, gap, font);
+        }
+
+        let mut rcol = right_start;
+        for (i, seg) in bar.right.iter().enumerate() {
+            let text = &seg.text;
+            let len = text.chars().count();
+            if rcol + len > total_cols { break; }
+            self.push_shaped_row(text, seg.fg, seg.bg, row, rcol, len, font);
+            rcol += len;
+
+            if i + 1 < bar.right.len() {
+                let sep_len = right_sep.chars().count();
+                if rcol + sep_len > total_cols { break; }
+                self.push_shaped_row(right_sep, sep_fg, bar_bg, row, rcol, sep_len, font);
+                rcol += sep_len;
+            }
+        }
+    }
+
     /// Render the tab bar at grid row -1 (one cell row above the terminal).
     /// Requires `set_padding` to have shifted padding.y up by one cell_height.
     ///

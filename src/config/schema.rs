@@ -15,6 +15,26 @@ pub struct Config {
     pub shell: String,
     pub shell_integration: bool,
     pub llm: LlmConfig,
+    pub status_bar: StatusBarConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StatusBarConfig {
+    pub enabled: bool,
+    pub position: StatusBarPosition,
+}
+
+impl Default for StatusBarConfig {
+    fn default() -> Self {
+        Self { enabled: true, position: StatusBarPosition::Bottom }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum StatusBarPosition {
+    Top,
+    Bottom,
 }
 
 impl Default for Config {
@@ -31,6 +51,7 @@ impl Default for Config {
             shell: std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into()),
             shell_integration: true,
             llm: LlmConfig::default(),
+            status_bar: StatusBarConfig::default(),
         }
     }
 }
@@ -201,7 +222,7 @@ pub struct LeaderConfig {
 impl Default for LeaderConfig {
     fn default() -> Self {
         Self {
-            key: "b".into(),
+            key: "f".into(),
             mods: "CTRL".into(),
             timeout_ms: 1000,
         }
