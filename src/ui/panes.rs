@@ -1,5 +1,13 @@
 #![allow(dead_code)]
 
+use std::sync::atomic::{AtomicU32, Ordering};
+
+static NEXT_NODE_ID: AtomicU32 = AtomicU32::new(1);
+
+fn next_node_id() -> u32 {
+    NEXT_NODE_ID.fetch_add(1, Ordering::Relaxed)
+}
+
 /// Split direction for pane splits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SplitDir {
@@ -35,6 +43,8 @@ pub enum PaneNode {
         rect: Rect,
     },
     Split {
+        /// Stable ID assigned at creation — survives layout recalculations.
+        node_id: u32,
         dir: SplitDir,
         /// Split ratio: 0.0 = all left/top, 1.0 = all right/bottom.
         ratio: f32,
@@ -54,7 +64,7 @@ impl PaneNode {
     pub fn layout(&mut self, rect: Rect) {
         match self {
             PaneNode::Leaf { rect: r, .. } => *r = rect,
-            PaneNode::Split { dir, ratio, left, right, rect: r } => {
+            PaneNode::Split { dir, ratio, left, right, rect: r, .. } => {
                 *r = rect;
                 match dir {
                     SplitDir::Horizontal => {
@@ -230,6 +240,7 @@ fn split_node(node: &mut PaneNode, target: usize, dir: SplitDir, new_id: usize) 
             let old_rect = *rect;
             let old_id = *terminal_id;
             *node = PaneNode::Split {
+                node_id: next_node_id(),
                 dir,
                 ratio: 0.5,
                 left: Box::new(PaneNode::leaf(old_id, old_rect)),
@@ -310,6 +321,8 @@ pub struct PaneSeparator {
     pub row: usize,
     /// Extent: rows (vertical) or columns (horizontal).
     pub length: usize,
+    /// Stable ID of the Split node that owns this separator.
+    pub node_id: u32,
 }
 
 impl PaneManager {
@@ -390,8 +403,9 @@ fn collect_separators_impl(
 ) {
     match node {
         PaneNode::Leaf { .. } => {}
-        PaneNode::Split { dir, left, right, rect, .. } => {
+        PaneNode::Split { node_id, dir, left, right, rect, .. } => {
             let rect = *rect;
+            let nid  = *node_id;
             match dir {
                 SplitDir::Horizontal => {
                     // Vertical separator at the right edge of the left child.
@@ -399,7 +413,7 @@ fn collect_separators_impl(
                     let sep_col = ((left_rect.x + left_rect.w - viewport.x) / cell_w).round() as usize;
                     let sep_row = ((rect.y - viewport.y) / cell_h).round() as usize;
                     let length = (rect.h / cell_h).floor() as usize;
-                    result.push(PaneSeparator { vertical: true, col: sep_col, row: sep_row, length });
+                    result.push(PaneSeparator { vertical: true, col: sep_col, row: sep_row, length, node_id: nid });
                 }
                 SplitDir::Vertical => {
                     // Horizontal separator at the bottom edge of the top child.
@@ -407,7 +421,7 @@ fn collect_separators_impl(
                     let sep_row = ((left_rect.y + left_rect.h - viewport.y) / cell_h).round() as usize;
                     let sep_col = ((rect.x - viewport.x) / cell_w).round() as usize;
                     let length = (rect.w / cell_w).floor() as usize;
-                    result.push(PaneSeparator { vertical: false, col: sep_col, row: sep_row, length });
+                    result.push(PaneSeparator { vertical: false, col: sep_col, row: sep_row, length, node_id: nid });
                 }
             }
             collect_separators_impl(left, viewport, cell_w, cell_h, result);
@@ -438,21 +452,14 @@ impl PaneManager {
         }
     }
 
-    /// Drag the separator identified by `(is_vert, sep_key)` to the current mouse position.
-    /// `is_vert`  = true  → vertical separator line (owns a Horizontal Split).
-    /// `sep_key`  = col (vertical sep) or row (horizontal sep).
-    #[allow(clippy::too_many_arguments)]
+    /// Drag the separator owned by the Split with `node_id` to the current mouse position.
     pub fn drag_separator(
         &mut self,
-        is_vert: bool,
-        sep_key: usize,
+        node_id: u32,
         mouse_x: f32,
         mouse_y: f32,
-        viewport: Rect,
-        cell_w: f32,
-        cell_h: f32,
     ) {
-        if drag_split_ratio(&mut self.root, is_vert, sep_key, mouse_x, mouse_y, &viewport, cell_w, cell_h) {
+        if drag_split_ratio(&mut self.root, node_id, mouse_x, mouse_y) {
             let r = self.root.rect();
             self.root.layout(r);
         }
@@ -501,46 +508,22 @@ fn adjust_parent_split(
     }
 }
 
-/// Walk the tree, find the Split that owns separator `(is_vert, sep_key)`, and
-/// recompute its ratio so the divider tracks the mouse position.
-#[allow(clippy::too_many_arguments)]
-fn drag_split_ratio(
-    node: &mut PaneNode,
-    is_vert: bool,
-    sep_key: usize,
-    mouse_x: f32,
-    mouse_y: f32,
-    viewport: &Rect,
-    cell_w: f32,
-    cell_h: f32,
-) -> bool {
+/// Walk the tree, find the Split with `target_id`, and recompute its ratio so
+/// the divider tracks the mouse position. Uses stable node_id — immune to layout changes.
+fn drag_split_ratio(node: &mut PaneNode, target_id: u32, mouse_x: f32, mouse_y: f32) -> bool {
     match node {
         PaneNode::Leaf { .. } => false,
-        PaneNode::Split { dir, ratio, left, right, rect } => {
-            let rect_copy = *rect;
-            let this_dir  = *dir;
-            let matches_this = match (is_vert, this_dir) {
-                (true, SplitDir::Horizontal) => {
-                    let lr = left.rect();
-                    ((lr.x + lr.w - viewport.x) / cell_w).round() as usize == sep_key
-                }
-                (false, SplitDir::Vertical) => {
-                    let lr = left.rect();
-                    ((lr.y + lr.h - viewport.y) / cell_h).round() as usize == sep_key
-                }
-                _ => false,
-            };
-            if matches_this {
-                let new_ratio = if is_vert {
-                    (mouse_x - rect_copy.x) / rect_copy.w
-                } else {
-                    (mouse_y - rect_copy.y) / rect_copy.h
+        PaneNode::Split { node_id, dir, ratio, left, right, rect } => {
+            if *node_id == target_id {
+                let new_ratio = match dir {
+                    SplitDir::Horizontal => (mouse_x - rect.x) / rect.w,
+                    SplitDir::Vertical   => (mouse_y - rect.y) / rect.h,
                 };
                 *ratio = new_ratio.clamp(0.1, 0.9);
                 return true;
             }
-            drag_split_ratio(left,  is_vert, sep_key, mouse_x, mouse_y, viewport, cell_w, cell_h)
-                || drag_split_ratio(right, is_vert, sep_key, mouse_x, mouse_y, viewport, cell_w, cell_h)
+            drag_split_ratio(left, target_id, mouse_x, mouse_y)
+                || drag_split_ratio(right, target_id, mouse_x, mouse_y)
         }
     }
 }

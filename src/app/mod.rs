@@ -213,18 +213,18 @@ impl App {
         let seps = self.mux.active_pane_separators(viewport, cw, ch);
         for sep in &seps {
             if sep.vertical {
-                let sep_x    = viewport.x + sep.col as f32 * cw;
-                let row_top  = viewport.y + sep.row as f32 * ch;
-                let row_bot  = row_top + sep.length as f32 * ch;
+                let sep_x   = viewport.x + sep.col as f32 * cw;
+                let row_top = viewport.y + sep.row as f32 * ch;
+                let row_bot = row_top + sep.length as f32 * ch;
                 if (px - sep_x).abs() <= 8.0 && py >= row_top && py <= row_bot {
-                    return Some(input::SeparatorDragState { is_vert: true,  key: sep.col });
+                    return Some(input::SeparatorDragState { node_id: sep.node_id });
                 }
             } else {
-                let sep_y    = viewport.y + sep.row as f32 * ch;
-                let col_lft  = viewport.x + sep.col as f32 * cw;
-                let col_rgt  = col_lft + sep.length as f32 * cw;
+                let sep_y   = viewport.y + sep.row as f32 * ch;
+                let col_lft = viewport.x + sep.col as f32 * cw;
+                let col_rgt = col_lft + sep.length as f32 * cw;
                 if (py - sep_y).abs() <= 8.0 && px >= col_lft && px <= col_rgt {
-                    return Some(input::SeparatorDragState { is_vert: false, key: sep.row });
+                    return Some(input::SeparatorDragState { node_id: sep.node_id });
                 }
             }
         }
@@ -441,8 +441,10 @@ impl ApplicationHandler<()> for App {
                     if self.config.status_bar.enabled {
                         let cwd = self.mux.active_cwd();
                         self.ui.poll_git_branch(cwd.as_deref());
-                        let leader_resize_mode = self.input.leader_active
-                            && self.input.modifiers.state().alt_key();
+                        let leader_resize_mode = (self.input.leader_active
+                            && self.input.modifiers.state().alt_key())
+                            || self.input.resize_mode
+                            || self.input.dragging_separator.is_some();
                         let bar = crate::ui::status_bar::StatusBar::build(
                             self.input.leader_active,
                             leader_resize_mode,
@@ -473,7 +475,12 @@ impl ApplicationHandler<()> for App {
                 self.ui.ai_block.dirty = true;
                 if let Some(w) = &self.window { w.request_redraw(); }
             }
-            WindowEvent::ModifiersChanged(mods) => self.input.modifiers = mods,
+            WindowEvent::ModifiersChanged(mods) => {
+                self.input.modifiers = mods;
+                if !mods.state().alt_key() {
+                    self.input.resize_mode = false;
+                }
+            }
             WindowEvent::KeyboardInput { event, is_synthetic, .. } => {
                 if !is_synthetic {
                     let panel_was_visible = self.ui.is_panel_visible();
@@ -516,16 +523,8 @@ impl ApplicationHandler<()> for App {
                 }
                 // Separator drag — update ratio live.
                 if let Some(drag) = &self.input.dragging_separator {
-                    let is_vert = drag.is_vert;
-                    let key     = drag.key;
-                    let viewport = self.viewport_rect();
-                    let (cell_w, cell_h) = self.cell_dims();
-                    self.mux.cmd_drag_separator(
-                        is_vert, key,
-                        position.x as f32, position.y as f32,
-                        viewport,
-                        cell_w as f32, cell_h as f32,
-                    );
+                    let node_id = drag.node_id;
+                    self.mux.cmd_drag_separator(node_id, position.x as f32, position.y as f32);
                     self.resize_terminals_for_panel();
                     if let Some(w) = &self.window { w.request_redraw(); }
                 } else if self.input.mouse_left_pressed && !self.mouse_in_panel() {

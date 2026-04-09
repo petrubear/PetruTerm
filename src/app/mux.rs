@@ -277,19 +277,10 @@ impl Mux {
 
     /// Drag the separator `(is_vert, sep_key)` to the current mouse position.
     #[allow(clippy::too_many_arguments)]
-    pub fn cmd_drag_separator(
-        &mut self,
-        is_vert: bool,
-        sep_key: usize,
-        mouse_x: f32,
-        mouse_y: f32,
-        viewport: Rect,
-        cell_w: f32,
-        cell_h: f32,
-    ) {
+    pub fn cmd_drag_separator(&mut self, node_id: u32, mouse_x: f32, mouse_y: f32) {
         let active = self.tabs.active_index();
         if let Some(pane_mgr) = self.panes.get_mut(active) {
-            pane_mgr.drag_separator(is_vert, sep_key, mouse_x, mouse_y, viewport, cell_w, cell_h);
+            pane_mgr.drag_separator(node_id, mouse_x, mouse_y);
         }
     }
 

@@ -42,6 +42,7 @@ Ordered newest-first within each date group.
 - **Keyboard:** `PaneManager::adjust_ratio(focused_id, dir, delta)` — depth-first ancestor search finds the nearest Split whose `SplitDir` matches the arrow axis, adjusts `ratio ±0.05`, re-layouts. `Mux::cmd_adjust_pane_ratio` wired from leader dispatch (`<leader>+Option+←→↑↓`). `pane_ratio_adjusted` flag triggers `resize_terminals_for_panel` after key event.
 - **Mouse:** `SeparatorDragState { is_vert, key }` in `InputHandler`. `App::separator_at_pixel` detects ±3px hit. `Left::Pressed` starts drag; `CursorMoved` calls `drag_split_ratio` → `drag_separator` → `resize_terminals_for_panel` live; `Left::Released` finalises.
 - **Known remaining bugs:** TD-043 (AI input regression), TD-044 (mouse hit area too small), TD-045 (keyboard not triggering), TD-046 (no resize-mode indicator).
+- **Polish (2026-04-09):** Keyboard resize now uses `resize_mode: bool` — hold Option to keep resizing, release to stop (cleared in `ModifiersChanged`). Mouse drag bug fixed: separator identified by `node_id: u32` (stable atomic counter on `PaneNode::Split`) instead of col/row — col/row changed after every `layout()` call, breaking subsequent drags. Status bar shows RESIZE during both keyboard (`resize_mode`) and mouse (`dragging_separator.is_some()`) resize.
 
 ### TD-041: Chat panel input row — display duplicado (fix 2)
 - **File:** `src/app/renderer.rs` ~l.709

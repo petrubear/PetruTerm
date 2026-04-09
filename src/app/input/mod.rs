@@ -15,10 +15,8 @@ pub mod key_map;
 
 /// Active separator drag: identifies which Split is being resized via mouse.
 pub struct SeparatorDragState {
-    /// `true` = vertical separator line (a Horizontal split), `false` = horizontal line.
-    pub is_vert: bool,
-    /// Column (for vertical sep) or row (for horizontal sep) that identifies the separator.
-    pub key: usize,
+    /// Stable ID of the Split node being dragged — does not change as layout updates.
+    pub node_id: u32,
 }
 
 /// Manages keyboard and mouse input state, including the leader key and cursor blinking.
@@ -48,6 +46,9 @@ pub struct InputHandler {
     /// Set when a <leader>+Option+Arrow pane-resize keybind fires so that
     /// `app/mod.rs` knows to call `resize_terminals_for_panel` afterward.
     pub pane_ratio_adjusted: bool,
+    /// Pane resize mode: activated by <leader>+Option+Arrow. While active, any
+    /// arrow key (with or without Option) continues resizing. Any other key exits.
+    pub resize_mode: bool,
 }
 
 impl InputHandler {
@@ -76,6 +77,7 @@ impl InputHandler {
             cursor_blink_on: true,
             cursor_last_blink: Instant::now(),
             pane_ratio_adjusted: false,
+            resize_mode: false,
         }
     }
 
@@ -162,6 +164,31 @@ impl InputHandler {
         let ctrl = self.modifiers.state().control_key();
         let shift = self.modifiers.state().shift_key();
 
+        // ── Pane resize mode — hold Option + press arrows to resize ──────────
+        // Activated by <leader>+Option+Arrow. Active while Option is held;
+        // ModifiersChanged clears resize_mode when Option is released.
+        if self.resize_mode && self.modifiers.state().alt_key() {
+            use crate::ui::panes::FocusDir;
+            let dir_opt = match &event.logical_key {
+                Key::Named(NamedKey::ArrowLeft)  => Some(FocusDir::Left),
+                Key::Named(NamedKey::ArrowRight) => Some(FocusDir::Right),
+                Key::Named(NamedKey::ArrowUp)    => Some(FocusDir::Up),
+                Key::Named(NamedKey::ArrowDown)  => Some(FocusDir::Down),
+                _ => match &event.physical_key {
+                    PhysicalKey::Code(KeyCode::ArrowLeft)  => Some(FocusDir::Left),
+                    PhysicalKey::Code(KeyCode::ArrowRight) => Some(FocusDir::Right),
+                    PhysicalKey::Code(KeyCode::ArrowUp)    => Some(FocusDir::Up),
+                    PhysicalKey::Code(KeyCode::ArrowDown)  => Some(FocusDir::Down),
+                    _ => None,
+                },
+            };
+            if let Some(dir) = dir_opt {
+                mux.cmd_adjust_pane_ratio(dir, 0.05);
+                self.pane_ratio_adjusted = true;
+                return;
+            }
+        }
+
         // ── Tab rename prompt ────────────────────────────────────────────────
         if ui.is_renaming_tab() {
             match &event.logical_key {
@@ -231,6 +258,7 @@ impl InputHandler {
                 if let Some(dir) = dir_opt {
                     mux.cmd_adjust_pane_ratio(dir, 0.05);
                     self.pane_ratio_adjusted = true;
+                    self.resize_mode = true; // stay in resize mode for subsequent arrows
                     return;
                 }
             }
