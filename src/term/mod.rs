@@ -72,6 +72,7 @@ impl Terminal {
         cell_width: u16,
         cell_height: u16,
         wakeup: EventLoopProxy<()>,
+        working_directory: Option<std::path::PathBuf>,
     ) -> Result<Self> {
         // TD-002 (partial fix): Term requires an EventListener at construction,
         // but the Notifier is only available after PtyEventLoop is created in
@@ -102,7 +103,7 @@ impl Terminal {
         };
 
         let term = Arc::new(FairMutex::new(Term::new(term_config, &size, proxy)));
-        let pty = Pty::spawn(config, Arc::clone(&term), cols, rows, cell_width, cell_height, wakeup, direct_notifier)?;
+        let pty = Pty::spawn(config, Arc::clone(&term), cols, rows, cell_width, cell_height, wakeup, direct_notifier, working_directory)?;
         let child_pid = pty.child_pid;
 
         Ok(Self { term, pty, cols, rows, child_pid })

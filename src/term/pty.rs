@@ -114,6 +114,7 @@ impl Pty {
         // Shared with the Term's placeholder proxy so that PtyWrite events from
         // term.process() — which use Term's internal proxy — are forwarded immediately.
         direct_notifier: Arc<OnceLock<Notifier>>,
+        working_directory: Option<std::path::PathBuf>,
     ) -> Result<Self> {
         let (tx, rx) = crossbeam_channel::unbounded::<PtyEvent>();
         let proxy = PtyEventProxy { tx, wakeup, direct_notifier: Arc::clone(&direct_notifier) };
@@ -125,7 +126,7 @@ impl Pty {
 
         let pty_options = PtyOptions {
             shell: Some(Shell::new(config.shell.clone(), vec!["-l".into()])),
-            working_directory: dirs::home_dir(),
+            working_directory: working_directory.or_else(dirs::home_dir),
             drain_on_exit: false,
             env,
         };

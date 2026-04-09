@@ -74,8 +74,9 @@ impl Mux {
         cell_w: u16,
         cell_h: u16,
         wakeup_proxy: EventLoopProxy<()>,
+        working_directory: Option<std::path::PathBuf>,
     ) -> Result<usize> {
-        let terminal = Terminal::new(config, cols, rows, cell_w, cell_h, wakeup_proxy)?;
+        let terminal = Terminal::new(config, cols, rows, cell_w, cell_h, wakeup_proxy, working_directory)?;
         let id = self.next_terminal_id;
         self.next_terminal_id += 1;
 
@@ -98,7 +99,7 @@ impl Mux {
         wakeup_proxy: EventLoopProxy<()>,
     ) -> Result<()> {
         let tab_id = self.tabs.new_tab("zsh");
-        let terminal_id = self.open_terminal(config, cols, rows, cell_w, cell_h, wakeup_proxy)?;
+        let terminal_id = self.open_terminal(config, cols, rows, cell_w, cell_h, wakeup_proxy, None)?;
         self.panes.push(PaneManager::new(viewport, terminal_id));
         log::info!("Opened initial tab {tab_id}, terminal {terminal_id}");
         Ok(())
@@ -208,8 +209,8 @@ impl Mux {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn cmd_new_tab(&mut self, config: &Config, viewport: Rect, cols: u16, rows: u16, cell_w: u16, cell_h: u16, wakeup_proxy: EventLoopProxy<()>) {
-        match self.open_terminal(config, cols, rows, cell_w, cell_h, wakeup_proxy) {
+    pub fn cmd_new_tab(&mut self, config: &Config, viewport: Rect, cols: u16, rows: u16, cell_w: u16, cell_h: u16, wakeup_proxy: EventLoopProxy<()>, working_directory: Option<std::path::PathBuf>) {
+        match self.open_terminal(config, cols, rows, cell_w, cell_h, wakeup_proxy, working_directory) {
             Ok(terminal_id) => {
                 self.tabs.new_tab("zsh");
                 self.panes.push(PaneManager::new(viewport, terminal_id));
@@ -234,8 +235,8 @@ impl Mux {
 
     /// TD-018: Create the terminal first; only mutate the pane tree on success.
     #[allow(clippy::too_many_arguments)]
-    pub fn cmd_split(&mut self, config: &Config, dir: crate::ui::SplitDir, cols: u16, rows: u16, cell_w: u16, cell_h: u16, wakeup_proxy: EventLoopProxy<()>) {
-        match Terminal::new(config, cols, rows, cell_w, cell_h, wakeup_proxy) {
+    pub fn cmd_split(&mut self, config: &Config, dir: crate::ui::SplitDir, cols: u16, rows: u16, cell_w: u16, cell_h: u16, wakeup_proxy: EventLoopProxy<()>, working_directory: Option<std::path::PathBuf>) {
+        match Terminal::new(config, cols, rows, cell_w, cell_h, wakeup_proxy, working_directory) {
             Ok(terminal) => {
                 let new_id = self.next_terminal_id;
                 self.next_terminal_id += 1;

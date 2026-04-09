@@ -708,7 +708,8 @@ impl UiManager {
                 let (cols, rows) = mux.active_terminal_size();
                 let (cell_w, cell_h) = (render_ctx.shaper.cell_width as u16, render_ctx.shaper.cell_height as u16);
                 let viewport = Rect { x: 0.0, y: 0.0, w: 800.0, h: 600.0 };
-                mux.cmd_new_tab(config, viewport, cols as u16, rows as u16, cell_w, cell_h, wakeup_proxy);
+                let cwd = mux.active_cwd().or_else(|| std::env::current_dir().ok());
+                mux.cmd_new_tab(config, viewport, cols as u16, rows as u16, cell_w, cell_h, wakeup_proxy, cwd);
             }
             Action::CloseTab     => mux.cmd_close_tab(),
             Action::NextTab      => mux.tabs.next_tab(),
@@ -717,12 +718,14 @@ impl UiManager {
             Action::SplitHorizontal => {
                 let (cols, rows) = mux.active_terminal_size();
                 let (cell_w, cell_h) = (render_ctx.shaper.cell_width as u16, render_ctx.shaper.cell_height as u16);
-                mux.cmd_split(config, SplitDir::Horizontal, cols as u16, rows as u16, cell_w, cell_h, wakeup_proxy);
+                let cwd = mux.active_cwd().or_else(|| std::env::current_dir().ok());
+                mux.cmd_split(config, SplitDir::Horizontal, cols as u16, rows as u16, cell_w, cell_h, wakeup_proxy, cwd);
             }
             Action::SplitVertical => {
                 let (cols, rows) = mux.active_terminal_size();
                 let (cell_w, cell_h) = (render_ctx.shaper.cell_width as u16, render_ctx.shaper.cell_height as u16);
-                mux.cmd_split(config, SplitDir::Vertical, cols as u16, rows as u16, cell_w, cell_h, wakeup_proxy);
+                let cwd = mux.active_cwd().or_else(|| std::env::current_dir().ok());
+                mux.cmd_split(config, SplitDir::Vertical, cols as u16, rows as u16, cell_w, cell_h, wakeup_proxy, cwd);
             }
             Action::ClosePane => mux.cmd_close_pane(),
             Action::FocusPane(dir) => mux.cmd_focus_pane_dir(dir),
