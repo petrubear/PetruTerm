@@ -72,7 +72,9 @@ impl App {
     }
 
     fn status_bar_height_px(&self) -> f32 {
-        if self.config.status_bar.enabled { self.cell_dims().1 as f32 } else { 0.0 }
+        // TD-047: 4 extra physical px above the bar create a visual gap from terminal content.
+        const SB_PAD_PX: f32 = 4.0;
+        if self.config.status_bar.enabled { self.cell_dims().1 as f32 + SB_PAD_PX } else { 0.0 }
     }
 
     /// Update the GPU uniform padding to account for the tab bar (or lack thereof).
@@ -202,7 +204,7 @@ impl App {
         self.input.mouse_pos.0 >= term_right_px
     }
 
-    /// If the pixel position `(px, py)` is within ±3 physical pixels of a pane
+    /// If the pixel position `(px, py)` is within ±8 physical pixels of a pane
     /// separator, returns the drag state identifying that separator.
     fn separator_at_pixel(&self, px: f32, py: f32) -> Option<input::SeparatorDragState> {
         let viewport = self.viewport_rect();
@@ -214,14 +216,14 @@ impl App {
                 let sep_x    = viewport.x + sep.col as f32 * cw;
                 let row_top  = viewport.y + sep.row as f32 * ch;
                 let row_bot  = row_top + sep.length as f32 * ch;
-                if (px - sep_x).abs() <= 3.0 && py >= row_top && py <= row_bot {
+                if (px - sep_x).abs() <= 8.0 && py >= row_top && py <= row_bot {
                     return Some(input::SeparatorDragState { is_vert: true,  key: sep.col });
                 }
             } else {
                 let sep_y    = viewport.y + sep.row as f32 * ch;
                 let col_lft  = viewport.x + sep.col as f32 * cw;
                 let col_rgt  = col_lft + sep.length as f32 * cw;
-                if (py - sep_y).abs() <= 3.0 && px >= col_lft && px <= col_rgt {
+                if (py - sep_y).abs() <= 8.0 && px >= col_lft && px <= col_rgt {
                     return Some(input::SeparatorDragState { is_vert: false, key: sep.row });
                 }
             }
@@ -439,8 +441,11 @@ impl ApplicationHandler<()> for App {
                     if self.config.status_bar.enabled {
                         let cwd = self.mux.active_cwd();
                         self.ui.poll_git_branch(cwd.as_deref());
+                        let leader_resize_mode = self.input.leader_active
+                            && self.input.modifiers.state().alt_key();
                         let bar = crate::ui::status_bar::StatusBar::build(
                             self.input.leader_active,
+                            leader_resize_mode,
                             &self.config.leader.key,
                             cwd.as_deref(),
                             self.ui.git_branch_cache.as_deref(),

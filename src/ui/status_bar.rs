@@ -23,6 +23,7 @@ const FG_DEFAULT:  [f32; 4] = [0.97, 0.97, 0.95, 1.0]; // foreground   #f8f8f2
 const FG_DIM:      [f32; 4] = [0.55, 0.56, 0.67, 1.0]; // comment      #6272a4
 
 const BG_LEADER_ACTIVE:   [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // purple  #9580ff
+const BG_LEADER_RESIZE:   [f32; 4] = [1.00, 0.72, 0.22, 1.0]; // orange  #ffb86c
 const BG_LEADER_INACTIVE: [f32; 4] = [0.22, 0.22, 0.30, 1.0]; // subdued
 const BG_CWD:      [f32; 4] = [0.20, 0.20, 0.27, 1.0]; // slightly lighter
 const BG_GIT:      [f32; 4] = [0.16, 0.28, 0.22, 1.0]; // green-tinted
@@ -34,11 +35,14 @@ impl StatusBar {
     ///
     /// - `leader_active`: true when the leader key has been pressed and the
     ///   timeout is still running (shows the LEADER segment in purple).
+    /// - `leader_resize_mode`: true when leader is active AND the Alt/Option modifier
+    ///   is held, indicating the user is about to resize a pane (shows RESIZE in orange).
     /// - `cwd`: current working directory (None if unavailable).
     /// - `git_branch`: cached git branch string (None if not a git repo or not yet fetched).
     /// - `last_exit_code`: last exit code from shell context (None if unavailable).
     pub fn build(
         leader_active: bool,
+        leader_resize_mode: bool,
         leader_key: &str,
         cwd: Option<&std::path::Path>,
         git_branch: Option<&str>,
@@ -49,10 +53,14 @@ impl StatusBar {
         // ── Left segments ────────────────────────────────────────────────────
 
         // Leader-mode indicator.
-        let leader_bg = if leader_active { BG_LEADER_ACTIVE } else { BG_LEADER_INACTIVE };
-        let leader_label = format!(" ^{} ", leader_key.to_uppercase());
-        let leader_text = if leader_active { " LEADER " } else { leader_label.as_str() };
-        bar.left.push(StatusBarSegment { text: leader_text.into(), fg: FG_DEFAULT, bg: leader_bg });
+        let (leader_text, leader_bg) = if leader_resize_mode {
+            (" RESIZE ".to_string(), BG_LEADER_RESIZE)
+        } else if leader_active {
+            (" LEADER ".to_string(), BG_LEADER_ACTIVE)
+        } else {
+            (format!(" ^{} ", leader_key.to_uppercase()), BG_LEADER_INACTIVE)
+        };
+        bar.left.push(StatusBarSegment { text: leader_text, fg: FG_DEFAULT, bg: leader_bg });
 
         // Current working directory (truncated).
         if let Some(path) = cwd {

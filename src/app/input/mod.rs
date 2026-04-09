@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 use winit::event::{Modifiers, ElementState, KeyEvent};
 use winit::event_loop::ActiveEventLoop;
-use winit::keyboard::{Key, NamedKey};
+use winit::keyboard::{Key, NamedKey, PhysicalKey, KeyCode};
 use crate::config::Config;
 use crate::app::mux::Mux;
 use crate::app::ui::UiManager;
@@ -207,22 +207,31 @@ impl InputHandler {
             self.leader_timer = None;
 
             // <leader> + Option/Alt + ←→↑↓ → resize pane (TD-042).
+            // On macOS, Option+Arrow may arrive as Key::Character (OS word-nav transform),
+            // so fall back to physical_key when logical_key is not a Named arrow (TD-045).
             let alt = self.modifiers.state().alt_key();
             if alt {
-                if let Key::Named(named) = &event.logical_key {
-                    use crate::ui::panes::FocusDir;
-                    let dir_opt = match named {
+                use crate::ui::panes::FocusDir;
+                let dir_opt = match &event.logical_key {
+                    Key::Named(named) => match named {
                         NamedKey::ArrowLeft  => Some(FocusDir::Left),
                         NamedKey::ArrowRight => Some(FocusDir::Right),
                         NamedKey::ArrowUp    => Some(FocusDir::Up),
                         NamedKey::ArrowDown  => Some(FocusDir::Down),
                         _ => None,
-                    };
-                    if let Some(dir) = dir_opt {
-                        mux.cmd_adjust_pane_ratio(dir, 0.05);
-                        self.pane_ratio_adjusted = true;
-                        return;
-                    }
+                    },
+                    _ => match &event.physical_key {
+                        PhysicalKey::Code(KeyCode::ArrowLeft)  => Some(FocusDir::Left),
+                        PhysicalKey::Code(KeyCode::ArrowRight) => Some(FocusDir::Right),
+                        PhysicalKey::Code(KeyCode::ArrowUp)    => Some(FocusDir::Up),
+                        PhysicalKey::Code(KeyCode::ArrowDown)  => Some(FocusDir::Down),
+                        _ => None,
+                    },
+                };
+                if let Some(dir) = dir_opt {
+                    mux.cmd_adjust_pane_ratio(dir, 0.05);
+                    self.pane_ratio_adjusted = true;
+                    return;
                 }
             }
 

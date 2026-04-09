@@ -5,6 +5,36 @@ Ordered newest-first within each date group.
 
 ---
 
+## Resolved 2026-04-09 (batch 3)
+
+### TD-047: Sin padding entre terminal y status bar
+- **File:** `src/app/mod.rs` `status_bar_height_px()`
+- **Fix:** `const SB_PAD_PX: f32 = 4.0` — `status_bar_height_px()` retorna `cell_h + SB_PAD_PX` en lugar de `cell_h`. El `viewport_rect().h` se reduce automáticamente en 4px, dejando una franja de 4px (cubierta con `bg_color` = fondo del terminal) entre el último row del grid y el status bar. El PTY nunca renderiza en esa franja.
+
+### TD-046: Status bar no indica modo resize
+- **Files:** `src/ui/status_bar.rs`, `src/app/mod.rs`
+- **Fix:** `StatusBar::build` recibe un nuevo parámetro `leader_resize_mode: bool`. Se añade `BG_LEADER_RESIZE = [1.00, 0.72, 0.22, 1.0]` (naranja Dracula). Cuando `leader_active && modifiers.alt_key()`, el segmento muestra " RESIZE " en naranja. Calculado inline en el render loop (sin campo en `InputHandler`).
+
+---
+
+## Resolved 2026-04-09 (batch 2)
+
+### TD-045: Keyboard pane resize no funcionaba (Option+Arrow en macOS)
+- **File:** `src/app/input/mod.rs`
+- **Bug:** En macOS, `Option+Arrow` puede llegar como `Key::Character` en lugar de `Key::Named`, por lo que el match solo sobre `logical_key` nunca encontraba la dirección.
+- **Fix:** Añadir imports `PhysicalKey`, `KeyCode`; en el bloque `if alt`, hacer match primero sobre `logical_key` y, si no es `Named`, hacer fallback a `physical_key` (siempre refleja la tecla física sin transformar).
+
+### TD-044: Mouse separator drag — zona de hit ±3px demasiado pequeña
+- **File:** `src/app/mod.rs` `separator_at_pixel`
+- **Fix:** Umbral aumentado de ±3.0 a ±8.0 px físicos en ambas ramas (vertical/horizontal). El comentario del doc también fue actualizado.
+
+### TD-043: AI panel input — texto en fila incorrecta (regresión de TD-041)
+- **File:** `src/app/renderer.rs` ~l.709
+- **Bug:** El fix de TD-041 dejó `vis1 = ""` siempre que `n==1`, moviendo el texto a la fila sin marcador `►`.
+- **Fix:** `let (vis1, vis2) = if n >= 2 { (lines[n-2], lines[n-1]) } else { (lines[0], String::new()) }` — cuando `n==1`, el texto va en la fila con `►` y la segunda fila queda vacía.
+
+---
+
 ## Resolved 2026-04-09
 
 ### TD-042: Pane resize — keyboard + mouse drag

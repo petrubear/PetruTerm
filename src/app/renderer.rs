@@ -704,10 +704,14 @@ impl RenderContext {
             let input_lines = wrap_input(&input_display, input_inner_w);
             let inp_fg = if panel_focused && !file_picker_focused { input_fg } else { DIM_FG };
             // Show the last two lines so the cursor is always visible when input is multiline.
-            // When there is only one line, vis1 must be empty — not a duplicate of vis2 (TD-041).
+            // When n==1: text goes on the ► row (vis1); vis2 is empty (TD-043 fix).
+            // When n>=2: vis1=second-to-last, vis2=last (scroll view).
             let n = input_lines.len();
-            let vis1 = if n >= 2 { input_lines[n - 2].clone() } else { String::new() };
-            let vis2 = input_lines.last().cloned().unwrap_or_default();
+            let (vis1, vis2) = if n >= 2 {
+                (input_lines[n - 2].clone(), input_lines[n - 1].clone())
+            } else {
+                (input_lines.first().cloned().unwrap_or_default(), String::new())
+            };
             let line1 = format!("│ \u{25b8}  {}", vis1);
             let line2 = format!("│    {}", vis2);
             self.push_shaped_row(&line1, inp_fg, panel_bg, input_row1, co, panel_cols, font);

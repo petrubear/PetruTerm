@@ -1,7 +1,7 @@
 # Session State
 
 **Last Updated:** 2026-04-09
-**Session Focus:** TD-042 — implementación de pane resize (teclado + mouse drag)
+**Session Focus:** TD-043–TD-047 — bugs en pane resize + P2 polish (status bar, padding)
 
 ## Branch: `master`
 
@@ -9,70 +9,37 @@
 
 ### Trabajo realizado
 
-#### TD-042: Pane resize implementado
-- **Keyboard:** `PaneManager::adjust_ratio(focused_id, dir, delta)` — búsqueda depth-first del Split ancestro más cercano con `SplitDir` coincidente; ajusta `ratio ±0.05`. Wired en leader dispatch como `<leader>+Option+←→↑↓`. Flag `pane_ratio_adjusted` + `resize_terminals_for_panel` post-key.
-- **Mouse:** `SeparatorDragState` en `InputHandler`; `App::separator_at_pixel` detecta ±3px; `Left::Pressed` inicia drag; `CursorMoved` → `drag_split_ratio` → live resize; `Left::Released` finaliza.
-- **Estado:** Implementado pero con 3 bugs conocidos (ver TD-043, TD-044, TD-045).
+#### TD-043 — AI panel input en fila incorrecta (resuelto)
+- `src/app/renderer.rs` ~l.709: `(vis1, vis2) = if n >= 2 { (lines[n-2], lines[n-1]) } else { (lines[0], "") }`. Texto en la fila con `►` cuando `n==1`.
 
-#### Deuda resuelta en esta sesión (archivada)
-TD-029, TD-030, TD-031, TD-033, TD-034, TD-035, TD-036, TD-037, TD-038, TD-041, TD-042 (parcial), TD-026, TD-027, TD-025, TD-028, TD-022, TD-021, TD-020, TD-019, TD-018, TD-017, TD-OP-01, TD-OP-02, TD-OP-03, TD-016, TD-015, TD-013, TD-014.
+#### TD-044 — Mouse separator hit area (resuelto)
+- `src/app/mod.rs` `separator_at_pixel`: umbral ±3.0 → ±8.0 px físicos en ambas ramas.
 
-#### Nuevas deudas registradas
-| ID | Prioridad | Descripción |
-|----|-----------|-------------|
-| TD-043 | P1 | AI panel input en fila incorrecta (regresión de TD-041) |
-| TD-044 | P1 | Mouse separator drag — hit area ±3px demasiado pequeña |
-| TD-045 | P1 | `<leader>+Option+Arrow` keyboard resize no funciona |
-| TD-046 | P2 | Status bar no indica modo resize al presionar Option |
+#### TD-045 — Keyboard pane resize Option+Arrow (resuelto)
+- `src/app/input/mod.rs`: añadidos imports `PhysicalKey`, `KeyCode`. Fallback a `physical_key` cuando `logical_key` es `Key::Character` (macOS transforma Option+Arrow).
 
-### Archivos modificados (commits de esta sesión)
-- `src/ui/panes.rs` — `adjust_ratio`, `drag_separator`, helpers `contains_leaf`, `adjust_parent_split`, `drag_split_ratio`
-- `src/app/mux.rs` — `cmd_adjust_pane_ratio`, `cmd_drag_separator`
-- `src/app/input/mod.rs` — `SeparatorDragState`, `dragging_separator`, `pane_ratio_adjusted`
-- `src/app/mod.rs` — `separator_at_pixel`, drag start/move/end en mouse handlers, `pane_ratio_adjusted` check en KeyboardInput
-- `.context/quality/TECHNICAL_DEBT.md` — limpio, solo 4 ítems abiertos
-- `.context/quality/TECHNICAL_DEBT_archive.md` — 30+ ítems archivados
+#### TD-046 — Status bar modo resize (resuelto)
+- `src/ui/status_bar.rs`: nuevo parámetro `leader_resize_mode: bool`; constante `BG_LEADER_RESIZE = #ffb86c` (naranja Dracula). Muestra " RESIZE " cuando `leader_active && alt_key()`.
+- `src/app/mod.rs`: `leader_resize_mode` calculado inline antes del `StatusBar::build`.
 
-### Commits
-```
-8b124c0  [TD-042] feat: implement pane resize via keyboard and mouse drag.
-ab8dbc0  chore: registrar TD-042 — pane resize (teclado + mouse drag).
-```
+#### TD-047 — Padding terminal↔status bar (resuelto)
+- `src/app/mod.rs` `status_bar_height_px()`: retorna `cell_h + 4.0` en lugar de `cell_h`. Crea franja de 4px cubierta por `bg_color` entre terminal y status bar. Sin cambios al shader.
+
+### Archivos modificados (esta sesión)
+- `src/app/renderer.rs` — fix TD-043 (vis1/vis2 logic)
+- `src/app/mod.rs` — fix TD-044 (±8px), TD-046 (leader_resize_mode inline), TD-047 (SB_PAD_PX)
+- `src/app/input/mod.rs` — fix TD-045 (PhysicalKey fallback)
+- `src/ui/status_bar.rs` — fix TD-046 (leader_resize_mode param, BG_LEADER_RESIZE)
+- `.context/quality/TECHNICAL_DEBT.md` — 0 ítems abiertos
+- `.context/quality/TECHNICAL_DEBT_archive.md` — TD-043–TD-047 archivados
 
 ## Build & Tests
 - **cargo build:** PASS (2026-04-09)
-- **cargo clippy:** PASS (6 errores pre-existentes no relacionados en status_bar.rs, diff.rs, ui.rs)
-- **cargo test:** no ejecutado esta sesión (sin cambios en lógica de tests)
+- **cargo clippy:** no ejecutado esta sesión
+- **cargo test:** no ejecutado esta sesión
 
 ## Próxima sesión
 
-Foco recomendado: **Resolver TD-043 + TD-044 + TD-045** (bugs en TD-042 — ~1h total).
-
-### TD-043 (15 min): Fix rápido en `src/app/renderer.rs` ~l.709
-```rust
-// Cambiar:
-let vis1 = if n >= 2 { input_lines[n - 2].clone() } else { String::new() };
-let vis2 = input_lines.last().cloned().unwrap_or_default();
-// Por:
-let (vis1, vis2) = if n >= 2 {
-    (input_lines[n-2].clone(), input_lines[n-1].clone())
-} else {
-    (input_lines.first().cloned().unwrap_or_default(), String::new())
-};
-```
-
-### TD-044 (5 min): Aumentar hit area en `src/app/mod.rs` `separator_at_pixel`
-```rust
-// Cambiar ±3.0 por ±8.0 en ambas condiciones
-if (px - sep_x).abs() <= 8.0 && ...
-if (py - sep_y).abs() <= 8.0 && ...
-```
-
-### TD-045 (~30 min): Investigar `alt_key()` en winit 0.30 macOS
-- Verificar si `self.modifiers.state().alt_key()` retorna `true` cuando Option está presionado al recibir `ArrowLeft`
-- Alternativa: manejar como `Key::Character` si winit mapea Option+Arrow a characters en macOS
-- Candidatos: imprimir `event.logical_key` con `log::debug!` para ver el valor real
-
-### TD-046 (~30 min): Indicador resize en status bar
-- Agregar `leader_alt_active: bool` a `InputHandler`
-- Propagar a `StatusBar::build` en `app/mod.rs`
+Deuda técnica a cero. Opciones:
+1. **Phase 3 P3:** Snippets (`config.snippets` Lua + expand via palette) y Starship compat.
+2. **Phase 4:** Plugin ecosystem (Lua plugin loader, API surface).

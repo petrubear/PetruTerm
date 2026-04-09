@@ -1,13 +1,13 @@
 # Active Context
 
-**Current Focus:** TD-043 / TD-044 / TD-045 — bugs en pane resize (TD-042) + regresión AI panel
+**Current Focus:** Deuda técnica resuelta — TD-043 a TD-047 completados
 **Last Active:** 2026-04-09
 
 ## Estado actual del proyecto
 
 **Phase 1 COMPLETE. Phase 2 COMPLETE. Phase 2.5 COMPLETE. Phase 3 P1 COMPLETE. Phase 3 P2 COMPLETE.**
 **Phase 3 P3 parcial (snippets/Starship pendientes). Phase 4 (plugins) no iniciada.**
-**Deuda técnica: 4 ítems abiertos (P0:0, P1:3, P2:1). `cargo build` PASA. `cargo clippy` PASA (6 lints pre-existentes ajenos).**
+**Deuda técnica: 0 ítems abiertos. `cargo build` PASA.**
 
 ### Features verificados
 
@@ -34,51 +34,13 @@
 | Multi-pane splits + separadores | ✅ |
 | Leader+h/j/k/l — vim-style pane focus | ✅ |
 | Status bar — leader, CWD, git branch, exit code, time | ✅ |
-| Pane resize (teclado + mouse drag) | ⚠️ implementado, bugs TD-043/044/045 |
+| Pane resize (teclado + mouse drag) | ✅ (TD-042–045 resueltos) |
+| Status bar modo resize (naranja al presionar Option) | ✅ (TD-046) |
+| Padding visual terminal↔status bar (4px) | ✅ (TD-047) |
 
 ## Deuda técnica abierta
 
-| ID | Prioridad | Archivo | Descripción breve |
-|----|-----------|---------|-------------------|
-| TD-043 | **P1** | `src/app/renderer.rs` ~l.709 | AI panel input en `vis2` (fila sin ►); debería ir en `vis1` cuando `n==1` |
-| TD-044 | **P1** | `src/app/mod.rs` `separator_at_pixel` | Hit area ±3px físicos demasiado pequeña en Retina — aumentar a ±8px |
-| TD-045 | **P1** | `src/app/input/mod.rs` leader dispatch | `<leader>+Option+Arrow` no activa resize — investigar `alt_key()` en winit 0.30 macOS |
-| TD-046 | P2 | `src/app/mod.rs`, `src/ui/status_bar.rs` | Status bar no cambia color al presionar Option en modo leader |
-
-### Fix exacto para TD-043 (renderer.rs ~l.709)
-```rust
-// Reemplazar las dos líneas:
-let vis1 = if n >= 2 { input_lines[n - 2].clone() } else { String::new() };
-let vis2 = input_lines.last().cloned().unwrap_or_default();
-// Con:
-let (vis1, vis2) = if n >= 2 {
-    (input_lines[n - 2].clone(), input_lines[n - 1].clone())
-} else {
-    (input_lines.first().cloned().unwrap_or_default(), String::new())
-};
-```
-
-### Fix exacto para TD-044 (mod.rs `separator_at_pixel`)
-```rust
-// Cambiar ambas comparaciones de 3.0 a 8.0:
-if (px - sep_x).abs() <= 8.0 && ...
-if (py - sep_y).abs() <= 8.0 && ...
-```
-
-### Investigación para TD-045
-- Agregar `log::debug!("leader key: {:?} alt={}", event.logical_key, self.modifiers.state().alt_key())` en el leader dispatch
-- Verificar si `Key::Named(NamedKey::ArrowLeft)` llega con `alt=true` o si Option+Arrow es mapeado a `Key::Character`
-- Si macOS envía `Key::Character` para Option+Arrow, añadir match arm correspondiente
-
-## Phase 3 P3 — Pendiente
-
-| Tarea | Estado |
-|-------|--------|
-| Tab rename `<leader>,` | ✅ (2026-04-08) |
-| Snippets: `config.snippets` tabla Lua, expandir via palette | 🔲 |
-| Starship compatibility: detectar `STARSHIP_SHELL` | 🔲 |
-| Powerline / Nerd Font glyphs en widgets | 🔲 |
-| Built-in themes en `assets/themes/` | 🔲 |
+*Sin ítems abiertos. Ver [TECHNICAL_DEBT_archive.md](../../.context/quality/TECHNICAL_DEBT_archive.md) para historial completo.*
 
 ## Keybinds actuales
 
@@ -92,7 +54,7 @@ if (py - sep_y).abs() <= 8.0 && ...
 | `^B "` | Split vertical |
 | `^B x` | Close pane |
 | `^B h/j/k/l` | Focus pane (vim-style) |
-| `^B Option+←→↑↓` | Resize pane (**parcial** — TD-045) |
+| `^B Option+←→↑↓` | Resize pane |
 | `^B a` | Abrir / cerrar AI panel |
 | `^B A` | Mover focus terminal ↔ chat |
 | `^B e` | Explain last output |
@@ -102,9 +64,17 @@ if (py - sep_y).abs() <= 8.0 && ...
 | `Ctrl+Space` | Inline AI block |
 | Right-click | Context menu |
 
+## Phase 3 P3 — Pendiente
+
+| Tarea | Estado |
+|-------|--------|
+| Tab rename `<leader>,` | ✅ (2026-04-08) |
+| Snippets: `config.snippets` tabla Lua, expandir via palette | 🔲 |
+| Starship compatibility: detectar `STARSHIP_SHELL` | 🔲 |
+| Powerline / Nerd Font glyphs en widgets | 🔲 |
+| Built-in themes en `assets/themes/` | 🔲 |
+
 ## Próximos pasos recomendados
 
-1. **Sesión rápida (~1h):** Resolver TD-043 + TD-044 (fixes de 2–5 líneas cada uno)
-2. **Sesión media (~1h):** Investigar + resolver TD-045; implementar TD-046
-3. **Phase 3 P3:** Snippets y Starship
-4. **Phase 4:** Plugin ecosystem
+1. **Phase 3 P3:** Snippets y Starship compatibility
+2. **Phase 4:** Plugin ecosystem (Lua loader, API surface)
