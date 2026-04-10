@@ -275,13 +275,6 @@ impl InputHandler {
                         return;
                     }
                 }
-                // Leader + k: clear screen and scrollback (hardcoded, like Cmd+K in Terminal.app).
-                if s.to_ascii_lowercase() == "k" {
-                    if let Some(terminal) = mux.active_terminal() {
-                        terminal.write_input(b"\x1b[H\x1b[2J\x1b[3J");
-                    }
-                    return;
-                }
                 let key = s.to_ascii_lowercase();
                 let action = self.leader_map.get(s.as_str())
                     .or_else(|| self.leader_map.get(key.as_str()))
@@ -446,6 +439,13 @@ impl InputHandler {
                 match s.as_str() {
                     // System clipboard — always Cmd+C / Cmd+V, not configurable via leader.
                     "q" => { event_loop.exit(); return; }
+                    "k" => {
+                        if let Some(terminal) = mux.active_terminal() {
+                            // Clear screen and scrollback, move cursor home.
+                            terminal.write_input(b"\x1b[H\x1b[2J\x1b[3J");
+                        }
+                        return;
+                    }
                     "c" => {
                         if let Some(terminal) = mux.active_terminal() {
                             if let Some(text) = terminal.selection_text() {

@@ -6,6 +6,7 @@
 -- System keybinds that remain hardcoded (not configurable here):
 --   Cmd+C / Cmd+V   — copy / paste (clipboard)
 --   Cmd+Q           — quit
+--   Cmd+K           — clear screen and scrollback
 --   Cmd+1-9         — switch to tab N
 
 local petruterm = require("petruterm")
