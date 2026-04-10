@@ -392,22 +392,27 @@ impl Mux {
             let screen_rows = term.screen_lines() as i32;
             let history = term.grid().history_size() as i32;
             let cols = term.columns();
+            let query_chars: Vec<char> = query_lower.chars().collect();
             let mut matches = Vec::new();
 
             for grid_row in (-history)..screen_rows {
                 let line = Line(grid_row);
-                let mut row_text = String::with_capacity(cols);
-                for col in 0..cols {
-                    let c = term.grid()[line][Column(col)].c;
-                    row_text.push(if c == '\0' { ' ' } else { c });
-                }
-                let row_lower = row_text.to_lowercase();
-                let mut search_from = 0;
-                while let Some(pos) = row_lower[search_from..].find(&query_lower) {
-                    let col = search_from + pos;
-                    matches.push(SearchMatch { grid_line: grid_row, col, len: query_len });
-                    search_from = col + 1;
-                    if search_from >= row_lower.len() { break; }
+                // Build a char-indexed row: index i == terminal column i.
+                let row_chars: Vec<char> = (0..cols)
+                    .map(|col| {
+                        let c = term.grid()[line][Column(col)].c;
+                        let c = if c == '\0' { ' ' } else { c };
+                        // Lowercase per char for case-insensitive matching.
+                        c.to_lowercase().next().unwrap_or(c)
+                    })
+                    .collect();
+
+                // Slide a window of query_len over the char array.
+                // Each index is a terminal column — no byte-offset ambiguity.
+                for col in 0..row_chars.len().saturating_sub(query_chars.len() - 1) {
+                    if row_chars[col..col + query_chars.len()] == query_chars[..] {
+                        matches.push(SearchMatch { grid_line: grid_row, col, len: query_len });
+                    }
                 }
             }
             matches
