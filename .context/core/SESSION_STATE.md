@@ -48,4 +48,4 @@
 
 ## Próxima sesión
 
-Phase 3 P3: built-in themes (último item). Luego Phase 4 (plugins).
+Phase 3 P3: built-in themes — ver decisiones de diseño en ACTIVE_CONTEXT.md. Luego Phase 4.

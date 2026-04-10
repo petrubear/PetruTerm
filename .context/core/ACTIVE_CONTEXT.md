@@ -71,10 +71,19 @@
 | Tab rename `<leader>,` | ✅ (2026-04-08) |
 | Snippets: `config.snippets` tabla Lua, expandir via palette | ✅ (2026-04-09) |
 | Powerline / Nerd Font glyphs en widgets | ✅ (2026-04-09) |
-| Built-in themes en `assets/themes/` | 🔲 |
+| Built-in themes | 🔲 (próximo) |
+
+## Phase 3 P3 — Themes: decisiones de diseño
+
+- Temas viven en **`~/.config/petruterm/themes/*.lua`** (NO embebidos en binario)
+- En primer launch, `ensure_default_configs()` crea `themes/` y escribe los temas default (dracula-pro, tokyo-night, catppuccin-mocha, one-dark, gruvbox-dark)
+- El usuario puede añadir sus propios temas copiando un `.lua` a esa carpeta
+- El theme picker **escanea el directorio en runtime** — temas nuevos aparecen solos
+- Acceso desde **command palette con submenú**: seleccionar "Switch Theme…" carga un sub-listado con los temas disponibles; Esc vuelve a la palette normal (no cierra)
+- NO hay `config.theme = "..."` en config.lua — el tema se aplica directamente vía palette
+- Formato de cada tema: archivo Lua que retorna tabla con `name`, `foreground`, `background`, `cursor_*`, `selection_*`, `ansi[8]`, `brights[8]`
 
 ## Próximos pasos recomendados
 
-1. **Phase 3 P3 (activo):** Snippets (`config.snippets` Lua + expand via palette + trigger opcional)
-2. **Phase 3 P3:** Starship compatibility, Powerline, built-in themes
-3. **Phase 4:** Plugin ecosystem (Lua loader, API surface)
+1. **Phase 3 P3 (activo):** Built-in themes con sub-menú en palette
+2. **Phase 4:** Plugin ecosystem (Lua loader, API surface)
