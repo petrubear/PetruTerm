@@ -70,13 +70,11 @@ pub fn compress_diff(lines: &[DiffLine], ctx: usize) -> Vec<DiffLine> {
     // Mark which lines are "near" a change.
     let n = lines.len();
     let mut near = vec![false; n];
-    for i in 0..n {
-        if lines[i].kind != DiffKind::Context {
+    for (i, line) in lines.iter().enumerate() {
+        if line.kind != DiffKind::Context {
             let lo = i.saturating_sub(ctx);
             let hi = (i + ctx + 1).min(n);
-            for k in lo..hi {
-                near[k] = true;
-            }
+            near[lo..hi].fill(true);
         }
     }
 

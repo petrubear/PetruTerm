@@ -164,14 +164,29 @@ pub enum AgentStepResult {
 pub fn execute_tool(call: &ToolCall, cwd: &Path) -> String {
     match call.name.as_str() {
         "read_file" => {
+            const MAX_BYTES: u64 = 512 * 1024; // 512 KB
             let Some(rel) = call.path_arg() else {
                 return "Error: missing 'path' argument".to_string();
             };
             let abs = cwd.join(&rel);
             match abs.canonicalize() {
                 Ok(canon) if canon.starts_with(cwd) => {
-                    std::fs::read_to_string(&canon)
-                        .unwrap_or_else(|e| format!("Error reading file: {e}"))
+                    let file_size = std::fs::metadata(&canon).map(|m| m.len()).unwrap_or(0);
+                    if file_size > MAX_BYTES {
+                        // Read only the first MAX_BYTES to avoid OOM and runaway API costs.
+                        use std::io::Read;
+                        let mut buf = vec![0u8; MAX_BYTES as usize];
+                        match std::fs::File::open(&canon).and_then(|mut f| f.read(&mut buf)) {
+                            Ok(n) => {
+                                let truncated = String::from_utf8_lossy(&buf[..n]).into_owned();
+                                format!("{truncated}\n[truncated at 512 KB — file is {file_size} bytes total]")
+                            }
+                            Err(e) => format!("Error reading file: {e}"),
+                        }
+                    } else {
+                        std::fs::read_to_string(&canon)
+                            .unwrap_or_else(|e| format!("Error reading file: {e}"))
+                    }
                 }
                 _ => format!("Error: path '{rel}' is outside the working directory"),
             }

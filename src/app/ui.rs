@@ -14,7 +14,7 @@ use winit::window::Window;
 use crate::app::mux::Mux;
 use crate::app::renderer::RenderContext;
 
-//// Convert a raw LLM error string into an actionable user message (TD-038).
+// Convert a raw LLM error string into an actionable user message (TD-038).
 fn classify_llm_error(e: &str) -> String {
     let e_lower = e.to_ascii_lowercase();
     if e_lower.contains("401") || e_lower.contains("unauthorized") || e_lower.contains("invalid api key") {

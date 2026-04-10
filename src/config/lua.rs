@@ -1,5 +1,6 @@
 use anyhow::Result;
 use mlua::prelude::*;
+use mlua::StdLib;
 use std::path::Path;
 
 use super::schema::{ColorScheme, Config, TitleBarStyle};
@@ -13,9 +14,21 @@ fn parse_hex_linear(s: &str) -> [f32; 4] {
     [r, g, b, 1.0]
 }
 
+/// Stdlib available to user config scripts.
+///
+/// Includes `os` (for `os.getenv`) and `package` (for `require`).
+/// `io`, `debug`, and `load` are excluded to limit the attack surface —
+/// user configs don't need arbitrary file I/O or dynamic code loading.
+/// Note: `os.execute` is still available here because this is user-controlled
+/// config, not third-party plugins. Phase 4 plugins will use a stricter sandbox.
+fn config_stdlib() -> StdLib {
+    StdLib::TABLE | StdLib::STRING | StdLib::MATH | StdLib::OS | StdLib::PACKAGE
+}
+
 /// Load and evaluate a Lua config file, returning a resolved Config.
 pub fn load_config(path: &Path) -> Result<Config> {
-    let lua = Lua::new();
+    let lua = Lua::new_with(config_stdlib(), LuaOptions::default())
+        .map_err(|e| anyhow::anyhow!("Lua VM init error: {e}"))?;
     inject_petruterm_global(&lua).map_err(|e| anyhow::anyhow!("Lua setup error: {e}"))?;
     inject_require_path(&lua, path).map_err(|e| anyhow::anyhow!("Lua path error: {e}"))?;
 
@@ -36,7 +49,8 @@ pub fn load_config(path: &Path) -> Result<Config> {
 /// `preloaded` is a list of `(module_name, source)` pairs registered into
 /// `package.preload` so that `require("ui")` etc. work without the filesystem.
 pub fn load_config_str(src: &str, name: &str, preloaded: &[(&str, &str)]) -> Result<Config> {
-    let lua = Lua::new();
+    let lua = Lua::new_with(config_stdlib(), LuaOptions::default())
+        .map_err(|e| anyhow::anyhow!("Lua VM init error: {e}"))?;
     inject_petruterm_global(&lua).map_err(|e| anyhow::anyhow!("Lua setup error: {e}"))?;
     inject_preloaded_modules(&lua, preloaded)
         .map_err(|e| anyhow::anyhow!("Lua preload error: {e}"))?;
@@ -57,7 +71,9 @@ pub fn load_config_str(src: &str, name: &str, preloaded: &[(&str, &str)]) -> Res
 /// return { name="Tokyo Night", foreground="#c0caf5", background="#1a1b26", ... }
 /// ```
 pub fn load_theme(path: &Path) -> Result<ColorScheme> {
-    let lua = Lua::new();
+    // Themes are pure data (color tables) — no OS, filesystem, or module access needed.
+    let lua = Lua::new_with(StdLib::TABLE | StdLib::STRING, LuaOptions::default())
+        .map_err(|e| anyhow::anyhow!("Lua VM init error: {e}"))?;
     let src = std::fs::read_to_string(path)
         .map_err(|e| anyhow::anyhow!("Failed to read theme {}: {e}", path.display()))?;
     let table: LuaTable = lua
@@ -79,9 +95,9 @@ fn table_to_color_scheme(table: LuaTable) -> LuaResult<ColorScheme> {
     let get_palette = |key: &str| -> [[f32; 4]; 8] {
         let mut arr = [[0.0f32; 4]; 8];
         if let Ok(t) = table.get::<LuaTable>(key) {
-            for i in 0..8usize {
+            for (i, slot) in arr.iter_mut().enumerate() {
                 if let Ok(s) = t.get::<String>((i + 1) as i64) {
-                    arr[i] = parse_hex_linear(&s);
+                    *slot = parse_hex_linear(&s);
                 }
             }
         }

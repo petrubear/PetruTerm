@@ -439,6 +439,13 @@ impl InputHandler {
                 match s.as_str() {
                     // System clipboard — always Cmd+C / Cmd+V, not configurable via leader.
                     "q" => { event_loop.exit(); return; }
+                    "k" => {
+                        if let Some(terminal) = mux.active_terminal() {
+                            // Clear screen and scrollback, move cursor home.
+                            terminal.write_input(b"\x1b[H\x1b[2J\x1b[3J");
+                        }
+                        return;
+                    }
                     "c" => {
                         if let Some(terminal) = mux.active_terminal() {
                             if let Some(text) = terminal.selection_text() {
@@ -470,10 +477,9 @@ impl InputHandler {
         if event.logical_key == Key::Named(NamedKey::Tab)
             && !self.modifiers.state().shift_key()
             && !self.modifiers.state().control_key()
+            && self.try_expand_snippet(config, mux)
         {
-            if self.try_expand_snippet(config, mux) {
-                return;
-            }
+            return;
         }
 
         self.send_key_to_active_terminal(event, mux);

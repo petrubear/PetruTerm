@@ -1,3 +1,4 @@
+use std::time::Duration;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use futures_util::StreamExt;
@@ -45,8 +46,14 @@ impl OpenRouterProvider {
             .clone()
             .unwrap_or_else(|| DEFAULT_BASE_URL.to_string());
 
+        let client = Client::builder()
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(120))
+            .build()
+            .context("Failed to build HTTP client")?;
+
         Ok(Self {
-            client: Client::new(),
+            client,
             api_key,
             model: config.model.clone(),
             base_url,

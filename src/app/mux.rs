@@ -66,6 +66,7 @@ impl Mux {
         (80, 24)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn open_terminal(
         &mut self,
         config: &Config,
@@ -353,8 +354,7 @@ impl Mux {
                 buf.truncate(rows);
             }
 
-            for row in 0..rows {
-                let (text, colors) = &mut buf[row];
+            for (row, (text, colors)) in buf.iter_mut().enumerate() {
                 text.clear();
                 colors.clear();
                 let grid_line = Line(row as i32 - display_offset);

@@ -2,6 +2,7 @@
 ///
 /// Both expose the same `/v1/chat/completions` endpoint with SSE streaming.
 /// No API key is required by default; `api_key` is forwarded if present.
+use std::time::Duration;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use futures_util::StreamExt;
@@ -23,13 +24,21 @@ pub struct OpenAICompatProvider {
 }
 
 impl OpenAICompatProvider {
+    fn build_client() -> Client {
+        Client::builder()
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(120))
+            .build()
+            .expect("Failed to build HTTP client")
+    }
+
     pub fn ollama(config: &LlmConfig) -> Self {
         let base_url = config
             .base_url
             .clone()
             .unwrap_or_else(|| "http://localhost:11434/v1".into());
         Self {
-            client: Client::new(),
+            client: Self::build_client(),
             model: config.model.clone(),
             base_url,
             api_key: config.api_key.clone(),
@@ -42,7 +51,7 @@ impl OpenAICompatProvider {
             .clone()
             .unwrap_or_else(|| "http://localhost:1234/v1".into());
         Self {
-            client: Client::new(),
+            client: Self::build_client(),
             model: config.model.clone(),
             base_url,
             api_key: config.api_key.clone(),
