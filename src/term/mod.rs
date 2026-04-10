@@ -236,11 +236,15 @@ pub fn process_cwd(pid: u32) -> Option<std::path::PathBuf> {
             )
         };
         if ret <= 0 { return None; }
-        // vip_path is [[c_char; 32]; 32] = 1024 bytes; flatten and find null.
-        let path_bytes: Vec<u8> = info.pvi_cdir.vip_path.iter()
-            .flat_map(|chunk| chunk.iter().map(|&c| c as u8))
-            .collect();
-        let end = path_bytes.iter().position(|&b| b == 0).unwrap_or(path_bytes.len());
+        // vip_path is [[c_char; 32]; 32] = 1024 bytes; reinterpret in-place, no allocation.
+        // SAFETY: c_char is i8 on macOS; reinterpreting as u8 is always valid for path bytes.
+        let path_bytes: &[u8] = unsafe {
+            std::slice::from_raw_parts(
+                info.pvi_cdir.vip_path.as_ptr() as *const u8,
+                1024,
+            )
+        };
+        let end = path_bytes.iter().position(|&b| b == 0).unwrap_or(1024);
         let s = std::str::from_utf8(&path_bytes[..end]).ok()?;
         if s.is_empty() { return None; }
         Some(std::path::PathBuf::from(s))

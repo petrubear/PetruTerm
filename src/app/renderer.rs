@@ -26,18 +26,11 @@ pub struct RowCacheEntry {
 /// Tracks shaped data for every visible row in one terminal's viewport.
 pub struct RowCache {
     pub rows: Vec<Option<RowCacheEntry>>,
-    pub dirty_rows: Vec<bool>,
 }
 
 impl RowCache {
     pub fn new() -> Self {
-        Self { rows: Vec::new(), dirty_rows: Vec::new() }
-    }
-
-    #[allow(dead_code)]
-    pub fn clear(&mut self) {
-        for r in &mut self.rows { *r = None; }
-        for d in &mut self.dirty_rows { *d = true; }
+        Self { rows: Vec::new() }
     }
 }
 
@@ -53,8 +46,23 @@ pub struct RenderContext {
     pub lcd_instances: Vec<CellVertex>,
     /// Cached GPU instances for the AI chat panel — rebuilt only when `ChatPanel::dirty`.
     pub panel_instances_cache: Vec<CellVertex>,
-    /// Rounded rect instances for the tab bar pills (TD-013), cleared each frame.
+    /// Scratch buffer for `collect_grid_cells_for` — reused across frames (TD-PERF-12).
+    pub cell_data_scratch: Vec<(String, Vec<(alacritty_terminal::vte::ansi::Color, alacritty_terminal::vte::ansi::Color)>)>,
+    /// Rounded rect instances for the tab bar pills and status bar background.
     pub rect_instances: Vec<RoundedRectInstance>,
+
+    // ── Static-geometry caches (TD-PERF-08/09/10) ────────────────────────────
+    // Scroll bar: ~50 CellVertex per frame, no HarfBuzz. Keyed by scroll state.
+    pub scroll_bar_state: Option<(usize, usize, usize, usize)>,
+    pub scroll_bar_cache: Vec<CellVertex>,
+    // Tab bar: HarfBuzz per tab name. Keyed by hash of tab titles + layout inputs.
+    pub tab_bar_key: u64,
+    pub tab_bar_instances_cache: Vec<CellVertex>,
+    pub tab_bar_rects_cache: Vec<RoundedRectInstance>,
+    // Status bar: HarfBuzz per segment. Keyed by hash of all segment inputs.
+    pub status_bar_key: u64,
+    pub status_bar_instances_cache: Vec<CellVertex>,
+    pub status_bar_rect_cache: Vec<RoundedRectInstance>,
 }
 
 impl RenderContext {
@@ -87,7 +95,16 @@ impl RenderContext {
             instances: Vec::new(),
             lcd_instances: Vec::new(),
             panel_instances_cache: Vec::new(),
+            cell_data_scratch: Vec::new(),
             rect_instances: Vec::new(),
+            scroll_bar_state: None,
+            scroll_bar_cache: Vec::new(),
+            tab_bar_key: 0,
+            tab_bar_instances_cache: Vec::new(),
+            tab_bar_rects_cache: Vec::new(),
+            status_bar_key: 0,
+            status_bar_instances_cache: Vec::new(),
+            status_bar_rect_cache: Vec::new(),
         })
     }
 
@@ -105,23 +122,9 @@ impl RenderContext {
         self.rect_instances.clear();
     }
 
-    /// Mark every row in every terminal cache as dirty (forces reshape next frame).
-    pub fn mark_all_rows_dirty(&mut self) {
-        for cache in self.row_caches.values_mut() {
-            cache.dirty_rows.fill(true);
-        }
-    }
-
     /// Drop all per-terminal row caches (used after atlas eviction).
     pub fn clear_all_row_caches(&mut self) {
         self.row_caches.clear();
-    }
-
-    /// Reset dirty flags after a completed frame for all cached terminals.
-    pub fn reset_row_dirty_flags(&mut self) {
-        for cache in self.row_caches.values_mut() {
-            cache.dirty_rows.fill(false);
-        }
     }
 
     /// Build and append cell instances for one pane's terminal.
@@ -144,10 +147,10 @@ impl RenderContext {
         let cache = self.row_caches.entry(terminal_id).or_insert_with(RowCache::new);
         if cache.rows.len() < cell_data.len() {
             cache.rows.resize(cell_data.len(), None);
-            cache.dirty_rows.resize(cell_data.len(), true);
         }
 
-        let mut colors_scratch: Vec<([f32; 4], [f32; 4])> = Vec::with_capacity(256);
+        let cols = cell_data.first().map(|(_, c)| c.len()).unwrap_or(256);
+        let mut colors_scratch: Vec<([f32; 4], [f32; 4])> = Vec::with_capacity(cols);
 
         for (row_idx, (text, raw_colors)) in cell_data.iter().enumerate() {
             colors_scratch.clear();
@@ -271,11 +274,8 @@ impl RenderContext {
                 self.lcd_instances.push(v);
             }
 
-            // Store local coordinates in cache; mark row dirty in the same lookup (TD-035).
+            // Store local coordinates in cache.
             if let Some(cache) = self.row_caches.get_mut(&terminal_id) {
-                if row_idx < cache.dirty_rows.len() {
-                    cache.dirty_rows[row_idx] = true;
-                }
                 if row_idx < cache.rows.len() {
                     cache.rows[row_idx] = Some(RowCacheEntry {
                         hash: row_hash,
@@ -313,40 +313,28 @@ impl RenderContext {
     }
 
     /// Draw 1-pixel separator lines between panes.
-    pub fn build_pane_separators(&mut self, separators: &[PaneSeparator]) {
+    ///
+    /// Each separator is a single `RoundedRectInstance` (1×N or N×1 pixels) instead of
+    /// emitting one `CellVertex` per row/column. `pad_x`/`pad_y` are the physical-pixel
+    /// offsets applied by the cell shader uniform (window padding + tab bar height).
+    pub fn build_pane_separators(&mut self, separators: &[PaneSeparator], pad_x: f32, pad_y: f32) {
         const SEP_COLOR: [f32; 4] = [0.35, 0.30, 0.48, 1.0]; // dim purple
         let ch = self.shaper.cell_height;
         let cw = self.shaper.cell_width;
         for sep in separators {
-            if sep.vertical {
-                // 1px left edge at column `sep.col`, spanning `sep.length` rows.
-                for i in 0..sep.length {
-                    self.instances.push(CellVertex {
-                        grid_pos:     [sep.col as f32, (sep.row + i) as f32],
-                        atlas_uv:     [0.0; 4],
-                        fg:           [0.0; 4],
-                        bg:           SEP_COLOR,
-                        glyph_offset: [0.0, 0.0],
-                        glyph_size:   [1.0, ch],
-                        flags:        FLAG_CURSOR,
-                        _pad:         0,
-                    });
-                }
+            let x = pad_x + sep.col as f32 * cw;
+            let y = pad_y + sep.row as f32 * ch;
+            let (w, h) = if sep.vertical {
+                (1.0_f32, sep.length as f32 * ch)
             } else {
-                // 1px top edge at row `sep.row`, spanning `sep.length` columns.
-                for i in 0..sep.length {
-                    self.instances.push(CellVertex {
-                        grid_pos:     [(sep.col + i) as f32, sep.row as f32],
-                        atlas_uv:     [0.0; 4],
-                        fg:           [0.0; 4],
-                        bg:           SEP_COLOR,
-                        glyph_offset: [0.0, 0.0],
-                        glyph_size:   [cw, 1.0],
-                        flags:        FLAG_CURSOR,
-                        _pad:         0,
-                    });
-                }
-            }
+                (sep.length as f32 * cw, 1.0_f32)
+            };
+            self.rect_instances.push(RoundedRectInstance {
+                rect:   [x, y, w, h],
+                color:  SEP_COLOR,
+                radius: 0.0,
+                _pad:   [0.0; 3],
+            });
         }
     }
 
@@ -631,15 +619,16 @@ impl RenderContext {
 
             let mut all_lines: Vec<(String, [f32; 4])> = Vec::new();
 
-            for msg in &panel.messages {
+            // Use pre-wrapped lines from the cache (TD-PERF-05).
+            // ensure_wrap_cache() is called in mod.rs before this function runs.
+            for (msg_idx, msg) in panel.messages.iter().enumerate() {
                 let (first_p, cont_p, fg) = match msg.role {
                     ChatRole::User      => ("│  You  ", "│       ", user_fg),
                     ChatRole::Assistant => ("│   AI  ", "│       ", asst_fg),
                     ChatRole::System    => continue,
                     ChatRole::Tool(_)   => continue,
                 };
-                let wrapped = word_wrap(&msg.content, msg_inner_w);
-                for (i, line) in wrapped.iter().enumerate() {
+                for (i, line) in panel.wrapped_message(msg_idx).iter().enumerate() {
                     let p = if i == 0 { first_p } else { cont_p };
                     all_lines.push((format!("{}{}", p, line), fg));
                 }
@@ -1104,9 +1093,6 @@ impl RenderContext {
         let _ = bar_bg;
 
         if tabs.is_empty() || total_cols == 0 { return; }
-
-        // Clear rect instances for this frame
-        self.rect_instances.clear();
 
         // Dracula palette (pill colors)
         const ACTIVE_PILL:   [f32; 4] = [0.74, 0.58, 0.98, 1.0]; // Dracula purple #bd93f9

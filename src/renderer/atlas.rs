@@ -115,13 +115,7 @@ impl GlyphAtlas {
         self.epoch = self.epoch.saturating_add(1);
     }
 
-    /// Look up a cached glyph.
-    pub fn get(&self, key: &CacheKey) -> Option<AtlasEntry> {
-        self.cache.get(key).copied()
-    }
-
     /// Look up a cached glyph and mark it as used in the current epoch.
-    #[allow(dead_code)]
     pub fn get_and_touch(&mut self, key: &CacheKey) -> Option<AtlasEntry> {
         if let Some(entry) = self.cache.get_mut(key) {
             entry.last_used = self.epoch;

@@ -40,6 +40,16 @@ pub struct App {
     /// (erase + redraw) are coalesced into a single frame, preventing flickering.
     pending_pty_redraw: bool,
     last_pty_activity: std::time::Instant,
+
+    /// Cached CWD of the active shell (TD-PERF-02).
+    /// Refreshed via proc_pidinfo only when PTY data arrives or terminal focus changes,
+    /// instead of every frame.
+    cached_cwd: Option<std::path::PathBuf>,
+
+    /// Cached exit code from ShellContext (TD-PERF-01).
+    /// Refreshed by reading shell-context.json only when PTY data arrives,
+    /// instead of calling read_to_string() on every frame.
+    cached_exit_code: Option<i32>,
 }
 
 impl App {
@@ -60,7 +70,19 @@ impl App {
             wakeup_proxy,
             pending_pty_redraw: false,
             last_pty_activity: std::time::Instant::now(),
+            cached_cwd: None,
+            cached_exit_code: None,
         }
+    }
+
+    /// Refresh cached status bar data (CWD + exit code).
+    ///
+    /// Calls proc_pidinfo and reads shell-context.json once per invocation.
+    /// Call only on PTY data arrival or terminal focus change — NOT every frame.
+    fn refresh_status_cache(&mut self) {
+        self.cached_cwd = self.mux.active_cwd();
+        self.cached_exit_code = crate::llm::shell_context::ShellContext::load()
+            .and_then(|ctx| if ctx.last_exit_code != 0 { Some(ctx.last_exit_code) } else { None });
     }
 
     fn tab_bar_visible(&self) -> bool {
@@ -364,8 +386,9 @@ impl ApplicationHandler<()> for App {
                         );
                     }
 
-                    // Pane separator lines.
-                    rc.build_pane_separators(&pane_seps);
+                    // Pane separator lines (one RoundedRectInstance per separator).
+                    let sep_pad_x = self.config.window.padding.left as f32;
+                    rc.build_pane_separators(&pane_seps, sep_pad_x, sb_pad_y);
 
                     // ── Tab bar (2+ tabs, or while a rename prompt is active) ───────────
                     let renaming = self.ui.is_renaming_tab();
@@ -373,23 +396,55 @@ impl ApplicationHandler<()> for App {
                         let tab_total_cols = total_cols
                             + if self.ui.is_panel_visible() { self.ui.panel().width_cols as usize } else { 0 };
                         let rename_input = self.ui.tab_rename_input.as_deref();
-                        rc.build_tab_bar_instances(
-                            self.mux.tabs.tabs(),
-                            self.mux.tabs.active_index(),
-                            &scaled_font,
-                            tab_total_cols,
-                            self.config.window.padding.left as f32,
-                            self.config.window.padding.top as f32,
-                            self.config.colors.background,
-                            rename_input,
-                        );
+                        // Key: active tab index + total columns + tab titles + rename input.
+                        let tab_key = {
+                            let idx_bytes = self.mux.tabs.active_index().to_le_bytes();
+                            let col_bytes = tab_total_cols.to_le_bytes();
+                            let rename_bytes = rename_input.unwrap_or("").as_bytes();
+                            let mut parts: Vec<&[u8]> = vec![&idx_bytes, &col_bytes, rename_bytes];
+                            for t in self.mux.tabs.tabs() { parts.push(t.title.as_bytes()); }
+                            static_hash(&parts)
+                        };
+                        if rc.tab_bar_key == tab_key && !rc.tab_bar_instances_cache.is_empty() {
+                            // Tabs unchanged — append cached instances (TD-PERF-09).
+                            rc.instances.extend_from_slice(&rc.tab_bar_instances_cache);
+                            rc.rect_instances.extend_from_slice(&rc.tab_bar_rects_cache);
+                        } else {
+                            let inst_start = rc.instances.len();
+                            let rect_start = rc.rect_instances.len();
+                            rc.build_tab_bar_instances(
+                                self.mux.tabs.tabs(),
+                                self.mux.tabs.active_index(),
+                                &scaled_font,
+                                tab_total_cols,
+                                self.config.window.padding.left as f32,
+                                self.config.window.padding.top as f32,
+                                self.config.colors.background,
+                                rename_input,
+                            );
+                            rc.tab_bar_instances_cache.clear();
+                            rc.tab_bar_instances_cache.extend_from_slice(&rc.instances[inst_start..]);
+                            rc.tab_bar_rects_cache.clear();
+                            rc.tab_bar_rects_cache.extend_from_slice(&rc.rect_instances[rect_start..]);
+                            rc.tab_bar_key = tab_key;
+                        }
                     }
 
                     // ── Scroll bar (overlays right edge of terminal) ─────────────────────
                     if self.config.enable_scroll_bar {
                         if let Some(terminal) = self.mux.active_terminal() {
                             let (disp_off, hist) = terminal.scrollback_info();
-                            rc.build_scroll_bar_instances(disp_off, hist, term_rows, term_cols);
+                            let sb_state = (disp_off, hist, term_rows, term_cols);
+                            if rc.scroll_bar_state.as_ref() == Some(&sb_state) {
+                                // Geometry unchanged — append cached instances (TD-PERF-08).
+                                rc.instances.extend_from_slice(&rc.scroll_bar_cache);
+                            } else {
+                                let start = rc.instances.len();
+                                rc.build_scroll_bar_instances(disp_off, hist, term_rows, term_cols);
+                                rc.scroll_bar_cache.clear();
+                                rc.scroll_bar_cache.extend_from_slice(&rc.instances[start..]);
+                                rc.scroll_bar_state = Some(sb_state);
+                            }
                         }
                     }
 
@@ -402,6 +457,10 @@ impl ApplicationHandler<()> for App {
                             let panel_focused = self.ui.panel_focused;
                             let blink = self.input.cursor_blink_on;
                             self.ui.panel_mut().dirty = false;
+                            // Pre-wrap message lines once per dirty rebuild instead of every
+                            // word_wrap() call inside the renderer (TD-PERF-05).
+                            let msg_wrap_w = self.ui.panel().width_cols.saturating_sub(8) as usize;
+                            self.ui.panel_mut().ensure_wrap_cache(msg_wrap_w);
                             rc.build_chat_panel_instances(
                                 self.ui.panel(),
                                 panel_focused,
@@ -412,7 +471,8 @@ impl ApplicationHandler<()> for App {
                                 total_rows,
                                 blink,
                             );
-                            rc.panel_instances_cache = rc.instances[panel_start..].to_vec();
+                            rc.panel_instances_cache.clear();
+                            rc.panel_instances_cache.extend_from_slice(&rc.instances[panel_start..]);
                         } else {
                             rc.instances.extend_from_slice(&rc.panel_instances_cache);
                         }
@@ -427,31 +487,60 @@ impl ApplicationHandler<()> for App {
 
                     // ── Status bar ───────────────────────────────────────────────────────
                     if self.config.status_bar.enabled {
-                        let cwd = self.mux.active_cwd();
-                        self.ui.poll_git_branch(cwd.as_deref());
+                        // Use cached CWD and exit code (TD-PERF-01, TD-PERF-02).
+                        // Both are refreshed in about_to_wait on PTY data and on terminal switch.
+                        self.ui.poll_git_branch(self.cached_cwd.as_deref());
                         let leader_resize_mode = (self.input.leader_active
                             && self.input.modifiers.state().alt_key())
                             || self.input.resize_mode
                             || self.input.dragging_separator.is_some();
-                        let bar = crate::ui::status_bar::StatusBar::build(
-                            self.input.leader_active,
-                            leader_resize_mode,
-                            &self.config.leader.key,
-                            cwd.as_deref(),
-                            self.ui.git_branch_cache.as_deref(),
-                            crate::llm::shell_context::ShellContext::load()
-                                .and_then(|ctx| if ctx.last_exit_code != 0 { Some(ctx.last_exit_code) } else { None }),
-                            self.config.status_bar.style.clone(),
-                        );
+                        let sb_total_cols = total_cols + if panel_visible { self.ui.panel().width_cols as usize } else { 0 };
                         let sb_win_w = rc.renderer.size().0 as f32;
-                        rc.build_status_bar_instances(&bar, &scaled_font, total_cols + if panel_visible { self.ui.panel().width_cols as usize } else { 0 }, total_rows, sb_pad_y, sb_win_w);
+                        // Key: all inputs that affect segment text + layout (TD-PERF-10).
+                        let sb_key = {
+                            let flags = [
+                                self.input.leader_active as u8,
+                                leader_resize_mode as u8,
+                                self.cached_exit_code.unwrap_or(0) as u8,
+                            ];
+                            let col_bytes = sb_total_cols.to_le_bytes();
+                            let row_bytes = total_rows.to_le_bytes();
+                            let win_w_bits = sb_win_w.to_bits().to_le_bytes();
+                            let cwd_bytes = self.cached_cwd.as_ref()
+                                .and_then(|p| p.to_str()).unwrap_or("").as_bytes();
+                            let branch_bytes = self.ui.git_branch_cache.as_deref().unwrap_or("").as_bytes();
+                            let leader_bytes = self.config.leader.key.as_bytes();
+                            static_hash(&[&flags, &col_bytes, &row_bytes, &win_w_bits, cwd_bytes, branch_bytes, leader_bytes])
+                        };
+                        if rc.status_bar_key == sb_key && !rc.status_bar_instances_cache.is_empty() {
+                            // Inputs unchanged — append cached instances (TD-PERF-10).
+                            rc.instances.extend_from_slice(&rc.status_bar_instances_cache);
+                            rc.rect_instances.extend_from_slice(&rc.status_bar_rect_cache);
+                        } else {
+                            let inst_start = rc.instances.len();
+                            let rect_start = rc.rect_instances.len();
+                            let bar = crate::ui::status_bar::StatusBar::build(
+                                self.input.leader_active,
+                                leader_resize_mode,
+                                &self.config.leader.key,
+                                self.cached_cwd.as_deref(),
+                                self.ui.git_branch_cache.as_deref(),
+                                self.cached_exit_code,
+                                self.config.status_bar.style.clone(),
+                            );
+                            rc.build_status_bar_instances(&bar, &scaled_font, sb_total_cols, total_rows, sb_pad_y, sb_win_w);
+                            rc.status_bar_instances_cache.clear();
+                            rc.status_bar_instances_cache.extend_from_slice(&rc.instances[inst_start..]);
+                            rc.status_bar_rect_cache.clear();
+                            rc.status_bar_rect_cache.extend_from_slice(&rc.rect_instances[rect_start..]);
+                            rc.status_bar_key = sb_key;
+                        }
                     }
 
                     // ── Overlays (palette, context menu) — rendered after main glyphs ──
                     // Record the split point so the GPU renders these in a separate pass.
                     let overlay_start = rc.instances.len();
                     if self.ui.palette.visible {
-                        rc.mark_all_rows_dirty();
                         let palette_cols = total_cols
                             + if panel_visible { self.ui.panel().width_cols as usize } else { 0 };
                         rc.build_palette_instances(&self.ui.palette, &scaled_font, palette_cols, total_rows);
@@ -464,7 +553,6 @@ impl ApplicationHandler<()> for App {
                     rc.renderer.upload_rect_instances(&rc.rect_instances);
                     rc.renderer.set_overlay_start(overlay_start);
                     rc.renderer.upload_instances(&rc.instances, 0);
-                    rc.reset_row_dirty_flags();
                     rc.renderer.set_cell_count(rc.instances.len());
                     rc.renderer.upload_lcd_instances(&rc.lcd_instances);
                     let _ = rc.renderer.render();
@@ -507,6 +595,8 @@ impl ApplicationHandler<()> for App {
                     } else if self.mux.active_tab_index() != tab_idx_before {
                         // Tab switched — resize the newly active tab's panes.
                         self.resize_terminals_for_panel();
+                        // Different tab = different shell process = potentially different CWD.
+                        self.refresh_status_cache();
                     } else if self.mux.active_pane_count() != pane_count_before {
                         // Pane split or close — resize all panes in current tab.
                         self.resize_terminals_for_panel();
@@ -608,6 +698,7 @@ impl ApplicationHandler<()> for App {
                             if let Some(idx) = self.hit_test_tab_bar(self.input.mouse_pos.0) {
                                 self.mux.tabs.switch_to_index(idx);
                                 self.resize_terminals_for_panel();
+                                self.refresh_status_cache();
                             }
                             if let Some(w) = &self.window { w.request_redraw(); }
                             return;
@@ -674,6 +765,8 @@ impl ApplicationHandler<()> for App {
                                     pane_mgr.focus_at(px, py);
                                     let new_tid = self.mux.focused_terminal_id();
                                     self.ui.set_active_terminal(new_tid);
+                                    // Different pane = different shell process = potentially different CWD.
+                                    self.refresh_status_cache();
                                 }
                             }
                             self.input.mouse_left_pressed = true;
@@ -746,7 +839,10 @@ impl ApplicationHandler<()> for App {
                 let (any_mouse, _, _) = self.mux.active_terminal().map(|t| t.mouse_mode_flags()).unwrap_or((false, false, false));
                 if any_mouse {
                     let btn = if lines > 0 { 65u8 } else { 64u8 };
-                    for _ in 0..lines.abs() { self.input.send_mouse_report(btn, col, row, true, &self.mux); }
+                    // Cap at 3 events per gesture: each report triggers a full TUI redraw + GPU
+                    // frame. Sending too many at once causes visible lag on slower hardware (M2).
+                    let capped = lines.abs().min(3);
+                    for _ in 0..capped { self.input.send_mouse_report(btn, col, row, true, &self.mux); }
                 } else if let Some(terminal) = self.mux.active_terminal() {
                     terminal.scroll_display(-lines);
                     if self.input.mouse_left_pressed { terminal.update_selection(col, row); }
@@ -772,6 +868,10 @@ impl ApplicationHandler<()> for App {
         if more_data {
             self.pending_pty_redraw = true;
             self.last_pty_activity = std::time::Instant::now();
+            // PTY data means the shell may have changed directory or finished a command.
+            // Refresh cached CWD + exit code here instead of every RedrawRequested frame
+            // (TD-PERF-01: eliminates 60 read_to_string/s; TD-PERF-02: eliminates 60 proc_pidinfo/s).
+            self.refresh_status_cache();
         }
 
         if self.ui.poll_ai_events()       { if let Some(w) = &self.window { w.request_redraw(); } }
@@ -824,8 +924,12 @@ fn build_all_pane_instances(
     cursor_blink_on: bool,
 ) -> Result<(), crate::renderer::atlas::AtlasError> {
     rc.begin_frame();
+    // Take the scratch buffer out of rc so we can mutably borrow rc (build_instances)
+    // while the buffer is filled by mux. Returned at the end of the function.
+    let mut cell_data_scratch = std::mem::take(&mut rc.cell_data_scratch);
     for info in pane_infos {
-        let cell_data = mux.collect_grid_cells_for(info.terminal_id);
+        mux.collect_grid_cells_for(info.terminal_id, &mut cell_data_scratch);
+        let cell_data = &cell_data_scratch[..];
         let cursor = if info.focused {
             mux.terminals
                 .get(info.terminal_id)
@@ -835,7 +939,7 @@ fn build_all_pane_instances(
             None
         };
         rc.build_instances(
-            &cell_data,
+            cell_data,
             config,
             font,
             cursor.as_ref(),
@@ -845,6 +949,7 @@ fn build_all_pane_instances(
             info.row_offset,
         )?;
     }
+    rc.cell_data_scratch = cell_data_scratch;
     Ok(())
 }
 
@@ -853,4 +958,14 @@ impl Drop for App {
         log::info!("App dropping; shutting down PTYs.");
         self.mux.shutdown();
     }
+}
+
+/// Hash a sequence of byte slices into a single u64.
+/// Used to detect whether static-geometry inputs (tab bar, status bar, scroll bar)
+/// changed since the last frame, so we can skip rebuilding their GPU instances.
+fn static_hash(parts: &[&[u8]]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    for p in parts { p.hash(&mut h); }
+    h.finish()
 }

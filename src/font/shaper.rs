@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::rc::Rc;
 
 use cosmic_text::{
@@ -224,29 +225,25 @@ pub struct TextShaper {
     pub cell_width: f32,
     pub cell_height: f32,
     shape_buf: Buffer,
+    /// Reusable byte-offset → char-index map. Resized on demand, never shrinks.
+    byte_to_col_buf: Vec<usize>,
     pub lcd_rasterizer: Option<FreeTypeLcdRasterizer>,
     pub lcd_atlas: Option<Rc<RefCell<LcdGlyphAtlas>>>,
     /// Queried family name (internal to the font file, may differ from config).
     family: String,
-    /// fontdb face ID for the loaded font — used when overriding PUA glyph_ids.
-    font_id: fontdb::ID,
+    /// fontdb face ID for the regular weight face that was loaded into FreeType.
+    /// Used for CacheKey construction in PUA overrides and for the LCD filter.
+    primary_font_id: fontdb::ID,
+    /// All fontdb face IDs that belong to the primary font family (regular, bold,
+    /// italic, etc.). A glyph is a true fallback only if its font_id is NOT in
+    /// this set. Using the full family set avoids false-positive PUA overrides
+    /// when cosmic-text picks a bold/italic variant of the same font.
+    primary_face_ids: HashSet<fontdb::ID>,
     /// FreeType cmap lookup — always initialized (not just for LCD) to resolve
     /// PUA glyph_ids that cosmic-text can't find via fontdb coverage.
     ft_cmap: Option<FreeTypeCmapLookup>,
 }
 
-// SAFETY: TextShaper owns a FreeType library + face handle (via FreeTypeCmapLookup)
-// and a FreeType-backed LCD rasterizer. FreeType's FT_Library is not thread-safe —
-// concurrent use from multiple threads would be UB. However, TextShaper lives
-// exclusively on the main (render) thread and is never aliased concurrently:
-//   • It is stored inside RenderContext which is owned by App (main thread only).
-//   • No Arc<TextShaper> or shared reference crosses thread boundaries.
-//   • It is only moved across threads (e.g. into a tokio::spawn) via ownership
-//     transfer, never while any other thread holds a reference.
-// Given this single-owner invariant, moving TextShaper between threads is sound.
-// Sync is intentionally NOT implemented: a shared &TextShaper from multiple threads
-// could lead to concurrent FreeType calls which would be unsound.
-unsafe impl Send for TextShaper {}
 
 impl TextShaper {
     pub fn new(
@@ -289,6 +286,37 @@ impl TextShaper {
             log::warn!("FreeType cmap lookup unavailable — Nerd Font PUA icons may not render.");
         }
 
+        // Collect all face IDs that belong to the primary font family (regular, bold,
+        // italic, bold-italic, etc.). This prevents false-positive PUA overrides when
+        // cosmic-text picks a different weight/style of the same font.
+        let primary_face_ids: HashSet<fontdb::ID> = {
+            // The face we loaded (font_id) tells us the canonical family name as stored
+            // in fontdb. We look up that name and collect all faces sharing it.
+            let canonical_family = font_system
+                .db()
+                .face(font_id)
+                .and_then(|f| f.families.first())
+                .map(|(name, _)| name.clone())
+                .unwrap_or_else(|| actual_family.clone());
+
+            font_system
+                .db()
+                .faces()
+                .filter(|face| {
+                    face.families
+                        .iter()
+                        .any(|(name, _)| name.eq_ignore_ascii_case(&canonical_family))
+                })
+                .map(|face| face.id)
+                .collect()
+        };
+
+        log::debug!(
+            "Primary family '{}' covers {} fontdb face ID(s)",
+            actual_family,
+            primary_face_ids.len()
+        );
+
         let mut shaper = Self {
             font_system,
             swash_cache: SwashCache::new(),
@@ -296,10 +324,12 @@ impl TextShaper {
             cell_width: font_config.size * 0.6,
             cell_height: line_height,
             shape_buf,
+            byte_to_col_buf: Vec::new(),
             lcd_rasterizer,
             lcd_atlas,
             family: actual_family,
-            font_id,
+            primary_font_id: font_id,
+            primary_face_ids,
             ft_cmap,
         };
 
@@ -387,6 +417,18 @@ impl TextShaper {
         let mut ascent = 0.0f32;
         let mut line_height = self.cell_height;
 
+        // Precompute byte-offset → char-index map once (O(n)) to avoid O(n²) per-glyph scans.
+        // Reuse the buffer across cache-miss calls — only grows, never re-allocates downward.
+        let n = text.len();
+        self.byte_to_col_buf.resize(n + 1, 0);
+        let mut char_idx = 0usize;
+        for (byte_idx, _) in text.char_indices() {
+            self.byte_to_col_buf[byte_idx] = char_idx;
+            char_idx += 1;
+        }
+        self.byte_to_col_buf[n] = char_idx;
+        let byte_to_col = &self.byte_to_col_buf;
+
         for run in self.shape_buf.layout_runs() {
             ascent = run.line_y;
             line_height = run.line_height;
@@ -395,8 +437,8 @@ impl TextShaper {
                 let tlen = text.len();
                 let start = glyph.start.min(tlen);
                 let end = glyph.end.min(tlen);
-                let col = text[..start].chars().count();
-                let span = text[start..end].chars().count().max(1);
+                let col = byte_to_col[start];
+                let span = (byte_to_col[end] - col).max(1);
                 let ch = text[start..end].chars().next().unwrap_or(' ');
                 
                 log::debug!("Shaping char '{}' (U+{:04X}), font_id: {:?}, glyph_id: {}", ch, ch as u32, glyph.font_id, glyph.glyph_id);
@@ -415,13 +457,14 @@ impl TextShaper {
                 // 1. cosmic-text returned glyph_id=0 (not found)
                 // 2. The character is a Nerd Font symbol AND cosmic-text routed it to 
                 //    a DIFFERENT font (fallback).
-                let should_override = glyph.glyph_id == 0 || (is_pua(ch) && glyph.font_id != self.font_id);
+                let should_override = glyph.glyph_id == 0
+                    || (is_pua(ch) && !self.primary_face_ids.contains(&glyph.font_id));
 
                 let cache_key = if should_override {
                     if let Some(real_id) = self.ft_cmap.as_ref().and_then(|ft| ft.get_glyph_index(ch)) {
                         log::debug!("Overriding glyph {} -> ID {}", ch, real_id);
                         let (key, _, _) = CacheKey::new(
-                            self.font_id,
+                            self.primary_font_id,
                             real_id as u16,
                             font_config.size,
                             (glyph.x.fract(), 0.0),
@@ -461,7 +504,7 @@ impl TextShaper {
         atlas: &mut GlyphAtlas,
         queue: &wgpu::Queue,
     ) -> Result<AtlasEntry, crate::renderer::atlas::AtlasError> {
-        if let Some(entry) = atlas.get(&cache_key) {
+        if let Some(entry) = atlas.get_and_touch(&cache_key) {
             return Ok(entry);
         }
 
@@ -501,7 +544,7 @@ impl TextShaper {
         ch: char,
         queue: &wgpu::Queue,
     ) -> Option<LcdAtlasEntry> {
-        if !should_use_lcd(cache_key, self.font_id, ch) {
+        if !should_use_lcd(cache_key, self.primary_font_id, ch) {
             return None;
         }
 

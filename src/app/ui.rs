@@ -832,7 +832,7 @@ impl UiManager {
                         );
                         render_ctx.renderer.update_bg_color(scheme.background_wgpu());
                         config.colors = scheme;
-                        render_ctx.mark_all_rows_dirty();
+                        // Hash-based row cache auto-invalidates on color change — no manual dirty needed.
                     }
                     Err(e) => log::error!("Failed to load theme '{name}': {e}"),
                 }

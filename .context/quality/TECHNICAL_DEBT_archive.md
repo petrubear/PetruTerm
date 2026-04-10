@@ -5,6 +5,55 @@ Ordered newest-first within each date group.
 
 ---
 
+## Resolved 2026-04-10 — Full debt sprint (P1/P2/P3)
+
+### TD-OP-01: `unsafe impl Send` en `TextShaper`
+- **Fix:** Eliminado. `cargo check` pasa sin errores — el compilador nunca requirió `Send` en el path real (winit event loop en macOS no exige `Send` en el handler).
+
+### TD-OP-02: Override de glyph ID de Nerd Font frágil
+- **Fix:** `TextShaper.primary_face_ids: HashSet<fontdb::ID>` reemplaza `font_id` único. En `new()`, todos los IDs de la familia primaria se recopilan con comparación case-insensitive. La condición de override usa `!primary_face_ids.contains(&glyph.font_id)`.
+
+### TD-OP-03: Atlas de glyphs sin eviction LRU
+- **Fix:** La infraestructura ya existía. Gap: `atlas.get` no actualizaba `last_used` en cache hits. Cambiado a `atlas.get_and_touch`. Eliminado `atlas.get` (dead code).
+
+### TD-PERF-01: `ShellContext::load()` — 60 file reads/segundo
+- **Fix:** `App.cached_exit_code: Option<i32>`, refrescado solo en `about_to_wait` cuando `more_data == true`.
+
+### TD-PERF-02: `active_cwd()` — 60 syscalls `proc_pidinfo`/segundo
+- **Fix:** `App.cached_cwd: Option<PathBuf>`, refrescado en PTY data y en cambio de terminal/tab. Helper `refresh_status_cache()`.
+
+### TD-PERF-04: `dirty_rows` dead code
+- **Fix:** `RowCache.dirty_rows`, `mark_all_rows_dirty()`, `reset_row_dirty_flags()` eliminados. El cache usa hash-based invalidation y nunca leyó estos campos.
+
+### TD-PERF-05: `word_wrap()` múltiples veces por frame
+- **Fix:** `ChatPanel.wrapped_cache: Vec<Vec<String>>` + `wrapped_cache_width`. `ensure_wrap_cache(width)` llamado una vez por dirty rebuild.
+
+### TD-PERF-06: `panel_instances_cache` usa `to_vec()` en rebuild
+- **Fix:** `clear() + extend_from_slice` — el Vec retiene capacidad entre frames.
+
+### TD-PERF-07: `process_cwd()` Vec<u8> 1024 bytes
+- **Fix:** `std::slice::from_raw_parts(vip_path.as_ptr() as *const u8, 1024)`. Cero heap allocation.
+
+### TD-PERF-08/09/10: Scroll/tab/status bar sin cache
+- **Fix:** Caches de instancias GPU en `RenderContext` con key hash. `extend_from_slice` en idle.
+
+### TD-PERF-11: `char_chunks()` Vec<char> intermedio
+- **Fix:** Loop directo sobre `s.chars()` con `String::with_capacity(width)` + `mem::take`.
+
+### TD-PERF-12: `collect_grid_cells_for()` N allocs/frame
+- **Fix:** Signature cambiada a `(&self, id, buf: &mut Vec<...>)`. Buffer en `RenderContext.cell_data_scratch`. `mem::take` en `build_all_pane_instances` para split de borrow.
+
+### TD-PERF-13: `byte_to_col` Vec por cache miss
+- **Fix:** `TextShaper.byte_to_col_buf: Vec<usize>`. `resize(n+1, 0)` + fill in-place.
+
+### TD-PERF-14: `colors_scratch` capacidad 256 hardcoded
+- **Fix:** `Vec::with_capacity(cell_data.first().map(|(_, c)| c.len()).unwrap_or(256))`.
+
+### TD-PERF-15: Separadores de pane emiten N instancias
+- **Fix:** `build_pane_separators` emite 1 `RoundedRectInstance` por separador (radius=0). Recibe `pad_x`/`pad_y` para coordenadas físicas.
+
+---
+
 ## Resolved 2026-04-09 (batch 3)
 
 ### TD-047: Sin padding entre terminal y status bar

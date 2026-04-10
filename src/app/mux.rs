@@ -327,18 +327,36 @@ impl Mux {
             .unwrap_or_default()
     }
 
-    /// Read the terminal grid for a specific terminal ID (for multi-pane rendering).
-    pub fn collect_grid_cells_for(&self, terminal_id: usize) -> Vec<(String, Vec<(AnsiColor, AnsiColor)>)> {
-        let Some(Some(terminal)) = self.terminals.get(terminal_id) else { return vec![]; };
+    /// Read the terminal grid for a specific terminal ID into a pre-allocated buffer.
+    ///
+    /// Reuses the outer `Vec` and inner `String`/`Vec` allocations from previous calls,
+    /// eliminating per-frame heap allocations once the buffer has reached steady state.
+    pub fn collect_grid_cells_for(
+        &self,
+        terminal_id: usize,
+        buf: &mut Vec<(String, Vec<(AnsiColor, AnsiColor)>)>,
+    ) {
+        let Some(Some(terminal)) = self.terminals.get(terminal_id) else {
+            buf.clear();
+            return;
+        };
         terminal.with_term(|term| {
             let rows = term.screen_lines();
             let cols = term.columns();
             let display_offset = term.grid().display_offset() as i32;
             let sel_range = term.selection.as_ref().and_then(|s| s.to_range(term));
-            let mut result = Vec::with_capacity(rows);
+
+            // Resize to exact row count, keeping existing allocations.
+            if buf.len() < rows {
+                buf.resize_with(rows, || (String::with_capacity(cols), Vec::with_capacity(cols)));
+            } else {
+                buf.truncate(rows);
+            }
+
             for row in 0..rows {
-                let mut text = String::with_capacity(cols);
-                let mut colors = Vec::with_capacity(cols);
+                let (text, colors) = &mut buf[row];
+                text.clear();
+                colors.clear();
                 let grid_line = Line(row as i32 - display_offset);
                 for col in 0..cols {
                     let cell = &term.grid()[grid_line][Column(col)];
@@ -347,10 +365,8 @@ impl Mux {
                     let (fg, bg) = if cell_in_selection(grid_line, Column(col), &sel_range) { (bg, fg) } else { (fg, bg) };
                     colors.push((fg, bg));
                 }
-                result.push((text, colors));
             }
-            result
-        })
+        });
     }
 
     pub fn shutdown(&mut self) {

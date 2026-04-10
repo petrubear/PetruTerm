@@ -93,6 +93,13 @@ pub struct ChatPanel {
     /// unchanged frames (avoids HarfBuzz calls on every redraw).
     pub dirty: bool,
 
+    /// Pre-wrapped lines for each message (index-parallel to `messages`).
+    /// Keyed by `wrapped_cache_width`; rebuilt lazily when width changes.
+    /// Avoids calling word_wrap() on every dirty rebuild (TD-PERF-05).
+    wrapped_cache: Vec<Vec<String>>,
+    /// The `msg_inner_w` value used to build `wrapped_cache`.
+    wrapped_cache_width: usize,
+
     // ── File context ──────────────────────────────────────────────────────────
     /// Files attached as context; injected into LLM system message at query time.
     pub attached_files: Vec<PathBuf>,
@@ -131,7 +138,34 @@ impl ChatPanel {
             file_picker_query: String::new(),
             file_picker_items: Vec::new(),
             file_picker_cursor: 0,
+            wrapped_cache: Vec::new(),
+            wrapped_cache_width: 0,
         }
+    }
+
+    /// Ensure `wrapped_cache` covers all messages at the given inner width.
+    ///
+    /// - If `width` changed, the entire cache is rebuilt.
+    /// - Otherwise, only new messages (appended since last call) are wrapped.
+    /// - Existing messages are never re-wrapped (their content is immutable).
+    ///
+    /// Call this once before rendering, not inside the per-frame render loop.
+    pub fn ensure_wrap_cache(&mut self, width: usize) {
+        if self.wrapped_cache_width != width {
+            self.wrapped_cache.clear();
+            self.wrapped_cache_width = width;
+        }
+        // Lazily wrap any messages added since the last call.
+        while self.wrapped_cache.len() < self.messages.len() {
+            let idx = self.wrapped_cache.len();
+            self.wrapped_cache.push(word_wrap(&self.messages[idx].content, width));
+        }
+    }
+
+    /// Return the pre-wrapped lines for message `idx`.
+    /// Panics if `ensure_wrap_cache` was not called first for the current width.
+    pub fn wrapped_message(&self, idx: usize) -> &[String] {
+        self.wrapped_cache.get(idx).map(|v| v.as_slice()).unwrap_or(&[])
     }
 
     pub fn is_visible(&self) -> bool {
@@ -532,11 +566,22 @@ pub fn word_wrap(text: &str, width: usize) -> Vec<String> {
 }
 
 fn char_chunks(s: &str, width: usize) -> Vec<String> {
-    s.chars()
-        .collect::<Vec<_>>()
-        .chunks(width)
-        .map(|c| c.iter().collect())
-        .collect()
+    let mut result = Vec::new();
+    let mut chunk = String::with_capacity(width);
+    let mut count = 0usize;
+    for ch in s.chars() {
+        chunk.push(ch);
+        count += 1;
+        if count == width {
+            result.push(std::mem::take(&mut chunk));
+            chunk = String::with_capacity(width);
+            count = 0;
+        }
+    }
+    if !chunk.is_empty() {
+        result.push(chunk);
+    }
+    result
 }
 
 #[allow(dead_code)]

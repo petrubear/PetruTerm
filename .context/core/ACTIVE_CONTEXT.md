@@ -1,13 +1,12 @@
 # Active Context
 
-**Current Focus:** Phase 3 P3 — Built-in themes (último item pendiente)
-**Last Active:** 2026-04-09
+**Current Focus:** Technical debt sprint completo → próximo: Phase 4 (plugins)
+**Last Active:** 2026-04-10
 
 ## Estado actual del proyecto
 
-**Phase 1 COMPLETE. Phase 2 COMPLETE. Phase 2.5 COMPLETE. Phase 3 P1 COMPLETE. Phase 3 P2 COMPLETE.**
-**Phase 3 P3 parcial (snippets/Starship pendientes). Phase 4 (plugins) no iniciada.**
-**Deuda técnica: 0 ítems abiertos. `cargo build` PASA.**
+**Phase 1–3 COMPLETE. Phase 4 (plugins) no iniciada.**
+**Deuda técnica: 1 ítem abierto (TD-PERF-03, no aplica en Apple Silicon). `cargo check` PASA.**
 
 ### Features verificados
 
@@ -41,7 +40,9 @@
 
 ## Deuda técnica abierta
 
-*Sin ítems abiertos. Ver [TECHNICAL_DEBT_archive.md](../../.context/quality/TECHNICAL_DEBT_archive.md) para historial completo.*
+**TD-PERF-03** — GPU upload completo del instance buffer en GPUs PCIe discretas. No es cuello de botella en Apple Silicon (unified memory). Dejar para Phase 2+ (cross-platform).
+
+Ver [TECHNICAL_DEBT_archive.md](../../.context/quality/TECHNICAL_DEBT_archive.md) para historial completo.
 
 ## Keybinds actuales
 
@@ -87,3 +88,4 @@
 ## Próximos pasos recomendados
 
 1. **Phase 4:** Plugin ecosystem (Lua loader, API surface)
+2. Limpiar `TECHNICAL_DEBT.md` — mover ítems resueltos al archive

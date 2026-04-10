@@ -1,57 +1,60 @@
 # Session State
 
-**Last Updated:** 2026-04-09
-**Session Focus:** Bug fixes + Phase 3 P3 snippets + Powerline + overlay rendering fix
+**Last Updated:** 2026-04-10
+**Session Focus:** Technical debt sprint completo — P1, P2, P3, TD-OP-01/02/03
 
 ## Branch: `master`
 
-## Session Notes (2026-04-09 — batch 4)
+## Session Notes (2026-04-10 — debt sprint)
 
-### Trabajo realizado
+### Resumen
 
-#### Command palette — scroll + orden alfabético
-- **Bug scroll:** el renderer siempre mostraba items `[0..14]`; `selected` quedaba fuera de la ventana al navegar hacia abajo. Fix: `scroll_offset = max(0, selected - max_visible + 1)`; items indexados con `scroll_offset + i`.
-- **Orden alfabético:** `built_in_actions()` ahora hace `sort_unstable_by(|a,b| a.name.cmp(&b.name))` antes de retornar. Con query activo el fuzzy scorer sigue teniendo precedencia.
+Sprint de deuda técnica completado. Todos los ítems P1–P3 resueltos (18 en total en la sesión).
+Solo queda TD-PERF-03 abierto (GPU upload en PCIe — no aplica en Apple Silicon).
 
-#### Status bar — click en git no funcionaba
-- **Bug:** hit zone calculada como `win_h - pad_bottom - cell_h` no coincidía con la posición renderizada por `floor()`. Gap de hasta `cell_h - 1` px.
-- **Fix:** hit zone ahora usa la misma fórmula que el renderer: `pad_top + tab_h + floor(viewport_h / cell_h) * cell_h`.
+### Ítems resueltos hoy
 
-### Archivos modificados (bugs)
-- `src/app/renderer.rs` — palette scroll offset
-- `src/ui/palette/actions.rs` — sort alfabético
-- `src/app/mod.rs` — status bar hit zone row-based
+#### P1
+- **TD-PERF-01**: `ShellContext::load()` — 60 file reads/seg → `App.cached_exit_code`
+- **TD-PERF-02**: `active_cwd()` — 60 syscalls/seg → `App.cached_cwd`, `refresh_status_cache()`
+- **TD-PERF-04**: `dirty_rows` dead code — eliminado
+- **TD-PERF-05**: `word_wrap()` múltiples veces/frame → `ChatPanel.wrapped_cache`
+- **TD-OP-02**: Nerd Font glyph ID override frágil → `primary_face_ids: HashSet<fontdb::ID>`
 
-#### Phase 3 P3 — Snippets
+#### P2
+- **TD-PERF-06**: `panel_instances_cache.to_vec()` → `clear() + extend_from_slice`
+- **TD-PERF-07**: `process_cwd()` Vec<u8> 1024 bytes → `from_raw_parts` cast in-place
+- **TD-PERF-08/09/10**: Scroll/tab/status bar sin cache → caches con key hash
+- **TD-PERF-11**: `char_chunks()` Vec<char> → loop directo sin allocation intermedia
+- **TD-OP-03**: Atlas sin eviction → `get_and_touch` actualiza `last_used` en cache hits
 
-- `SnippetConfig { name, body, trigger? }` en `src/config/schema.rs`
-- Parser Lua en `src/config/lua.rs` — lee `config.snippets[]`
-- `Action::ExpandSnippet(body)` en `src/ui/palette/actions.rs`
-- `CommandPalette::rebuild_snippets()` — inyecta entradas "Snippet: …" con hint `Tab: trigger`; llamado en init + hot-reload
-- Dispatch en `src/app/ui.rs` — `ExpandSnippet` escribe body al PTY activo
-- Tab trigger: `InputHandler.input_echo` rastrea chars desde último Enter/Esc (máx 256 bytes). En Tab (sin modificadores), `try_expand_snippet()` compara último word; si hay match: backspaces + body; si no: Tab normal al shell
-- `config/default/snippets.lua` — módulo con snippets de ejemplo (git, docker, kubectl, ps)
-- `ensure_default_configs()` crea `snippets.lua` en instalaciones nuevas sin sobreescribir el existente
-- `config/default/config.lua` — `require("snippets")` añadido
+#### P3
+- **TD-PERF-12**: `collect_grid_cells_for()` N allocs/frame → buffer reutilizable en `RenderContext.cell_data_scratch`
+- **TD-PERF-13**: `byte_to_col` Vec por cache miss → `TextShaper.byte_to_col_buf` reutilizable
+- **TD-PERF-14**: `colors_scratch` capacidad 256 → `Vec::with_capacity(cols)`
+- **TD-PERF-15**: Separadores N CellVertex → 1 `RoundedRectInstance` por separador
+- **TD-OP-01**: `unsafe impl Send for TextShaper` → eliminado (el compilador nunca lo requirió)
 
-#### Phase 3 P3 — Powerline status bar
+### Archivos modificados
 
-- `StatusBarStyle` enum (`Plain` | `Powerline`) en `config/schema.rs`
-- Lua DSL: `config.status_bar.style = "plain" | "powerline"`
-- `StatusBar` lleva su propio `style`; `left_sep_width`/`right_sep_width` y `click_kind` style-aware
-- Renderer: izquierda usa `` (U+E0B0) fg=seg.bg/bg=next.bg; derecha usa `` (U+E0B2) con flecha líder desde bar_bg y flechas internas entre segmentos
-- `config/default/ui.lua` — documenta la opción `style`
-- `~/.config/petruterm/ui.lua` — activado `style = "powerline"` en config del usuario
-
-#### Overlay rendering — fondo sólido en palette y context menu
-
-- **Bug:** el LCD pass (glifos del terminal con subpixel AA) se ejecutaba **después** del overlay pass, sobreescribiendo los fondos del palette y context menu con los glifos del terminal.
-- **Fix:** en `src/renderer/gpu.rs`, el LCD pass se movió para ejecutarse entre el main pass y el overlay pass. Orden correcto: `main bg → main glyphs → LCD glyphs → overlay bg (REPLACE) → overlay glyphs`. El `bg_pipeline` usa `BlendState::REPLACE` por lo que el fondo del overlay elimina completamente los glifos LCD subyacentes.
-- **Archivo modificado:** `src/renderer/gpu.rs` — reordenamiento de draw calls en `render()`
+| Archivo | Cambios |
+|---------|---------|
+| `src/app/mod.rs` | `sep_pad_x`, `sb_pad_y` pasados a `build_pane_separators`; `mem::take` para `cell_data_scratch` |
+| `src/app/renderer.rs` | `cell_data_scratch` en `RenderContext`; `build_pane_separators` usa `RoundedRectInstance`; `colors_scratch` capacidad correcta |
+| `src/app/mux.rs` | `collect_grid_cells_for` acepta buffer mutable; reusa allocaciones inner |
+| `src/font/shaper.rs` | `primary_face_ids: HashSet`; `primary_font_id`; `byte_to_col_buf`; eliminado `unsafe impl Send` |
+| `src/renderer/atlas.rs` | `get` eliminado (dead); `get_and_touch` ahora público sin `#[allow(dead_code)]` |
+| `src/llm/chat_panel.rs` | `char_chunks` sin Vec<char> intermedio |
+| `src/term/mod.rs` | `process_cwd` sin Vec<u8> heap allocation |
+| `.context/quality/TECHNICAL_DEBT.md` | 18 ítems cerrados, 1 abierto |
 
 ## Build & Tests
-- **cargo build:** PASS (2026-04-09)
+- **cargo check:** PASS (2026-04-10, cero warnings, cero errores)
+
+## Deuda técnica restante
+
+**1 ítem** — TD-PERF-03 (GPU upload completo en PCIe). No aplica en Apple Silicon. Dejar para cross-platform (Phase 2+).
 
 ## Próxima sesión
 
-Phase 4: Plugin ecosystem (Lua loader, API surface). Ver `build_phases.md`.
+**Phase 4:** Plugin ecosystem (Lua loader, API surface). Ver `build_phases.md`.
