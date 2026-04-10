@@ -13,6 +13,7 @@ const DEFAULT_UI: &str = include_str!("../../config/default/ui.lua");
 const DEFAULT_PERF: &str = include_str!("../../config/default/perf.lua");
 const DEFAULT_KEYBINDS: &str = include_str!("../../config/default/keybinds.lua");
 const DEFAULT_LLM: &str = include_str!("../../config/default/llm.lua");
+const DEFAULT_SNIPPETS: &str = include_str!("../../config/default/snippets.lua");
 const SHELL_INTEGRATION_ZSH: &str = include_str!("../../scripts/shell-integration.zsh");
 
 /// Modules preloaded for the embedded fallback config (no filesystem access).
@@ -21,6 +22,7 @@ pub const EMBEDDED_MODULES: &[(&str, &str)] = &[
     ("perf",     DEFAULT_PERF),
     ("keybinds", DEFAULT_KEYBINDS),
     ("llm",      DEFAULT_LLM),
+    ("snippets", DEFAULT_SNIPPETS),
 ];
 
 /// Resolve the user config directory: ~/.config/petruterm/
@@ -135,8 +137,9 @@ fn ensure_default_configs(dir: &std::path::Path) -> Result<()> {
         ("config.lua",   include_str!("../../config/default/config.lua")),
         ("ui.lua",       include_str!("../../config/default/ui.lua")),
         ("perf.lua",     include_str!("../../config/default/perf.lua")),
-        ("keybinds.lua", include_str!("../../config/default/keybinds.lua")),
-        ("llm.lua",      include_str!("../../config/default/llm.lua")),
+        ("keybinds.lua",  include_str!("../../config/default/keybinds.lua")),
+        ("llm.lua",       include_str!("../../config/default/llm.lua")),
+        ("snippets.lua",  DEFAULT_SNIPPETS),
     ];
 
     for (name, content) in files {
