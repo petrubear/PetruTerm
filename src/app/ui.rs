@@ -106,8 +106,11 @@ impl UiManager {
         let mut chat_panels = HashMap::new();
         chat_panels.insert(0usize, initial_panel);
 
+        let mut palette = CommandPalette::new(config);
+        palette.rebuild_snippets(&config.snippets);
+
         Self {
-            palette: CommandPalette::new(config),
+            palette,
             context_menu: ContextMenu::new(),
             chat_panels,
             active_panel_id: 0,
@@ -699,6 +702,7 @@ impl UiManager {
                 *config = new_cfg;
                 render_ctx.renderer.update_bg_color(config.colors.background_wgpu());
                 self.palette.rebuild_keybinds(config);
+                self.palette.rebuild_snippets(&config.snippets);
                 self.rewire_llm_provider(config);
             },
             Action::OpenConfigFile => {
@@ -788,6 +792,12 @@ impl UiManager {
                     .or_else(|| std::env::current_dir().ok())
                     .unwrap_or_default();
                 self.git_checkout(&branch, &cwd);
+            }
+            Action::ExpandSnippet(body) => {
+                if let Some(terminal) = mux.active_terminal() {
+                    terminal.scroll_to_bottom();
+                    terminal.write_input(body.as_bytes());
+                }
             }
         }
     }

@@ -321,6 +321,17 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
         }
     }
 
+    if let Ok(snippets_table) = table.get::<LuaTable>("snippets") {
+        for entry in snippets_table.sequence_values::<LuaTable>().flatten() {
+            let name: String = entry.get("name").unwrap_or_default();
+            let body: String = entry.get("body").unwrap_or_default();
+            let trigger: Option<String> = entry.get("trigger").ok();
+            if !name.is_empty() && !body.is_empty() {
+                config.snippets.push(super::schema::SnippetConfig { name, body, trigger });
+            }
+        }
+    }
+
     if let Ok(sb_table) = table.get::<LuaTable>("status_bar") {
         if let Ok(e) = sb_table.get::<bool>("enabled") {
             config.status_bar.enabled = e;

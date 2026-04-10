@@ -49,6 +49,9 @@ pub struct InputHandler {
     /// Pane resize mode: activated by <leader>+Option+Arrow. While active, any
     /// arrow key (with or without Option) continues resizing. Any other key exits.
     pub resize_mode: bool,
+    /// Rolling buffer of printable chars sent to the PTY since the last Enter/Ctrl-C.
+    /// Used only for snippet Tab-trigger matching — cleared on newline, backspace trims.
+    input_echo: String,
 }
 
 impl InputHandler {
@@ -78,6 +81,7 @@ impl InputHandler {
             cursor_last_blink: Instant::now(),
             pane_ratio_adjusted: false,
             resize_mode: false,
+            input_echo: String::new(),
         }
     }
 
@@ -464,13 +468,79 @@ impl InputHandler {
             }
         }
 
+        // Tab: try snippet trigger expansion first; fall through to PTY on no match.
+        if event.logical_key == Key::Named(NamedKey::Tab)
+            && !self.modifiers.state().shift_key()
+            && !self.modifiers.state().control_key()
+        {
+            if self.try_expand_snippet(config, mux) {
+                return;
+            }
+        }
+
         self.send_key_to_active_terminal(event, mux);
     }
 
-    pub fn send_key_to_active_terminal(&self, event: &KeyEvent, mux: &Mux) {
+    /// Try to expand a snippet trigger from `input_echo`. If the last contiguous
+    /// non-whitespace word matches a trigger, write backspaces + body and return true.
+    /// Returns false if no trigger matched (caller should send a regular Tab).
+    fn try_expand_snippet(&mut self, config: &Config, mux: &Mux) -> bool {
+        if config.snippets.iter().all(|s| s.trigger.is_none()) {
+            return false;
+        }
+        // Extract the last word (non-space sequence) from the echo buffer.
+        let word: &str = self.input_echo
+            .trim_end()
+            .rsplit(|c: char| c.is_whitespace())
+            .next()
+            .unwrap_or("");
+        if word.is_empty() { return false; }
+
+        if let Some(snippet) = config.snippets.iter().find(|s| {
+            s.trigger.as_deref() == Some(word)
+        }) {
+            if let Some(terminal) = mux.active_terminal() {
+                // Erase the trigger word with backspaces.
+                let backspaces = vec![0x7fu8; word.len()];
+                terminal.scroll_to_bottom();
+                terminal.write_input(&backspaces);
+                terminal.write_input(snippet.body.as_bytes());
+                // Clear the word from the echo buffer.
+                let trim_len = self.input_echo.trim_end().len();
+                let new_len = trim_len.saturating_sub(word.len());
+                self.input_echo.truncate(new_len);
+            }
+            return true;
+        }
+        false
+    }
+
+    pub fn send_key_to_active_terminal(&mut self, event: &KeyEvent, mux: &Mux) {
         let mode = mux.active_terminal().map(|t| *t.term.lock().mode()).unwrap_or(TermMode::empty());
 
         if let Some(data) = key_map::translate_key(&event.logical_key, self.modifiers, mode) {
+            // Update the echo buffer for snippet trigger detection.
+            match &event.logical_key {
+                Key::Named(NamedKey::Enter) | Key::Named(NamedKey::Escape) => {
+                    self.input_echo.clear();
+                }
+                Key::Named(NamedKey::Backspace) => {
+                    self.input_echo.pop();
+                }
+                Key::Character(s) => {
+                    // Only track printable chars; reset on Ctrl sequences (data != s.as_bytes()).
+                    if data == s.as_bytes() {
+                        self.input_echo.push_str(s);
+                        // Cap buffer to avoid unbounded growth.
+                        if self.input_echo.len() > 256 {
+                            let keep = self.input_echo.len() - 256;
+                            self.input_echo.drain(..keep);
+                        }
+                    }
+                }
+                _ => {}
+            }
+
             if let Some(terminal) = mux.active_terminal() {
                 terminal.scroll_to_bottom();
                 terminal.write_input(&data);

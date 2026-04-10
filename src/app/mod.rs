@@ -186,6 +186,7 @@ impl App {
                     self.config = new_cfg;
                     if let Some(rc) = &mut self.render_ctx { rc.renderer.update_bg_color(self.config.colors.background_wgpu()); }
                     self.ui.palette.rebuild_keybinds(&self.config);
+                    self.ui.palette.rebuild_snippets(&self.config.snippets);
                     // TD-020: also rewire LLM provider so provider/width_cols stay in sync.
                     self.ui.rewire_llm_provider(&self.config);
                     log::info!("Config hot-reloaded.");

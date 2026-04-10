@@ -106,6 +106,25 @@ impl CommandPalette {
         action
     }
 
+    /// Replace snippet actions with those from the current config (call after load/hot-reload).
+    pub fn rebuild_snippets(&mut self, snippets: &[crate::config::schema::SnippetConfig]) {
+        self.all_actions.retain(|a| !matches!(a.action, Action::ExpandSnippet(_)));
+        for s in snippets {
+            let label = format!("Snippet: {}", s.name);
+            self.all_actions.push(PaletteAction {
+                name: label,
+                action: Action::ExpandSnippet(s.body.clone()),
+                keybind: s.trigger.as_deref().map(|t| format!("Tab: {t}")),
+            });
+        }
+        self.all_actions.sort_unstable_by(|a, b| a.name.cmp(&b.name));
+        if !self.visible {
+            self.results = self.all_actions.clone();
+        } else {
+            self.filter();
+        }
+    }
+
     /// Register an additional action (used by plugins in Phase 3).
     #[allow(dead_code)]
     pub fn register(&mut self, action: PaletteAction) {

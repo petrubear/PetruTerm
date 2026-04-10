@@ -12,6 +12,7 @@ pub struct Config {
     pub max_fps: u32,
     pub leader: LeaderConfig,
     pub keys: Vec<KeyBind>,
+    pub snippets: Vec<SnippetConfig>,
     pub shell: String,
     pub shell_integration: bool,
     pub llm: LlmConfig,
@@ -48,6 +49,7 @@ impl Default for Config {
             max_fps: 60,
             leader: LeaderConfig::default(),
             keys: vec![],
+            snippets: vec![],
             shell: std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into()),
             shell_integration: true,
             llm: LlmConfig::default(),
@@ -227,6 +229,17 @@ impl Default for LeaderConfig {
             timeout_ms: 1000,
         }
     }
+}
+
+/// A single snippet entry, parsed from `config.snippets` in Lua.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnippetConfig {
+    /// Display name shown in the command palette.
+    pub name: String,
+    /// Text written to the PTY when the snippet is expanded.
+    pub body: String,
+    /// Optional short keyword; typing it then pressing Tab expands the snippet directly.
+    pub trigger: Option<String>,
 }
 
 /// A single key binding entry, parsed from `config.keys` in Lua.

@@ -46,6 +46,7 @@ pub enum Action {
     ToggleStatusBar,
     RenameTab,
     GitCheckout(String),
+    ExpandSnippet(String),
 }
 
 impl std::str::FromStr for Action {
