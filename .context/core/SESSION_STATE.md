@@ -1,7 +1,7 @@
 # Session State
 
 **Last Updated:** 2026-04-09
-**Session Focus:** Bug fixes + Phase 3 P3 snippets
+**Session Focus:** Bug fixes + Phase 3 P3 snippets + Powerline
 
 ## Branch: `master`
 
@@ -34,9 +34,18 @@
 - `ensure_default_configs()` crea `snippets.lua` en instalaciones nuevas sin sobreescribir el existente
 - `config/default/config.lua` — `require("snippets")` añadido
 
+#### Phase 3 P3 — Powerline status bar
+
+- `StatusBarStyle` enum (`Plain` | `Powerline`) en `config/schema.rs`
+- Lua DSL: `config.status_bar.style = "plain" | "powerline"`
+- `StatusBar` lleva su propio `style`; `left_sep_width`/`right_sep_width` y `click_kind` style-aware
+- Renderer: izquierda usa `` (U+E0B0) fg=seg.bg/bg=next.bg; derecha usa `` (U+E0B2) con flecha líder desde bar_bg y flechas internas entre segmentos
+- `config/default/ui.lua` — documenta la opción `style`
+- `~/.config/petruterm/ui.lua` — activado `style = "powerline"` en config del usuario
+
 ## Build & Tests
 - **cargo check:** PASS (2026-04-09)
 
 ## Próxima sesión
 
-Phase 3 P3 continúa: Starship compat, Powerline, built-in themes. O Phase 4 (plugins).
+Phase 3 P3: built-in themes (último item). Luego Phase 4 (plugins).

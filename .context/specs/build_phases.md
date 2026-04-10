@@ -158,8 +158,7 @@ preview; user confirms before any write happens.
 - [x] Tab rename: `<leader>,` — inline prompt in tab pill, Enter confirms, Esc cancels (2026-04-08)
 - [x] Snippets: `config.snippets` table in Lua, expand via command palette (2026-04-09)
 - [x] Snippet keybind: optional `trigger` field per snippet — Tab-expand with input_echo tracker (2026-04-09)
-- [ ] Starship compatibility: detect `STARSHIP_SHELL`, defer left prompt
-- [ ] Powerline support: Nerd Font glyphs in custom widget strings
+- [x] Powerline support: Nerd Font arrows  /  via `config.status_bar.style = "powerline"` (2026-04-09)
 - [ ] Built-in themes as Lua files in `assets/themes/`
 
 ### Exit Criteria
@@ -167,7 +166,7 @@ Tab bar renders and reflects active tab. Scroll bar visible when scrollback is a
 Status bar renders with at least 3 widgets. Snippets expand via command palette.
 Starship prompt works when enabled.
 
-> **Status:** P1 COMPLETE. P2 COMPLETE. P3 partial: snippets ✅ (2026-04-09). Pending: Starship compat, Powerline, themes.
+> **Status:** P1 COMPLETE. P2 COMPLETE. P3 partial: snippets ✅, Powerline ✅ (2026-04-09). Pending: built-in themes.
 
 ---
 

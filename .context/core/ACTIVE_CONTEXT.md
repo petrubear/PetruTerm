@@ -1,6 +1,6 @@
 # Active Context
 
-**Current Focus:** Phase 3 P3 — Snippets
+**Current Focus:** Phase 3 P3 — Built-in themes (último item pendiente)
 **Last Active:** 2026-04-09
 
 ## Estado actual del proyecto
@@ -70,8 +70,7 @@
 |-------|--------|
 | Tab rename `<leader>,` | ✅ (2026-04-08) |
 | Snippets: `config.snippets` tabla Lua, expandir via palette | ✅ (2026-04-09) |
-| Starship compatibility: detectar `STARSHIP_SHELL` | 🔲 |
-| Powerline / Nerd Font glyphs en widgets | 🔲 |
+| Powerline / Nerd Font glyphs en widgets | ✅ (2026-04-09) |
 | Built-in themes en `assets/themes/` | 🔲 |
 
 ## Próximos pasos recomendados
