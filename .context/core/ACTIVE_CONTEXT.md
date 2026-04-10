@@ -69,7 +69,7 @@
 | Tarea | Estado |
 |-------|--------|
 | Tab rename `<leader>,` | ✅ (2026-04-08) |
-| Snippets: `config.snippets` tabla Lua, expandir via palette | 🔲 |
+| Snippets: `config.snippets` tabla Lua, expandir via palette | ✅ (2026-04-09) |
 | Starship compatibility: detectar `STARSHIP_SHELL` | 🔲 |
 | Powerline / Nerd Font glyphs en widgets | 🔲 |
 | Built-in themes en `assets/themes/` | 🔲 |
