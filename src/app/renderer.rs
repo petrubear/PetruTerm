@@ -922,6 +922,8 @@ impl RenderContext {
 
         let sep_fg = [0.3, 0.3, 0.5, 1.0];
 
+        let label_fg: [f32; 4] = [0.65, 0.65, 0.80, 1.0]; // dim, non-interactive
+
         for (i, item) in menu.items.iter().enumerate() {
             let row = menu.row + i;
 
@@ -929,6 +931,12 @@ impl RenderContext {
                 // Render a full-width horizontal rule.
                 let rule = "─".repeat(width);
                 self.push_shaped_row(&rule, sep_fg, bg, row, menu.col, width, font);
+                continue;
+            }
+
+            if item.action == crate::ui::context_menu::ContextAction::Label {
+                let label_text = format!("  {}", item.label);
+                self.push_shaped_row(&label_text, label_fg, bg, row, menu.col, width, font);
                 continue;
             }
 

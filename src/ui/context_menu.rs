@@ -5,8 +5,12 @@ pub enum ContextAction {
     Paste,
     Clear,
     SendToChat,
+    /// Copy the last shell command to the clipboard.
+    CopyLastCommand,
     /// Non-interactive separator row.
     Separator,
+    /// Non-interactive informational label (displays text, no action).
+    Label,
 }
 
 /// A single item in the context menu.
@@ -20,6 +24,11 @@ pub struct ContextMenuItem {
 impl ContextMenuItem {
     pub fn is_separator(&self) -> bool {
         self.action == ContextAction::Separator
+    }
+
+    /// True for non-interactive display rows (Separator or Label).
+    pub fn is_non_interactive(&self) -> bool {
+        matches!(self.action, ContextAction::Separator | ContextAction::Label)
     }
 }
 
@@ -80,6 +89,67 @@ impl ContextMenu {
         self.hovered = None;
     }
 
+    /// Open an exit-code info popup just above the status bar.
+    ///
+    /// `exit_code`: the non-zero code to display.
+    /// `last_command`: the last shell command that ran (may be empty).
+    /// `col`: click column from the status bar click.
+    /// `term_rows`: terminal grid height (status bar is at row `term_rows`).
+    /// `term_cols`: terminal grid width.
+    pub fn open_exit_info(
+        &mut self,
+        exit_code: i32,
+        last_command: &str,
+        col: usize,
+        term_rows: usize,
+        term_cols: usize,
+    ) {
+        let max_label = CONTEXT_MENU_WIDTH.saturating_sub(4);
+        let cmd_display = if last_command.is_empty() {
+            "(no command recorded)".to_string()
+        } else {
+            let chars: Vec<char> = last_command.chars().collect();
+            if chars.len() > max_label {
+                format!("{}…", chars[..max_label.saturating_sub(1)].iter().collect::<String>())
+            } else {
+                last_command.to_string()
+            }
+        };
+
+        self.items = vec![
+            ContextMenuItem {
+                label: format!("✘ Exit code: {exit_code}"),
+                keybind: None,
+                action: ContextAction::Label,
+            },
+            ContextMenuItem { label: String::new(), keybind: None, action: ContextAction::Separator },
+            ContextMenuItem {
+                label: cmd_display,
+                keybind: None,
+                action: ContextAction::Label,
+            },
+            ContextMenuItem { label: String::new(), keybind: None, action: ContextAction::Separator },
+            ContextMenuItem {
+                label: "Copy command".to_string(),
+                keybind: None,
+                action: ContextAction::CopyLastCommand,
+            },
+        ];
+
+        let height = self.items.len();
+        let clamped_col = if col + CONTEXT_MENU_WIDTH > term_cols {
+            term_cols.saturating_sub(CONTEXT_MENU_WIDTH)
+        } else {
+            col
+        };
+        // Place above the status bar (status bar is at term_rows, menu goes upward).
+        let row = term_rows.saturating_sub(height);
+        self.col = clamped_col;
+        self.row = row;
+        self.hovered = None;
+        self.visible = true;
+    }
+
     /// Given a terminal cell (col, row), return the action for that item if it's inside the menu.
     /// Separator rows are skipped (return None).
     pub fn hit_test(&self, col: usize, row: usize) -> Option<ContextAction> {
@@ -88,7 +158,7 @@ impl ContextMenu {
         if row < self.row || row >= self.row + self.items.len() { return None; }
         let idx = row - self.row;
         self.items.get(idx).and_then(|item| {
-            if item.is_separator() { None } else { Some(item.action.clone()) }
+            if item.is_non_interactive() { None } else { Some(item.action.clone()) }
         })
     }
 
@@ -104,7 +174,7 @@ impl ContextMenu {
             && row < self.row + self.items.len()
         {
             let idx = row - self.row;
-            if self.items.get(idx).map(|i| i.is_separator()).unwrap_or(false) {
+            if self.items.get(idx).map(|i| i.is_non_interactive()).unwrap_or(false) {
                 None
             } else {
                 Some(idx)

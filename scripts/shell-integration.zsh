@@ -5,7 +5,7 @@
 # Usage — add to ~/.zshrc:
 #   source ~/.config/petruterm/shell-integration.zsh
 
-_petruterm_context_file="${XDG_CACHE_HOME:-$HOME/.cache}/petruterm/shell-context.json"
+_petruterm_cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/petruterm"
 _petruterm_last_cmd=""
 
 _petruterm_preexec() {
@@ -14,8 +14,7 @@ _petruterm_preexec() {
 
 _petruterm_precmd() {
     local exit_code=$?
-    local cache_dir="${_petruterm_context_file%/*}"
-    [[ -d "$cache_dir" ]] || mkdir -p "$cache_dir"
+    [[ -d "$_petruterm_cache_dir" ]] || mkdir -p "$_petruterm_cache_dir"
 
     # Minimal JSON escaping: backslash then double-quote.
     local cmd="${_petruterm_last_cmd//\\/\\\\}"
@@ -23,8 +22,9 @@ _petruterm_precmd() {
     local cwd="${PWD//\\/\\\\}"
     cwd="${cwd//\"/\\\"}"
 
+    # Write per-PID file so each pane tracks its own shell state.
     printf '{"cwd":"%s","last_command":"%s","last_exit_code":%d}\n' \
-        "$cwd" "$cmd" "$exit_code" >| "$_petruterm_context_file"
+        "$cwd" "$cmd" "$exit_code" >| "${_petruterm_cache_dir}/shell-context-$$.json"
 
     _petruterm_last_cmd=""
 }

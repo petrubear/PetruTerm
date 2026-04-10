@@ -46,10 +46,10 @@ pub struct App {
     /// instead of every frame.
     cached_cwd: Option<std::path::PathBuf>,
 
-    /// Cached exit code from ShellContext (TD-PERF-01).
-    /// Refreshed by reading shell-context.json only when PTY data arrives,
-    /// instead of calling read_to_string() on every frame.
-    cached_exit_code: Option<i32>,
+    /// Per-terminal shell context (exit code + last command), keyed by terminal_id.
+    /// Updated only when that specific terminal gets PTY data, so switching panes
+    /// always shows the correct context for the new pane without reading stale data.
+    terminal_shell_ctxs: std::collections::HashMap<usize, crate::llm::shell_context::ShellContext>,
 }
 
 impl App {
@@ -71,18 +71,33 @@ impl App {
             pending_pty_redraw: false,
             last_pty_activity: std::time::Instant::now(),
             cached_cwd: None,
-            cached_exit_code: None,
+            terminal_shell_ctxs: std::collections::HashMap::new(),
         }
     }
 
-    /// Refresh cached status bar data (CWD + exit code).
-    ///
-    /// Calls proc_pidinfo and reads shell-context.json once per invocation.
-    /// Call only on PTY data arrival or terminal focus change — NOT every frame.
+    /// Refresh the cached CWD for the active pane (TD-PERF-02).
+    /// Call on PTY data arrival or terminal focus change — NOT every frame.
     fn refresh_status_cache(&mut self) {
         self.cached_cwd = self.mux.active_cwd();
-        self.cached_exit_code = crate::llm::shell_context::ShellContext::load()
-            .and_then(|ctx| if ctx.last_exit_code != 0 { Some(ctx.last_exit_code) } else { None });
+    }
+
+    /// Read shell context for a specific terminal and store it by terminal_id.
+    /// Called only when that terminal's PTY fires, so each pane tracks its own state.
+    fn update_terminal_shell_ctx(&mut self, terminal_id: usize) {
+        let pid = self.mux.terminals.get(terminal_id)
+            .and_then(|t| t.as_ref())
+            .map(|t| t.child_pid);
+        if let Some(pid) = pid {
+            if let Some(ctx) = crate::llm::shell_context::ShellContext::load_for_pid(pid) {
+                self.terminal_shell_ctxs.insert(terminal_id, ctx);
+            }
+        }
+    }
+
+    /// Shell context for the currently active pane, if any.
+    fn active_shell_ctx(&self) -> Option<&crate::llm::shell_context::ShellContext> {
+        let tid = self.mux.focused_terminal_id();
+        self.terminal_shell_ctxs.get(&tid)
     }
 
     fn tab_bar_visible(&self) -> bool {
@@ -276,15 +291,17 @@ impl App {
 
 impl ApplicationHandler<()> for App {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, _event: ()) {
-        let (has_data, exited) = self.mux.poll_pty_events();
+        let (data_ids, exited) = self.mux.poll_pty_events();
         if self.close_exited_terminals(exited) { event_loop.exit(); return; }
 
         // PTY data: mark pending but do NOT request_redraw immediately.
         // about_to_wait will fire the render after a short coalescing window (4ms),
         // ensuring multi-batch TUI updates (erase + redraw) are shown as one frame.
-        if has_data {
+        if !data_ids.is_empty() {
             self.pending_pty_redraw = true;
             self.last_pty_activity = std::time::Instant::now();
+            for id in &data_ids { self.update_terminal_shell_ctx(*id); }
+            self.refresh_status_cache();
         }
 
         // AI events are low-frequency; render immediately.
@@ -330,8 +347,9 @@ impl ApplicationHandler<()> for App {
             WindowEvent::CloseRequested => { event_loop.exit(); }
             WindowEvent::RedrawRequested => {
                 self.check_config_reload();
-                let (_, exited) = self.mux.poll_pty_events();
+                let (data_ids, exited) = self.mux.poll_pty_events();
                 if self.close_exited_terminals(exited) { event_loop.exit(); return; }
+                for id in &data_ids { self.update_terminal_shell_ctx(*id); }
                 self.ui.poll_ai_events();
                 self.ui.poll_ai_block_events();
                 self.flush_pending_pty_run();
@@ -351,6 +369,10 @@ impl ApplicationHandler<()> for App {
                 let total_rows = (viewport.h / cell_h as f32).floor() as usize;
                 // Capture status bar layout values before the mutable borrow of render_ctx.
                 let sb_pad_y = self.config.window.padding.top as f32 + self.tab_bar_height_px();
+                // Snapshot the active pane's shell context before the render_ctx borrow.
+                let sb_exit_code = self.active_shell_ctx()
+                    .and_then(|c| if c.last_exit_code != 0 { Some(c.last_exit_code) } else { None });
+                let sb_exit_code_raw = self.active_shell_ctx().map(|c| c.last_exit_code).unwrap_or(0);
                 // Focused pane dimensions (scroll bar, AI block anchor).
                 let (term_cols, term_rows) = self.mux.active_terminal_size();
 
@@ -533,7 +555,7 @@ impl ApplicationHandler<()> for App {
                             let flags = [
                                 self.input.leader_active as u8,
                                 leader_resize_mode as u8,
-                                self.cached_exit_code.unwrap_or(0) as u8,
+                                sb_exit_code_raw as u8,
                             ];
                             let col_bytes = sb_total_cols.to_le_bytes();
                             let row_bytes = total_rows.to_le_bytes();
@@ -557,7 +579,7 @@ impl ApplicationHandler<()> for App {
                                 &self.config.leader.key,
                                 self.cached_cwd.as_deref(),
                                 self.ui.git_branch_cache.as_deref(),
-                                self.cached_exit_code,
+                                sb_exit_code,
                                 self.config.status_bar.style.clone(),
                             );
                             rc.build_status_bar_instances(&bar, &scaled_font, sb_total_cols, total_rows, sb_pad_y, sb_win_w);
@@ -712,7 +734,15 @@ impl ApplicationHandler<()> for App {
                                             self.resize_terminals_for_panel();
                                         }
                                     }
-                                    ContextAction::Separator => {}
+                                    ContextAction::CopyLastCommand => {
+                                        if let Some(cmd) = self.active_shell_ctx().map(|c| c.last_command.clone()) {
+                                            if !cmd.is_empty() {
+                                                let _ = arboard::Clipboard::new()
+                                                    .and_then(|mut cb| cb.set_text(cmd));
+                                            }
+                                        }
+                                    }
+                                    ContextAction::Separator | ContextAction::Label => {}
                                 }
                                 if let Some(w) = &self.window { w.request_redraw(); }
                                 return;
@@ -764,13 +794,32 @@ impl ApplicationHandler<()> for App {
                                     cwd.as_deref(), git_branch.as_deref(), None,
                                     self.config.status_bar.style.clone(),
                                 );
-                                if let Some(crate::ui::status_bar::SegmentKind::GitBranch) = bar.click_kind(col, total_cols) {
-                                    if let Some(cwd_path) = self.mux.active_cwd()
-                                        .or_else(|| std::env::current_dir().ok())
-                                    {
-                                        self.ui.open_branch_picker(&cwd_path);
-                                        if let Some(w) = &self.window { w.request_redraw(); }
+                                match bar.click_kind(col, total_cols) {
+                                    Some(crate::ui::status_bar::SegmentKind::GitBranch) => {
+                                        if let Some(cwd_path) = self.mux.active_cwd()
+                                            .or_else(|| std::env::current_dir().ok())
+                                        {
+                                            self.ui.open_branch_picker(&cwd_path);
+                                            if let Some(w) = &self.window { w.request_redraw(); }
+                                        }
                                     }
+                                    Some(crate::ui::status_bar::SegmentKind::ExitCode) => {
+                                        if let Some(ctx) = self.active_shell_ctx() {
+                                            if ctx.last_exit_code != 0 {
+                                                let (exit_code, last_cmd) = (ctx.last_exit_code, ctx.last_command.clone());
+                                                let (term_cols, term_rows) = self.mux.active_terminal_size();
+                                                self.ui.context_menu.open_exit_info(
+                                                    exit_code,
+                                                    &last_cmd,
+                                                    col,
+                                                    term_rows as usize,
+                                                    term_cols as usize,
+                                                );
+                                                if let Some(w) = &self.window { w.request_redraw(); }
+                                            }
+                                        }
+                                    }
+                                    _ => {}
                                 }
                                 return;
                             }
@@ -898,14 +947,14 @@ impl ApplicationHandler<()> for App {
         // Drain any PTY events that arrived since user_event last ran.
         // This catches batches that slipped in after user_event drained the channel,
         // and keeps last_pty_activity accurate for coalescing.
-        let (more_data, exited) = self.mux.poll_pty_events();
+        let (data_ids, exited) = self.mux.poll_pty_events();
         if self.close_exited_terminals(exited) { event_loop.exit(); return; }
-        if more_data {
+        if !data_ids.is_empty() {
             self.pending_pty_redraw = true;
             self.last_pty_activity = std::time::Instant::now();
-            // PTY data means the shell may have changed directory or finished a command.
-            // Refresh cached CWD + exit code here instead of every RedrawRequested frame
-            // (TD-PERF-01: eliminates 60 read_to_string/s; TD-PERF-02: eliminates 60 proc_pidinfo/s).
+            // Update per-terminal shell context only for terminals that fired (TD-PERF-01).
+            // Refresh CWD for the active pane (TD-PERF-02).
+            for id in &data_ids { self.update_terminal_shell_ctx(*id); }
             self.refresh_status_cache();
         }
 

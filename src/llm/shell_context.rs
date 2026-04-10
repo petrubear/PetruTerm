@@ -22,13 +22,34 @@ pub struct ShellContext {
 }
 
 impl ShellContext {
-    pub fn context_file_path() -> PathBuf {
-        let cache_base = std::env::var("XDG_CACHE_HOME")
+    fn cache_dir() -> PathBuf {
+        std::env::var("XDG_CACHE_HOME")
             .map(PathBuf::from)
-            .unwrap_or_else(|_| {
-                dirs::home_dir().unwrap_or_default().join(".cache")
-            });
-        cache_base.join("petruterm").join("shell-context.json")
+            .unwrap_or_else(|_| dirs::home_dir().unwrap_or_default().join(".cache"))
+            .join("petruterm")
+    }
+
+    pub fn context_file_path() -> PathBuf {
+        Self::cache_dir().join("shell-context.json")
+    }
+
+    /// Per-PID context file written by the shell integration for each pane.
+    pub fn context_file_path_for_pid(pid: u32) -> PathBuf {
+        Self::cache_dir().join(format!("shell-context-{pid}.json"))
+    }
+
+    /// Load from the per-PID file (written by the updated shell integration).
+    /// Falls back to the legacy global file so old integrations keep working.
+    pub fn load_for_pid(pid: u32) -> Option<Self> {
+        let pid_path = Self::context_file_path_for_pid(pid);
+        if let Ok(data) = std::fs::read_to_string(&pid_path) {
+            if let Ok(ctx) = serde_json::from_str::<Self>(&data) {
+                return Some(ctx);
+            }
+        }
+        // Fallback: global file (shell-integration.zsh v1 without per-PID support).
+        let data = std::fs::read_to_string(Self::context_file_path()).ok()?;
+        serde_json::from_str(&data).ok()
     }
 
     /// Load from the JSON file. Returns `None` if missing or unparseable.

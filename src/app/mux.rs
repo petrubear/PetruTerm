@@ -113,9 +113,11 @@ impl Mux {
     }
 
     /// Poll PTY events for all terminals.
-    /// Returns `(has_data, exited_terminal_ids)`.
-    pub fn poll_pty_events(&mut self) -> (bool, Vec<usize>) {
-        let mut has_data = false;
+    /// Returns `(terminals_with_data, exited_terminal_ids)`.
+    /// `terminals_with_data` lists every terminal ID that received a `DataReady` event
+    /// so callers can update per-terminal state (e.g. shell context) for the right pane.
+    pub fn poll_pty_events(&mut self) -> (Vec<usize>, Vec<usize>) {
+        let mut data_ids: Vec<usize> = Vec::new();
         let mut exited: Vec<usize> = Vec::new();
         for (id, terminal_slot) in self.terminals.iter_mut().enumerate() {
             let Some(terminal) = terminal_slot else { continue };
@@ -123,7 +125,9 @@ impl Mux {
                 use crossbeam_channel::TryRecvError;
                 match terminal.pty.rx.try_recv() {
                     Ok(event) => match event {
-                        PtyEvent::DataReady => { has_data = true; }
+                        PtyEvent::DataReady => {
+                            if !data_ids.contains(&id) { data_ids.push(id); }
+                        }
                         PtyEvent::TitleChanged(t) => { log::debug!("PTY title: {t}"); }
                         PtyEvent::Exit => { log::info!("PTY shell exited (terminal {id})."); exited.push(id); }
                         PtyEvent::Bell => {}
@@ -139,7 +143,7 @@ impl Mux {
                 }
             }
         }
-        (has_data, exited)
+        (data_ids, exited)
     }
 
     /// Handle a terminal exit: close just the pane if multiple panes exist in the tab,
