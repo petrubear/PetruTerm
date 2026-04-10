@@ -2,12 +2,18 @@ use anyhow::Result;
 use crate::config::Config;
 use crate::term::{Terminal, PtyEvent};
 use crate::ui::{PaneInfo, PaneSeparator, PaneManager, TabManager, Rect};
+use crate::ui::search_bar::SearchMatch;
 use winit::event_loop::EventLoopProxy;
-use alacritty_terminal::vte::ansi::Color as AnsiColor;
+use alacritty_terminal::vte::ansi::{Color as AnsiColor, Rgb};
 use alacritty_terminal::index::{Column, Line, Point};
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::selection::SelectionRange;
+
+/// Highlight colors injected into cell data for search matches.
+const SEARCH_MATCH_FG: AnsiColor = AnsiColor::Spec(Rgb { r: 40, g: 42, b: 54 });    // Dracula bg (dark)
+const SEARCH_MATCH_BG: AnsiColor = AnsiColor::Spec(Rgb { r: 241, g: 250, b: 140 }); // Dracula yellow
+const SEARCH_CURRENT_BG: AnsiColor = AnsiColor::Spec(Rgb { r: 255, g: 184, b: 108 }); // Dracula orange
 
 /// Manages multiple terminal instances, tabs, and panes (Multiplexer).
 pub struct Mux {
@@ -332,10 +338,13 @@ impl Mux {
     ///
     /// Reuses the outer `Vec` and inner `String`/`Vec` allocations from previous calls,
     /// eliminating per-frame heap allocations once the buffer has reached steady state.
+    ///
+    /// When `search` is `Some`, cells that match the query are recolored in-place.
     pub fn collect_grid_cells_for(
         &self,
         terminal_id: usize,
         buf: &mut Vec<(String, Vec<(AnsiColor, AnsiColor)>)>,
+        search: Option<(&[SearchMatch], usize)>,
     ) {
         let Some(Some(terminal)) = self.terminals.get(terminal_id) else {
             buf.clear();
@@ -363,10 +372,46 @@ impl Mux {
                     text.push(if cell.c == '\0' { ' ' } else { cell.c });
                     let (fg, bg) = if cell.flags.contains(Flags::INVERSE) { (cell.bg, cell.fg) } else { (cell.fg, cell.bg) };
                     let (fg, bg) = if cell_in_selection(grid_line, Column(col), &sel_range) { (bg, fg) } else { (fg, bg) };
+                    let (fg, bg) = search_highlight_at(grid_line.0, col, search)
+                        .unwrap_or((fg, bg));
                     colors.push((fg, bg));
                 }
             }
         });
+    }
+
+    /// Search all visible rows and scrollback history for `query` (case-insensitive).
+    /// Returns matches sorted from oldest history to current screen.
+    pub fn search_active_terminal(&self, query: &str) -> Vec<SearchMatch> {
+        if query.is_empty() { return Vec::new(); }
+        let query_lower = query.to_lowercase();
+        let query_len = query.chars().count();
+        let Some(terminal) = self.active_terminal() else { return Vec::new() };
+
+        terminal.with_term(|term| {
+            let screen_rows = term.screen_lines() as i32;
+            let history = term.grid().history_size() as i32;
+            let cols = term.columns();
+            let mut matches = Vec::new();
+
+            for grid_row in (-history)..screen_rows {
+                let line = Line(grid_row);
+                let mut row_text = String::with_capacity(cols);
+                for col in 0..cols {
+                    let c = term.grid()[line][Column(col)].c;
+                    row_text.push(if c == '\0' { ' ' } else { c });
+                }
+                let row_lower = row_text.to_lowercase();
+                let mut search_from = 0;
+                while let Some(pos) = row_lower[search_from..].find(&query_lower) {
+                    let col = search_from + pos;
+                    matches.push(SearchMatch { grid_line: grid_row, col, len: query_len });
+                    search_from = col + 1;
+                    if search_from >= row_lower.len() { break; }
+                }
+            }
+            matches
+        })
     }
 
     pub fn shutdown(&mut self) {
@@ -380,4 +425,21 @@ fn cell_in_selection(line: Line, col: Column, sel_range: &Option<SelectionRange>
     let Some(range) = sel_range else { return false };
     if range.is_block { line >= range.start.line && line <= range.end.line && col >= range.start.column && col <= range.end.column }
     else { let pt = Point::new(line, col); pt >= range.start && pt <= range.end }
+}
+
+/// Return overridden (fg, bg) colors if (grid_line, col) falls inside any search match.
+/// Returns `None` if no match covers this cell.
+fn search_highlight_at(
+    grid_line: i32,
+    col: usize,
+    search: Option<(&[SearchMatch], usize)>,
+) -> Option<(AnsiColor, AnsiColor)> {
+    let (matches, current) = search?;
+    for (idx, m) in matches.iter().enumerate() {
+        if m.grid_line == grid_line && col >= m.col && col < m.col + m.len {
+            let bg = if idx == current { SEARCH_CURRENT_BG } else { SEARCH_MATCH_BG };
+            return Some((SEARCH_MATCH_FG, bg));
+        }
+    }
+    None
 }

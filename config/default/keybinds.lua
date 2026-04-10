@@ -7,6 +7,7 @@
 --   Cmd+C / Cmd+V   — copy / paste (clipboard)
 --   Cmd+Q           — quit
 --   Cmd+K           — clear screen and scrollback
+--   Cmd+F           — open / close text search (Enter=next, Shift+Enter=prev, Esc=close)
 --   Cmd+1-9         — switch to tab N
 
 local petruterm = require("petruterm")

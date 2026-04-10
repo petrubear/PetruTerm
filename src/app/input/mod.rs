@@ -434,6 +434,35 @@ impl InputHandler {
             return;
         }
 
+        // ── Cmd+F — open search bar ──────────────────────────────────────────────
+        if cmd && !shift && !ctrl {
+            if let Key::Character(s) = &event.logical_key {
+                if s.as_str() == "f" {
+                    if ui.search_bar.visible {
+                        ui.search_bar.close();
+                    } else {
+                        ui.search_bar.open();
+                    }
+                    return;
+                }
+            }
+        }
+
+        // ── Search bar input ─────────────────────────────────────────────────
+        if ui.search_bar.visible && !cmd {
+            match &event.logical_key {
+                Key::Named(NamedKey::Escape) => { ui.search_bar.close(); }
+                Key::Named(NamedKey::Enter) => {
+                    if shift { ui.search_bar.prev_match(); } else { ui.search_bar.next_match(); }
+                }
+                Key::Named(NamedKey::Backspace) => ui.search_bar.backspace(),
+                Key::Named(NamedKey::Space) => ui.search_bar.type_char(' '),
+                Key::Character(s) => { for ch in s.chars() { ui.search_bar.type_char(ch); } }
+                _ => {}
+            }
+            return;
+        }
+
         if cmd && !shift && !ctrl {
             if let Key::Character(s) = &event.logical_key {
                 match s.as_str() {

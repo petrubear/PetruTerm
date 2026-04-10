@@ -14,6 +14,7 @@ use alacritty_terminal::vte::ansi::Color as AnsiColor;
 use crate::llm::chat_panel::ChatPanel;
 use crate::llm::ai_block::{AiBlock, AiState, AI_BLOCK_ROWS};
 use crate::ui::{CommandPalette, PaneSeparator, Tab};
+use crate::ui::search_bar::SearchBar;
 
 /// Cache for a single shaped row to avoid re-shaping every frame.
 #[derive(Clone)]
@@ -1232,4 +1233,84 @@ fn calculate_row_hash(text: &str, colors: &[([f32; 4], [f32; 4])]) -> u64 {
         ((bg[0] * 255.0) as u32).hash(&mut hasher);
     }
     hasher.finish()
+}
+
+// ── Search bar overlay ────────────────────────────────────────────────────────
+
+impl RenderContext {
+    /// Render a 1-row search bar overlay at the top-right corner of the terminal.
+    ///
+    /// Shows: `  / query /  N / M  ↑↓ esc `
+    /// Width adapts to the query length with a minimum of 24 columns.
+    pub fn build_search_bar_instances(
+        &mut self,
+        search: &SearchBar,
+        font: &crate::config::schema::FontConfig,
+        total_cols: usize,
+        total_rows: usize,
+    ) {
+        if total_cols == 0 || total_rows == 0 { return; }
+
+        const BAR_BG:    [f32; 4] = [0.22, 0.22, 0.30, 1.0]; // subdued dark
+        const QUERY_FG:  [f32; 4] = [0.97, 0.97, 0.95, 1.0]; // near-white
+        const COUNT_FG:  [f32; 4] = [0.95, 0.98, 0.55, 1.0]; // Dracula yellow
+        const HINT_FG:   [f32; 4] = [0.38, 0.44, 0.64, 1.0]; // comment gray
+        const CURSOR_FG: [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // Dracula purple
+
+        let count_label = search.count_label();
+
+        // Build the bar text:  "  query_  N / M  ↑↓ esc "
+        // We render it in 3 segments with different colors.
+        let query_display = format!(" /{}/", search.query);
+        let count_display = if count_label.is_empty() {
+            String::new()
+        } else {
+            format!("  {}  ", count_label)
+        };
+        let hint = " ↑↓ esc ";
+
+        let bar_width = (query_display.chars().count()
+            + count_display.chars().count()
+            + hint.chars().count())
+            .max(24)
+            .min(total_cols);
+
+        let col_offset = total_cols.saturating_sub(bar_width);
+        let row = 0usize; // top row
+
+        // Segment 1: query
+        let q_width = query_display.chars().count().min(bar_width);
+        self.push_shaped_row(&query_display, QUERY_FG, BAR_BG, row, col_offset, q_width, font);
+
+        // Segment 2: match count
+        let mut seg_offset = col_offset + q_width;
+        if !count_display.is_empty() {
+            let c_width = count_display.chars().count().min(bar_width.saturating_sub(q_width));
+            self.push_shaped_row(&count_display, COUNT_FG, BAR_BG, row, seg_offset, c_width, font);
+            seg_offset += c_width;
+        }
+
+        // Segment 3: hint
+        let remaining = bar_width.saturating_sub(seg_offset - col_offset);
+        if remaining > 0 {
+            self.push_shaped_row(hint, HINT_FG, BAR_BG, row, seg_offset, remaining, font);
+        }
+
+        // Cursor blink at end of query (a 1-cell colored block)
+        let cursor_col = col_offset + 1 + search.query.chars().count() + 1; // after the /query
+        if cursor_col < col_offset + q_width {
+            self.instances.push(CellVertex {
+                grid_pos: [cursor_col as f32, row as f32],
+                atlas_uv: [0.0; 4],
+                fg: CURSOR_FG,
+                bg: CURSOR_FG,
+                glyph_offset: [0.0; 2],
+                glyph_size: [0.0; 2],
+                flags: 0,
+                _pad: 0,
+            });
+        }
+
+        let _ = CURSOR_FG; // suppress if unused after cursor removal
+    }
 }

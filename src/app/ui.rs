@@ -8,7 +8,7 @@ use crate::llm::ai_block::AiBlock;
 use crate::llm::LlmProvider;
 use crate::llm::shell_context::ShellContext;
 use crate::llm::tools::{AgentStepResult, AgentTool, execute_tool};
-use crate::ui::{CommandPalette, ContextMenu, SplitDir, Rect};
+use crate::ui::{CommandPalette, ContextMenu, SearchBar, SplitDir, Rect};
 use winit::event_loop::EventLoopProxy;
 use winit::window::Window;
 use crate::app::mux::Mux;
@@ -81,6 +81,9 @@ pub struct UiManager {
     // ── Tab rename prompt ─────────────────────────────────────────────────────
     /// When `Some`, the user is typing a new name for the active tab.
     pub tab_rename_input: Option<String>,
+
+    // ── Text search (Cmd+F) ───────────────────────────────────────────────────
+    pub search_bar: SearchBar,
 }
 
 impl UiManager {
@@ -133,6 +136,7 @@ impl UiManager {
             git_rx: git_rx_init,
             git_branch_cwd: None,
             tab_rename_input: None,
+            search_bar: SearchBar::default(),
         }
     }
 

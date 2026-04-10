@@ -370,9 +370,40 @@ impl ApplicationHandler<()> for App {
 
                     let scaled_font = rc.scaled_font_config(&self.config);
 
+                    // ── Search: run query if dirty, scroll to current match ──────────────
+                    let active_tid = self.mux.focused_terminal_id();
+                    if self.ui.search_bar.visible && self.ui.search_bar.dirty {
+                        let query = self.ui.search_bar.query.clone();
+                        if query.is_empty() {
+                            self.ui.search_bar.matches.clear();
+                            self.ui.search_bar.current = 0;
+                        } else {
+                            let matches = self.mux.search_active_terminal(&query);
+                            self.ui.search_bar.set_matches(matches);
+                        }
+                        self.ui.search_bar.dirty = false;
+                    }
+                    if self.ui.search_bar.visible && self.ui.search_bar.scroll_needed {
+                        if let Some(m) = self.ui.search_bar.current_match().cloned() {
+                            if let Some(terminal) = self.mux.active_terminal() {
+                                let (disp_off, _) = terminal.scrollback_info();
+                                let screen_rows = terminal.rows as i32;
+                                // Target: center the match in the viewport.
+                                let target_offset = (screen_rows / 2 - m.grid_line).max(0) as usize;
+                                let delta = disp_off as i32 - target_offset as i32;
+                                if delta != 0 {
+                                    terminal.scroll_display(-delta);
+                                }
+                            }
+                        }
+                        self.ui.search_bar.scroll_needed = false;
+                    }
+
                     // ── Build cell instances for every pane ──────────────────────────────
+                    let search_arg = if self.ui.search_bar.visible { Some(&self.ui.search_bar) } else { None };
                     let render_result = build_all_pane_instances(
-                        rc, &pane_infos, &self.mux, &self.config, &scaled_font, self.input.cursor_blink_on,
+                        rc, &pane_infos, &self.mux, &self.config, &scaled_font,
+                        self.input.cursor_blink_on, search_arg, active_tid,
                     );
 
                     if let Err(crate::renderer::atlas::AtlasError::Full) = render_result {
@@ -382,7 +413,8 @@ impl ApplicationHandler<()> for App {
                         rc.clear_all_row_caches();
                         rc.atlas_generation += 1;
                         let _ = build_all_pane_instances(
-                            rc, &pane_infos, &self.mux, &self.config, &scaled_font, self.input.cursor_blink_on,
+                            rc, &pane_infos, &self.mux, &self.config, &scaled_font,
+                            self.input.cursor_blink_on, search_arg, active_tid,
                         );
                     }
 
@@ -537,9 +569,12 @@ impl ApplicationHandler<()> for App {
                         }
                     }
 
-                    // ── Overlays (palette, context menu) — rendered after main glyphs ──
+                    // ── Overlays (search bar, palette, context menu) ─────────────────────
                     // Record the split point so the GPU renders these in a separate pass.
                     let overlay_start = rc.instances.len();
+                    if self.ui.search_bar.visible {
+                        rc.build_search_bar_instances(&self.ui.search_bar, &scaled_font, total_cols, total_rows);
+                    }
                     if self.ui.palette.visible {
                         let palette_cols = total_cols
                             + if panel_visible { self.ui.panel().width_cols as usize } else { 0 };
@@ -915,6 +950,7 @@ impl ApplicationHandler<()> for App {
 
 /// Build and upload cell instances for every pane in the active tab.
 /// Calls `rc.begin_frame()` first to clear previous frame's instances.
+#[allow(clippy::too_many_arguments)]
 fn build_all_pane_instances(
     rc: &mut RenderContext,
     pane_infos: &[crate::ui::PaneInfo],
@@ -922,13 +958,23 @@ fn build_all_pane_instances(
     config: &crate::config::Config,
     font: &crate::config::schema::FontConfig,
     cursor_blink_on: bool,
+    search_bar: Option<&crate::ui::SearchBar>,
+    active_terminal_id: usize,
 ) -> Result<(), crate::renderer::atlas::AtlasError> {
     rc.begin_frame();
     // Take the scratch buffer out of rc so we can mutably borrow rc (build_instances)
     // while the buffer is filled by mux. Returned at the end of the function.
     let mut cell_data_scratch = std::mem::take(&mut rc.cell_data_scratch);
     for info in pane_infos {
-        mux.collect_grid_cells_for(info.terminal_id, &mut cell_data_scratch);
+        // Pass search highlight info only for the active pane with a non-empty query.
+        let search_arg = search_bar.and_then(|sb| {
+            if !sb.query.is_empty() && !sb.matches.is_empty() && info.terminal_id == active_terminal_id {
+                Some((sb.matches.as_slice(), sb.current))
+            } else {
+                None
+            }
+        });
+        mux.collect_grid_cells_for(info.terminal_id, &mut cell_data_scratch, search_arg);
         let cell_data = &cell_data_scratch[..];
         let cursor = if info.focused {
             mux.terminals
