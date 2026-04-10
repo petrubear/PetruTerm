@@ -342,6 +342,12 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
                 _ => crate::config::schema::StatusBarPosition::Bottom,
             };
         }
+        if let Ok(s) = sb_table.get::<String>("style") {
+            config.status_bar.style = match s.as_str() {
+                "powerline" | "Powerline" => crate::config::schema::StatusBarStyle::Powerline,
+                _ => crate::config::schema::StatusBarStyle::Plain,
+            };
+        }
     }
 
     Ok(config)

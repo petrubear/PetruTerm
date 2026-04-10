@@ -1,4 +1,5 @@
 use std::time::SystemTime;
+use crate::config::schema::StatusBarStyle;
 
 /// Which logical widget a status bar segment represents.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,12 +21,20 @@ pub struct StatusBarSegment {
 }
 
 /// Assembled status bar with left and right segment groups.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct StatusBar {
-    /// Segments shown on the left, separated by › arrows.
+    /// Segments shown on the left.
     pub left: Vec<StatusBarSegment>,
-    /// Segments shown on the right, separated by │.
+    /// Segments shown on the right.
     pub right: Vec<StatusBarSegment>,
+    /// Visual style: plain text separators or Nerd Font powerline arrows.
+    pub style: StatusBarStyle,
+}
+
+impl Default for StatusBar {
+    fn default() -> Self {
+        Self { left: vec![], right: vec![], style: StatusBarStyle::Plain }
+    }
 }
 
 // ── Dracula Pro palette constants ────────────────────────────────────────────
@@ -58,8 +67,9 @@ impl StatusBar {
         cwd: Option<&std::path::Path>,
         git_branch: Option<&str>,
         last_exit_code: Option<i32>,
+        style: StatusBarStyle,
     ) -> Self {
-        let mut bar = StatusBar::default();
+        let mut bar = StatusBar { style, ..StatusBar::default() };
 
         // ── Left segments ────────────────────────────────────────────────────
 
@@ -115,21 +125,37 @@ impl StatusBar {
     /// Background color for empty space between left and right groups.
     pub fn bar_bg() -> [f32; 4] { BG_BAR }
 
-    /// Separator used between left segments.
-    pub fn left_sep() -> &'static str { " › " }
+    /// Powerline left arrow glyph (U+E0B0 — solid right-pointing triangle).
+    pub fn pl_left_arrow() -> &'static str { "\u{E0B0}" }
 
-    /// Separator used between right segments.
-    pub fn right_sep() -> &'static str { " │ " }
+    /// Powerline right arrow glyph (U+E0B2 — solid left-pointing triangle).
+    pub fn pl_right_arrow() -> &'static str { "\u{E0B2}" }
+
+    /// Width of left separators in character columns for this bar's style.
+    pub fn left_sep_width(&self) -> usize {
+        match self.style {
+            StatusBarStyle::Plain     => " › ".chars().count(), // 3
+            StatusBarStyle::Powerline => 1,                     // ""
+        }
+    }
+
+    /// Width of right separators in character columns for this bar's style.
+    pub fn right_sep_width(&self) -> usize {
+        match self.style {
+            StatusBarStyle::Plain     => " │ ".chars().count(), // 3
+            StatusBarStyle::Powerline => 1,                     // ""
+        }
+    }
 
     /// Given a column click position and the total bar width, return which segment kind
     /// was clicked (if any). Mirrors the layout produced by `build_status_bar_instances`.
     pub fn click_kind(&self, col: usize, total_cols: usize) -> Option<SegmentKind> {
-        let sep_w = Self::left_sep().chars().count();
+        let sep_w = self.left_sep_width();
         // Walk left segments.
         let mut x = 0usize;
         for (i, seg) in self.left.iter().enumerate() {
             if i > 0 {
-                x += sep_w; // separator before this segment
+                x += sep_w;
             }
             let w = seg.text.chars().count();
             if col >= x && col < x + w {
@@ -138,10 +164,14 @@ impl StatusBar {
             x += w;
         }
         // Walk right segments (right-aligned).
-        let rsep_w = Self::right_sep().chars().count();
-        let right_total: usize = self.right.iter().map(|s| s.text.chars().count()).sum::<usize>()
+        let rsep_w = self.right_sep_width();
+        // In Powerline mode a leading arrow precedes the first right segment.
+        let leading = if self.style == StatusBarStyle::Powerline && !self.right.is_empty() { 1 } else { 0 };
+        let right_total: usize = leading
+            + self.right.iter().map(|s| s.text.chars().count()).sum::<usize>()
             + self.right.len().saturating_sub(1) * rsep_w;
         let mut rx = total_cols.saturating_sub(right_total);
+        rx += leading; // skip the leading arrow
         for (i, seg) in self.right.iter().enumerate() {
             if i > 0 { rx += rsep_w; }
             let w = seg.text.chars().count();

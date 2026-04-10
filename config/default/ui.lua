@@ -61,11 +61,14 @@ function module.apply_to_config(config)
 	config.hide_tab_bar_if_one = true
 
 	-- ── Status bar ───────────────────────────────────────────────────────────
-	-- enabled: show/hide the status bar (also togglable via command palette).
+	-- enabled:  show/hide the status bar (also togglable via command palette).
 	-- position: "bottom" (default) or "top".
+	-- style:    "plain"     — text separators ( › and │ ).
+	--           "powerline" — Nerd Font arrows ( and ). Requires a Nerd Font.
 	config.status_bar = {
 		enabled  = true,
 		position = "bottom",
+		style    = "plain",
 	}
 end
 

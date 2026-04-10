@@ -982,9 +982,9 @@ impl RenderContext {
                 _pad:   [0.0; 3],
             });
         }
-        let sep_fg  = [0.40, 0.40, 0.55, 1.0];
-        let left_sep  = StatusBar::left_sep();
-        let right_sep = StatusBar::right_sep();
+        use crate::config::schema::StatusBarStyle;
+        let powerline = bar.style == StatusBarStyle::Powerline;
+        let plain_sep_fg = [0.40, 0.40, 0.55, 1.0];
 
         // ── Left side ────────────────────────────────────────────────────────
         let mut col = 0usize;
@@ -997,20 +997,31 @@ impl RenderContext {
 
             // Separator between segments (not after last).
             if i + 1 < bar.left.len() {
-                let sep_len = left_sep.chars().count();
-                if col + sep_len > total_cols { break; }
-                // Use next segment's bg for the separator background.
                 let next_bg = bar.left[i + 1].bg;
-                self.push_shaped_row(left_sep, sep_fg, next_bg, row, col, sep_len, font);
-                col += sep_len;
+                if powerline {
+                    // Powerline: "" with fg = current segment bg, bg = next segment bg.
+                    let arrow = StatusBar::pl_left_arrow();
+                    if col + 1 > total_cols { break; }
+                    self.push_shaped_row(arrow, seg.bg, next_bg, row, col, 1, font);
+                    col += 1;
+                } else {
+                    let sep = " › ";
+                    let sep_len = sep.chars().count();
+                    if col + sep_len > total_cols { break; }
+                    self.push_shaped_row(sep, plain_sep_fg, next_bg, row, col, sep_len, font);
+                    col += sep_len;
+                }
             }
         }
 
         // ── Right side (compute total width first, then render right-aligned) ─
-        let right_total: usize = bar.right.iter().enumerate().map(|(i, seg)| {
-            seg.text.chars().count()
-                + if i + 1 < bar.right.len() { right_sep.chars().count() } else { 0 }
-        }).sum();
+        let rsep_w = bar.right_sep_width();
+        // In Powerline mode a leading "" transitions from bar_bg to the first right segment.
+        let leading_arrow = powerline && !bar.right.is_empty();
+        let right_total: usize =
+            (if leading_arrow { 1 } else { 0 })
+            + bar.right.iter().map(|s| s.text.chars().count()).sum::<usize>()
+            + bar.right.len().saturating_sub(1) * rsep_w;
 
         let right_start = total_cols.saturating_sub(right_total);
 
@@ -1021,6 +1032,14 @@ impl RenderContext {
         }
 
         let mut rcol = right_start;
+
+        // Powerline leading arrow before first right segment.
+        if leading_arrow {
+            let first_bg = bar.right[0].bg;
+            self.push_shaped_row(StatusBar::pl_right_arrow(), first_bg, bar_bg, row, rcol, 1, font);
+            rcol += 1;
+        }
+
         for (i, seg) in bar.right.iter().enumerate() {
             let text = &seg.text;
             let len = text.chars().count();
@@ -1029,10 +1048,17 @@ impl RenderContext {
             rcol += len;
 
             if i + 1 < bar.right.len() {
-                let sep_len = right_sep.chars().count();
-                if rcol + sep_len > total_cols { break; }
-                self.push_shaped_row(right_sep, sep_fg, bar_bg, row, rcol, sep_len, font);
-                rcol += sep_len;
+                if powerline {
+                    // Powerline: "" with fg = next segment bg, bg = current segment bg.
+                    let next_bg = bar.right[i + 1].bg;
+                    if rcol + 1 > total_cols { break; }
+                    self.push_shaped_row(StatusBar::pl_right_arrow(), next_bg, seg.bg, row, rcol, 1, font);
+                    rcol += 1;
+                } else {
+                    if rcol + rsep_w > total_cols { break; }
+                    self.push_shaped_row(" │ ", plain_sep_fg, bar_bg, row, rcol, rsep_w, font);
+                    rcol += rsep_w;
+                }
             }
         }
     }

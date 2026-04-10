@@ -454,6 +454,7 @@ impl ApplicationHandler<()> for App {
                             self.ui.git_branch_cache.as_deref(),
                             crate::llm::shell_context::ShellContext::load()
                                 .and_then(|ctx| if ctx.last_exit_code != 0 { Some(ctx.last_exit_code) } else { None }),
+                            self.config.status_bar.style.clone(),
                         );
                         let sb_win_w = rc.renderer.size().0 as f32;
                         rc.build_status_bar_instances(&bar, &scaled_font, total_cols + if panel_visible { self.ui.panel().width_cols as usize } else { 0 }, total_rows, sb_pad_y, sb_win_w);
@@ -634,6 +635,7 @@ impl ApplicationHandler<()> for App {
                                 let bar = crate::ui::status_bar::StatusBar::build(
                                     false, false, &self.config.leader.key,
                                     cwd.as_deref(), git_branch.as_deref(), None,
+                                    self.config.status_bar.style.clone(),
                                 );
                                 if let Some(crate::ui::status_bar::SegmentKind::GitBranch) = bar.click_kind(col, total_cols) {
                                     if let Some(cwd_path) = self.mux.active_cwd()

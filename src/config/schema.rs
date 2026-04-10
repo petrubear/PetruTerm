@@ -23,11 +23,16 @@ pub struct Config {
 pub struct StatusBarConfig {
     pub enabled: bool,
     pub position: StatusBarPosition,
+    pub style: StatusBarStyle,
 }
 
 impl Default for StatusBarConfig {
     fn default() -> Self {
-        Self { enabled: true, position: StatusBarPosition::Bottom }
+        Self {
+            enabled: true,
+            position: StatusBarPosition::Bottom,
+            style: StatusBarStyle::Plain,
+        }
     }
 }
 
@@ -36,6 +41,16 @@ impl Default for StatusBarConfig {
 pub enum StatusBarPosition {
     Top,
     Bottom,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum StatusBarStyle {
+    /// Plain text separators: ` › ` between left segments, ` │ ` between right segments.
+    #[default]
+    Plain,
+    /// Nerd Font powerline arrows:  (U+E0B0) for left,  (U+E0B2) for right.
+    Powerline,
 }
 
 impl Default for Config {
