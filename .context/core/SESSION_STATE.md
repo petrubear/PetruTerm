@@ -1,33 +1,30 @@
 # Session State
 
 **Last Updated:** 2026-04-09
-**Session Focus:** Status bar — fix altura visual (revert SB_PAD_PX; usar rect extension)
+**Session Focus:** Bug fixes + Phase 3 P3 inicio
 
 ## Branch: `master`
 
-## Session Notes (2026-04-09 — batch 3)
+## Session Notes (2026-04-09 — batch 4)
 
 ### Trabajo realizado
 
-#### Status bar — fix altura visual
+#### Command palette — scroll + orden alfabético
+- **Bug scroll:** el renderer siempre mostraba items `[0..14]`; `selected` quedaba fuera de la ventana al navegar hacia abajo. Fix: `scroll_offset = max(0, selected - max_visible + 1)`; items indexados con `scroll_offset + i`.
+- **Orden alfabético:** `built_in_actions()` ahora hace `sort_unstable_by(|a,b| a.name.cmp(&b.name))` antes de retornar. Con query activo el fuzzy scorer sigue teniendo precedencia.
 
-**Bug:** `SB_PAD_PX = 4.0` en `status_bar_height_px()` reducía el espacio disponible para filas del terminal. En ciertos tamaños de ventana, el truncamiento por `floor()` hacía que el terminal perdiera una fila entera (~36px en Retina 2×), dejando un hueco vacío (color de fondo de ventana) entre el contenido del terminal y la barra de estado. El usuario quería la barra MÁS ALTA, no un hueco encima de ella.
-
-**Fix:**
-- Eliminado `SB_PAD_PX` de `status_bar_height_px()` — la reserva vuelve a ser exactamente `cell_h`. Terminal no pierde filas.
-- `build_status_bar_instances` ahora recibe `pad_y: f32` y `win_w: f32`.
-- Se añade un `RoundedRectInstance` (radio 0, color `bar_bg`) de ancho completo que cubre `cell_h + 8px` a partir de `pad_y + row * cell_h`. Los 8px extra por debajo de la fila de celdas no están cubiertos por ninguna celda, por lo que el rect asoma y la barra luce visualmente más alta.
+#### Status bar — click en git no funcionaba
+- **Bug:** hit zone calculada como `win_h - pad_bottom - cell_h` no coincidía con la posición renderizada por `floor()`. Gap de hasta `cell_h - 1` px.
+- **Fix:** hit zone ahora usa la misma fórmula que el renderer: `pad_top + tab_h + floor(viewport_h / cell_h) * cell_h`.
 
 ### Archivos modificados
-- `src/app/mod.rs` — revert `SB_PAD_PX`; extraer `sb_pad_y` antes del borrow mutable; pasar a `build_status_bar_instances`
-- `src/app/renderer.rs` — nueva firma + rect de fondo extendido (8px)
-- `.context/` — docs actualizados
+- `src/app/renderer.rs` — palette scroll offset
+- `src/ui/palette/actions.rs` — sort alfabético
+- `src/app/mod.rs` — status bar hit zone row-based
 
 ## Build & Tests
 - **cargo check:** PASS (2026-04-09)
 
 ## Próxima sesión
 
-Deuda técnica a cero. Opciones:
-1. **Phase 3 P3:** Snippets (`config.snippets` Lua + expand via palette) y Starship compat.
-2. **Phase 4:** Plugin ecosystem (Lua plugin loader, API surface).
+**Phase 3 P3 — Snippets.** Ver plan en ACTIVE_CONTEXT.md.

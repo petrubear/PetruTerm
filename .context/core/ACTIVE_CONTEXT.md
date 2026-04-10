@@ -1,6 +1,6 @@
 # Active Context
 
-**Current Focus:** Deuda técnica resuelta — TD-043 a TD-047 completados
+**Current Focus:** Phase 3 P3 — Snippets
 **Last Active:** 2026-04-09
 
 ## Estado actual del proyecto
@@ -27,7 +27,7 @@
 | Shell exit cierra tab | ✅ |
 | Selección doble/triple click | ✅ |
 | Context menu (right-click) | ✅ |
-| Command palette | ✅ |
+| Command palette (scroll + orden alfabético) | ✅ |
 | Phase 2.5 P1 — file context + AGENTS.md + file picker | ✅ |
 | Phase 2.5 P2 — LLM tool use (ReadFile, ListDir) | ✅ |
 | Phase 2.5 P3 — WriteFile + RunCommand + undo | ✅ |
@@ -76,5 +76,6 @@
 
 ## Próximos pasos recomendados
 
-1. **Phase 3 P3:** Snippets y Starship compatibility
-2. **Phase 4:** Plugin ecosystem (Lua loader, API surface)
+1. **Phase 3 P3 (activo):** Snippets (`config.snippets` Lua + expand via palette + trigger opcional)
+2. **Phase 3 P3:** Starship compatibility, Powerline, built-in themes
+3. **Phase 4:** Plugin ecosystem (Lua loader, API surface)

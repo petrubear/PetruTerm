@@ -856,12 +856,21 @@ impl RenderContext {
 
         let keybind_fg = [0.5, 0.5, 0.7, 1.0];
 
-        for i in 0..(palette_height - 1) {
+        let max_visible = palette_height - 1; // rows available for results (below query row)
+        // Keep selected item in view: scroll down when it goes past the last visible row.
+        let scroll_offset = if palette.selected >= max_visible {
+            palette.selected - max_visible + 1
+        } else {
+            0
+        };
+
+        for i in 0..max_visible {
+            let result_idx = scroll_offset + i;
             let row = start_row + 1 + i;
-            let is_selected = i == palette.selected;
+            let is_selected = result_idx == palette.selected;
             let current_bg = if is_selected { highlight_bg } else { bg };
 
-            if let Some(action) = palette.results.get(i) {
+            if let Some(action) = palette.results.get(result_idx) {
                 // Name on the left, keybind right-aligned.
                 let name_text = format!("  {}", action.name);
                 self.push_shaped_row(&name_text, fg, current_bg, row, start_col, palette_width, font);

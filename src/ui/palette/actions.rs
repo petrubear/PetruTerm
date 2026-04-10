@@ -98,7 +98,7 @@ pub fn built_in_actions(config: &Config) -> Vec<PaletteAction> {
 
     let kb = |action: &str| -> Option<String> { keybind_map.get(action).cloned() };
 
-    vec![
+    let mut actions = vec![
         PaletteAction { name: "Open Config File".into(),       action: Action::OpenConfigFile,    keybind: None },
         PaletteAction { name: "Reload Config".into(),          action: Action::ReloadConfig,       keybind: None },
         PaletteAction { name: "New Tab".into(),                action: Action::NewTab,             keybind: kb("NewTab") },
@@ -125,5 +125,7 @@ pub fn built_in_actions(config: &Config) -> Vec<PaletteAction> {
         // Phase 3 UI actions
         PaletteAction { name: "Toggle Status Bar".into(),      action: Action::ToggleStatusBar,     keybind: None },
         PaletteAction { name: "Rename Tab".into(),              action: Action::RenameTab,           keybind: kb("RenameTab") },
-    ]
+    ];
+    actions.sort_unstable_by(|a, b| a.name.cmp(&b.name));
+    actions
 }

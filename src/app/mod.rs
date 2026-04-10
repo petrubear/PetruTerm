@@ -611,12 +611,20 @@ impl ApplicationHandler<()> for App {
                         }
                         // Status bar click — hit-test segments.
                         if self.config.status_bar.enabled {
-                            let sb_h = self.status_bar_height_px() as f64;
+                            // Use the same row-based math as the renderer so the hit zone
+                            // aligns exactly with the drawn bar regardless of viewport floor() rounding.
+                            let (cell_w, cell_h_u) = self.cell_dims();
+                            let cell_h = cell_h_u as f64;
                             let win_h = self.render_ctx.as_ref().map(|rc| rc.renderer.size().1 as f64).unwrap_or(0.0);
-                            let sb_bottom = win_h - self.config.window.padding.bottom as f64;
-                            let sb_top = sb_bottom - sb_h;
+                            let pad_top = self.config.window.padding.top as f64;
+                            let pad_bottom = self.config.window.padding.bottom as f64;
+                            let tab_h = self.tab_bar_height_px() as f64;
+                            let sb_h = self.status_bar_height_px() as f64;
+                            let viewport_h = (win_h - pad_top - pad_bottom - tab_h - sb_h).max(0.0);
+                            let total_sb_rows = (viewport_h / cell_h).floor() as usize;
+                            let sb_top = pad_top + tab_h + total_sb_rows as f64 * cell_h;
+                            let sb_bottom = sb_top + cell_h;
                             if self.input.mouse_pos.1 >= sb_top && self.input.mouse_pos.1 < sb_bottom {
-                                let (cell_w, _) = self.cell_dims();
                                 let col = ((self.input.mouse_pos.0 - self.config.window.padding.left as f64) / cell_w as f64)
                                     .floor().max(0.0) as usize;
                                 let total_cols = self.mux.active_terminal_size().0;
