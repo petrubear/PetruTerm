@@ -47,6 +47,9 @@ pub enum Action {
     RenameTab,
     GitCheckout(String),
     ExpandSnippet(String),
+    // Phase 3 P3 — Themes
+    OpenThemePicker,
+    SwitchTheme(String),
 }
 
 impl std::str::FromStr for Action {
@@ -126,6 +129,7 @@ pub fn built_in_actions(config: &Config) -> Vec<PaletteAction> {
         // Phase 3 UI actions
         PaletteAction { name: "Toggle Status Bar".into(),      action: Action::ToggleStatusBar,     keybind: None },
         PaletteAction { name: "Rename Tab".into(),              action: Action::RenameTab,           keybind: kb("RenameTab") },
+        PaletteAction { name: "Switch Theme\u{2026}".into(),   action: Action::OpenThemePicker,     keybind: None },
     ];
     actions.sort_unstable_by(|a, b| a.name.cmp(&b.name));
     actions

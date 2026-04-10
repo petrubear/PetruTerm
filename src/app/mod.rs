@@ -425,19 +425,6 @@ impl ApplicationHandler<()> for App {
                         rc.build_ai_block_instances(&self.ui.ai_block, &scaled_font, total_cols, total_rows);
                     }
 
-                    // ── Command palette ──────────────────────────────────────────────────
-                    if self.ui.palette.visible {
-                        rc.mark_all_rows_dirty();
-                        let palette_cols = total_cols
-                            + if panel_visible { self.ui.panel().width_cols as usize } else { 0 };
-                        rc.build_palette_instances(&self.ui.palette, &scaled_font, palette_cols, total_rows);
-                    }
-
-                    // ── Context menu (right-click) ────────────────────────────────────────
-                    if self.ui.context_menu.visible {
-                        rc.build_context_menu_instances(&self.ui.context_menu, &scaled_font, total_cols, total_rows);
-                    }
-
                     // ── Status bar ───────────────────────────────────────────────────────
                     if self.config.status_bar.enabled {
                         let cwd = self.mux.active_cwd();
@@ -460,8 +447,22 @@ impl ApplicationHandler<()> for App {
                         rc.build_status_bar_instances(&bar, &scaled_font, total_cols + if panel_visible { self.ui.panel().width_cols as usize } else { 0 }, total_rows, sb_pad_y, sb_win_w);
                     }
 
+                    // ── Overlays (palette, context menu) — rendered after main glyphs ──
+                    // Record the split point so the GPU renders these in a separate pass.
+                    let overlay_start = rc.instances.len();
+                    if self.ui.palette.visible {
+                        rc.mark_all_rows_dirty();
+                        let palette_cols = total_cols
+                            + if panel_visible { self.ui.panel().width_cols as usize } else { 0 };
+                        rc.build_palette_instances(&self.ui.palette, &scaled_font, palette_cols, total_rows);
+                    }
+                    if self.ui.context_menu.visible {
+                        rc.build_context_menu_instances(&self.ui.context_menu, &scaled_font, total_cols, total_rows);
+                    }
+
                     // ── GPU upload ──────────────────────────────────────────────────────
                     rc.renderer.upload_rect_instances(&rc.rect_instances);
+                    rc.renderer.set_overlay_start(overlay_start);
                     rc.renderer.upload_instances(&rc.instances, 0);
                     rc.reset_row_dirty_flags();
                     rc.renderer.set_cell_count(rc.instances.len());
@@ -492,7 +493,7 @@ impl ApplicationHandler<()> for App {
                     let pane_count_before = self.mux.active_pane_count();
                     self.ui.set_active_terminal(self.mux.focused_terminal_id());
                     self.input.handle_key_input(
-                        &event, event_loop, &self.config,
+                        &event, event_loop, &mut self.config,
                         &mut self.mux, &mut self.ui,
                         &mut self.render_ctx, self.window.as_deref(),
                         self.wakeup_proxy.clone(),

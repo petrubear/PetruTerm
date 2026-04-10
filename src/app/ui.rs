@@ -288,6 +288,26 @@ impl UiManager {
         updated
     }
 
+    /// Open the command palette in theme-picker mode.
+    /// Lists .lua files in ~/.config/petruterm/themes/ and pre-populates the palette.
+    pub fn open_theme_picker(&mut self) {
+        use crate::ui::palette::{Action, PaletteAction};
+        let themes = crate::config::list_themes();
+        if themes.is_empty() {
+            log::warn!("No themes found in {}", crate::config::themes_dir().display());
+            return;
+        }
+        let items: Vec<PaletteAction> = themes
+            .into_iter()
+            .map(|name| PaletteAction {
+                name: format!("  {name}"),
+                action: Action::SwitchTheme(name),
+                keybind: None,
+            })
+            .collect();
+        self.palette.open_with_items(items);
+    }
+
     /// Open the command palette in branch-picker mode.
     /// Lists local git branches synchronously (fast) and pre-populates the palette.
     pub fn open_branch_picker(&mut self, cwd: &std::path::Path) {
@@ -797,6 +817,24 @@ impl UiManager {
                 if let Some(terminal) = mux.active_terminal() {
                     terminal.scroll_to_bottom();
                     terminal.write_input(body.as_bytes());
+                }
+            }
+            Action::OpenThemePicker => {
+                self.open_theme_picker();
+            }
+            Action::SwitchTheme(name) => {
+                let path = crate::config::themes_dir().join(format!("{name}.lua"));
+                match crate::config::lua::load_theme(&path) {
+                    Ok(scheme) => {
+                        log::info!(
+                            "Switched theme to '{name}': bg={:?} fg={:?} ansi[1]={:?}",
+                            scheme.background, scheme.foreground, scheme.ansi[1]
+                        );
+                        render_ctx.renderer.update_bg_color(scheme.background_wgpu());
+                        config.colors = scheme;
+                        render_ctx.mark_all_rows_dirty();
+                    }
+                    Err(e) => log::error!("Failed to load theme '{name}': {e}"),
                 }
             }
         }

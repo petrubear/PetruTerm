@@ -139,7 +139,7 @@ impl InputHandler {
         &mut self,
         event: &KeyEvent,
         event_loop: &ActiveEventLoop,
-        config: &Config,
+        config: &mut Config,
         mux: &mut Mux,
         ui: &mut UiManager,
         render_ctx: &mut Option<RenderContext>,
@@ -285,8 +285,7 @@ impl InputHandler {
                         return;
                     }
                     if let Some(rc) = render_ctx.as_mut() {
-                        let mut cfg_temp = config.clone();
-                        ui.handle_palette_action(action, mux, rc, &mut cfg_temp, window, wakeup_proxy);
+                        ui.handle_palette_action(action, mux, rc, config, window, wakeup_proxy);
                     }
                 }
             }
@@ -423,9 +422,8 @@ impl InputHandler {
                 Key::Named(NamedKey::Enter) => { 
                     if let Some(action) = ui.palette.confirm() { 
                         let rc = render_ctx.as_mut().expect("RenderContext");
-                        let mut cfg_temp = config.clone(); 
-                        ui.handle_palette_action(action, mux, rc, &mut cfg_temp, window, wakeup_proxy);
-                    } 
+                        ui.handle_palette_action(action, mux, rc, config, window, wakeup_proxy);
+                    }
                 }
                 Key::Named(NamedKey::ArrowUp) => ui.palette.select_up(),
                 Key::Named(NamedKey::ArrowDown) => ui.palette.select_down(),

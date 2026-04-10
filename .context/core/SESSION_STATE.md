@@ -1,7 +1,7 @@
 # Session State
 
 **Last Updated:** 2026-04-09
-**Session Focus:** Bug fixes + Phase 3 P3 snippets + Powerline
+**Session Focus:** Bug fixes + Phase 3 P3 snippets + Powerline + overlay rendering fix
 
 ## Branch: `master`
 
@@ -43,9 +43,15 @@
 - `config/default/ui.lua` — documenta la opción `style`
 - `~/.config/petruterm/ui.lua` — activado `style = "powerline"` en config del usuario
 
+#### Overlay rendering — fondo sólido en palette y context menu
+
+- **Bug:** el LCD pass (glifos del terminal con subpixel AA) se ejecutaba **después** del overlay pass, sobreescribiendo los fondos del palette y context menu con los glifos del terminal.
+- **Fix:** en `src/renderer/gpu.rs`, el LCD pass se movió para ejecutarse entre el main pass y el overlay pass. Orden correcto: `main bg → main glyphs → LCD glyphs → overlay bg (REPLACE) → overlay glyphs`. El `bg_pipeline` usa `BlendState::REPLACE` por lo que el fondo del overlay elimina completamente los glifos LCD subyacentes.
+- **Archivo modificado:** `src/renderer/gpu.rs` — reordenamiento de draw calls en `render()`
+
 ## Build & Tests
-- **cargo check:** PASS (2026-04-09)
+- **cargo build:** PASS (2026-04-09)
 
 ## Próxima sesión
 
-Phase 3 P3: built-in themes — ver decisiones de diseño en ACTIVE_CONTEXT.md. Luego Phase 4.
+Phase 4: Plugin ecosystem (Lua loader, API surface). Ver `build_phases.md`.

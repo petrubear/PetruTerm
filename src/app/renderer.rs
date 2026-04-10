@@ -363,6 +363,25 @@ impl RenderContext {
     ) {
         if width == 0 { return; }
 
+        // Step 1: push one background-coverage vertex per cell.
+        // This guarantees full-row background even when shape_line collapses
+        // space runs into a single glyph entry (skipping intermediate cells).
+        // In the bg_pipeline these produce full-cell rects; in the glyph_pipeline
+        // they produce zero-area quads that are immediately discarded.
+        for i in 0..width {
+            self.instances.push(CellVertex {
+                grid_pos: [(col_offset + i) as f32, row as f32],
+                atlas_uv: [0.0; 4],
+                fg,
+                bg,
+                glyph_offset: [0.0; 2],
+                glyph_size:   [0.0; 2],
+                flags: 0,
+                _pad: 0,
+            });
+        }
+
+        // Step 2: push glyph vertices for visible characters.
         let chars: Vec<char> = text.chars().take(width).collect();
         let len = chars.len();
         let padded: String = chars
@@ -379,11 +398,7 @@ impl RenderContext {
             let (atlas, queue) = self.renderer.atlas_and_queue();
             let entry = match self.shaper.rasterize_to_atlas(glyph.cache_key, atlas, queue) {
                 Ok(e) => e,
-                Err(_) => crate::renderer::atlas::AtlasEntry {
-                    uv: [0.0; 4],
-                    width: 0, height: 0, bearing_x: 0, bearing_y: 0, is_color: false,
-                    last_used: 0,
-                },
+                Err(_) => continue, // skip; bg-coverage vertex already pushed above
             };
 
             let ox = entry.bearing_x as f32;
@@ -391,17 +406,19 @@ impl RenderContext {
             let gw = entry.width as f32;
             let gh = entry.height as f32;
 
+            // Skip zero-size glyphs (spaces): bg-coverage vertex already handles bg.
+            if gw == 0.0 || gh == 0.0 { continue; }
+
             let y0 = oy.max(0.0);
             let y1 = (oy + gh).min(self.shaper.cell_height);
+            if y1 <= y0 { continue; }
 
-            let (atlas_uv, glyph_offset, glyph_size) = if y1 <= y0 || gw == 0.0 || gh == 0.0 {
-                ([0.0f32; 4], [0.0; 2], [0.0; 2])
-            } else {
-                let fy0 = (y0 - oy) / gh;
-                let fy1 = (y1 - oy) / gh;
-                let [u0, v0, u1, v1] = entry.uv;
-                ([u0, v0 + fy0 * (v1 - v0), u1, v0 + fy1 * (v1 - v0)], [ox, y0], [gw, y1 - y0])
-            };
+            let fy0 = (y0 - oy) / gh;
+            let fy1 = (y1 - oy) / gh;
+            let [u0, v0, u1, v1] = entry.uv;
+            let atlas_uv    = [u0, v0 + fy0 * (v1 - v0), u1, v0 + fy1 * (v1 - v0)];
+            let glyph_offset = [ox, y0];
+            let glyph_size   = [gw, y1 - y0];
 
             let color_flag = if entry.is_color { FLAG_COLOR_GLYPH } else { 0 };
             self.instances.push(CellVertex {

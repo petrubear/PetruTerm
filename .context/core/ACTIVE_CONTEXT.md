@@ -37,6 +37,7 @@
 | Pane resize (teclado + mouse drag) | ✅ (TD-042–045 resueltos) |
 | Status bar modo resize (naranja al presionar Option) | ✅ (TD-046) |
 | Status bar — altura visual extendida (rect 8px bajo la fila) | ✅ |
+| Palette + context menu — fondo sólido sobre contenido LCD | ✅ (2026-04-09) |
 
 ## Deuda técnica abierta
 
@@ -71,7 +72,7 @@
 | Tab rename `<leader>,` | ✅ (2026-04-08) |
 | Snippets: `config.snippets` tabla Lua, expandir via palette | ✅ (2026-04-09) |
 | Powerline / Nerd Font glyphs en widgets | ✅ (2026-04-09) |
-| Built-in themes | 🔲 (próximo) |
+| Built-in themes | ✅ (2026-04-09) |
 
 ## Phase 3 P3 — Themes: decisiones de diseño
 
@@ -85,5 +86,4 @@
 
 ## Próximos pasos recomendados
 
-1. **Phase 3 P3 (activo):** Built-in themes con sub-menú en palette
-2. **Phase 4:** Plugin ecosystem (Lua loader, API surface)
+1. **Phase 4:** Plugin ecosystem (Lua loader, API surface)

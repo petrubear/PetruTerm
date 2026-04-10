@@ -41,6 +41,9 @@ pub struct GpuRenderer {
     bg_aware_atlas_bind_group: wgpu::BindGroup,
     instance_buffer: wgpu::Buffer,
     cell_count: usize,
+    /// Index into the instance buffer where overlay instances start (palette, context menu).
+    /// Instances before this index are rendered first (bg+glyph); overlays rendered after.
+    overlay_start: usize,
 
     // LCD subpixel AA resources
     lcd_pipeline: Option<CellPipelineLcd>,
@@ -260,6 +263,7 @@ impl GpuRenderer {
             bg_aware_atlas_bind_group,
             instance_buffer,
             cell_count: 0,
+            overlay_start: 0,
             lcd_pipeline,
             lcd_atlas,
             lcd_atlas_bind_group,
@@ -321,6 +325,13 @@ impl GpuRenderer {
         self.cell_count = count.min(MAX_INSTANCES);
     }
 
+    /// Set the index at which overlay instances (palette, context menu) begin.
+    /// These are rendered in a separate bg+glyph pass AFTER the main pass so
+    /// overlay backgrounds cover terminal glyphs underneath.
+    pub fn set_overlay_start(&mut self, start: usize) {
+        self.overlay_start = start.min(MAX_INSTANCES);
+    }
+
     /// Render a single frame: combined pass for bg and glyphs.
     pub fn render(&mut self) -> Result<()> {
         use wgpu::CurrentSurfaceTexture;
@@ -377,30 +388,52 @@ impl GpuRenderer {
             }
 
             if self.cell_count > 0 {
-                // Backgrounds first
-                pass.set_pipeline(&self.pipeline.bg_pipeline);
-                pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_bind_group(1, &self.atlas_bind_group, &[]);
-                pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
-                pass.draw(0..6, 0..self.cell_count as u32);
+                let main_end = (self.overlay_start as u32).min(self.cell_count as u32);
+                let overlay_end = self.cell_count as u32;
+                let overlay_start = main_end;
 
-                // Glyphs on top (same pass, no reload)
-                pass.set_pipeline(&self.pipeline.cell_pipeline);
-                pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_bind_group(1, &self.atlas_bind_group, &[]);
-                pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
-                pass.draw(0..6, 0..self.cell_count as u32);
-            }
+                // ── Main pass: terminal + static UI ──────────────────────────────
+                if main_end > 0 {
+                    pass.set_pipeline(&self.pipeline.bg_pipeline);
+                    pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                    pass.set_bind_group(1, &self.atlas_bind_group, &[]);
+                    pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
+                    pass.draw(0..6, 0..main_end);
 
-            // LCD pass (if any)
-            if self.lcd_instance_count > 0 {
-                if let Some(ref lcd_pipeline) = self.lcd_pipeline {
-                    pass.set_pipeline(&lcd_pipeline.lcd_pipeline);
-                    pass.set_bind_group(0, &self.bg_aware_uniform_bind_group, &[]);
-                    pass.set_bind_group(1, &self.bg_aware_atlas_bind_group, &[]);
-                    pass.set_bind_group(2, &self.lcd_atlas_bind_group, &[]);
-                    pass.set_vertex_buffer(0, self.lcd_instance_buffer.slice(..));
-                    pass.draw(0..6, 0..self.lcd_instance_count as u32);
+                    pass.set_pipeline(&self.pipeline.cell_pipeline);
+                    pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                    pass.set_bind_group(1, &self.atlas_bind_group, &[]);
+                    pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
+                    pass.draw(0..6, 0..main_end);
+                }
+
+                // ── LCD pass (terminal glyphs) — drawn BEFORE overlay so overlay bg covers them ──
+                if self.lcd_instance_count > 0 {
+                    if let Some(ref lcd_pipeline) = self.lcd_pipeline {
+                        pass.set_pipeline(&lcd_pipeline.lcd_pipeline);
+                        pass.set_bind_group(0, &self.bg_aware_uniform_bind_group, &[]);
+                        pass.set_bind_group(1, &self.bg_aware_atlas_bind_group, &[]);
+                        pass.set_bind_group(2, &self.lcd_atlas_bind_group, &[]);
+                        pass.set_vertex_buffer(0, self.lcd_instance_buffer.slice(..));
+                        pass.draw(0..6, 0..self.lcd_instance_count as u32);
+                    }
+                }
+
+                // ── Overlay pass: palette, context menu ─────────────────────────
+                // Rendered AFTER main glyphs (and LCD pass) so overlay backgrounds
+                // cover all terminal text underneath.
+                if overlay_start < overlay_end {
+                    pass.set_pipeline(&self.pipeline.bg_pipeline);
+                    pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                    pass.set_bind_group(1, &self.atlas_bind_group, &[]);
+                    pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
+                    pass.draw(0..6, overlay_start..overlay_end);
+
+                    pass.set_pipeline(&self.pipeline.cell_pipeline);
+                    pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                    pass.set_bind_group(1, &self.atlas_bind_group, &[]);
+                    pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
+                    pass.draw(0..6, overlay_start..overlay_end);
                 }
             }
         }

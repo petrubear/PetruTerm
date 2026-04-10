@@ -16,6 +16,13 @@ const DEFAULT_LLM: &str = include_str!("../../config/default/llm.lua");
 const DEFAULT_SNIPPETS: &str = include_str!("../../config/default/snippets.lua");
 const SHELL_INTEGRATION_ZSH: &str = include_str!("../../scripts/shell-integration.zsh");
 
+// Bundled theme files — seeded into ~/.config/petruterm/themes/ on first launch.
+const THEME_DRACULA_PRO:      &str = include_str!("../../assets/themes/dracula-pro.lua");
+const THEME_TOKYO_NIGHT:      &str = include_str!("../../assets/themes/tokyo-night.lua");
+const THEME_CATPPUCCIN_MOCHA: &str = include_str!("../../assets/themes/catppuccin-mocha.lua");
+const THEME_ONE_DARK:         &str = include_str!("../../assets/themes/one-dark.lua");
+const THEME_GRUVBOX_DARK:     &str = include_str!("../../assets/themes/gruvbox-dark.lua");
+
 /// Modules preloaded for the embedded fallback config (no filesystem access).
 pub const EMBEDDED_MODULES: &[(&str, &str)] = &[
     ("ui",       DEFAULT_UI),
@@ -44,6 +51,32 @@ pub fn config_dir() -> PathBuf {
 /// Resolve the main config file path: ~/.config/petruterm/config.lua
 pub fn config_path() -> PathBuf {
     config_dir().join("config.lua")
+}
+
+/// Resolve the themes directory: ~/.config/petruterm/themes/
+pub fn themes_dir() -> PathBuf {
+    config_dir().join("themes")
+}
+
+/// Scan the themes directory and return a sorted list of theme names (stem of each .lua file).
+pub fn list_themes() -> Vec<String> {
+    let dir = themes_dir();
+    if !dir.exists() { return vec![]; }
+    let mut names: Vec<String> = std::fs::read_dir(&dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| {
+            let p = e.path();
+            if p.extension().map(|x| x == "lua").unwrap_or(false) {
+                p.file_stem()?.to_str().map(|s| s.to_string())
+            } else {
+                None
+            }
+        })
+        .collect();
+    names.sort();
+    names
 }
 
 /// Load the user config, falling back to the embedded default if the file doesn't exist.
@@ -147,6 +180,27 @@ fn ensure_default_configs(dir: &std::path::Path) -> Result<()> {
         if !dest.exists() {
             std::fs::write(&dest, content)?;
             log::info!("Created default config: {}", dest.display());
+        }
+    }
+
+    // Seed bundled themes into ~/.config/petruterm/themes/ (never overwrite user edits).
+    let themes_dir = dir.join("themes");
+    if !themes_dir.exists() {
+        std::fs::create_dir_all(&themes_dir)?;
+        log::info!("Created themes dir: {}", themes_dir.display());
+    }
+    let bundled_themes: &[(&str, &str)] = &[
+        ("dracula-pro.lua",      THEME_DRACULA_PRO),
+        ("tokyo-night.lua",      THEME_TOKYO_NIGHT),
+        ("catppuccin-mocha.lua", THEME_CATPPUCCIN_MOCHA),
+        ("one-dark.lua",         THEME_ONE_DARK),
+        ("gruvbox-dark.lua",     THEME_GRUVBOX_DARK),
+    ];
+    for (name, content) in bundled_themes {
+        let dest = themes_dir.join(name);
+        if !dest.exists() {
+            std::fs::write(&dest, content)?;
+            log::info!("Seeded theme: {}", dest.display());
         }
     }
 

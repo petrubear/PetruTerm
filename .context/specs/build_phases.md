@@ -159,14 +159,14 @@ preview; user confirms before any write happens.
 - [x] Snippets: `config.snippets` table in Lua, expand via command palette (2026-04-09)
 - [x] Snippet keybind: optional `trigger` field per snippet — Tab-expand with input_echo tracker (2026-04-09)
 - [x] Powerline support: Nerd Font arrows  /  via `config.status_bar.style = "powerline"` (2026-04-09)
-- [ ] Built-in themes: Lua files in `~/.config/petruterm/themes/`, seeded on first launch, theme picker as palette sub-menu (Esc returns to parent palette)
+- [x] Built-in themes: Lua files in `~/.config/petruterm/themes/`, seeded on first launch, theme picker as palette sub-menu (Esc returns to parent palette) (2026-04-09)
 
 ### Exit Criteria
 Tab bar renders and reflects active tab. Scroll bar visible when scrollback is active.
 Status bar renders with at least 3 widgets. Snippets expand via command palette.
 Starship prompt works when enabled.
 
-> **Status:** P1 COMPLETE. P2 COMPLETE. P3 partial: snippets ✅, Powerline ✅ (2026-04-09). Pending: built-in themes.
+> **Status:** P1 COMPLETE. P2 COMPLETE. P3 COMPLETE (2026-04-09): snippets ✅, Powerline ✅, built-in themes ✅.
 
 ---
 

@@ -2,7 +2,7 @@ use anyhow::Result;
 use mlua::prelude::*;
 use std::path::Path;
 
-use super::schema::{Config, TitleBarStyle};
+use super::schema::{ColorScheme, Config, TitleBarStyle};
 
 fn parse_hex_linear(s: &str) -> [f32; 4] {
     let s = s.trim_start_matches('#');
@@ -48,6 +48,56 @@ pub fn load_config_str(src: &str, name: &str, preloaded: &[(&str, &str)]) -> Res
         .map_err(|e| anyhow::anyhow!("Lua eval error in {name}: {e}"))?;
 
     table_to_config(config_table).map_err(|e| anyhow::anyhow!("Config parse error in {name}: {e}"))
+}
+
+/// Load a theme file (returns a `ColorScheme` table) from disk.
+///
+/// Theme files return a Lua table with hex color strings. Example:
+/// ```lua
+/// return { name="Tokyo Night", foreground="#c0caf5", background="#1a1b26", ... }
+/// ```
+pub fn load_theme(path: &Path) -> Result<ColorScheme> {
+    let lua = Lua::new();
+    let src = std::fs::read_to_string(path)
+        .map_err(|e| anyhow::anyhow!("Failed to read theme {}: {e}", path.display()))?;
+    let table: LuaTable = lua
+        .load(&src)
+        .set_name(path.to_string_lossy().as_ref())
+        .eval()
+        .map_err(|e| anyhow::anyhow!("Lua error in theme {}: {e}", path.display()))?;
+    table_to_color_scheme(table)
+        .map_err(|e| anyhow::anyhow!("Theme parse error in {}: {e}", path.display()))
+}
+
+/// Parse a Lua table (hex strings) into a `ColorScheme`.
+fn table_to_color_scheme(table: LuaTable) -> LuaResult<ColorScheme> {
+    let get_color = |key: &str| -> [f32; 4] {
+        table.get::<String>(key)
+            .map(|s| parse_hex_linear(&s))
+            .unwrap_or([0.0, 0.0, 0.0, 1.0])
+    };
+    let get_palette = |key: &str| -> [[f32; 4]; 8] {
+        let mut arr = [[0.0f32; 4]; 8];
+        if let Ok(t) = table.get::<LuaTable>(key) {
+            for i in 0..8usize {
+                if let Ok(s) = t.get::<String>((i + 1) as i64) {
+                    arr[i] = parse_hex_linear(&s);
+                }
+            }
+        }
+        arr
+    };
+    Ok(ColorScheme {
+        foreground:    get_color("foreground"),
+        background:    get_color("background"),
+        cursor_bg:     get_color("cursor_bg"),
+        cursor_fg:     get_color("cursor_fg"),
+        cursor_border: get_color("cursor_border"),
+        selection_bg:  get_color("selection_bg"),
+        selection_fg:  get_color("selection_fg"),
+        ansi:          get_palette("ansi"),
+        brights:       get_palette("brights"),
+    })
 }
 
 /// Inject the `petruterm` global table into the Lua VM.
