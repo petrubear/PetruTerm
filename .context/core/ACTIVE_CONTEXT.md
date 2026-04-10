@@ -1,12 +1,12 @@
 # Active Context
 
-**Current Focus:** Technical debt sprint completo → próximo: Phase 4 (plugins)
+**Current Focus:** Phase 4 (plugins) — búsqueda de texto y deuda técnica completadas
 **Last Active:** 2026-04-10
 
 ## Estado actual del proyecto
 
 **Phase 1–3 COMPLETE. Phase 4 (plugins) no iniciada.**
-**Deuda técnica: 1 ítem abierto (TD-PERF-03, no aplica en Apple Silicon). `cargo check` PASA.**
+**Deuda técnica: 4 ítems abiertos (TD-PERF-03/04/05, TD-MAINT-01). `cargo clippy` PASA, 0 warnings.**
 
 ### Features verificados
 
@@ -33,21 +33,31 @@
 | Multi-pane splits + separadores | ✅ |
 | Leader+h/j/k/l — vim-style pane focus | ✅ |
 | Status bar — leader, CWD, git branch, exit code, time | ✅ |
-| Pane resize (teclado + mouse drag) | ✅ (TD-042–045 resueltos) |
-| Status bar modo resize (naranja al presionar Option) | ✅ (TD-046) |
-| Status bar — altura visual extendida (rect 8px bajo la fila) | ✅ |
-| Palette + context menu — fondo sólido sobre contenido LCD | ✅ (2026-04-09) |
+| Pane resize (teclado + mouse drag) | ✅ |
+| Palette + context menu — fondo sólido sobre contenido LCD | ✅ |
+| **Cmd+K** — clear screen + scrollback | ✅ (2026-04-10) |
+| **Cmd+F** — búsqueda de texto en terminal + scrollback | ✅ (2026-04-10) |
 
 ## Deuda técnica abierta
 
-**TD-PERF-03** — GPU upload completo del instance buffer en GPUs PCIe discretas. No es cuello de botella en Apple Silicon (unified memory). Dejar para Phase 2+ (cross-platform).
+| ID | Descripción | Prioridad |
+|----|-------------|-----------|
+| TD-PERF-03 | GPU upload completo (PCIe) — no aplica en Apple Silicon | P1 |
+| TD-PERF-04 | `scan_files()` síncrono en hilo principal al abrir file picker | P2 |
+| TD-PERF-05 | Atlas de glifos siempre 64 MB desde arranque | P2 |
+| TD-MAINT-01 | Sin `cargo-audit` — sin escaneo CVEs | P3 |
 
-Ver [TECHNICAL_DEBT_archive.md](../../.context/quality/TECHNICAL_DEBT_archive.md) para historial completo.
+Ver [TECHNICAL_DEBT.md](../../.context/quality/TECHNICAL_DEBT.md) para detalle.
 
-## Keybinds actuales
+## Keybinds actuales (hardcoded + leader)
 
 | Tecla | Acción |
 |-------|--------|
+| `Cmd+C / Cmd+V` | Copy / paste |
+| `Cmd+Q` | Quit |
+| `Cmd+K` | Clear screen + scrollback |
+| `Cmd+F` | Abrir/cerrar búsqueda de texto |
+| `Cmd+1-9` | Cambiar a tab N |
 | `^B c` | New tab |
 | `^B &` | Close tab |
 | `^B n/b` | Next/prev tab |
@@ -66,26 +76,15 @@ Ver [TECHNICAL_DEBT_archive.md](../../.context/quality/TECHNICAL_DEBT_archive.md
 | `Ctrl+Space` | Inline AI block |
 | Right-click | Context menu |
 
-## Phase 3 P3 — Pendiente
+## Búsqueda de texto — arquitectura (2026-04-10)
 
-| Tarea | Estado |
-|-------|--------|
-| Tab rename `<leader>,` | ✅ (2026-04-08) |
-| Snippets: `config.snippets` tabla Lua, expandir via palette | ✅ (2026-04-09) |
-| Powerline / Nerd Font glyphs en widgets | ✅ (2026-04-09) |
-| Built-in themes | ✅ (2026-04-09) |
-
-## Phase 3 P3 — Themes: decisiones de diseño
-
-- Temas viven en **`~/.config/petruterm/themes/*.lua`** (NO embebidos en binario)
-- En primer launch, `ensure_default_configs()` crea `themes/` y escribe los temas default (dracula-pro, tokyo-night, catppuccin-mocha, one-dark, gruvbox-dark)
-- El usuario puede añadir sus propios temas copiando un `.lua` a esa carpeta
-- El theme picker **escanea el directorio en runtime** — temas nuevos aparecen solos
-- Acceso desde **command palette con submenú**: seleccionar "Switch Theme…" carga un sub-listado con los temas disponibles; Esc vuelve a la palette normal (no cierra)
-- NO hay `config.theme = "..."` en config.lua — el tema se aplica directamente vía palette
-- Formato de cada tema: archivo Lua que retorna tabla con `name`, `foreground`, `background`, `cursor_*`, `selection_*`, `ansi[8]`, `brights[8]`
+- `src/ui/search_bar.rs` — `SearchBar` + `SearchMatch { grid_line: i32, col, len }`
+- `UiManager.search_bar: SearchBar` en `src/app/ui.rs`
+- `Mux::search_active_terminal(&query)` — char-indexed (`Vec<char>` por fila) para evitar desplazamiento con chars multi-byte
+- `collect_grid_cells_for` acepta `Option<(&[SearchMatch], usize)>` e inyecta `AnsiColor::Spec(Rgb)` para highlights
+- `RenderContext::build_search_bar_instances` — overlay top-right con query + contador + hint
+- Auto-scroll al match activo usando `scroll_display(delta)` — centra el match en viewport
 
 ## Próximos pasos recomendados
 
-1. **Phase 4:** Plugin ecosystem (Lua loader, API surface)
-2. Limpiar `TECHNICAL_DEBT.md` — mover ítems resueltos al archive
+1. **Phase 4:** Plugin ecosystem (Lua loader, API surface). Ver `build_phases.md`.
