@@ -105,10 +105,45 @@ fn bench_shape_line_unicode(c: &mut Criterion) {
     });
 }
 
+/// Warm the word cache with one call, then measure the second call (word-cache hit path).
+fn bench_shape_line_ascii_cached(c: &mut Criterion) {
+    let (mut shaper, font_config) = make_shaper();
+    let text = "fn hello_world() -> &str {";
+    let colors = make_colors(text.chars().count());
+
+    // Prime the word cache (this call goes through HarfBuzz or ASCII fast path).
+    let _ = shaper.shape_line(text, &colors, &font_config);
+
+    c.bench_function("shape_line_ascii_cached", |b| {
+        b.iter(|| {
+            let _ = shaper.shape_line(text, &colors, &font_config);
+        });
+    });
+}
+
+/// Measure a line that has ligature chars but is otherwise ASCII — exercises the
+/// word-cache path (per-word HarfBuzz + caching) rather than the full-line path.
+fn bench_shape_line_ligatures_cached(c: &mut Criterion) {
+    let (mut shaper, font_config) = make_shaper();
+    let text = "let result = if x >= 0 { x } else { -x };";
+    let colors = make_colors(text.chars().count());
+
+    // Prime the word cache.
+    let _ = shaper.shape_line(text, &colors, &font_config);
+
+    c.bench_function("shape_line_ligatures_cached", |b| {
+        b.iter(|| {
+            let _ = shaper.shape_line(text, &colors, &font_config);
+        });
+    });
+}
+
 criterion_group!(
     benches,
     bench_shape_line_ascii,
     bench_shape_line_ligatures,
     bench_shape_line_unicode,
+    bench_shape_line_ascii_cached,
+    bench_shape_line_ligatures_cached,
 );
 criterion_main!(benches);

@@ -213,7 +213,17 @@ impl RenderContext {
 
             let shaped = self.shaper.shape_line(text, colors, font);
 
+            let default_bg = config.colors.background;
+
             for glyph in &shaped.glyphs {
+                // Fast path: space cells with the default background color produce no
+                // visible glyph and the GPU clear already fills them with the correct
+                // color — skip the vertex entirely. This avoids an atlas lookup and a
+                // vertex upload for every trailing space on every terminal line.
+                if glyph.ch == ' ' && colors_approx_eq(glyph.bg, default_bg) {
+                    continue;
+                }
+
                 let lcd_entry = if let Some(queue) = self.renderer.lcd_queue() {
                     self.shaper.rasterize_lcd_to_atlas(glyph.cache_key, glyph.ch, queue)
                 } else {
@@ -1253,13 +1263,32 @@ impl RenderContext {
     }
 }
 
+/// Pack an `[f32; 4]` RGBA color into a `u32` by quantizing each channel to 8 bits.
+/// Used by `calculate_row_hash` to avoid hashing raw float bytes (which can differ
+/// for semantically identical colors due to NaN/subnormal representations).
+#[inline]
+fn pack_color(c: [f32; 4]) -> u32 {
+    let r = (c[0].clamp(0.0, 1.0) * 255.0) as u32;
+    let g = (c[1].clamp(0.0, 1.0) * 255.0) as u32;
+    let b = (c[2].clamp(0.0, 1.0) * 255.0) as u32;
+    let a = (c[3].clamp(0.0, 1.0) * 255.0) as u32;
+    (r << 24) | (g << 16) | (b << 8) | a
+}
+
+/// Approximate color equality using 8-bit quantization (same as `pack_color`).
+#[inline]
+fn colors_approx_eq(a: [f32; 4], b: [f32; 4]) -> bool {
+    pack_color(a) == pack_color(b)
+}
+
 fn calculate_row_hash(text: &str, colors: &[([f32; 4], [f32; 4])]) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     text.hash(&mut hasher);
     for (fg, bg) in colors {
-        ((fg[0] * 255.0) as u32).hash(&mut hasher);
-        ((bg[0] * 255.0) as u32).hash(&mut hasher);
+        // Hash all 4 channels of each color packed into a u32 (not just red).
+        pack_color(*fg).hash(&mut hasher);
+        pack_color(*bg).hash(&mut hasher);
     }
     hasher.finish()
 }
