@@ -458,6 +458,9 @@ impl ApplicationHandler<()> for App {
                         // Atlas full — clear everything and retry.
                         rc.renderer.atlas.clear(&rc.renderer.device());
                         if let Some(atlas) = rc.renderer.get_lcd_atlas() { atlas.borrow_mut().clear(&rc.renderer.device()); }
+                        // Bind groups held stale wgpu TextureViews after clear() (TD-MEM-03).
+                        // Rebuild them before the next render pass.
+                        rc.renderer.rebuild_atlas_bind_groups();
                         rc.clear_all_row_caches();
                         rc.atlas_generation += 1;
                         let _ = build_all_pane_instances(

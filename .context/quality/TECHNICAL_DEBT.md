@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-04-15
-**Open Items:** 39
-**Critical (P0):** 0 | **P1:** 6 | **P2:** 21 | **P3:** 12
+**Open Items:** 38
+**Critical (P0):** 0 | **P1:** 5 | **P2:** 21 | **P3:** 12
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -44,13 +44,6 @@ Sesión de auditoría con objetivo declarado: **diagnosticar el consumo de 20 GB
 
 ---
 
-### TD-MEM-03: `atlas_bind_group` y `bg_aware_atlas_bind_group` no se recrean tras `atlas.clear()`
-- **Archivo:** `src/renderer/gpu.rs:new()`, `src/app/renderer.rs` (llamadas a `atlas.clear()`)
-- **Descripción:** Los bind groups `atlas_bind_group` y `bg_aware_atlas_bind_group` se crean en `GpuRenderer::new()` apuntando a la `wgpu::TextureView` inicial del atlas. Cuando `atlas.clear()` se llama (por atlas lleno), `clear()` recrea la textura y la view (`self.texture = Self::create_texture(device); self.view = ...`). Los bind groups del renderer siguen apuntando a la **view antigua** — en wgpu esto es una referencia a un recurso destruido. El comportamiento es undefined: puede renderizar basura, crashear el driver, o silenciosamente no renderizar nada.
-- **Fix:** Exponer un método `GpuRenderer::rebuild_atlas_bind_groups()` que recree `atlas_bind_group` y `bg_aware_atlas_bind_group` usando la view actual del atlas. Llamarlo inmediatamente después de cualquier `atlas.clear()`. Mismo fix para `lcd_atlas_bind_group` cuando `LcdGlyphAtlas::clear()` se llame.
-- **Severidad:** P1 — correctness bug: después de un `clear()` el renderer usa bind groups stale que apuntan a texturas destruidas.
-
----
 
 ### TD-MEM-04: `SwashCache` de cosmic-text crece indefinidamente sin límite
 - **Archivo:** `src/font/shaper.rs:TextShaper` (campo `swash_cache: SwashCache`)
@@ -202,7 +195,7 @@ Sesión de auditoría con objetivo declarado: **diagnosticar el consumo de 20 GB
 | ~~TD-MEM-05~~ | `word_cache` | ~~Miss storm periódico~~ | ~~resuelto~~ | ~~P1~~ |
 | TD-MEM-06 | `byte_to_col_buf` | Crece sin reducir | ~1-10 MB (según líneas largas) | P1 |
 | ~~TD-MEM-08~~ | `terminal_shell_ctxs` | ~~Leak por terminal cerrado~~ | ~~resuelto~~ | ~~P1~~ |
-| TD-MEM-03 | Bind groups stale | Correctness bug | N/A (crash/render roto) | P1 |
+| ~~TD-MEM-03~~ | Bind groups stale | ~~Correctness bug~~ | ~~resuelto~~ | ~~P1~~ |
 | TD-MEM-12 | Tokio tasks colgados | Tasks no cancelados | ~10-50 MB (según queries canceladas) | P2 |
 | TD-MEM-13 | Agent `api_messages` | Crece por round | ~10-50 MB por query con archivos grandes | P2 |
 

@@ -569,6 +569,51 @@ impl GpuRenderer {
     pub fn is_lcd_ready(&self) -> bool {
         self.lcd_ready
     }
+
+    /// Rebuild all atlas bind groups after atlas.clear() or lcd_atlas.clear().
+    ///
+    /// Both GlyphAtlas::clear() and LcdGlyphAtlas::clear() recreate the wgpu
+    /// Texture and TextureView. Any BindGroup created before the clear holds a
+    /// reference to the old (now destroyed) view, which is a wgpu correctness
+    /// violation and may silently produce garbage rendering or a driver crash.
+    ///
+    /// Call this immediately after any atlas clear, before the next render pass.
+    pub fn rebuild_atlas_bind_groups(&mut self) {
+        self.atlas_bind_group = make_atlas_bind_group(&self.device, &self.pipeline, &self.atlas);
+        self.bg_aware_atlas_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("atlas bg (bg-aware)"),
+            layout: &self.bg_aware_pipeline.atlas_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(self.atlas.texture_view()),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(self.atlas.sampler()),
+                },
+            ],
+        });
+        if self.lcd_ready {
+            if let (Some(pipeline), Some(atlas_rc)) = (&self.lcd_pipeline, &self.lcd_atlas) {
+                let atlas = atlas_rc.borrow();
+                self.lcd_atlas_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("LCD atlas bg"),
+                    layout: &pipeline.lcd_atlas_bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(atlas.texture_view()),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(atlas.sampler()),
+                        },
+                    ],
+                });
+            }
+        }
+    }
 }
 
 fn make_atlas_bind_group(
