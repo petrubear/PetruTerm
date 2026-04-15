@@ -547,8 +547,7 @@ impl ApplicationHandler<()> for App {
                     // ── Status bar ───────────────────────────────────────────────────────
                     if self.config.status_bar.enabled {
                         // Use cached CWD and exit code (TD-PERF-01, TD-PERF-02).
-                        // Both are refreshed in about_to_wait on PTY data and on terminal switch.
-                        self.ui.poll_git_branch(self.cached_cwd.as_deref());
+                        // Git branch is polled on an independent timer in about_to_wait (TD-PERF-19).
                         let leader_resize_mode = (self.input.leader_active
                             && self.input.modifiers.state().alt_key())
                             || self.input.resize_mode
@@ -618,6 +617,14 @@ impl ApplicationHandler<()> for App {
 
                     // ── GPU upload ──────────────────────────────────────────────────────
                     rc.last_instance_count = rc.instances.len();
+                    {
+                        use crate::renderer::cell::CellVertex;
+                        use crate::renderer::rounded_rect::RoundedRectInstance;
+                        let instance_bytes = rc.instances.len() * std::mem::size_of::<CellVertex>();
+                        let lcd_bytes = rc.lcd_instances.len() * std::mem::size_of::<CellVertex>();
+                        let rect_bytes = rc.rect_instances.len() * std::mem::size_of::<RoundedRectInstance>();
+                        rc.last_gpu_upload_bytes = instance_bytes + lcd_bytes + rect_bytes;
+                    }
                     rc.renderer.upload_rect_instances(&rc.rect_instances);
                     rc.renderer.set_overlay_start(overlay_start);
                     rc.renderer.upload_instances(&rc.instances, 0);
@@ -967,7 +974,8 @@ impl ApplicationHandler<()> for App {
         // and keeps last_pty_activity accurate for coalescing.
         let (data_ids, exited) = self.mux.poll_pty_events();
         if self.close_exited_terminals(exited) { event_loop.exit(); return; }
-        if !data_ids.is_empty() {
+        let had_pty_data = !data_ids.is_empty();
+        if had_pty_data {
             self.pending_pty_redraw = true;
             self.last_pty_activity = std::time::Instant::now();
             // Update per-terminal shell context only for terminals that fired (TD-PERF-01).
@@ -976,20 +984,53 @@ impl ApplicationHandler<()> for App {
             self.refresh_status_cache();
         }
 
-        if self.ui.poll_ai_events()       { if let Some(w) = &self.window { w.request_redraw(); } }
-        if self.ui.poll_ai_block_events() { if let Some(w) = &self.window { w.request_redraw(); } }
+        let had_ai = self.ui.poll_ai_events() || self.ui.poll_ai_block_events();
+        if had_ai { if let Some(w) = &self.window { w.request_redraw(); } }
         self.flush_pending_pty_run();
-        if self.input.update_cursor_blink() {
-            // Panel input cursor blinks — mark dirty so cached instances are rebuilt.
-            if self.ui.is_panel_visible() && self.ui.panel_focused {
-                self.ui.panel_mut().dirty = true;
+
+        // ── Independent git branch poll (TD-PERF-19) ────────────────────────
+        // Runs at most once per second, regardless of PTY/render activity.
+        // Removed from the render hot path (was called every RedrawRequested).
+        if self.config.status_bar.enabled
+            && self.ui.git_branch_last_poll.elapsed() >= std::time::Duration::from_secs(1)
+        {
+            self.ui.git_branch_last_poll = std::time::Instant::now();
+            let git_updated = self.ui.poll_git_branch(self.cached_cwd.as_deref());
+            if git_updated {
+                // Invalidate status bar key so it rebuilds on the next frame.
+                if let Some(rc) = &mut self.render_ctx { rc.status_bar_key = 0; }
+                if let Some(w) = &self.window { w.request_redraw(); }
             }
-            // AI block query cursor blinks when typing.
-            if self.ui.ai_block.is_typing() {
-                self.ui.ai_block.dirty = true;
-            }
-            if let Some(w) = &self.window { w.request_redraw(); }
         }
+
+        // ── Idle detection ───────────────────────────────────────────────────
+        // The frame is "idle" when there is no PTY data, no AI events, no active
+        // drag, no overlay, and no search bar open. When idle, we skip cursor blink
+        // entirely (many terminals do this) and use ControlFlow::Wait so the OS
+        // keeps the event loop dormant until a real event arrives.
+        let any_overlay = self.ui.is_panel_visible()
+            || self.ui.palette.visible
+            || self.ui.context_menu.visible
+            || self.ui.search_bar.visible
+            || self.ui.is_block_visible();
+        let any_drag = self.input.dragging_separator.is_some() || self.input.mouse_left_pressed;
+        let idle = !had_pty_data && !had_ai && !self.pending_pty_redraw && !any_overlay && !any_drag;
+
+        if !idle {
+            // Active: advance cursor blink as usual.
+            if self.input.update_cursor_blink() {
+                // Panel input cursor blinks — mark dirty so cached instances are rebuilt.
+                if self.ui.is_panel_visible() && self.ui.panel_focused {
+                    self.ui.panel_mut().dirty = true;
+                }
+                // AI block query cursor blinks when typing.
+                if self.ui.ai_block.is_typing() {
+                    self.ui.ai_block.dirty = true;
+                }
+                if let Some(w) = &self.window { w.request_redraw(); }
+            }
+        }
+        // When idle: skip blink entirely — saves a 530ms-periodic reshape + GPU upload.
 
         // PTY render coalescing: fire the deferred redraw once the PTY has been
         // quiet for 4ms. This window is long enough to catch Gemini/TUI "erase +
@@ -1005,13 +1046,19 @@ impl ApplicationHandler<()> for App {
             // else: WaitUntil below will wake us at pty_deadline to retry.
         }
 
-        let blink_deadline = self.input.cursor_last_blink + std::time::Duration::from_millis(530);
-        let wake = if self.pending_pty_redraw {
-            blink_deadline.min(pty_deadline)
+        if idle {
+            // Fully idle: let the OS park the thread until a real event arrives.
+            // winit will wake us for key presses, PTY data (via user_event), mouse, etc.
+            event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
         } else {
-            blink_deadline
-        };
-        event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(wake));
+            let blink_deadline = self.input.cursor_last_blink + std::time::Duration::from_millis(530);
+            let wake = if self.pending_pty_redraw {
+                blink_deadline.min(pty_deadline)
+            } else {
+                blink_deadline
+            };
+            event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(wake));
+        }
     }
 }
 

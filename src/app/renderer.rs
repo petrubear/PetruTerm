@@ -59,6 +59,8 @@ pub struct RenderContext {
     pub shape_cache_hits: u64,
     pub shape_cache_misses: u64,
     pub last_instance_count: usize,
+    /// Bytes written to GPU buffers in the current frame (instances + LCD + rects).
+    pub last_gpu_upload_bytes: usize,
 
     // ── Static-geometry caches (TD-PERF-08/09/10) ────────────────────────────
     // Scroll bar: ~50 CellVertex per frame, no HarfBuzz. Keyed by scroll state.
@@ -111,6 +113,7 @@ impl RenderContext {
             shape_cache_hits: 0,
             shape_cache_misses: 0,
             last_instance_count: 0,
+            last_gpu_upload_bytes: 0,
             scroll_bar_state: None,
             scroll_bar_cache: Vec::new(),
             tab_bar_key: 0,
@@ -1388,6 +1391,7 @@ impl RenderContext {
         let shape_hits = self.shape_cache_hits;
         let shape_misses = self.shape_cache_misses;
         let instance_count = self.last_instance_count;
+        let upload_kb = self.last_gpu_upload_bytes as f32 / 1024.0;
 
         // ── Build HUD text lines ─────────────────────────────────────────────
         let frame_fg = if avg_ms > 16.67 { WARN_FG } else { VALUE_FG };
@@ -1398,6 +1402,7 @@ impl RenderContext {
             (format!(" {:10} hits={} miss={} ({}%)", "shape", shape_hits, shape_misses, hit_pct), VALUE_FG),
             (format!(" {:10} {}", "instances", instance_count), VALUE_FG),
             (format!(" {:10} {:.1}%", "atlas", atlas_pct), VALUE_FG),
+            (format!(" {:10} {:.1} KB/frame", "upload", upload_kb), VALUE_FG),
         ];
 
         for (row, (text, fg)) in hud_lines.iter().enumerate() {

@@ -72,6 +72,11 @@ pub struct UiManager {
     pub git_branch_cache: Option<String>,
     /// Instant of the last git branch fetch, for TTL-based refresh.
     git_branch_fetched_at: Option<std::time::Instant>,
+    /// Independent wall-clock timer for git poll (TD-PERF-19): we call poll_git_branch
+    /// at most once per second, regardless of PTY/render activity.
+    pub git_branch_last_poll: std::time::Instant,
+    /// True while an async git fetch is in flight — prevents duplicate spawns (TD-PERF-19).
+    git_branch_in_flight: bool,
     /// Channel to receive async git branch results.
     git_tx: crossbeam_channel::Sender<String>,
     pub git_rx: crossbeam_channel::Receiver<String>,
@@ -132,6 +137,8 @@ impl UiManager {
             pending_pty_run: None,
             git_branch_cache: None,
             git_branch_fetched_at: None,
+            git_branch_last_poll: std::time::Instant::now(),
+            git_branch_in_flight: false,
             git_tx: git_tx_init,
             git_rx: git_rx_init,
             git_branch_cwd: None,
@@ -268,6 +275,7 @@ impl UiManager {
         while let Ok(branch) = self.git_rx.try_recv() {
             self.git_branch_cache = Some(branch);
             self.git_branch_fetched_at = Some(std::time::Instant::now());
+            self.git_branch_in_flight = false;
             updated = true;
         }
 
@@ -277,9 +285,10 @@ impl UiManager {
             .map(|t| t.elapsed() > std::time::Duration::from_secs(5))
             .unwrap_or(true);
 
-        if cwd_changed || ttl_expired {
+        if (cwd_changed || ttl_expired) && !self.git_branch_in_flight {
             if let Some(cwd_path) = cwd {
                 self.git_branch_cwd = Some(cwd_path.to_path_buf());
+                self.git_branch_in_flight = true;
                 let tx = self.git_tx.clone();
                 let cwd_owned = cwd_path.to_path_buf();
                 self.tokio_rt.spawn(async move {
