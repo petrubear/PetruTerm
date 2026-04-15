@@ -52,6 +52,9 @@ pub struct InputHandler {
     /// Rolling buffer of printable chars sent to the PTY since the last Enter/Ctrl-C.
     /// Used only for snippet Tab-trigger matching — cleared on newline, backspace trims.
     input_echo: String,
+    /// Timestamp of the last keypress that was forwarded to the terminal.
+    /// Used to measure input-to-pixel latency under RUST_LOG=petruterm=debug.
+    pub last_key_instant: Option<std::time::Instant>,
 }
 
 impl InputHandler {
@@ -82,6 +85,7 @@ impl InputHandler {
             pane_ratio_adjusted: false,
             resize_mode: false,
             input_echo: String::new(),
+            last_key_instant: None,
         }
     }
 
@@ -584,6 +588,7 @@ impl InputHandler {
 
             if let Some(terminal) = mux.active_terminal() {
                 terminal.scroll_to_bottom();
+                self.last_key_instant = Some(std::time::Instant::now());
                 terminal.write_input(&data);
             }
         }

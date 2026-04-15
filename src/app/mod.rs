@@ -40,6 +40,11 @@ pub struct App {
     /// (erase + redraw) are coalesced into a single frame, preventing flickering.
     pending_pty_redraw: bool,
     last_pty_activity: std::time::Instant,
+    /// Number of PTY events in the last batch, used for adaptive coalescing.
+    /// Small batches (≤2) are keyboard echo — skip coalescing for lower latency.
+    last_pty_batch_size: usize,
+    /// True when the window is occluded/minimized — skip render to save CPU/GPU.
+    window_occluded: bool,
 
     /// Cached CWD of the active shell (TD-PERF-02).
     /// Refreshed via proc_pidinfo only when PTY data arrives or terminal focus changes,
@@ -70,6 +75,8 @@ impl App {
             wakeup_proxy,
             pending_pty_redraw: false,
             last_pty_activity: std::time::Instant::now(),
+            last_pty_batch_size: 0,
+            window_occluded: false,
             cached_cwd: None,
             terminal_shell_ctxs: std::collections::HashMap::new(),
         }
@@ -297,11 +304,18 @@ impl ApplicationHandler<()> for App {
         // PTY data: mark pending but do NOT request_redraw immediately.
         // about_to_wait will fire the render after a short coalescing window (4ms),
         // ensuring multi-batch TUI updates (erase + redraw) are shown as one frame.
+        // Exception: small batches (≤2 events) are likely keyboard echo — render immediately.
         if !data_ids.is_empty() {
+            self.last_pty_batch_size = data_ids.len();
             self.pending_pty_redraw = true;
             self.last_pty_activity = std::time::Instant::now();
             for id in &data_ids { self.update_terminal_shell_ctx(*id); }
             self.refresh_status_cache();
+            // Adaptive coalescing: keyboard echo has small batches — skip the wait.
+            if data_ids.len() <= 2 {
+                self.pending_pty_redraw = false;
+                if let Some(w) = &self.window { w.request_redraw(); }
+            }
         }
 
         // AI events are low-frequency; render immediately.
@@ -345,7 +359,13 @@ impl ApplicationHandler<()> for App {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => { event_loop.exit(); }
+            WindowEvent::Occluded(occluded) => {
+                self.window_occluded = occluded;
+            }
             WindowEvent::RedrawRequested => {
+                // Skip rendering when the window is occluded or minimized.
+                if self.window_occluded { return; }
+
                 #[cfg(feature = "profiling")]
                 let _span = tracing::info_span!("redraw_frame").entered();
 
@@ -520,6 +540,9 @@ impl ApplicationHandler<()> for App {
                             // word_wrap() call inside the renderer (TD-PERF-05).
                             let msg_wrap_w = self.ui.panel().width_cols.saturating_sub(8) as usize;
                             self.ui.panel_mut().ensure_wrap_cache(msg_wrap_w);
+                            // Pre-build separator cache (TD-PERF-13): avoids "─".repeat() alloc per rebuild.
+                            let panel_cols = self.ui.panel().width_cols as usize;
+                            self.ui.panel_mut().separator(panel_cols);
                             rc.build_chat_panel_instances(
                                 self.ui.panel(),
                                 panel_focused,
@@ -631,6 +654,15 @@ impl ApplicationHandler<()> for App {
                     rc.renderer.set_cell_count(rc.instances.len());
                     rc.renderer.upload_lcd_instances(&rc.lcd_instances);
                     let _ = rc.renderer.render();
+
+                    // ── Input-to-pixel latency probe (RUST_LOG=petruterm=debug) ─────────
+                    // Only logged when PTY data arrived this frame (echo of a keypress).
+                    if !data_ids.is_empty() {
+                        if let Some(t) = self.input.last_key_instant.take() {
+                            let latency_ms = t.elapsed().as_secs_f32() * 1000.0;
+                            log::debug!("input-to-pixel: {:.1}ms", latency_ms);
+                        }
+                    }
 
                     // ── Frame time tracking for HUD ─────────────────────────────────────
                     let frame_ms = frame_start.elapsed().as_secs_f32() * 1000.0;
@@ -976,12 +1008,18 @@ impl ApplicationHandler<()> for App {
         if self.close_exited_terminals(exited) { event_loop.exit(); return; }
         let had_pty_data = !data_ids.is_empty();
         if had_pty_data {
+            self.last_pty_batch_size = data_ids.len();
             self.pending_pty_redraw = true;
             self.last_pty_activity = std::time::Instant::now();
             // Update per-terminal shell context only for terminals that fired (TD-PERF-01).
             // Refresh CWD for the active pane (TD-PERF-02).
             for id in &data_ids { self.update_terminal_shell_ctx(*id); }
             self.refresh_status_cache();
+            // Adaptive coalescing: small batches (≤2) are keyboard echo — skip the wait.
+            if data_ids.len() <= 2 {
+                self.pending_pty_redraw = false;
+                if let Some(w) = &self.window { w.request_redraw(); }
+            }
         }
 
         let had_ai = self.ui.poll_ai_events() || self.ui.poll_ai_block_events();
