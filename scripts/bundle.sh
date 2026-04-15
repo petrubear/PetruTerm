@@ -29,7 +29,9 @@ done
 # ── build ─────────────────────────────────────────────────────────────────────
 echo "==> Building PetruTerm ($PROFILE)..."
 if [ "$PROFILE" = "release" ]; then
-    cargo build --release --manifest-path "$ROOT/Cargo.toml"
+    # RUSTFLAGS: target-cpu=apple-m1 enables AMX, SHA3, and other M1 ISA extensions.
+    # Produces a binary optimised for Apple Silicon — NOT portable to Intel Macs.
+    RUSTFLAGS="-C target-cpu=apple-m1" cargo build --release --manifest-path "$ROOT/Cargo.toml"
     BINARY="$ROOT/target/release/petruterm"
 else
     cargo build --manifest-path "$ROOT/Cargo.toml"

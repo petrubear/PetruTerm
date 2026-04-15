@@ -89,6 +89,7 @@ impl Terminal {
             tx: tx_placeholder,
             wakeup: wakeup.clone(),
             direct_notifier: Arc::clone(&direct_notifier),
+            qos_set: Arc::new(std::sync::OnceLock::new()),
         };
 
         let term_config = TermConfig {

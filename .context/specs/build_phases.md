@@ -78,7 +78,7 @@
 - [ ] Rayon per-pane parallel build
 - [ ] Parallel row shaping en cache-miss storm
 - [ ] Lock-free PTY ring buffer (`rtrb` SPSC)
-- [ ] PTY reader thread pinned a efficiency core
+- [x] PTY reader thread steered to efficiency cores via `QOS_CLASS_UTILITY` (OnceLock, once per thread)
 
 ---
 
@@ -108,9 +108,9 @@
 ### Sub-phase H: Build & Release
 
 - [ ] PGO con workload representativo
-- [ ] `target-cpu=apple-m1` en `bundle.sh`
-- [ ] `release-native` profile en `.cargo/config.toml`
-- [ ] Lua bytecode cache
+- [x] `target-cpu=apple-m1` en `bundle.sh`
+- [x] `release-native` profile en `Cargo.toml` (`[profile.release-native]`)
+- [x] Lua bytecode cache (`~/.cache/petruterm/lua-bc/*.luac`, mtime-validated)
 - [ ] Config eager-load en paralelo con window creation
 
 ---

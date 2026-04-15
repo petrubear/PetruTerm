@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-04-10
-**Open Items:** 30
-**Critical (P0):** 0 | **P1:** 5 | **P2:** 16 | **P3:** 9
+**Last Updated:** 2026-04-15
+**Open Items:** 41
+**Critical (P0):** 0 | **P1:** 8 | **P2:** 21 | **P3:** 12
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -14,6 +14,213 @@
 | P1 | Significant impact on velocity or correctness | This sprint |
 | P2 | Moderate impact, workaround exists | This quarter |
 | P3 | Minor, address when convenient | Backlog |
+
+---
+
+## Auditoría de Memory Leaks — 2026-04-15
+
+Sesión de auditoría con objetivo declarado: **diagnosticar el consumo de 20 GB de RAM tras un día de uso continuo**. Se auditaron todos los módulos con crecimiento de memoria no acotado: renderer (atlas GPU), font/shaper (caches de glifos), term (scrollback, PTY), ui (chat panel), llm (streaming, agent), config (watcher) y app (estado global). Cada item incluye archivo, mecanismo de leak y fix propuesto.
+
+**Metodología:** lectura estática de todos los módulos fuente. Se identificaron estructuras de datos sin límite de capacidad, caches sin evicción, recursos no liberados al cerrar panes/tabs, y tareas tokio que pueden quedar colgadas.
+
+---
+
+## P1 — Alta prioridad (crecimiento ilimitado, impacto directo en RAM)
+
+### TD-MEM-01: `evict_cold()` en GlyphAtlas no reclaima espacio físico en la textura GPU
+- **Archivo:** `src/renderer/atlas.rs:evict_cold()`
+- **Descripción:** `evict_cold()` elimina entradas del `HashMap<CacheKey, AtlasEntry>` pero **no resetea `cursor_x`/`cursor_y`**. El espacio físico en la textura de 64 MiB (4096×4096 RGBA) no se recupera. Los glifos evictados se re-rasterizarán y se subirán a posiciones nuevas, llenando progresivamente la textura hasta que `upload()` devuelva `AtlasError::Full`. En ese punto solo `clear()` puede recuperar el espacio, pero `clear()` recrea la textura y requiere re-rasterizar todo el contenido visible (stutter visible). Con uso continuo de 24 h, el atlas se llena y se vacía cíclicamente, pero cada ciclo de `clear()` causa un pico de CPU.
+- **Impacto:** La textura de 64 MiB está siempre ocupada en VRAM. No es un leak de RAM del proceso, pero sí de VRAM. El problema real es que `evict_cold()` da una falsa sensación de que el espacio se recupera cuando no es así.
+- **Fix:** Implementar compactación real del atlas: al evictar, marcar regiones como libres y reutilizarlas para nuevos uploads. Alternativa más simple: cuando `evict_cold()` elimina >50% de las entradas, llamar a `clear()` y re-subir solo las entradas calientes (las que sobrevivieron la evicción). Esto convierte el `clear()` de "catastrófico" a "selectivo".
+- **Severidad:** P1 — la textura de 64 MiB nunca se reduce; `evict_cold()` es una ilusión de gestión de memoria.
+
+---
+
+### TD-MEM-02: `LcdGlyphAtlas` no tiene evicción — se llena y lanza error sin recuperación automática
+- **Archivo:** `src/renderer/lcd_atlas.rs:upload()`
+- **Descripción:** `LcdGlyphAtlas` (2048×2048 = 16 MiB) no tiene ningún mecanismo de evicción. Solo tiene `clear()`. Cuando el atlas se llena, `upload()` devuelve `Err("LCD glyph atlas is full")`. No hay código que llame a `clear()` automáticamente en respuesta a este error — el error se propaga y los glifos LCD dejan de renderizarse silenciosamente. Con uso continuo (muchos glifos únicos, cambios de fuente, múltiples tabs), el atlas se llena y el LCD AA queda roto hasta reiniciar.
+- **Fix:** Añadir el mismo mecanismo de evicción por época que tiene `GlyphAtlas`: campo `last_used: u64` en `LcdAtlasEntry`, `next_epoch()`, `evict_cold(max_age)`. Cuando `upload()` falla con `Full`, llamar a `evict_cold()` y reintentar. Si sigue lleno, llamar a `clear()` y re-subir las entradas calientes.
+- **Severidad:** P1 — el LCD AA se rompe silenciosamente tras uso prolongado.
+
+---
+
+### TD-MEM-03: `atlas_bind_group` y `bg_aware_atlas_bind_group` no se recrean tras `atlas.clear()`
+- **Archivo:** `src/renderer/gpu.rs:new()`, `src/app/renderer.rs` (llamadas a `atlas.clear()`)
+- **Descripción:** Los bind groups `atlas_bind_group` y `bg_aware_atlas_bind_group` se crean en `GpuRenderer::new()` apuntando a la `wgpu::TextureView` inicial del atlas. Cuando `atlas.clear()` se llama (por atlas lleno), `clear()` recrea la textura y la view (`self.texture = Self::create_texture(device); self.view = ...`). Los bind groups del renderer siguen apuntando a la **view antigua** — en wgpu esto es una referencia a un recurso destruido. El comportamiento es undefined: puede renderizar basura, crashear el driver, o silenciosamente no renderizar nada.
+- **Fix:** Exponer un método `GpuRenderer::rebuild_atlas_bind_groups()` que recree `atlas_bind_group` y `bg_aware_atlas_bind_group` usando la view actual del atlas. Llamarlo inmediatamente después de cualquier `atlas.clear()`. Mismo fix para `lcd_atlas_bind_group` cuando `LcdGlyphAtlas::clear()` se llame.
+- **Severidad:** P1 — correctness bug: después de un `clear()` el renderer usa bind groups stale que apuntan a texturas destruidas.
+
+---
+
+### TD-MEM-04: `SwashCache` de cosmic-text crece indefinidamente sin límite
+- **Archivo:** `src/font/shaper.rs:TextShaper` (campo `swash_cache: SwashCache`)
+- **Descripción:** `SwashCache` de la crate `cosmic-text` es un cache interno de imágenes rasterizadas de glifos. No tiene límite de tamaño documentado ni API de evicción pública. Con uso continuo (muchos glifos únicos, emoji, fallback fonts), el cache crece indefinidamente. Es el candidato más probable para el consumo de 20 GB tras 24 h: cada glifo único rasterizado a cada tamaño ocupa ~1-4 KB en el cache, y con miles de glifos únicos (código fuente, logs, emoji) el total puede ser varios GB.
+- **Fix:** Reemplazar `SwashCache` con una implementación propia que use `swash` directamente con un **LRU cache acotado en bytes** (no en número de entradas, ya que los glifos tienen tamaño variable: ~4.5 KB texto LCD, ~6 KB emoji). El límite se expresa en MB y es configurable en `perf.lua`:
+  ```lua
+  config.glyph_cache_mb = 50  -- default; rango recomendado: 20–200
+  ```
+  La implementación lleva un contador `used_bytes: usize` que se actualiza en cada insert/evict. Al insertar un glifo nuevo, si `used_bytes + glyph_size > limit_bytes`, se evictan entradas LRU hasta tener espacio. Con 50 MB el cache contiene ~10 700 entradas (mix típico), suficiente para cubrir el working set de una sesión de trabajo completa sin misses tras el warm-up inicial.
+- **Decisión de diseño:** Se eligió **50 MB como default** porque: (a) es insignificante en hardware moderno (Mac con 16-32 GB RAM), (b) cubre el working set completo de una sesión típica (~5 000-8 000 glifos únicos) con margen, (c) elimina prácticamente todos los cache misses después del primer pass sobre el contenido, y (d) es 400× menos que el leak actual. 100 MB solo aporta beneficio con uso intensivo de CJK o muchas fuentes de fallback simultáneas.
+- **Severidad:** P1 — candidato principal del leak de 20 GB. Sin límite de tamaño, crece con cada glifo único visto.
+- **Validación:** El cache puede crecer durante uso activo pero **no debe crecer cuando la terminal está idle**. Los únicos drivers de crecimiento en idle son: cursor blink (cada 530 ms), actualización del reloj en la status bar (cada 1 s), y git branch polling (cada ~5 s) — todos con un conjunto de glifos acotado y estable que se agota rápidamente. Para verificar el fix:
+  1. **Cota de tamaño:** el RSS del proceso no debe superar el valor de `config.glyph_cache_mb` (default 50 MB) atribuible al cache de glifos, independientemente del tiempo de sesión o variedad de glifos vistos.
+  2. **Idle no crece:** dejar la terminal idle 30 min (con status bar y cursor blink activos) y medir RSS al inicio y al final — debe ser estable (±1 MB).
+  3. **Uso intensivo acotado:** abrir un archivo de código grande con `less` o `bat`, hacer scroll completo (máximos glifos únicos), y verificar que el RSS no supera el límite configurado. Al repetir el scroll, el RSS no debe crecer (los glifos ya están en cache o se evictan los más fríos).
+  4. **Evicción no causa stutter:** cuando el LRU evicta entradas (cache lleno), el frame time no debe superar 16 ms — los glifos evictados se re-rasterizan bajo demanda sin pico visible.
+  5. **Configurabilidad:** cambiar `config.glyph_cache_mb = 20` en `perf.lua`, recargar config en caliente, y verificar que el cache se reduce al nuevo límite evictando entradas frías.
+
+---
+
+### TD-MEM-05: `word_cache` usa `clear()` total en lugar de LRU — causa miss storm
+- **Archivo:** `src/font/shaper.rs:word_cache_insert()`
+- **Descripción:** Cuando `word_cache` alcanza 512 entradas, se llama `self.word_cache.clear()` — se borra **todo** el cache de golpe. El siguiente frame debe re-shapear todas las palabras visibles a través de HarfBuzz, causando un pico de CPU (miss storm). Además, el límite de 512 entradas es arbitrario y puede ser demasiado pequeño para sesiones largas con vocabulario variado (código fuente con muchos identificadores únicos).
+- **Fix:** Reemplazar `HashMap` + `clear()` con `lru::LruCache<(u64, u32), ShapedRun>` con capacidad configurable (ej. 1024). La evicción LRU elimina solo la entrada menos usada, sin miss storm. La crate `lru` es `no_std`-compatible y tiene overhead mínimo.
+- **Severidad:** P1 — el `clear()` total causa stutter visible cada vez que el cache se llena.
+
+---
+
+### TD-MEM-06: `byte_to_col_buf` en `TextShaper` crece al tamaño máximo de línea visto y nunca se reduce
+- **Archivo:** `src/font/shaper.rs:shape_line_harfbuzz()` — `self.byte_to_col_buf.resize(n + 1, 0)`
+- **Descripción:** `byte_to_col_buf` es un `Vec<usize>` que se redimensiona con `resize()` al tamaño de la línea actual. `Vec::resize` solo crece, nunca reduce la capacidad. Si en algún momento se shapea una línea muy larga (ej. un log de 10 000 bytes en una sola línea), el buffer queda con esa capacidad para siempre. Con múltiples panes/tabs, cada `TextShaper` tiene su propio buffer. No es un leak grave por sí solo, pero contribuye al consumo base.
+- **Fix:** Añadir `self.byte_to_col_buf.shrink_to(MAX_REASONABLE_LINE)` después de cada uso si `n < capacity / 4` (shrink cuando la línea actual es mucho más corta que la capacidad). Alternativa: usar `Vec::with_capacity(n + 1)` local en lugar del buffer reutilizable — la alocación es barata para líneas cortas y evita el problema de capacidad permanente.
+- **Severidad:** P1 — menor por sí solo, pero se multiplica por el número de panes/tabs abiertos.
+
+---
+
+### TD-MEM-07: `messages` en `ChatPanel` crece indefinidamente — sin límite de historial
+- **Archivo:** `src/llm/chat_panel.rs:ChatPanel` (campo `messages: Vec<ChatMessage>`)
+- **Descripción:** El historial de conversación (`messages`) y su cache de wrapped lines (`wrapped_cache`) crecen sin límite. Cada mensaje del asistente puede contener cientos de líneas (respuestas largas, diffs, código). Con uso intensivo del panel de AI durante 24 h, el historial puede acumular decenas de MB. `wrapped_cache` crece en paralelo (un `Vec<String>` por mensaje). `attached_files` y `attached_file_chars` también crecen sin límite si el usuario adjunta muchos archivos.
+- **Fix:** (a) Limitar `messages` a las últimas N entradas (ej. 200 mensajes). Al truncar, eliminar también las entradas correspondientes de `wrapped_cache`. (b) Limitar `attached_files` a un máximo razonable (ej. 20 archivos). (c) Añadir un botón "Clear history" en la UI del panel.
+- **Severidad:** P1 — con uso intensivo del AI panel, el historial puede acumular decenas de MB.
+
+---
+
+### TD-MEM-08: `terminal_shell_ctxs` en `App` nunca se limpia al cerrar terminales
+- **Archivo:** `src/app/mod.rs:App` (campo `terminal_shell_ctxs: HashMap<usize, ShellContext>`)
+- **Descripción:** `terminal_shell_ctxs` acumula un `ShellContext` por cada terminal creado durante la sesión. Cuando un terminal se cierra (`close_specific`, `close_focused`), la entrada correspondiente en el mapa **no se elimina**. Con uso intensivo (abrir/cerrar muchos tabs/panes durante 24 h), el mapa crece indefinidamente. `ShellContext` contiene strings (CWD, último comando, etc.) — el leak es pequeño por entrada pero acumulativo.
+- **Fix:** En los handlers de cierre de terminal (`handle_pane_exit`, `close_specific`, `close_tab`), llamar a `self.terminal_shell_ctxs.remove(&terminal_id)` para limpiar la entrada correspondiente.
+- **Severidad:** P1 — leak directo y fácil de corregir. Cada terminal cerrado deja una entrada huérfana.
+
+---
+
+## P2 — Prioridad media
+
+### TD-MEM-09: Scrollback por pane sin límite efectivo en sesiones largas con muchos tabs
+- **Archivo:** `src/term/mod.rs:Terminal::new()` — `scrolling_history: config.scrollback_lines`
+- **Descripción:** Cada `Terminal` tiene su propio scrollback buffer gestionado por `alacritty_terminal`. Con el default de 10 000 líneas y ~200 bytes/línea, cada terminal ocupa ~2 MB de scrollback. Con 10 tabs × 2 panes = 20 terminales, son ~40 MB solo de scrollback. Con `scrollback_lines = 50000` (valor que el README sugiere como ejemplo), son 200 MB. En sesiones de 24 h con muchos tabs abiertos, el scrollback es el mayor consumidor de RAM del proceso.
+- **Fix:** (a) Reducir el default de `scrollback_lines` de 10 000 a 5 000. (b) Documentar el impacto de memoria en `perf.lua`. (c) Implementar un límite global de scrollback total (ej. 100 MB) distribuido entre los terminales activos, reduciendo el límite por terminal cuando hay muchos abiertos.
+- **Severidad:** P2 — no es un leak sino un diseño con alto consumo base. Configurable por el usuario.
+
+---
+
+### TD-MEM-10: `file_picker_items` no se limpia al cerrar el file picker
+- **Archivo:** `src/llm/chat_panel.rs:close_file_picker()`
+- **Descripción:** `close_file_picker()` solo pone `file_picker_open = false` pero no limpia `file_picker_items`. El `Vec<PathBuf>` con todos los archivos escaneados del CWD permanece en memoria hasta la próxima apertura del picker (que lo reemplaza). En proyectos grandes (monorepos con miles de archivos), este Vec puede ocupar varios MB innecesariamente mientras el picker está cerrado.
+- **Fix:** En `close_file_picker()`, añadir `self.file_picker_items.clear(); self.file_picker_items.shrink_to_fit();` para liberar la memoria inmediatamente al cerrar.
+- **Severidad:** P2 — menor pero fácil de corregir.
+
+---
+
+### TD-MEM-11: `filtered_picker_items()` crea `SkimMatcherV2` en cada llamada (cada frame con picker abierto)
+- **Archivo:** `src/llm/chat_panel.rs:filtered_picker_items()`
+- **Descripción:** `filtered_picker_items()` instancia `SkimMatcherV2::default()` en cada llamada. Esta función se llama en cada frame mientras el file picker está abierto (para renderizar la lista filtrada). `SkimMatcherV2` tiene un costo de inicialización no trivial y aloca internamente. Son decenas de alocaciones/liberaciones por segundo mientras el picker está abierto.
+- **Fix:** Cachear el matcher como campo de `ChatPanel` (`matcher: SkimMatcherV2`) inicializado una sola vez en `new()`. El matcher es stateless entre queries, por lo que puede reutilizarse sin problema.
+- **Severidad:** P2 — alocaciones innecesarias en el render loop.
+
+---
+
+### TD-MEM-12: Tokio task de streaming LLM puede quedar colgada si el usuario cierra el panel
+- **Archivo:** `src/app/ui.rs` (spawn del task de streaming), `src/llm/openrouter.rs:stream()`
+- **Descripción:** Cuando el usuario inicia una query al LLM, se spawnea un tokio task que consume el `TokenStream` (conexión HTTP SSE abierta). Si el usuario cierra el panel durante el streaming, el task continúa ejecutándose hasta que el stream se agota o el timeout de 120 s expira. Durante ese tiempo, la conexión HTTP permanece abierta y el task ocupa memoria (buffer de tokens, estado del stream). Con múltiples queries canceladas, pueden acumularse varios tasks colgados.
+- **Fix:** Usar `tokio::task::JoinHandle` + `CancellationToken` (de la crate `tokio-util`). Al cerrar el panel o iniciar una nueva query, cancelar el token del task anterior. El task debe hacer `select!` entre el stream y el token de cancelación para terminar limpiamente.
+- **Severidad:** P2 — en uso normal (una query a la vez) el impacto es bajo, pero con uso intensivo puede acumular tasks y conexiones.
+
+---
+
+### TD-MEM-13: `api_messages` en el agent loop crece con cada tool call round
+- **Archivo:** `src/llm/tools.rs` (función `agent_step` o equivalente)
+- **Descripción:** El agent loop acumula `api_messages: Vec<Value>` con cada round de tool calls (hasta 10 rounds). Cada round agrega el mensaje del asistente + los resultados de las tools. Con archivos grandes adjuntos (ej. `ReadFile` de un archivo de 100 KB) y 10 rounds, el Vec puede acumular varios MB de JSON. Este Vec se crea por query y se descarta al terminar, pero durante la query ocupa memoria proporcional al número de rounds × tamaño de los resultados.
+- **Fix:** (a) Limitar el tamaño de los resultados de `ReadFile` a N caracteres (ej. 50 000) con truncación explícita. (b) Limitar el número de rounds a 5 en lugar de 10. (c) Usar streaming JSON en lugar de acumular todo en memoria (más complejo).
+- **Severidad:** P2 — impacto proporcional al uso del AI agent con archivos grandes.
+
+---
+
+### TD-MEM-14: `ConfigWatcher` usa `mpsc::channel()` unbounded — puede acumular eventos
+- **Archivo:** `src/config/watcher.rs:ConfigWatcher::new()`
+- **Descripción:** El watcher usa `std::sync::mpsc::channel()` (unbounded). Si el filesystem genera muchos eventos rápidamente (ej. un editor que guarda con `atomic_save` generando 3-5 eventos por guardado, o un `git checkout` que toca muchos archivos `.lua`), el canal puede acumular cientos de eventos antes de que `poll()` los drene. `poll()` drena todos pero solo retorna el último, por lo que los eventos intermedios se descartan — el canal actúa como buffer innecesario.
+- **Fix:** Usar `mpsc::sync_channel(1)` (bounded con capacidad 1) con `try_send` en el closure del watcher. Si el canal ya tiene un evento pendiente, descartar el nuevo (ya hay una notificación de cambio pendiente). Esto elimina el buffer ilimitado y reduce la presión de memoria.
+- **Severidad:** P2 — menor en uso normal, pero puede acumular en escenarios de muchos cambios de filesystem.
+
+---
+
+### TD-MEM-19: Cursor blink, reloj y git polling corren aunque la ventana no tenga foco
+- **Archivo:** `src/app/mod.rs` (cursor blink timer), `src/app/ui.rs` (status bar clock, `poll_git_branch`)
+- **Descripción:** Los tres timers periódicos corren continuamente sin importar si la ventana tiene foco o si la máquina está suspendida. Esto causa redraws innecesarios (~2/s por blink + 1/s por reloj + 1/5s por git) que presionan el `SwashCache` (TD-MEM-04) con misses de glifos del reloj y la status bar, y mantienen el GPU activo sin razón. En una sesión de 8 h con la ventana en background, son ~60 000 redraws evitables.
+- **Fix:**
+  1. Escuchar `WindowEvent::Focused(bool)` de winit y guardar `window_focused: bool` en `App`.
+  2. Cuando `window_focused = false`: no procesar ticks de cursor blink, no disparar redraw por el reloj, no spawnear `poll_git_branch`.
+  3. Cambiar `ControlFlow` a `Wait` cuando la ventana no tiene foco y no hay PTY activo escribiendo — el event loop se suspende hasta el próximo evento real en lugar de correr a 60 fps.
+  4. Al recuperar el foco (`Focused(true)`): forzar un redraw inmediato para actualizar el reloj y mostrar el cursor en estado visible (no en fase "apagado" del blink).
+  5. Para sleep/wake: no se requiere manejo especial — los timers de tokio se pausan con el system clock durante el sleep; al despertar, winit emite `Resumed` y todo vuelve a arrancar.
+- **Severidad:** P2 — elimina decenas de miles de redraws evitables en sesiones largas con la ventana en background; reduce la presión sobre el `SwashCache` en idle.
+- **Validación:**
+  1. Con la ventana en background, medir CPU usage de PetruTerm con `Activity Monitor` — debe ser 0% (o cercano) si no hay PTY activo.
+  2. El `SwashCache` no debe crecer mientras la ventana está en background.
+  3. Al recuperar el foco, el reloj muestra la hora correcta en el primer frame y el cursor aparece visible.
+
+---
+
+## P3 — Prioridad baja
+
+### TD-MEM-15: `FreeTypeCmapLookup` mantiene `FT_Library` + `FT_Face` por `TextShaper`
+- **Archivo:** `src/font/shaper.rs:FreeTypeCmapLookup`
+- **Descripción:** Cada `TextShaper` crea una instancia de `FreeTypeCmapLookup` que mantiene un `FT_Library` y un `FT_Face` en memoria durante toda la vida del shaper. El `Drop` impl los libera correctamente. El problema es que si se crean múltiples `TextShaper` (ej. uno por pane con fuentes diferentes), cada uno tiene su propia instancia de FreeType. En la práctica hay un solo `TextShaper` global, por lo que el impacto es mínimo.
+- **Fix:** Si en el futuro se crean múltiples shapers, compartir una única instancia de `FreeTypeCmapLookup` via `Arc<Mutex<...>>` o `Rc<RefCell<...>>`.
+- **Severidad:** P3 — impacto mínimo con la arquitectura actual (un solo shaper).
+
+---
+
+### TD-MEM-16: `ascii_glyph_cache` es un array fijo de 128 `u32` — OK pero documentar
+- **Archivo:** `src/font/shaper.rs:TextShaper` (campo `ascii_glyph_cache: [u32; 128]`)
+- **Descripción:** El cache ASCII es un array de tamaño fijo (512 bytes). No es un problema de memoria, pero si en el futuro se añaden más rangos (ej. Latin Extended, Cyrillic), el array podría crecer. Documentar el límite explícitamente.
+- **Fix:** Añadir un comentario `// Fixed-size: 512 bytes. Extend to HashMap if non-ASCII fast paths are needed.`
+- **Severidad:** P3 — documentación, no un bug.
+
+---
+
+### TD-MEM-17: `streaming_buf` en `ChatPanel` no se limpia si el panel se cierra durante streaming
+- **Archivo:** `src/llm/chat_panel.rs:close()`
+- **Descripción:** `close()` solo pone `state = Hidden` pero no limpia `streaming_buf`. Si el usuario cierra el panel mientras el LLM está streamando, `streaming_buf` retiene todos los tokens recibidos hasta ese momento. Al reabrir el panel, `streaming_buf` aún contiene el contenido parcial de la query anterior.
+- **Fix:** En `close()`, añadir `self.streaming_buf.clear();` para liberar la memoria y evitar mostrar contenido stale al reabrir.
+- **Severidad:** P3 — menor, pero causa confusión UX al reabrir el panel.
+
+---
+
+### TD-MEM-18: `separator_cache` y `thin_separator_cache` no se liberan al cerrar el panel
+- **Archivo:** `src/llm/chat_panel.rs:ChatPanel` (campos `separator_cache`, `thin_separator_cache`)
+- **Descripción:** Los separadores cacheados son strings de longitud proporcional al ancho del panel (típicamente ~50 chars). Se reconstruyen solo cuando el ancho cambia. No es un problema de memoria significativo, pero si el panel se cierra y no se reabre, los strings permanecen en memoria innecesariamente.
+- **Fix:** En `close()`, opcionalmente limpiar los caches de separadores. Impacto mínimo (~100 bytes).
+- **Severidad:** P3 — negligible.
+
+---
+
+## Resumen de impacto estimado
+
+| ID | Módulo | Tipo | RAM estimada tras 24 h | Prioridad |
+|----|--------|------|------------------------|-----------|
+| TD-MEM-04 | `SwashCache` | Crecimiento ilimitado | **~10-15 GB** (candidato principal) | P1 |
+| TD-MEM-09 | Scrollback | Alto consumo base | ~40-200 MB (según tabs) | P2 |
+| TD-MEM-07 | Chat history | Crecimiento ilimitado | ~10-100 MB (según uso AI) | P1 |
+| TD-MEM-01 | GlyphAtlas VRAM | No reclaima espacio | 64 MiB VRAM permanente | P1 |
+| TD-MEM-02 | LcdGlyphAtlas | Sin evicción | 16 MiB VRAM + LCD roto | P1 |
+| TD-MEM-05 | `word_cache` | Miss storm periódico | ~5-10 MB + CPU spike | P1 |
+| TD-MEM-06 | `byte_to_col_buf` | Crece sin reducir | ~1-10 MB (según líneas largas) | P1 |
+| TD-MEM-08 | `terminal_shell_ctxs` | Leak por terminal cerrado | ~1 MB (según tabs abiertos/cerrados) | P1 |
+| TD-MEM-03 | Bind groups stale | Correctness bug | N/A (crash/render roto) | P1 |
+| TD-MEM-12 | Tokio tasks colgados | Tasks no cancelados | ~10-50 MB (según queries canceladas) | P2 |
+| TD-MEM-13 | Agent `api_messages` | Crece por round | ~10-50 MB por query con archivos grandes | P2 |
+
+**Causa más probable del consumo de 20 GB:** `SwashCache` (TD-MEM-04) combinado con scrollback alto (TD-MEM-09) y chat history sin límite (TD-MEM-07). Atacar TD-MEM-04 primero.
 
 ---
 
@@ -226,12 +433,6 @@ Sesión de auditoría completa con objetivo declarado: **hacer de PetruTerm el t
 
 ---
 
-### TD-PERF-27: Profile release sin `target-cpu=native` para builds locales
-- **Archivo:** `Cargo.toml:89-94`
-- **Descripción:** `[profile.release]` tiene `lto = true`, `codegen-units = 1`, `strip = true` — excelente para binarios distribuidos. Pero no hay un perfil `release-native` con `target-cpu=native` que habilite SIMD específico del host (AVX-512/NEON avanzado) para los dev builds locales donde no importa la portabilidad.
-- **Fix:** Añadir `.cargo/config.toml` con un alias o un `[profile.release-native]` que herede de release y exporte `rustflags = ["-C", "target-cpu=native"]`. Usar para benchmarks locales.
-
----
 
 ### TD-PERF-28: Log macros con formato evaluado antes del level filter
 - **Archivo:** varios (`src/app/mod.rs:389, 294, 325` etc.)

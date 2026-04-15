@@ -8,6 +8,8 @@ use alacritty_terminal::sync::FairMutex;
 use crossbeam_channel::Sender;
 use std::sync::{Arc, OnceLock};
 use winit::event_loop::EventLoopProxy;
+#[cfg(target_os = "macos")]
+use libc::{self, qos_class_t::QOS_CLASS_UTILITY};
 
 use crate::config::Config;
 use dirs;
@@ -15,6 +17,16 @@ use dirs;
 impl EventListener for PtyEventProxy {
     fn send_event(&self, event: alacritty_terminal::event::Event) {
         use alacritty_terminal::event::Event;
+
+        // Lower the PTY I/O thread to QOS_CLASS_UTILITY (efficiency cores) exactly once.
+        // send_event is always called from the alacritty_terminal background I/O thread,
+        // so this OnceLock fires on the first event and never again.
+        #[cfg(target_os = "macos")]
+        self.qos_set.get_or_init(|| {
+            // SAFETY: pthread_set_qos_class_self_np is safe to call from any thread.
+            // QOS_CLASS_UTILITY steers the thread towards efficiency cores on Apple Silicon.
+            unsafe { libc::pthread_set_qos_class_self_np(QOS_CLASS_UTILITY, 0); }
+        });
 
         // PtyWrite responses (cursor position, DA, DECRQSS, etc.) must be forwarded
         // to the PTY immediately — on the background thread, without going through the
@@ -69,11 +81,14 @@ pub enum PtyEvent {
 /// `direct_notifier` is set once after the PTY event loop is created and is used
 /// to forward PtyWrite responses (cursor position, DA, etc.) directly to the PTY
 /// without a main-thread round-trip.
+///
+/// `qos_set` ensures the QoS class is lowered exactly once on the PTY I/O thread.
 #[derive(Clone)]
 pub struct PtyEventProxy {
     pub tx: Sender<PtyEvent>,
     pub wakeup: EventLoopProxy<()>,
     pub direct_notifier: Arc<OnceLock<Notifier>>,
+    pub(crate) qos_set: Arc<OnceLock<()>>,
 }
 
 use std::any::Any;
@@ -117,7 +132,12 @@ impl Pty {
         working_directory: Option<std::path::PathBuf>,
     ) -> Result<Self> {
         let (tx, rx) = crossbeam_channel::unbounded::<PtyEvent>();
-        let proxy = PtyEventProxy { tx, wakeup, direct_notifier: Arc::clone(&direct_notifier) };
+        let proxy = PtyEventProxy {
+            tx,
+            wakeup,
+            direct_notifier: Arc::clone(&direct_notifier),
+            qos_set: Arc::new(OnceLock::new()),
+        };
 
         let mut env = std::collections::HashMap::new();
         env.insert("TERM".into(),          "xterm-256color".into());

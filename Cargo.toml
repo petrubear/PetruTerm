@@ -115,3 +115,11 @@ harness = false
 
 [profile.dev]
 opt-level = 1
+
+# Local-only profile with native CPU optimisations.
+# Use: cargo build --profile release-native
+# WARNING: the resulting binary is NOT portable across machines.
+# To avoid hard-coding the CPU target, pass the rustflag at the command line:
+#   RUSTFLAGS="-C target-cpu=native" cargo build --profile release-native
+[profile.release-native]
+inherits = "release"

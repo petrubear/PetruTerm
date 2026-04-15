@@ -2,6 +2,9 @@ use anyhow::Result;
 use mlua::prelude::*;
 use mlua::StdLib;
 use std::path::Path;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use dirs;
 
 use super::schema::{ColorScheme, Config, TitleBarStyle};
 
@@ -26,6 +29,11 @@ fn config_stdlib() -> StdLib {
 }
 
 /// Load and evaluate a Lua config file, returning a resolved Config.
+///
+/// Bytecode cache: compiled Lua is stored at `~/.cache/petruterm/lua-bc/{hash}.luac`.
+/// The cache is reused when its mtime is >= the source file's mtime.
+/// On any error reading or writing the cache the loader silently falls back to
+/// compiling from source, so this is always a transparent optimisation.
 pub fn load_config(path: &Path) -> Result<Config> {
     let lua = Lua::new_with(config_stdlib(), LuaOptions::default())
         .map_err(|e| anyhow::anyhow!("Lua VM init error: {e}"))?;
@@ -35,13 +43,89 @@ pub fn load_config(path: &Path) -> Result<Config> {
     let config_src = std::fs::read_to_string(path)
         .map_err(|e| anyhow::anyhow!("Failed to read config {}: {e}", path.display()))?;
 
-    let config_table: LuaTable = lua
-        .load(&config_src)
-        .set_name("config.lua")
-        .eval()
+    // --- bytecode cache ---------------------------------------------------
+    let config_table: LuaTable = load_or_compile_config(&lua, path, &config_src)
         .map_err(|e| anyhow::anyhow!("Lua eval error in {}: {e}", path.display()))?;
+    // ----------------------------------------------------------------------
 
     table_to_config(config_table).map_err(|e| anyhow::anyhow!("Config parse error: {e}"))
+}
+
+/// Compute a stable u64 hash of a path string.
+fn hash_path(path: &Path) -> u64 {
+    let mut h = DefaultHasher::new();
+    path.to_string_lossy().hash(&mut h);
+    h.finish()
+}
+
+/// Return the path to `~/.cache/petruterm/lua-bc/{hash}.luac`.
+fn bytecode_cache_path(src_path: &Path) -> Option<std::path::PathBuf> {
+    let cache_dir = dirs::cache_dir()?.join("petruterm").join("lua-bc");
+    Some(cache_dir.join(format!("{:016x}.luac", hash_path(src_path))))
+}
+
+/// Get the mtime of a file as a `SystemTime`, returns `None` on any error.
+fn mtime(path: &Path) -> Option<std::time::SystemTime> {
+    std::fs::metadata(path).ok()?.modified().ok()
+}
+
+/// Try to load bytecode from cache; compile from source and cache on miss.
+/// On any cache I/O error, silently falls back to fresh compilation.
+fn load_or_compile_config(
+    lua: &Lua,
+    src_path: &Path,
+    src: &str,
+) -> LuaResult<LuaTable> {
+    // Attempt to use bytecode cache.
+    if let Some(cache_path) = bytecode_cache_path(src_path) {
+        let src_mtime = mtime(src_path);
+        let cache_mtime = mtime(&cache_path);
+
+        // Cache hit: cache exists and is at least as new as the source.
+        let use_cache = match (src_mtime, cache_mtime) {
+            (Some(sm), Some(cm)) => cm >= sm,
+            _ => false,
+        };
+
+        if use_cache {
+            if let Ok(bytecode) = std::fs::read(&cache_path) {
+                match lua.load(&bytecode[..]).set_name("config.lua").eval::<LuaTable>() {
+                    Ok(t) => {
+                        log::debug!("Loaded Lua config from bytecode cache: {}", cache_path.display());
+                        return Ok(t);
+                    }
+                    Err(e) => {
+                        log::warn!("Bytecode cache invalid, recompiling: {e}");
+                        // Fall through to recompile.
+                    }
+                }
+            }
+        }
+
+        // Cache miss or stale — compile from source and store bytecode.
+        let func: LuaFunction = lua.load(src).set_name("config.lua").into_function()?;
+        // dump(strip=true) removes debug info (line numbers, local names) for smaller cache.
+        let bytecode: Vec<u8> = func.dump(true);
+
+        // Evaluate the function to get the config table.
+        let config_table: LuaTable = func.call(())?;
+
+        // Write cache asynchronously-ish: ignore errors so a read-only FS never breaks loading.
+        if let Some(parent) = cache_path.parent() {
+            if std::fs::create_dir_all(parent).is_ok() {
+                if let Err(e) = std::fs::write(&cache_path, &bytecode) {
+                    log::warn!("Failed to write Lua bytecode cache {}: {e}", cache_path.display());
+                } else {
+                    log::debug!("Cached Lua bytecode: {}", cache_path.display());
+                }
+            }
+        }
+
+        Ok(config_table)
+    } else {
+        // No cache dir available — compile directly.
+        lua.load(src).set_name("config.lua").eval()
+    }
 }
 
 /// Evaluate a Lua config from embedded source (used for defaults).
