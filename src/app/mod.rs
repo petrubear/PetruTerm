@@ -405,14 +405,40 @@ impl ApplicationHandler<()> for App {
                 if let Some(rc) = &mut self.render_ctx {
                     // Advance epoch once per frame so LRU eviction can age unused entries.
                     rc.renderer.atlas.next_epoch();
+                    if let Some(lcd) = rc.renderer.get_lcd_atlas() { lcd.borrow_mut().next_epoch(); }
 
-                    // Proactive eviction: when the atlas is 90% full, drop entries not
+                    // Proactive eviction: when the main atlas is 90% full, drop entries not
                     // touched in the last 60 frames (~1 second at 60fps).
                     if rc.renderer.atlas.is_near_full() {
                         let evicted = rc.renderer.atlas.evict_cold(60);
                         if evicted > 0 {
                             rc.clear_all_row_caches();
                             log::debug!("Atlas eviction: removed {} stale glyphs", evicted);
+                            // evict_cold() removes logical entries but the physical cursor
+                            // does not move back (shelf packing is append-only). If the
+                            // cursor is still >75% of the atlas height, a new upload would
+                            // hit AtlasError::Full within a few frames anyway. Clear now
+                            // so the retry frame starts with a fully empty atlas (TD-MEM-01).
+                            if rc.renderer.atlas.cursor_fill_ratio() > 0.75 {
+                                rc.renderer.atlas.clear(&rc.renderer.device());
+                                if let Some(lcd) = rc.renderer.get_lcd_atlas() {
+                                    lcd.borrow_mut().clear(&rc.renderer.device());
+                                    rc.shaper.clear_lcd_rasterizer_cache();
+                                }
+                                rc.renderer.rebuild_atlas_bind_groups();
+                                rc.atlas_generation += 1;
+                                log::debug!("Atlas: cursor still high after eviction — preemptive clear");
+                            }
+                        }
+                    }
+
+                    // Proactive eviction for the LCD atlas (TD-MEM-02).
+                    if let Some(lcd) = rc.renderer.get_lcd_atlas() {
+                        if lcd.borrow().is_near_full() {
+                            let evicted = lcd.borrow_mut().evict_cold(60);
+                            if evicted > 0 {
+                                log::debug!("LCD atlas: evicted {} cold glyphs", evicted);
+                            }
                         }
                     }
 
@@ -457,9 +483,12 @@ impl ApplicationHandler<()> for App {
                     if let Err(crate::renderer::atlas::AtlasError::Full) = render_result {
                         // Atlas full — clear everything and retry.
                         rc.renderer.atlas.clear(&rc.renderer.device());
-                        if let Some(atlas) = rc.renderer.get_lcd_atlas() { atlas.borrow_mut().clear(&rc.renderer.device()); }
+                        if let Some(atlas) = rc.renderer.get_lcd_atlas() {
+                            atlas.borrow_mut().clear(&rc.renderer.device());
+                            // LCD atlas clear invalidates the rasterizer's local cache (TD-MEM-02).
+                            rc.shaper.clear_lcd_rasterizer_cache();
+                        }
                         // Bind groups held stale wgpu TextureViews after clear() (TD-MEM-03).
-                        // Rebuild them before the next render pass.
                         rc.renderer.rebuild_atlas_bind_groups();
                         rc.clear_all_row_caches();
                         rc.atlas_generation += 1;

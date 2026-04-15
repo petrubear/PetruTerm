@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-04-15
-**Open Items:** 38
-**Critical (P0):** 0 | **P1:** 5 | **P2:** 21 | **P3:** 12
+**Open Items:** 36
+**Critical (P0):** 0 | **P1:** 3 | **P2:** 21 | **P3:** 12
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -27,7 +27,7 @@ Sesión de auditoría con objetivo declarado: **diagnosticar el consumo de 20 GB
 
 ## P1 — Alta prioridad (crecimiento ilimitado, impacto directo en RAM)
 
-### TD-MEM-01: `evict_cold()` en GlyphAtlas no reclaima espacio físico en la textura GPU
+### ~~TD-MEM-01~~: `evict_cold()` en GlyphAtlas no reclaima espacio físico — RESUELTO
 - **Archivo:** `src/renderer/atlas.rs:evict_cold()`
 - **Descripción:** `evict_cold()` elimina entradas del `HashMap<CacheKey, AtlasEntry>` pero **no resetea `cursor_x`/`cursor_y`**. El espacio físico en la textura de 64 MiB (4096×4096 RGBA) no se recupera. Los glifos evictados se re-rasterizarán y se subirán a posiciones nuevas, llenando progresivamente la textura hasta que `upload()` devuelva `AtlasError::Full`. En ese punto solo `clear()` puede recuperar el espacio, pero `clear()` recrea la textura y requiere re-rasterizar todo el contenido visible (stutter visible). Con uso continuo de 24 h, el atlas se llena y se vacía cíclicamente, pero cada ciclo de `clear()` causa un pico de CPU.
 - **Impacto:** La textura de 64 MiB está siempre ocupada en VRAM. No es un leak de RAM del proceso, pero sí de VRAM. El problema real es que `evict_cold()` da una falsa sensación de que el espacio se recupera cuando no es así.
@@ -36,7 +36,7 @@ Sesión de auditoría con objetivo declarado: **diagnosticar el consumo de 20 GB
 
 ---
 
-### TD-MEM-02: `LcdGlyphAtlas` no tiene evicción — se llena y lanza error sin recuperación automática
+### ~~TD-MEM-02~~: `LcdGlyphAtlas` sin evicción — RESUELTO
 - **Archivo:** `src/renderer/lcd_atlas.rs:upload()`
 - **Descripción:** `LcdGlyphAtlas` (2048×2048 = 16 MiB) no tiene ningún mecanismo de evicción. Solo tiene `clear()`. Cuando el atlas se llena, `upload()` devuelve `Err("LCD glyph atlas is full")`. No hay código que llame a `clear()` automáticamente en respuesta a este error — el error se propaga y los glifos LCD dejan de renderizarse silenciosamente. Con uso continuo (muchos glifos únicos, cambios de fuente, múltiples tabs), el atlas se llena y el LCD AA queda roto hasta reiniciar.
 - **Fix:** Añadir el mismo mecanismo de evicción por época que tiene `GlyphAtlas`: campo `last_used: u64` en `LcdAtlasEntry`, `next_epoch()`, `evict_cold(max_age)`. Cuando `upload()` falla con `Full`, llamar a `evict_cold()` y reintentar. Si sigue lleno, llamar a `clear()` y re-subir las entradas calientes.

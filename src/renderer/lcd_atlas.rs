@@ -3,10 +3,23 @@ use std::collections::HashMap;
 
 use crate::font::freetype_lcd::LcdAtlasEntry;
 
+/// Internal cache entry that pairs the atlas location with an LRU epoch stamp.
+struct LcdCacheEntry {
+    entry: LcdAtlasEntry,
+    last_used: u64,
+}
+
 /// GPU atlas for LCD subpixel glyphs (3× horizontal resolution).
 ///
 /// Glyphs are packed identically to GlyphAtlas but use a separate texture
 /// so LCD rendering can use a dedicated shader pipeline.
+///
+/// ## Eviction strategy
+/// Uses the same epoch-based scheme as `GlyphAtlas`: callers advance the epoch
+/// once per frame via `next_epoch()`. `get_and_touch()` marks entries as warm.
+/// `evict_cold(max_age)` removes stale entries from the logical cache.
+/// When the physical cursor is near the atlas boundary, `is_near_full()` signals
+/// that a caller-driven `clear()` is needed.
 pub struct LcdGlyphAtlas {
     texture: wgpu::Texture,
     view: wgpu::TextureView,
@@ -16,7 +29,9 @@ pub struct LcdGlyphAtlas {
     cursor_x: u32,
     cursor_y: u32,
     shelf_height: u32,
-    cache: HashMap<u64, LcdAtlasEntry>,
+    cache: HashMap<u64, LcdCacheEntry>,
+    /// Current frame epoch. Incremented by callers once per frame via `next_epoch()`.
+    epoch: u64,
 }
 
 impl LcdGlyphAtlas {
@@ -58,11 +73,41 @@ impl LcdGlyphAtlas {
             cursor_y: Self::PADDING,
             shelf_height: 0,
             cache: HashMap::new(),
+            epoch: 0,
         }
     }
 
-    pub fn get(&self, key: u64) -> Option<LcdAtlasEntry> {
-        self.cache.get(&key).copied()
+    /// Advance to the next frame epoch. Call once per rendered frame.
+    pub fn next_epoch(&mut self) {
+        self.epoch = self.epoch.saturating_add(1);
+    }
+
+    /// Look up a cached glyph and mark it as used in the current epoch.
+    pub fn get_and_touch(&mut self, key: u64) -> Option<LcdAtlasEntry> {
+        if let Some(e) = self.cache.get_mut(&key) {
+            e.last_used = self.epoch;
+            Some(e.entry)
+        } else {
+            None
+        }
+    }
+
+    /// Returns true when the cursor has consumed >80% of the atlas height.
+    /// Physical space cannot be reclaimed without a full `clear()`.
+    pub fn is_near_full(&self) -> bool {
+        (self.cursor_y + self.shelf_height) as f32 / self.height as f32 > 0.80
+    }
+
+    /// Remove all entries last used more than `max_age` epochs ago.
+    /// Returns the number of entries evicted.
+    ///
+    /// Note: this is a logical eviction — the cursor does not move back.
+    /// Use `is_near_full()` to detect when a full `clear()` is needed.
+    pub fn evict_cold(&mut self, max_age: u64) -> usize {
+        let current = self.epoch;
+        let before = self.cache.len();
+        self.cache.retain(|_, e| current.saturating_sub(e.last_used) <= max_age);
+        before - self.cache.len()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -130,7 +175,7 @@ impl LcdGlyphAtlas {
             bearing_x,
             bearing_y,
         };
-        self.cache.insert(key, entry);
+        self.cache.insert(key, LcdCacheEntry { entry, last_used: self.epoch });
         Ok(entry)
     }
 
@@ -146,6 +191,7 @@ impl LcdGlyphAtlas {
         self.cursor_x = Self::PADDING;
         self.cursor_y = Self::PADDING;
         self.shelf_height = 0;
+        self.epoch = 0;
         self.cache.clear();
         self.texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("LCD glyph atlas"),

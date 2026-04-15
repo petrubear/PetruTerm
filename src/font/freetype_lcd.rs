@@ -120,7 +120,7 @@ impl FreeTypeLcdRasterizer {
             return Some(*cached);
         }
 
-        if let Some(entry) = self.lcd_atlas.borrow().get(cache_key) {
+        if let Some(entry) = self.lcd_atlas.borrow_mut().get_and_touch(cache_key) {
             self.cache.lock().unwrap().insert(cache_key, entry);
             return Some(entry);
         }
@@ -190,6 +190,14 @@ impl FreeTypeLcdRasterizer {
     pub fn rasterize_char(&mut self, c: char, queue: &wgpu::Queue) -> Option<LcdAtlasEntry> {
         let glyph_id = self.get_glyph_index(c)?;
         self.rasterize(glyph_id, queue)
+    }
+
+    /// Clear the rasterizer's local glyph cache.
+    ///
+    /// Must be called whenever `LcdGlyphAtlas::clear()` is called, since the
+    /// local cache holds UVs that would point into the now-empty texture.
+    pub fn clear_local_cache(&mut self) {
+        self.cache.lock().unwrap().clear();
     }
 
     unsafe fn deinterleave_lcd(

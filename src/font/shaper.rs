@@ -833,6 +833,16 @@ impl TextShaper {
         atlas.upload(queue, cache_key, &rgba, width, height, image.placement.left, image.placement.top, is_color)
     }
 
+    /// Clear the LCD rasterizer's local glyph cache.
+    ///
+    /// Must be called after `LcdGlyphAtlas::clear()` to prevent the rasterizer
+    /// from returning cached UVs that now point into a destroyed/empty texture.
+    pub fn clear_lcd_rasterizer_cache(&mut self) {
+        if let Some(r) = self.lcd_rasterizer.as_mut() {
+            r.clear_local_cache();
+        }
+    }
+
     pub fn rasterize_lcd_to_atlas(
         &mut self,
         cache_key: CacheKey,

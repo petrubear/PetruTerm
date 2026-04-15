@@ -224,6 +224,17 @@ impl GlyphAtlas {
         (self.used_pixels as f32 / total as f32) * 100.0
     }
 
+    /// Fraction of the texture height consumed by the cursor (0.0–1.0).
+    ///
+    /// Unlike `current_fill_percent()` (which tracks logical used area), this
+    /// measures where the physical write cursor is. After `evict_cold()` removes
+    /// logical entries, the cursor does NOT move back — so this ratio stays high
+    /// even after eviction. When it exceeds ~0.75, new uploads are close to
+    /// `AtlasError::Full` regardless of how many entries were evicted.
+    pub fn cursor_fill_ratio(&self) -> f32 {
+        (self.cursor_y + self.shelf_height) as f32 / self.height as f32
+    }
+
     pub fn texture_view(&self) -> &wgpu::TextureView {
         &self.view
     }
