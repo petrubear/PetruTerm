@@ -6,6 +6,10 @@ mod renderer;
 mod term;
 mod ui;
 
+use mimalloc::MiMalloc;
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
+
 use anyhow::Result;
 use winit::event_loop::{ControlFlow, EventLoop};
 

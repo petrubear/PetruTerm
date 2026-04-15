@@ -110,6 +110,14 @@ pub struct ChatPanel {
     /// Display data for the current confirmation prompt (write/run). Cleared on accept/reject.
     pub confirm_display: Option<ConfirmDisplay>,
 
+    // ── Separator cache (TD-PERF-13) ─────────────────────────────────────────
+    /// Cached separator string "│────…" — rebuilt only when width changes.
+    pub separator_cache: String,
+    /// Panel width (in cols) used to build `separator_cache`.
+    pub separator_width: usize,
+    /// Cached thin separator "│╌╌╌…" used after the file section.
+    pub thin_separator_cache: String,
+
     // ── File picker ───────────────────────────────────────────────────────────
     /// Whether the file picker overlay is open.
     pub file_picker_open: bool,
@@ -140,6 +148,9 @@ impl ChatPanel {
             file_picker_cursor: 0,
             wrapped_cache: Vec::new(),
             wrapped_cache_width: 0,
+            separator_cache: String::new(),
+            separator_width: 0,
+            thin_separator_cache: String::new(),
         }
     }
 
@@ -436,6 +447,24 @@ impl ChatPanel {
                 self.attach_file(abs);
             }
         }
+    }
+
+    /// Return a cached "│────…" separator of the given width, rebuilding only when width changes (TD-PERF-13).
+    pub fn separator(&mut self, width: usize) -> &str {
+        if self.separator_width != width {
+            self.separator_cache.clear();
+            self.separator_cache.push('│');
+            for _ in 0..width.saturating_sub(1) {
+                self.separator_cache.push('─');
+            }
+            self.thin_separator_cache.clear();
+            self.thin_separator_cache.push('│');
+            for _ in 0..width.saturating_sub(1) {
+                self.thin_separator_cache.push('╌');
+            }
+            self.separator_width = width;
+        }
+        &self.separator_cache
     }
 
     /// Returns filtered file picker items matching the current query (fuzzy).

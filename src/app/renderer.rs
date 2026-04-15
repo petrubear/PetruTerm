@@ -49,6 +49,13 @@ pub struct RenderContext {
     pub panel_instances_cache: Vec<CellVertex>,
     /// Scratch buffer for `collect_grid_cells_for` — reused across frames (TD-PERF-12).
     pub cell_data_scratch: Vec<(String, Vec<(alacritty_terminal::vte::ansi::Color, alacritty_terminal::vte::ansi::Color)>)>,
+    /// Scratch buffers for `push_shaped_row` — reused per call to avoid hot-path allocs (TD-PERF-13).
+    pub scratch_chars: Vec<char>,
+    pub scratch_str: String,
+    pub scratch_colors: Vec<([f32; 4], [f32; 4])>,
+    /// General-purpose format scratch for callers of `push_shaped_row` (TD-PERF-13).
+    /// Kept separate from `scratch_str` (used inside push_shaped_row) to avoid borrow conflicts.
+    pub fmt_buf: String,
     /// Rounded rect instances for the tab bar pills and status bar background.
     pub rect_instances: Vec<RoundedRectInstance>,
 
@@ -107,6 +114,10 @@ impl RenderContext {
             lcd_instances: Vec::new(),
             panel_instances_cache: Vec::new(),
             cell_data_scratch: Vec::new(),
+            scratch_chars: Vec::new(),
+            scratch_str: String::new(),
+            scratch_colors: Vec::new(),
+            fmt_buf: String::new(),
             rect_instances: Vec::new(),
             hud_visible: false,
             frame_times: std::collections::VecDeque::new(),
@@ -402,15 +413,27 @@ impl RenderContext {
         }
 
         // Step 2: push glyph vertices for visible characters.
-        let chars: Vec<char> = text.chars().take(width).collect();
-        let len = chars.len();
-        let padded: String = chars
-            .into_iter()
-            .chain(std::iter::repeat_n(' ', width.saturating_sub(len)))
-            .collect();
+        // Reuse scratch buffers to avoid per-call allocations (TD-PERF-13).
+        // We take ownership temporarily so the borrow checker allows calling &mut self methods below.
+        let mut scratch_chars = std::mem::take(&mut self.scratch_chars);
+        let mut scratch_str = std::mem::take(&mut self.scratch_str);
+        let mut scratch_colors = std::mem::take(&mut self.scratch_colors);
 
-        let colors: Vec<([f32; 4], [f32; 4])> = (0..width).map(|_| (fg, bg)).collect();
-        let shaped = self.shaper.shape_line(&padded, &colors, font);
+        scratch_chars.clear();
+        scratch_chars.extend(text.chars().take(width));
+        let len = scratch_chars.len();
+        scratch_str.clear();
+        scratch_str.extend(scratch_chars.iter().copied().chain(std::iter::repeat_n(' ', width.saturating_sub(len))));
+
+        scratch_colors.clear();
+        scratch_colors.extend((0..width).map(|_| (fg, bg)));
+
+        let shaped = self.shaper.shape_line(&scratch_str, &scratch_colors, font);
+
+        // Restore scratch buffers.
+        self.scratch_chars = scratch_chars;
+        self.scratch_str = scratch_str;
+        self.scratch_colors = scratch_colors;
 
         for glyph in shaped.glyphs {
             if glyph.col >= width { continue; }
@@ -469,6 +492,7 @@ impl RenderContext {
         use crate::llm::chat_panel::{word_wrap, wrap_input, ConfirmDisplay, MAX_FILE_ROWS, PanelState};
         use crate::llm::diff::DiffKind;
         use crate::llm::ChatRole;
+        use std::fmt::Write as _;
 
         let panel_cols = panel.width_cols as usize;
         if panel_cols == 0 || screen_rows < 6 { return; }
@@ -516,8 +540,13 @@ impl RenderContext {
         let title = " Petrubot ";
         let left  = "│───";
         let dashes = panel_cols.saturating_sub(left.chars().count() + title.chars().count());
-        let header = format!("{}{}{}", left, title, "─".repeat(dashes));
-        self.push_shaped_row(&header, border_fg, panel_bg, 0, co, panel_cols, font);
+        {
+            let mut buf = std::mem::take(&mut self.fmt_buf);
+            buf.clear();
+            let _ = write!(buf, "{}{}{}", left, title, "─".repeat(dashes));
+            self.push_shaped_row(&buf, border_fg, panel_bg, 0, co, panel_cols, font);
+            self.fmt_buf = buf;
+        }
 
         // ── File picker overlay (replaces history area) ───────────────────────
         if panel.file_picker_open {
@@ -639,9 +668,8 @@ impl RenderContext {
                     let line = format!("│   {}", trimmed);
                     self.push_shaped_row(&line, DIM_FG, panel_bg, 2 + i, co, panel_cols, font);
                 }
-                // Thin separator after file section
-                let fsep = format!("│{}", "╌".repeat(panel_cols.saturating_sub(1)));
-                self.push_shaped_row(&fsep, SEP_FG, panel_bg, 1 + file_section_rows, co, panel_cols, font);
+                // Thin separator after file section (use pre-built cache from ChatPanel — TD-PERF-13)
+                self.push_shaped_row(&panel.thin_separator_cache, SEP_FG, panel_bg, 1 + file_section_rows, co, panel_cols, font);
             }
 
             // History area: rows after file section up to sep_row
@@ -711,9 +739,8 @@ impl RenderContext {
             }
         }
 
-        // ── Separator ────────────────────────────────────────────────────────
-        let sep = format!("│{}", "─".repeat(panel_cols.saturating_sub(1)));
-        self.push_shaped_row(&sep, SEP_FG, panel_bg, sep_row, co, panel_cols, font);
+        // ── Separator (use pre-built cache from ChatPanel — TD-PERF-13) ─────
+        self.push_shaped_row(&panel.separator_cache, SEP_FG, panel_bg, sep_row, co, panel_cols, font);
 
         // ── Input field (or confirmation prompt) ─────────────────────────────
         if matches!(panel.state, PanelState::AwaitingConfirm) {
