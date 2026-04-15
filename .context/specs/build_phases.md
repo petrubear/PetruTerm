@@ -1,176 +1,163 @@
 # PetruTerm — Build Phases
 
-## Phase 0.5: Integration Spike (Risk Reduction)
-**Goal:** Validate the three highest-risk integration points before committing to full Phase 1 scope. No polish, no config, no UI — just proof that the core stack works together.
-
-### Deliverables
-- [x] **Version pinning:** wgpu=29, winit=0.30.13, alacritty_terminal=0.25.1, cosmic-text=0.18.2, mlua=0.11.6, bytemuck=1.25.0 — `Cargo.toml` written, `cargo check` passes
-- [x] **Spike 1 — Terminal grid + ligatures:** `alacritty_terminal` grid cells grouped into runs, shaped by `cosmic-text` with HarfBuzz (`calt`, `liga`, `dlig`), rasterized by `swash`, uploaded to wgpu glyph atlas, rendered as instanced quads. `->`, `=>`, `!=`, `>=`, `|>` all work. nvim/tmux verified.
-- [~] **Spike 2 — Custom title bar on macOS:** NSWindow style mask + transparency applied via `objc2` (`apply_macos_custom_titlebar()`). Traffic lights show correctly. **Remaining:** window dragging from custom area (`setMovableByWindowBackground` currently NO).
-- [x] **Spike 3 — PTY ↔ winit event loop wakeup:** PTY I/O thread bridges to main thread via `crossbeam-channel`; `about_to_wait()` polls events and calls `window.request_redraw()` — implemented in `src/app/mod.rs` + `src/term/pty.rs`
-- [x] **Run extractor prototype:** `TextShaper::shape_line()` in `src/font/shaper.rs` — walks grid, groups cells into runs, shapes with HarfBuzz, maps glyph positions back to cell coordinates. Handles wide chars, PUA icons, ligatures.
-- [x] **Document `alacritty_terminal` API surface:** recorded in `memory/MEMORY.md` — key types: `Term<T>`, `Dimensions` trait, `event::EventListener`, `tty::Options`, `event_loop::EventLoop::new()`, `event_loop::Notifier`
-
-### Exit Criteria
-All three spikes produce working proof-of-concept code. A single window opens, spawns a PTY, and renders shaped terminal output with ligatures at 60fps using the full pipeline: `alacritty_terminal` → run extractor → `cosmic-text` → `swash` → glyph atlas → `wgpu`. Custom title bar is draggable with correctly positioned traffic lights. Version compatibility of all crates is confirmed and pinned.
-
-> **Status:** 5/6 done. Spike 2 partial (dragging from title bar area not wired).
+> Phases 0.5–3 (complete) archived in [`build_phases_archive.md`](./build_phases_archive.md).
 
 ---
 
-## Phase 1: Core Terminal (MVP)
-**Goal:** A working, fast terminal you can use daily — zsh, tmux, nvim, claude all run correctly.
+## Phase 3.5: Performance Sprint ⚡
+**Status: Not started — P1 crítico, prerequisito para Phase 4**
 
-### Deliverables
-- [x] Cargo workspace + all Phase 1 dependencies compile (`cargo check` — zero errors)
-- [x] wgpu + winit: blank window opens on macOS (Metal backend) — `app/mod.rs:158–183`, `resumed()` wires Metal + wgpu surface
-- [x] `alacritty_terminal` integration: PTY spawns `/bin/zsh -l`, I/O works — `term/pty.rs:122–127`, env vars set (`xterm-256color`, `COLORTERM=truecolor`)
-- [x] wgpu renderer: terminal cells render at 60fps — `renderer/gpu.rs:112` Fifo present mode; `RedrawRequested` build→upload→render loop
-- [x] Font loading via `fontdb`, text shaping via `cosmic-text` + `swash` — `TextShaper` + `GlyphAtlas` implemented
-- [x] Font ligatures enabled via HarfBuzz features (`calt=1`, `liga=1`, `dlig=1`) — configured in `FontConfig::default()` and Lua DSL
-- [x] Glyph atlas on GPU (rasterize once, cache as texture) — `GlyphAtlas` with shelf packing + `TexelCopyTextureInfo` upload
-- [x] Lua config DSL: `petruterm` global, `apply_to_config` module pattern — `src/config/lua.rs` fully implemented
-- [x] Config hot-reload via `notify` watcher — `ConfigWatcher` implemented, polled in `about_to_wait()`
-- [x] Custom title bar with `borderless` option — style mask + transparency done, `setMovableByWindowBackground:YES` wired (`app/mod.rs`)
-- [x] Window config: `initial_width`, `initial_height`, `start_maximized` — all in `WindowConfig` schema + applied in `resumed()`
-- [x] Tab bar: create, close, switch (Cmd+1–9) — `TabManager` implemented, keybinds wired, renders in UI
-- [x] Split panes: horizontal (Leader+%), vertical (Leader+"), binary tree layout — `PaneManager` + binary tree implemented
-- [x] Pane navigation: vim-style Leader+hjkl — keybind dispatch in `input/mod.rs`
-- [x] Command palette (Leader+p): fuzzy search, built-in actions only — `CommandPalette` + `SkimMatcherV2` implemented
-- [x] Dracula Pro default color theme — `ColorScheme::dracula_pro()` in schema
-- [x] Monolisa Nerd Font 16px default (JetBrains Mono as fallback) — `FontConfig::default()`
-- [~] 100k scrollback lines, scroll bar enabled — scrollback wired (`term/mod.rs:91–100`, default 10k lines); **missing:** scroll bar not rendered (config field exists, no GPU draw code)
-- [x] Leader key: Ctrl+B, 1000ms timeout — `LeaderConfig::default()` + dispatch in `input/mod.rs`; all custom binds Lua-configurable
-- [x] Default config files shipped in `config/default/` and embedded in binary — `include_str!` in `config/mod.rs`
-- [x] `.app` bundle script in `scripts/bundle.sh` — complete: builds binary, creates .app structure, writes Info.plist, signs ad-hoc
-- [x] Mouse handling: click-to-focus, click-to-place cursor, drag selection, scroll wheel, SGR + X10 mouse reporting — `app/mod.rs:266–325`, `app/input/mod.rs:80–93`
-- [x] Clipboard: Cmd+C copy, Cmd+V paste, OSC 52 read/write — all complete (`app/input/mod.rs`, `app/mux.rs` ClipboardLoad/ClipboardStore handlers)
-- [x] Text selection: click-drag, double-click word select (Semantic), triple-click line select (Lines) — all wired via `InputHandler::register_click()` in `app/mod.rs`
-- [x] Cursor rendering: block/underline/beam shapes, blinking, cursor colors from theme — `app/renderer.rs:237–248`, 530ms blink, `cursor_bg`/`cursor_fg` from config
-- [x] Resize handling: window resize → pane layout recalc → `Term::resize()` → content reflow — wired in `WindowEvent::Resized`
-- [x] Run extractor: grid cell → text run grouping for `cosmic-text` ligature shaping — `font/shaper.rs:350–440` `shape_line()` fully integrated
-- [x] PTY ↔ winit wakeup via channel — `crossbeam-channel` + `about_to_wait()` polling + `user_event()` wakeup
-- [x] Error display for Lua config parse failures — logged via `log::error!`, stderr fallback
-- [x] Font-not-found graceful fallback with user-visible warning — `font_available()` check + `log::warn!`
-- [x] `log` crate integration for debug/diagnostic output — `env_logger` initialized in `main.rs`
-- [x] Cmd+Q quit, Cmd+1–9 tab switching keybinds — implemented in `input/mod.rs`
+**Goal:** Hacer de PetruTerm el terminal más rápido en existencia.
 
-### Exit Criteria
-`cargo build --release` produces a working binary. The app opens on macOS,
-spawns zsh, renders correctly with ligatures. `nvim`, `tmux`, and `claude`
-all work inside it. Command palette opens. Tabs and pane splits work.
-Config hot-reloads without restart.
+| KPI | Target |
+|-----|--------|
+| Input-to-pixel latency p99 | < 8 ms |
+| Input-to-pixel latency p50 | < 4 ms |
+| Steady-state frame time | < 1 ms |
+| Idle allocations | 0 |
+| Cache-miss storm | < 16 ms |
+| Startup (exec → first pixel) | < 80 ms |
 
-> **Status:** Phase 1 COMPLETE (MVP criteria met). 3 polish items remain: title bar drag, scroll bar render, double/triple-click selection. OSC 52 read path minor gap.
+**Principio rector:** *Measure first, optimize second.* Sub-phases B-H no empiezan hasta que A esté completa.
 
 ---
 
-## Phase 2: AI Layer
-**Goal:** Full Warp-style LLM integration, all 4 AI features, provider flexibility.
+### Sub-phase A: Measurement Infrastructure (prerequisite)
 
-### Deliverables
-- [x] `LlmProvider` trait: `complete()` + `stream()` async methods — `llm/mod.rs:56–64`
-- [x] OpenRouter provider (`https://openrouter.ai/api/v1`, any model) — `llm/openrouter.rs`, full HTTP + streaming
-- [x] Ollama provider (`http://localhost:11434`, OpenAI-compat) — `llm/openai_compat.rs`, `ollama()` factory
-- [x] LMStudio provider (`http://localhost:1234/v1`, OpenAI-compat) — `llm/openai_compat.rs`, `lmstudio()` factory
-- [x] AI mode toggle keybind: `Ctrl+Space` — `app/input/mod.rs`; 4-row inline AI block overlay
-- [x] Inline AI block UI: state machine (Typing→Loading→Streaming→Done/Error), streaming token-by-token — `llm/ai_block.rs` + `build_ai_block_instances` in `app/renderer.rs`
-- [x] **Feature 1 — NL → Shell Command:** LLM query + streaming works; Run bar (green `│ ⏎ cmd`); Enter executes via PTY — `app/ui.rs`, `app/renderer.rs`
-- [x] **Feature 2 — Explain Last Output:** `explain_last_output()` wired to palette + `<leader>e` — `app/ui.rs`
-- [x] **Feature 3 — Fix Last Error:** `fix_last_error()` wired to palette + `<leader>f` — `app/ui.rs`
-- [x] **Feature 4 — Context-Aware Chat:** CWD + exit code + last command injected as system message; per-pane history via `HashMap<usize, ChatPanel>` — `app/ui.rs`, `llm/shell_context.rs`
-- [x] Command palette: "Enable AI Features" / "Disable AI Features" master toggle — `app/ui.rs:193–197`
-- [x] `llm.lua` config module: `provider`, `model`, `api_key`, `base_url`, `features`, `enabled` — `config/lua.rs`
-- [x] Shell integration script (`shell-integration.zsh`): `preexec`/`precmd` hooks write CWD/exit-code/last-command to `~/.cache/petruterm/shell-context.json` — `scripts/shell-integration.zsh`
-- [x] `config.llm.enabled = false` disables all AI features cleanly — checked in `app/ui.rs:33–37`
+**Baselines (2026-04-14, M4 Max, release profile):**
+| Benchmark | Tiempo |
+|-----------|--------|
+| `shape_line_ascii` | 5 643 ns |
+| `shape_line_ligatures` | 8 766 ns |
+| `shape_line_unicode` | 5 586 ns |
 
-### Exit Criteria
-Can type natural language and get a shell command. Can ask "why did that
-fail?" after a non-zero exit. Can toggle AI off entirely from command
-palette. Works with OpenRouter, Ollama, and LMStudio.
+- [x] `benches/shaping.rs` con criterion: `shape_line_ascii`, `shape_line_ligatures`, `shape_line_unicode`
+- [x] Tracing con `tracing` + feature flag `profiling`: spans en `build_instances`, `shape_line`, `RedrawRequested`
+- [x] Debug HUD (F12): overlay con last frame time, p50/p95 ring buffer (120 frames), shape cache hit/miss %, atlas fill %, instance count
+- [x] `.context/quality/PROFILING.md`: recetas para criterion, flamegraph, Instruments
+- [ ] Frame budget documentado en `term_specs.md`: objetivos p50/p95/p99
+- [ ] Benches adicionales: `build_instances` (1/4 panes), `search_active_terminal` (1K/10K/100K history), `rasterize_to_atlas` cold miss
+- [ ] CI gating: regresión > 5% en bench principal falla el build
+- [ ] Tracy integration (opt-in): `tracing-tracy` subscriber
+- [ ] GPU timestamp queries: `wgpu::QuerySet::Timestamp`
+- [ ] Input-to-pixel latency probe: ring buffer `KeyboardInput` → frame end
+- [ ] `os_signpost` markers en macOS
 
-> **Status:** COMPLETE (2026-04-04). All Phase 2 deliverables shipped. Commit b815320 closed the final three items: per-pane history, Ctrl+Space inline block, and inline rendering.
+**Exit criteria:** frame time visible en vivo; criterion reproduce mediciones; latency probe reporta números coherentes.
 
 ---
 
-## Phase 2.5: AI Agent Mode
-**Goal:** Upgrade the chat panel into a context-aware coding agent — similar to avante.nvim — where the user can attach files from the current working directory, have `AGENTS.md` loaded automatically as project context, and let the LLM read, propose edits, and apply changes to files.
+### Sub-phase B: Idle Zero-Cost (steady state)
 
-The chat panel and agent panel are **one unified panel** (`leader+a`). When the user asks a general question it responds as a chat assistant; when the user attaches files or the LLM needs file context, it operates as a file-aware agent.
+- [ ] Cursor como overlay independiente (elimina TD-PERF-10): blink solo cambia alpha, no invalida grid cache
+- [ ] Damage tracking con `alacritty_terminal::Term::damage()`: solo iterar filas en damage set
+- [ ] Idle detection + adaptive frame rate: `ControlFlow::Wait` cuando sin PTY data, input, ni AI event
+- [ ] No-op render path: si solo cambió cursor blink y grid idle, saltar `build_all_pane_instances` completamente
+- [ ] Counter de bytes uploaded al GPU por frame: idle debe ser 0 bytes
+- [ ] Mover `poll_git_branch` a timer 1 Hz independiente del render loop (fixea TD-PERF-19)
 
-### Deliverables
-
-#### P1 — File Context Attachment ✅ (2026-04-05)
-- [x] `ChatPanel` gains `attached_files: Vec<PathBuf>` — list of files injected into system context
-- [x] Auto-load `AGENTS.md` from CWD on every panel open (if it exists)
-- [x] File list section rendered at top of panel: `Selected (N files)` header + filenames
-- [x] `Tab` key in panel toggles focus between file-picker and chat input
-- [x] File picker: fuzzy-search files in CWD (reuse `fuzzy-matcher`), `Enter` to attach/detach
-- [x] Attached file contents injected as `role: system` messages before user query
-- [x] Token counter rendered in panel footer: `Tokens: NNNN`
-- [x] Keybind: `<C-s>` submits (in addition to Enter)
-- [x] CWD from real terminal process PID via `proc_pidinfo` (macOS) — no shell integration needed
-- [x] `/q` / `/quit` in panel input closes panel + current tab
-
-#### P2 — LLM Tool Use: Read & Explore ✅ (2026-04-05)
-- [x] `AgentTool` enum: `ReadFile`, `ListDir` in OpenAI function-calling format — `src/llm/tools.rs`
-- [x] `agent_step()` added to `LlmProvider` trait; both OpenRouter + OpenAI-compat implement it
-- [x] Tool execution loop (max 10 rounds): call → execute → inject result → re-query — `src/app/ui.rs`
-- [x] Streaming UI: `⟳ tool(path)` / `✓ tool(path)` inline via `AiEvent::ToolStatus` — `src/llm/chat_panel.rs`
-- [x] Safety: `canonicalize()` + `starts_with(cwd)` check before any file access — `src/llm/tools.rs`
-
-#### P3 — LLM Tool Use: Write & Run ✅ (2026-04-07)
-- [x] `WriteFile { path, content }` tool: LLM proposes full file replacement
-- [x] Diff preview rendered inline in panel (before/after lines with `+`/`-` colors)
-- [x] Confirmation prompt: `[y] Apply  [n] Reject` before writing to disk
-- [x] `RunCommand { cmd }` tool: executes in active PTY after user confirmation
-- [x] Undo: keep original file in memory for single-step undo (`<leader>z` restores)
-
-### Exit Criteria
-Panel opens and auto-loads `AGENTS.md`. User can fuzzy-attach additional files. Token count
-updates as files are added. LLM receives file contents as context and gives file-aware answers.
-LLM can request to read additional files via tool use. LLM can propose file edits with a diff
-preview; user confirms before any write happens.
-
-> **Status:** COMPLETE (2026-04-07). P1+P2+P3 shipped. WriteFile+RunCommand con diff preview y confirmación. Undo stack via `<leader>z`.
+**Exit criteria:** tracy muestra idle frames < 100 µs. HUD reporta 0 bytes uploaded en idle.
 
 ---
 
-## Phase 3: Polish & UI Chrome
-**Goal:** Complete visual chrome — tab bar, scroll bar, status bar, snippets, Starship support.
+### Sub-phase C: Hot Path Fast Paths (typing & scrolling)
 
-### Deliverables
+- [ ] ASCII fast path en `shape_line`: saltar HarfBuzz para ASCII-only sin chars de ligatura
+- [ ] Pre-shape warmup al arranque: rasterizar ASCII 32-126 + common Nerd Font icons; marcar `hot=true` (never evict)
+- [ ] Per-word shape cache: `(word, font_key) → Vec<ShapedGlyph>` con xxhash3
+- [ ] Ligature scan bit: `memchr` scan antes de HarfBuzz — si no hay chars de ligadura, saltar HB
+- [ ] Subpixel position quantization: cuantizar offsets a 1/4 px antes de cachear
+- [ ] Empty/space cell fast path: celdas ` ` + bg default saltan el glyph pipeline
+- [ ] Row hash con xxhash3 o foldhash (reemplaza DefaultHasher)
 
-#### Priority — Visual Chrome (P1)
-- [x] **Tab bar:** renders at grid row -1 (above terminal); active tab highlighted; Dracula Pro colors — `build_tab_bar_instances()` in `app/renderer.rs`; GPU padding shifted via `renderer.set_padding()`
-- [x] **Scroll bar:** 6px right-edge overlay using FLAG_CURSOR; thumb proportional to `screen_rows / total_lines`; gated by `config.enable_scroll_bar` — `build_scroll_bar_instances()` in `app/renderer.rs`; `Terminal::scrollback_info()` in `term/mod.rs`
-- [x] **Right-click context menu:** floating popup at click position; items: Copy (Cmd+C), Paste (Cmd+V), Clear; keybinds shown right-aligned; hover highlight; closes on click-outside, key press, or action — `src/ui/context_menu.rs`; `build_context_menu_instances()` in `app/renderer.rs`; mouse handling in `app/mod.rs`
-- [x] **Pane resize — keyboard:** `<leader>` + `Option+←→↑↓` ajusta ratio del Split padre en pasos de 0.05 — `PaneManager::adjust_ratio()` en `src/ui/panes.rs`; keybinds + macOS `physical_key` fallback en `src/app/input/mod.rs:209–236` (TD-045 resolved).
-- [x] **Pane resize — mouse drag:** arrastrar separador entre panes — `SeparatorDragState` en `input/mod.rs`; hit-test ±8px en `separator_at_pixel()`; drag en `CursorMoved`; `drag_separator()` en `src/ui/panes.rs` (TD-044 resolved).
+**Exit criteria:** criterion muestra `shape_line("fn hello_world()")` < 5 µs. ASCII fast path hit rate > 90%.
 
-#### Status Bar (P2) ✅ (2026-04-08)
-- [x] Status bar engine: enable/disable from Lua + command palette (`ToggleStatusBar`)
-- [x] Built-in status bar widgets: `mode` (leader indicator), `cwd`, `git_branch`, `time`, `exit_code`
-- [x] Status bar position: `top` or `bottom` (Lua config `config.status_bar.position`)
-- [x] Git branch polled async with 5s TTL cache (`poll_git_branch` in `app/ui.rs`)
+---
 
-#### Snippets & Compatibility (P3)
-- [x] Tab rename: `<leader>,` — inline prompt in tab pill, Enter confirms, Esc cancels (2026-04-08)
-- [x] Snippets: `config.snippets` table in Lua, expand via command palette (2026-04-09)
-- [x] Snippet keybind: optional `trigger` field per snippet — Tab-expand with input_echo tracker (2026-04-09)
-- [x] Powerline support: Nerd Font arrows  /  via `config.status_bar.style = "powerline"` (2026-04-09)
-- [x] Built-in themes: Lua files in `~/.config/petruterm/themes/`, seeded on first launch, theme picker as palette sub-menu (Esc returns to parent palette) (2026-04-09)
+### Sub-phase D: Memory & Allocator
 
-### Exit Criteria
-Tab bar renders and reflects active tab. Scroll bar visible when scrollback is active.
-Status bar renders with at least 3 widgets. Snippets expand via command palette.
-Starship prompt works when enabled.
+- [ ] `mimalloc` como `#[global_allocator]`: evaluar con microbenchmarks; rollback si no hay win
+- [ ] Bumpalo arena para datos per-frame en `RenderContext`: reset O(1), cero malloc en hot path
+- [ ] Scratch buffers a `RenderContext`: `scratch_chars`, `scratch_padded`, `scratch_colors`, `scratch_lines` (reemplaza TD-PERF-12, TD-PERF-13)
+- [ ] `smallvec::SmallVec<[T; N]>` en hot paths (shaped glyphs por run, search matches por fila)
+- [ ] `compact_str::CompactString` donde contenido es corto (tab titles, paths relativos)
+- [ ] Color palette interning: `ColorId(u16)` → lookup table como uniform buffer (solo si HUD muestra bottleneck)
 
-> **Status:** P1 COMPLETE. P2 COMPLETE. P3 COMPLETE (2026-04-09): snippets ✅, Powerline ✅, built-in themes ✅.
+**Exit criteria:** `dhat-rs` report muestra 0 allocs en hot loop tras warm-up.
+
+---
+
+### Sub-phase E: Parallel Rendering
+
+- [ ] Rayon per-pane parallel build: `par_iter` sobre `pane_infos`, merge en main thread
+- [ ] Parallel row shaping en cache-miss storm: rayon para filas con miss > threshold
+- [ ] Atlas upload en secondary queue: Metal multi-queue para no bloquear render pass
+- [ ] Lock-free PTY ring buffer: reemplazar crossbeam-channel con `rtrb` SPSC
+- [ ] PTY reader thread pinned a efficiency core: `pthread_set_qos_class_self_np(QOS_CLASS_UTILITY)`
+
+**Exit criteria:** 4-pane build en tiempo cercano al pane más lento. Multi-pane benchmarks mejoran 2-3× en M4.
+
+---
+
+### Sub-phase F: Latency Minimization
+
+- [ ] `PresentMode::Mailbox` con fallback a FifoRelaxed → Fifo; exponer como `config.performance.present_mode` (reemplaza TD-PERF-08)
+- [ ] `desired_maximum_frame_latency = 1`: de 2 a 1
+- [ ] Adaptive PTY coalescing: saltar 4 ms coalesce para single-char typing; mantener para TUI bursts (> 3 eventos/ms)
+- [ ] Input event priority sobre PTY en tick: procesar `KeyboardInput`/`MouseInput` antes que PTY drain
+- [ ] `CVDisplayLink` en macOS (experimental): firing exactamente en vblank start
+- [ ] `CAMetalLayer::setDisplaySyncEnabled(false)` para low-latency mode (experimental)
+- [ ] Skip render cuando window hidden/minimized: detectar `WindowEvent::Occluded(true)`
+- [ ] Input latency test suite: script que simula typing a 100 cps + latency probe
+
+**Exit criteria:** latency probe p50 < 4 ms, p99 < 8 ms en typing en zsh idle.
+
+---
+
+### Sub-phase G: GPU Architecture (forward-looking)
+
+- [ ] Atlas split por tamaño: 1024×1024 para ASCII + 4096×4096 para emoji/wide
+- [ ] Persistent mapped ring buffer (3× frame in flight)
+- [ ] Indirect draw para multi-pane: un solo `draw_indirect` con `DrawIndirectArgs` per pane
+- [ ] Unificar bg + glyph en un solo pass
+- [ ] GPU-resident grid (experimental, tipo Kitty): documentar como "Phase 5+ candidate"
+- [ ] Compute shader shaping (experimental): documentar como exploratory
+
+**Exit criteria:** primeros 4 items completados. Últimos 2 documentados como spike tasks.
+
+---
+
+### Sub-phase H: Build & Release Optimization
+
+- [ ] PGO: `cargo pgo` con workload representativo (typing zsh, nvim, scroll de log)
+- [ ] BOLT post-link: `llvm-bolt` con profiles generados
+- [ ] `target-cpu=apple-m1` en `bundle.sh` para el `.app` bundle
+- [ ] `release-native` profile en `.cargo/config.toml` con `target-cpu=native` + `lto=thin`
+- [ ] Lua bytecode cache: precompilar `.lua` a bytecode mlua, cachear en `~/.cache/petruterm/lua-bc/`
+- [ ] Config eager-load en paralelo con window creation
+- [ ] Split debug info: `split-debuginfo = "unpacked"` en release
+
+**Exit criteria:** startup < 80 ms. Runtime benchmarks mejoran 5-10% vs release sin PGO/BOLT.
+
+---
+
+### Exit Criteria (Phase 3.5 global)
+
+- [ ] Input-to-pixel latency: **p50 < 4 ms, p99 < 8 ms**
+- [ ] Steady-state frame time: **< 1 ms**
+- [ ] Zero allocations en idle hot path (verificado con `dhat`)
+- [ ] Cache-miss storm: **< 16 ms**
+- [ ] Startup: **< 80 ms** wall-clock
+- [ ] Criterion benchmarks con CI gating activo
+- [ ] Debug HUD (F12) operativo
+- [ ] `PROFILING.md` con recetas reproducibles
+- [ ] Comparativa vs Alacritty/kitty/wezterm/Terminal.app en `.context/quality/BENCHMARKS.md`
 
 ---
 
 ## Phase 4: Plugin Ecosystem
+**Status: Not started — bloqueado hasta Phase 3.5 exit criteria**
+
 **Goal:** Extensible plugin platform — third-party Lua plugins can extend palette, status bar, and events.
 
 ### Deliverables
@@ -183,7 +170,4 @@ Starship prompt works when enabled.
 - [ ] Example plugin + documentation
 
 ### Exit Criteria
-A third-party Lua plugin can register a command palette action and a status bar widget.
-Plugin hot-reload works. `install()` clones a repo into the plugins directory.
-
-> **Status:** Not started.
+A third-party Lua plugin can register a command palette action and a status bar widget. Plugin hot-reload works. `install()` clones a repo into the plugins directory.

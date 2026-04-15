@@ -17,6 +17,24 @@ pub struct Config {
     pub shell_integration: bool,
     pub llm: LlmConfig,
     pub status_bar: StatusBarConfig,
+    pub keyboard: KeyboardConfig,
+}
+
+/// Keyboard behaviour options.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeyboardConfig {
+    /// When `true`, the Option/Alt key sends an ESC prefix (Meta key — useful for
+    /// Emacs / readline Alt+letter shortcuts).
+    /// When `false` (default), Option acts as a compose key and the OS-composed
+    /// character is sent as-is — correct for non-US keyboards (Spanish, ISO, etc.)
+    /// where characters like `{`, `}`, `@`, `#` require Option+key.
+    pub option_as_meta: bool,
+}
+
+impl Default for KeyboardConfig {
+    fn default() -> Self {
+        Self { option_as_meta: false }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,6 +87,7 @@ impl Default for Config {
             shell_integration: true,
             llm: LlmConfig::default(),
             status_bar: StatusBarConfig::default(),
+            keyboard: KeyboardConfig::default(),
         }
     }
 }

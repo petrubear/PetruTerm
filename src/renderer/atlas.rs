@@ -217,6 +217,13 @@ impl GlyphAtlas {
         Ok(entry)
     }
 
+    /// Returns the atlas fill percentage (0.0–100.0).
+    pub fn current_fill_percent(&self) -> f32 {
+        let total = (self.width * self.height) as u64;
+        if total == 0 { return 0.0; }
+        (self.used_pixels as f32 / total as f32) * 100.0
+    }
+
     pub fn texture_view(&self) -> &wgpu::TextureView {
         &self.view
     }

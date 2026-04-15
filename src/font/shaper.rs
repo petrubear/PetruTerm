@@ -247,7 +247,7 @@ pub struct TextShaper {
 
 impl TextShaper {
     pub fn new(
-        device: &wgpu::Device,
+        device: Option<&wgpu::Device>,
         font_system: FontSystem,
         actual_family: String,
         font_id: fontdb::ID,
@@ -262,7 +262,7 @@ impl TextShaper {
         let shape_buf = Buffer::new(&mut font_system, metrics);
 
         let lcd_rasterizer = if font_config.lcd_antialiasing {
-            if let Some(atlas) = &lcd_atlas {
+            if let (Some(device), Some(atlas)) = (device, &lcd_atlas) {
                 match FreeTypeLcdRasterizer::new(device, font_config, Rc::clone(atlas)) {
                     Ok(r) => {
                         log::info!("LCD subpixel AA enabled via FreeType");
@@ -274,7 +274,7 @@ impl TextShaper {
                     }
                 }
             } else {
-                log::warn!("LCD AA enabled but no atlas provided. LCD AA disabled.");
+                log::warn!("LCD AA enabled but no device/atlas provided. LCD AA disabled.");
                 None
             }
         } else {
@@ -399,6 +399,9 @@ impl TextShaper {
         colors: &[([f32; 4], [f32; 4])],
         font_config: &FontConfig,
     ) -> ShapedRun {
+        #[cfg(feature = "profiling")]
+        let _span = tracing::info_span!("shape_line", len = text.len()).entered();
+
         let attrs = Self::make_attrs(&self.family, font_config);
         let attr_list = build_attr_list(text, &attrs, &self.family);
 

@@ -346,6 +346,11 @@ impl ApplicationHandler<()> for App {
         match event {
             WindowEvent::CloseRequested => { event_loop.exit(); }
             WindowEvent::RedrawRequested => {
+                #[cfg(feature = "profiling")]
+                let _span = tracing::info_span!("redraw_frame").entered();
+
+                let frame_start = std::time::Instant::now();
+
                 self.check_config_reload();
                 let (data_ids, exited) = self.mux.poll_pty_events();
                 if self.close_exited_terminals(exited) { event_loop.exit(); return; }
@@ -606,13 +611,26 @@ impl ApplicationHandler<()> for App {
                         rc.build_context_menu_instances(&self.ui.context_menu, &scaled_font, total_cols, total_rows);
                     }
 
+                    // ── Debug HUD (F12) — rendered last so it appears above all overlays ─
+                    if rc.hud_visible {
+                        rc.build_debug_hud_instances(&scaled_font);
+                    }
+
                     // ── GPU upload ──────────────────────────────────────────────────────
+                    rc.last_instance_count = rc.instances.len();
                     rc.renderer.upload_rect_instances(&rc.rect_instances);
                     rc.renderer.set_overlay_start(overlay_start);
                     rc.renderer.upload_instances(&rc.instances, 0);
                     rc.renderer.set_cell_count(rc.instances.len());
                     rc.renderer.upload_lcd_instances(&rc.lcd_instances);
                     let _ = rc.renderer.render();
+
+                    // ── Frame time tracking for HUD ─────────────────────────────────────
+                    let frame_ms = frame_start.elapsed().as_secs_f32() * 1000.0;
+                    rc.frame_times.push_back(frame_ms);
+                    if rc.frame_times.len() > 120 {
+                        rc.frame_times.pop_front();
+                    }
 
                     // Suppress unused warning for scroll-bar focused dimensions.
                     let _ = (term_cols, term_rows);

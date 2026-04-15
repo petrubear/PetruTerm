@@ -52,6 +52,14 @@ pub struct RenderContext {
     /// Rounded rect instances for the tab bar pills and status bar background.
     pub rect_instances: Vec<RoundedRectInstance>,
 
+    // ── Debug HUD (F12) ───────────────────────────────────────────────────────
+    pub hud_visible: bool,
+    /// Ring buffer of the last 120 frame times in milliseconds.
+    pub frame_times: std::collections::VecDeque<f32>,
+    pub shape_cache_hits: u64,
+    pub shape_cache_misses: u64,
+    pub last_instance_count: usize,
+
     // ── Static-geometry caches (TD-PERF-08/09/10) ────────────────────────────
     // Scroll bar: ~50 CellVertex per frame, no HarfBuzz. Keyed by scroll state.
     pub scroll_bar_state: Option<(usize, usize, usize, usize)>,
@@ -78,7 +86,7 @@ impl RenderContext {
         let (font_system, actual_family, face_id, font_path) = build_font_system(&scaled_font)?;
         let lcd_atlas = renderer.get_lcd_atlas();
 
-        let mut shaper = TextShaper::new(&renderer.device(), font_system, actual_family, face_id, font_path, &scaled_font, lcd_atlas);
+        let mut shaper = TextShaper::new(Some(&renderer.device()), font_system, actual_family, face_id, font_path, &scaled_font, lcd_atlas);
         
         // Finalize renderer setup with shaper info
         let mut renderer = renderer;
@@ -98,6 +106,11 @@ impl RenderContext {
             panel_instances_cache: Vec::new(),
             cell_data_scratch: Vec::new(),
             rect_instances: Vec::new(),
+            hud_visible: false,
+            frame_times: std::collections::VecDeque::new(),
+            shape_cache_hits: 0,
+            shape_cache_misses: 0,
+            last_instance_count: 0,
             scroll_bar_state: None,
             scroll_bar_cache: Vec::new(),
             tab_bar_key: 0,
@@ -144,6 +157,9 @@ impl RenderContext {
         col_offset: usize,
         row_offset: usize,
     ) -> Result<(), crate::renderer::atlas::AtlasError> {
+        #[cfg(feature = "profiling")]
+        let _span = tracing::info_span!("build_instances", rows = cell_data.len()).entered();
+
         // Retrieve or create the per-terminal row cache.
         let cache = self.row_caches.entry(terminal_id).or_insert_with(RowCache::new);
         if cache.rows.len() < cell_data.len() {
@@ -168,6 +184,7 @@ impl RenderContext {
             // Cache hit: copy local-coordinate instances and apply pane offset.
             if let Some(Some(entry)) = self.row_caches.get(&terminal_id).and_then(|c| c.rows.get(row_idx)) {
                 if entry.hash == row_hash {
+                    self.shape_cache_hits = self.shape_cache_hits.saturating_add(1);
                     let co = col_offset as f32;
                     let ro = (row_offset + row_idx) as f32;
                     for inst in &entry.instances {
@@ -185,6 +202,7 @@ impl RenderContext {
                     continue;
                 }
             }
+            self.shape_cache_misses = self.shape_cache_misses.saturating_add(1);
 
             // Cache miss: shape and rasterize.
             let mut row_instances: Vec<CellVertex> = Vec::new();
@@ -1320,5 +1338,70 @@ impl RenderContext {
         }
 
         let _ = CURSOR_FG; // suppress if unused after cursor removal
+    }
+}
+
+// ── Debug HUD ─────────────────────────────────────────────────────────────────
+
+impl RenderContext {
+    /// Render the debug HUD overlay in the top-left corner (F12 toggle).
+    ///
+    /// Shows frame time statistics, shape cache hit/miss ratio, instance count,
+    /// and atlas fill percentage. Uses `push_shaped_row` so it shares the same
+    /// overlay render pass as the palette and search bar.
+    pub fn build_debug_hud_instances(
+        &mut self,
+        font: &crate::config::schema::FontConfig,
+    ) {
+        if !self.hud_visible { return; }
+
+        const HUD_BG:   [f32; 4] = [0.08, 0.08, 0.14, 0.90]; // dark semi-transparent
+        const TITLE_FG: [f32; 4] = [0.58, 0.50, 1.00, 1.0];  // Dracula purple
+        const VALUE_FG: [f32; 4] = [0.95, 0.98, 0.55, 1.0];  // Dracula yellow
+        const WARN_FG:  [f32; 4] = [1.00, 0.47, 0.47, 1.0];  // red for high frame times
+
+        let hud_width = 44usize;
+
+        // ── Frame time statistics from ring buffer ───────────────────────────
+        let (avg_ms, p50_ms, p95_ms) = if self.frame_times.is_empty() {
+            (0.0f32, 0.0f32, 0.0f32)
+        } else {
+            let mut sorted: Vec<f32> = self.frame_times.iter().copied().collect();
+            let n = sorted.len();
+            let avg = sorted.iter().sum::<f32>() / n as f32;
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            let p50 = sorted[n / 2];
+            let p95 = sorted[(n * 95 / 100).min(n - 1)];
+            (avg, p50, p95)
+        };
+
+        // ── Shape cache ──────────────────────────────────────────────────────
+        let total_shapes = self.shape_cache_hits + self.shape_cache_misses;
+        let hit_pct = if total_shapes == 0 {
+            0u32
+        } else {
+            (self.shape_cache_hits * 100 / total_shapes) as u32
+        };
+
+        // ── Atlas fill ───────────────────────────────────────────────────────
+        let atlas_pct = self.renderer.atlas.current_fill_percent();
+        let shape_hits = self.shape_cache_hits;
+        let shape_misses = self.shape_cache_misses;
+        let instance_count = self.last_instance_count;
+
+        // ── Build HUD text lines ─────────────────────────────────────────────
+        let frame_fg = if avg_ms > 16.67 { WARN_FG } else { VALUE_FG };
+
+        let hud_lines: Vec<(String, [f32; 4])> = vec![
+            (format!(" F12 HUD"), TITLE_FG),
+            (format!(" {:10} {:.1}ms  p50:{:.1}ms  p95:{:.1}ms", "frame", avg_ms, p50_ms, p95_ms), frame_fg),
+            (format!(" {:10} hits={} miss={} ({}%)", "shape", shape_hits, shape_misses, hit_pct), VALUE_FG),
+            (format!(" {:10} {}", "instances", instance_count), VALUE_FG),
+            (format!(" {:10} {:.1}%", "atlas", atlas_pct), VALUE_FG),
+        ];
+
+        for (row, (text, fg)) in hud_lines.iter().enumerate() {
+            self.push_shaped_row(text, *fg, HUD_BG, row, 0, hud_width, font);
+        }
     }
 }

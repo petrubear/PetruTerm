@@ -416,5 +416,11 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
         }
     }
 
+    if let Ok(kb_table) = table.get::<LuaTable>("keyboard") {
+        if let Ok(v) = kb_table.get::<bool>("option_as_meta") {
+            config.keyboard.option_as_meta = v;
+        }
+    }
+
     Ok(config)
 }

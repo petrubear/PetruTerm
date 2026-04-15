@@ -3,10 +3,15 @@ use winit::keyboard::{Key, NamedKey};
 use alacritty_terminal::term::TermMode;
 
 /// Translates a winit key event into an ANSI escape sequence.
+///
+/// `option_as_meta`: when true, Alt/Option + character sends `ESC <char>` (Meta key for
+/// Emacs/readline). When false (default), the OS-composed character is sent as-is,
+/// which is correct for non-US keyboards where Option produces `{`, `}`, `@`, `#`, etc.
 pub fn translate_key(
     key: &Key,
     mods: Modifiers,
     mode: TermMode,
+    option_as_meta: bool,
 ) -> Option<Vec<u8>> {
     let state = mods.state();
     let shift = state.shift_key();
@@ -36,8 +41,10 @@ pub fn translate_key(
             };
         }
         
-        // Alt + Key (Escape prefix)
-        if alt && !ctrl && !logo {
+        // Alt + Key: only add ESC prefix when option_as_meta is explicitly enabled.
+        // By default (option_as_meta = false) the OS has already composed the character
+        // (e.g. Option+2 → "@" on Spanish layout) and we send it as-is.
+        if alt && !ctrl && !logo && option_as_meta {
             let mut seq = vec![0x1b];
             seq.extend_from_slice(s.as_bytes());
             return Some(seq);

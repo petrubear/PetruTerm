@@ -16,6 +16,12 @@ local module    = {}
 function module.apply_to_config(config)
   config.leader = { key = "f", mods = "CTRL", timeout_ms = 1000 }
 
+  -- Keyboard options.
+  -- option_as_meta = false (default): Option/Alt acts as a compose key.
+  --   Characters like {, }, @, # produced via Option on non-US keyboards work correctly.
+  -- option_as_meta = true: Option/Alt sends ESC prefix (Meta key for Emacs/readline).
+  config.keyboard = { option_as_meta = false }
+
   config.keys = {
     -- ── Overlays ──────────────────────────────────────────────────────────
     { mods = "LEADER", key = "o",  action = petruterm.action.CommandPalette },

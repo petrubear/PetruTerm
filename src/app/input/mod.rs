@@ -463,6 +463,14 @@ impl InputHandler {
             return;
         }
 
+        // ── F12 — toggle debug HUD ───────────────────────────────────────────
+        if let Key::Named(NamedKey::F12) = &event.logical_key {
+            if let Some(rc) = render_ctx.as_mut() {
+                rc.hud_visible = !rc.hud_visible;
+            }
+            return;
+        }
+
         if cmd && !shift && !ctrl {
             if let Key::Character(s) = &event.logical_key {
                 match s.as_str() {
@@ -511,7 +519,7 @@ impl InputHandler {
             return;
         }
 
-        self.send_key_to_active_terminal(event, mux);
+        self.send_key_to_active_terminal(event, mux, config.keyboard.option_as_meta);
     }
 
     /// Try to expand a snippet trigger from `input_echo`. If the last contiguous
@@ -548,10 +556,10 @@ impl InputHandler {
         false
     }
 
-    pub fn send_key_to_active_terminal(&mut self, event: &KeyEvent, mux: &Mux) {
+    pub fn send_key_to_active_terminal(&mut self, event: &KeyEvent, mux: &Mux, option_as_meta: bool) {
         let mode = mux.active_terminal().map(|t| *t.term.lock().mode()).unwrap_or(TermMode::empty());
 
-        if let Some(data) = key_map::translate_key(&event.logical_key, self.modifiers, mode) {
+        if let Some(data) = key_map::translate_key(&event.logical_key, self.modifiers, mode, option_as_meta) {
             // Update the echo buffer for snippet trigger detection.
             match &event.logical_key {
                 Key::Named(NamedKey::Enter) | Key::Named(NamedKey::Escape) => {
