@@ -200,6 +200,7 @@ impl App {
     fn close_exited_terminals(&mut self, exited: Vec<usize>) -> bool {
         if exited.is_empty() { return false; }
         for tid in exited {
+            self.terminal_shell_ctxs.remove(&tid);
             if self.mux.close_terminal(tid) { return true; }
         }
         self.apply_tab_bar_padding();
@@ -700,6 +701,10 @@ impl ApplicationHandler<()> for App {
                         &mut self.render_ctx, self.window.as_deref(),
                         self.wakeup_proxy.clone(),
                     );
+                    // Clean up per-terminal state for any panes/tabs closed by input (TD-MEM-08).
+                    for tid in self.mux.closed_ids.drain(..) {
+                        self.terminal_shell_ctxs.remove(&tid);
+                    }
                     if self.ui.is_panel_visible() != panel_was_visible {
                         self.resize_terminals_for_panel();
                     }

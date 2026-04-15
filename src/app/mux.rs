@@ -21,6 +21,9 @@ pub struct Mux {
     pub panes: Vec<PaneManager>,           // one PaneManager per tab
     pub terminals: Vec<Option<Terminal>>,  // indexed by terminal_id
     pub next_terminal_id: usize,
+    /// Terminal IDs closed by cmd_close_tab / cmd_close_pane (TD-MEM-08).
+    /// App drains this after each input cycle to clean up per-terminal state.
+    pub closed_ids: Vec<usize>,
 }
 
 impl Mux {
@@ -30,6 +33,7 @@ impl Mux {
             panes: Vec::new(),
             terminals: Vec::new(),
             next_terminal_id: 0,
+            closed_ids: Vec::new(),
         }
     }
 
@@ -239,6 +243,7 @@ impl Mux {
         if active < self.panes.len() {
             for tid in self.panes[active].root.leaf_ids() {
                 if let Some(slot) = self.terminals.get_mut(tid) { *slot = None; }
+                self.closed_ids.push(tid);
             }
             self.panes.remove(active);
         }
@@ -267,6 +272,7 @@ impl Mux {
         if let Some(pane_mgr) = self.panes.get_mut(active) {
             if let Some(closed_id) = pane_mgr.close_focused() {
                 if let Some(slot) = self.terminals.get_mut(closed_id) { *slot = None; }
+                self.closed_ids.push(closed_id);
             }
         }
     }

@@ -64,6 +64,9 @@ regex = "1"
 # Command palette fuzzy search
 fuzzy-matcher = "0.3"
 
+# LRU cache for word_cache in font shaper (TD-MEM-05)
+lru = "0.12"
+
 # GPU buffer casting
 bytemuck = { version = "1", features = ["derive"] }
 

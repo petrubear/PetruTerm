@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-04-15
-**Open Items:** 41
-**Critical (P0):** 0 | **P1:** 8 | **P2:** 21 | **P3:** 12
+**Open Items:** 39
+**Critical (P0):** 0 | **P1:** 6 | **P2:** 21 | **P3:** 12
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -71,13 +71,6 @@ Sesión de auditoría con objetivo declarado: **diagnosticar el consumo de 20 GB
 
 ---
 
-### TD-MEM-05: `word_cache` usa `clear()` total en lugar de LRU — causa miss storm
-- **Archivo:** `src/font/shaper.rs:word_cache_insert()`
-- **Descripción:** Cuando `word_cache` alcanza 512 entradas, se llama `self.word_cache.clear()` — se borra **todo** el cache de golpe. El siguiente frame debe re-shapear todas las palabras visibles a través de HarfBuzz, causando un pico de CPU (miss storm). Además, el límite de 512 entradas es arbitrario y puede ser demasiado pequeño para sesiones largas con vocabulario variado (código fuente con muchos identificadores únicos).
-- **Fix:** Reemplazar `HashMap` + `clear()` con `lru::LruCache<(u64, u32), ShapedRun>` con capacidad configurable (ej. 1024). La evicción LRU elimina solo la entrada menos usada, sin miss storm. La crate `lru` es `no_std`-compatible y tiene overhead mínimo.
-- **Severidad:** P1 — el `clear()` total causa stutter visible cada vez que el cache se llena.
-
----
 
 ### TD-MEM-06: `byte_to_col_buf` en `TextShaper` crece al tamaño máximo de línea visto y nunca se reduce
 - **Archivo:** `src/font/shaper.rs:shape_line_harfbuzz()` — `self.byte_to_col_buf.resize(n + 1, 0)`
@@ -95,13 +88,6 @@ Sesión de auditoría con objetivo declarado: **diagnosticar el consumo de 20 GB
 
 ---
 
-### TD-MEM-08: `terminal_shell_ctxs` en `App` nunca se limpia al cerrar terminales
-- **Archivo:** `src/app/mod.rs:App` (campo `terminal_shell_ctxs: HashMap<usize, ShellContext>`)
-- **Descripción:** `terminal_shell_ctxs` acumula un `ShellContext` por cada terminal creado durante la sesión. Cuando un terminal se cierra (`close_specific`, `close_focused`), la entrada correspondiente en el mapa **no se elimina**. Con uso intensivo (abrir/cerrar muchos tabs/panes durante 24 h), el mapa crece indefinidamente. `ShellContext` contiene strings (CWD, último comando, etc.) — el leak es pequeño por entrada pero acumulativo.
-- **Fix:** En los handlers de cierre de terminal (`handle_pane_exit`, `close_specific`, `close_tab`), llamar a `self.terminal_shell_ctxs.remove(&terminal_id)` para limpiar la entrada correspondiente.
-- **Severidad:** P1 — leak directo y fácil de corregir. Cada terminal cerrado deja una entrada huérfana.
-
----
 
 ## P2 — Prioridad media
 
@@ -213,9 +199,9 @@ Sesión de auditoría con objetivo declarado: **diagnosticar el consumo de 20 GB
 | TD-MEM-07 | Chat history | Crecimiento ilimitado | ~10-100 MB (según uso AI) | P1 |
 | TD-MEM-01 | GlyphAtlas VRAM | No reclaima espacio | 64 MiB VRAM permanente | P1 |
 | TD-MEM-02 | LcdGlyphAtlas | Sin evicción | 16 MiB VRAM + LCD roto | P1 |
-| TD-MEM-05 | `word_cache` | Miss storm periódico | ~5-10 MB + CPU spike | P1 |
+| ~~TD-MEM-05~~ | `word_cache` | ~~Miss storm periódico~~ | ~~resuelto~~ | ~~P1~~ |
 | TD-MEM-06 | `byte_to_col_buf` | Crece sin reducir | ~1-10 MB (según líneas largas) | P1 |
-| TD-MEM-08 | `terminal_shell_ctxs` | Leak por terminal cerrado | ~1 MB (según tabs abiertos/cerrados) | P1 |
+| ~~TD-MEM-08~~ | `terminal_shell_ctxs` | ~~Leak por terminal cerrado~~ | ~~resuelto~~ | ~~P1~~ |
 | TD-MEM-03 | Bind groups stale | Correctness bug | N/A (crash/render roto) | P1 |
 | TD-MEM-12 | Tokio tasks colgados | Tasks no cancelados | ~10-50 MB (según queries canceladas) | P2 |
 | TD-MEM-13 | Agent `api_messages` | Crece por round | ~10-50 MB por query con archivos grandes | P2 |

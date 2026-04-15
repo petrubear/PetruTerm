@@ -1,7 +1,10 @@
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::num::NonZeroUsize;
 use std::rc::Rc;
+
+use lru::LruCache;
 
 use cosmic_text::{
     fontdb, Attrs, AttrsList, Buffer, BufferLine, CacheKey, CacheKeyFlags, Family, FontSystem,
@@ -254,8 +257,10 @@ pub struct TextShaper {
     ft_cmap: Option<FreeTypeCmapLookup>,
     /// Per-run shape cache: key is (xxhash(text_bytes), font_size_bits).
     /// Stores pre-shaped `ShapedRun`s so that common words (`fn`, `let`, etc.)
-    /// hit this cache instead of re-entering HarfBuzz. Capped at 512 entries.
-    word_cache: HashMap<(u64, u32), ShapedRun>,
+    /// hit this cache instead of re-entering HarfBuzz. Capped at 1024 entries
+    /// with LRU eviction — evicts the least-recently-used entry instead of
+    /// clearing everything (TD-MEM-05).
+    word_cache: LruCache<(u64, u32), ShapedRun>,
     /// Direct cmap glyph-ID cache for the ASCII fast path.
     /// Maps ASCII codepoint → glyph_id (0 = not in font / fast-path unavailable).
     ascii_glyph_cache: [u32; 128],
@@ -350,7 +355,7 @@ impl TextShaper {
             primary_font_id: font_id,
             primary_face_ids,
             ft_cmap,
-            word_cache: HashMap::new(),
+            word_cache: LruCache::new(NonZeroUsize::new(1024).unwrap()),
             ascii_glyph_cache: [0u32; 128],
             ascii_glyph_cache_ready: false,
         };
@@ -505,14 +510,10 @@ impl TextShaper {
         (h.finish(), font_size_bits)
     }
 
-    /// Insert a shaped run into `word_cache`. Evicts all entries when the cache exceeds 512.
+    /// Insert a shaped run into `word_cache`. LRU eviction handles capacity automatically.
     fn word_cache_insert(&mut self, text: &str, font_size_bits: u32, run: ShapedRun) {
-        const MAX_ENTRIES: usize = 512;
-        if self.word_cache.len() >= MAX_ENTRIES {
-            self.word_cache.clear();
-        }
         let key = Self::word_hash(text, font_size_bits);
-        self.word_cache.insert(key, run);
+        self.word_cache.put(key, run);
     }
 
     pub fn shape_line(
@@ -578,7 +579,7 @@ impl TextShaper {
 
         // Check if all tokens are cached before doing any mutation.
         let all_cached = tokens.iter().all(|(_, word)| {
-            self.word_cache.contains_key(&Self::word_hash(word, font_size_bits))
+            self.word_cache.contains(&Self::word_hash(word, font_size_bits))
         });
 
         let mut all_glyphs: Vec<ShapedGlyph> = Vec::with_capacity(text.len());
