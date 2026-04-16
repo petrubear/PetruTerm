@@ -31,8 +31,8 @@ Commits de esta sesión:
 - TD-MEM-04: SwashCache NO es el leak — el código usa `get_image_uncached`, no `get_image`
 
 ### P1 pendientes
-- TD-MEM-06: `byte_to_col_buf` en shaper no hace shrink tras líneas largas — fácil
-- TD-MEM-07: `ChatPanel.messages` sin límite de historial — requiere truncación + UI
+- ~~TD-MEM-06~~: `byte_to_col_buf` shrink condicional — RESUELTO
+- ~~TD-MEM-07~~: `ChatPanel.messages` truncado a 200 + drain wrapped_cache — RESUELTO
 
 ### P2 notables abiertos (ver TECHNICAL_DEBT.md para lista completa)
 - TD-MEM-09: scrollback alto (40-200 MB con muchos tabs)

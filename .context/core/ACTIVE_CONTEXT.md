@@ -23,21 +23,16 @@
 
 ### Pendientes P1
 
-| ID | Descripción | Esfuerzo |
-|----|-------------|----------|
-| **TD-MEM-06** | `byte_to_col_buf` en `shaper.rs` no hace shrink tras líneas largas | Bajo — `shrink_to()` condicional |
-| **TD-MEM-07** | `ChatPanel.messages` sin límite — historial crece sin fin | Medio — truncar a 200 msgs + limpiar `wrapped_cache` |
+Todos los P1 de memory leaks resueltos (TD-MEM-01..03, 05..08).
 
 ### Falso positivo (documentado)
 - **TD-MEM-04**: SwashCache NO crece — el código usa `get_image_uncached`, no `get_image`. El atlas (64 MiB) es el cache acotado.
 
 ## Próximos pasos
 
-1. **TD-MEM-06** — fix trivial, 15 min
-2. **TD-MEM-07** — truncar historial de chat a N mensajes + shrink wrapped_cache
-3. **P2 pendientes** de TD-MEM-09..19 (scrollback, file_picker, tokio tasks, ventana sin foco)
-4. **Phase 3.5 performance** pendiente: TD-PERF-06 (doble rasterización LCD), TD-PERF-07 (reshape storm), TD-PERF-09 (shell context disk read)
-5. **Phase 4 (plugins)** — bloqueado hasta Phase 3.5 exit criteria
+1. **P2 pendientes** de TD-MEM-09..19 (scrollback, file_picker, tokio tasks, ventana sin foco)
+2. **Phase 3.5 performance** pendiente: TD-PERF-06 (doble rasterización LCD), TD-PERF-07 (reshape storm), TD-PERF-09 (shell context disk read)
+3. **Phase 4 (plugins)** — bloqueado hasta Phase 3.5 exit criteria
 
 ## Cambios clave de esta sesión
 

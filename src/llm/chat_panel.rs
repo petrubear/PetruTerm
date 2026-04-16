@@ -4,6 +4,8 @@ use crate::llm::diff::{DiffLine, diff_lines, compress_diff};
 
 /// Default panel width in terminal cell columns.
 pub const PANEL_COLS: u16 = 55;
+/// Maximum number of messages retained per panel before the oldest are dropped.
+const MAX_MESSAGES: usize = 200;
 /// Max number of file attachment rows shown in the panel header section.
 pub const MAX_FILE_ROWS: usize = 4;
 
@@ -282,6 +284,13 @@ impl ChatPanel {
             self.messages.push(ChatMessage::assistant(response));
         }
         self.streaming_buf.clear();
+        // Drop oldest messages if history exceeds the cap, keeping wrapped_cache in sync.
+        if self.messages.len() > MAX_MESSAGES {
+            let drop = self.messages.len() - MAX_MESSAGES;
+            self.messages.drain(..drop);
+            let cached = self.wrapped_cache.len().min(drop);
+            self.wrapped_cache.drain(..cached);
+        }
         self.state = PanelState::Idle;
         self.scroll_offset = 0; // snap to bottom
         self.dirty = true;

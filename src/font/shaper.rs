@@ -238,7 +238,7 @@ pub struct TextShaper {
     pub cell_width: f32,
     pub cell_height: f32,
     shape_buf: Buffer,
-    /// Reusable byte-offset → char-index map. Resized on demand, never shrinks.
+    /// Reusable byte-offset → char-index map. Resized on demand; shrinks when capacity > 4x need.
     byte_to_col_buf: Vec<usize>,
     pub lcd_rasterizer: Option<FreeTypeLcdRasterizer>,
     pub lcd_atlas: Option<Rc<RefCell<LcdGlyphAtlas>>>,
@@ -713,9 +713,13 @@ impl TextShaper {
         let mut line_height = self.cell_height;
 
         // Precompute byte-offset → char-index map once (O(n)) to avoid O(n²) per-glyph scans.
-        // Reuse the buffer across cache-miss calls — only grows, never re-allocates downward.
+        // Reuse the buffer across cache-miss calls. Shrink if capacity is >4x the current need
+        // (e.g. after a very long line is no longer being shaped) to avoid retaining large allocations.
         let n = text.len();
         self.byte_to_col_buf.resize(n + 1, 0);
+        if self.byte_to_col_buf.capacity() > (n + 1).max(256) * 4 {
+            self.byte_to_col_buf.shrink_to((n + 1) * 2);
+        }
         let mut char_idx = 0usize;
         for (byte_idx, _) in text.char_indices() {
             self.byte_to_col_buf[byte_idx] = char_idx;
