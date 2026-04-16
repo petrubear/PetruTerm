@@ -241,29 +241,31 @@ impl RenderContext {
                     None
                 };
 
-                let (atlas, queue) = self.renderer.atlas_and_queue();
-                let swash_entry = self.shaper.rasterize_to_atlas(glyph.cache_key, atlas, queue)?;
-
-                let (atlas_uv, glyph_offset, glyph_size) = if lcd_entry.is_none() {
-                    let ox = swash_entry.bearing_x as f32;
-                    let oy = shaped.ascent - swash_entry.bearing_y as f32;
-                    let gw = swash_entry.width as f32;
-                    let gh = swash_entry.height as f32;
+                // Skip Swash rasterization when LCD succeeded — saves rasterization + atlas
+                // upload for every text glyph on a cache miss. Color emoji never produce an
+                // LCD entry and always fall through to the Swash path (TD-PERF-06).
+                let (atlas_uv, glyph_offset, glyph_size, color_flag) = if lcd_entry.is_none() {
+                    let (atlas, queue) = self.renderer.atlas_and_queue();
+                    let se = self.shaper.rasterize_to_atlas(glyph.cache_key, atlas, queue)?;
+                    let ox = se.bearing_x as f32;
+                    let oy = shaped.ascent - se.bearing_y as f32;
+                    let gw = se.width as f32;
+                    let gh = se.height as f32;
                     let y0 = oy.max(0.0);
                     let y1 = (oy + gh).min(self.shaper.cell_height);
+                    let flag = if se.is_color { FLAG_COLOR_GLYPH } else { 0 };
                     if y1 <= y0 || gw == 0.0 || gh == 0.0 {
-                        ([0.0f32; 4], [0.0; 2], [0.0; 2])
+                        ([0.0f32; 4], [0.0f32; 2], [0.0f32; 2], flag)
                     } else {
                         let fy0 = (y0 - oy) / gh;
                         let fy1 = (y1 - oy) / gh;
-                        let [u0, v0, u1, v1] = swash_entry.uv;
-                        ([u0, v0 + fy0 * (v1 - v0), u1, v0 + fy1 * (v1 - v0)], [ox, y0], [gw, y1 - y0])
+                        let [u0, v0, u1, v1] = se.uv;
+                        ([u0, v0 + fy0 * (v1 - v0), u1, v0 + fy1 * (v1 - v0)], [ox, y0], [gw, y1 - y0], flag)
                     }
                 } else {
-                    ([0.0f32; 4], [0.0; 2], [0.0; 2])
+                    // LCD path: emit a background-only vertex (zeroed UVs; GPU reads bg color).
+                    ([0.0f32; 4], [0.0f32; 2], [0.0f32; 2], 0)
                 };
-
-                let color_flag = if swash_entry.is_color { FLAG_COLOR_GLYPH } else { 0 };
                 // Store LOCAL coordinates in the cache (col within pane, row within pane).
                 row_instances.push(CellVertex {
                     grid_pos: [glyph.col as f32, row_idx as f32],

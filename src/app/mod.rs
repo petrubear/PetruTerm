@@ -52,9 +52,9 @@ pub struct App {
     cached_cwd: Option<std::path::PathBuf>,
 
     /// Per-terminal shell context (exit code + last command), keyed by terminal_id.
-    /// Updated only when that specific terminal gets PTY data, so switching panes
-    /// always shows the correct context for the new pane without reading stale data.
-    terminal_shell_ctxs: std::collections::HashMap<usize, crate::llm::shell_context::ShellContext>,
+    /// Stored with the mtime of the context file to skip redundant disk reads when
+    /// the file has not changed since the last PTY event (TD-PERF-09).
+    terminal_shell_ctxs: std::collections::HashMap<usize, (crate::llm::shell_context::ShellContext, std::time::SystemTime)>,
 }
 
 impl App {
@@ -89,14 +89,19 @@ impl App {
     }
 
     /// Read shell context for a specific terminal and store it by terminal_id.
-    /// Called only when that terminal's PTY fires, so each pane tracks its own state.
+    /// Skips the disk read when the context file has not changed since last call (TD-PERF-09).
     fn update_terminal_shell_ctx(&mut self, terminal_id: usize) {
         let pid = self.mux.terminals.get(terminal_id)
             .and_then(|t| t.as_ref())
             .map(|t| t.child_pid);
         if let Some(pid) = pid {
+            let path = crate::llm::shell_context::ShellContext::context_file_path_for_pid(pid);
+            let Ok(mtime) = std::fs::metadata(&path).and_then(|m| m.modified()) else { return };
+            if let Some((_, cached_mtime)) = self.terminal_shell_ctxs.get(&terminal_id) {
+                if *cached_mtime == mtime { return; }
+            }
             if let Some(ctx) = crate::llm::shell_context::ShellContext::load_for_pid(pid) {
-                self.terminal_shell_ctxs.insert(terminal_id, ctx);
+                self.terminal_shell_ctxs.insert(terminal_id, (ctx, mtime));
             }
         }
     }
@@ -104,7 +109,7 @@ impl App {
     /// Shell context for the currently active pane, if any.
     fn active_shell_ctx(&self) -> Option<&crate::llm::shell_context::ShellContext> {
         let tid = self.mux.focused_terminal_id();
-        self.terminal_shell_ctxs.get(&tid)
+        self.terminal_shell_ctxs.get(&tid).map(|(ctx, _)| ctx)
     }
 
     fn tab_bar_visible(&self) -> bool {
@@ -412,13 +417,13 @@ impl ApplicationHandler<()> for App {
                     if rc.renderer.atlas.is_near_full() {
                         let evicted = rc.renderer.atlas.evict_cold(60);
                         if evicted > 0 {
-                            rc.clear_all_row_caches();
+                            // evict_cold() removes logical entries but the physical texture
+                            // is unchanged — cached UV coordinates in row caches remain valid.
+                            // Only flush row caches after an actual clear() (TD-PERF-07).
                             log::debug!("Atlas eviction: removed {} stale glyphs", evicted);
-                            // evict_cold() removes logical entries but the physical cursor
-                            // does not move back (shelf packing is append-only). If the
-                            // cursor is still >75% of the atlas height, a new upload would
-                            // hit AtlasError::Full within a few frames anyway. Clear now
-                            // so the retry frame starts with a fully empty atlas (TD-MEM-01).
+                            // If the physical cursor is still >75% full after logical eviction,
+                            // the next uploads would fail quickly. Clear the texture now and
+                            // invalidate all row caches (UVs now point to wiped data).
                             if rc.renderer.atlas.cursor_fill_ratio() > 0.75 {
                                 rc.renderer.atlas.clear(&rc.renderer.device());
                                 if let Some(lcd) = rc.renderer.get_lcd_atlas() {
@@ -427,6 +432,7 @@ impl ApplicationHandler<()> for App {
                                 }
                                 rc.renderer.rebuild_atlas_bind_groups();
                                 rc.atlas_generation += 1;
+                                rc.clear_all_row_caches();
                                 log::debug!("Atlas: cursor still high after eviction — preemptive clear");
                             }
                         }
