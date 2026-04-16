@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-04-15
-**Open Items:** 47
-**Critical (P0):** 0 | **P1:** 4 | **P2:** 24 | **P3:** 19
+**Open Items:** 46
+**Critical (P0):** 0 | **P1:** 3 | **P2:** 24 | **P3:** 19
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -39,14 +39,6 @@
 - **Descripción:** `upload_instances` clampea con `.min(MAX_INSTANCES)` sin log ni error cuando se supera el límite. `upload_rect_instances` hace lo mismo con `MAX_RECT_INSTANCES = 256`. El resultado es **rendering incompleto sin ninguna indicación de error**. Con una terminal grande (200×50 = 10 000 celdas) + panel de chat + tab bar + overlays, el total puede superar 32 768. `MAX_RECT_INSTANCES = 256` es especialmente ajustado: 10 tabs + separadores de panes puede acercarse al límite.
 - **Fix:** (a) Corto plazo: añadir `log::warn!` cuando `instances.len() > MAX_*` para detectar en desarrollo. (b) Largo plazo: buffer dinámico — recrear con `device.create_buffer` al nuevo tamaño (siguiente potencia de 2) cuando se supere la capacidad. Aumentar `MAX_RECT_INSTANCES` a 1 024 como mínimo.
 - **Severidad:** P1 — correctness bug silencioso: rendering incompleto sin error visible.
-
----
-
-### TD-MEM-04: `SwashCache` de cosmic-text crece indefinidamente sin límite
-- **Archivo:** `src/font/shaper.rs:TextShaper` (campo `swash_cache: SwashCache`)
-- **Descripción:** `SwashCache` no tiene límite de tamaño ni API de evicción pública. Con uso continuo (muchos glifos únicos, emoji, fallback fonts), el cache crece indefinidamente. Candidato principal del consumo de 20 GB tras 24 h de uso.
-- **Fix:** Reemplazar `SwashCache` con implementación propia sobre `swash` directo con LRU acotado en bytes. Límite configurable en `perf.lua` (`config.glyph_cache_mb = 50`). Contador `used_bytes: usize` actualizado en cada insert/evict; al insertar, si `used_bytes + glyph_size > limit_bytes`, evictar entradas LRU hasta tener espacio.
-- **Severidad:** P1 — candidato principal del leak de 20 GB. Sin límite, crece con cada glifo único visto.
 
 ---
 

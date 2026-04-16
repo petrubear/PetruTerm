@@ -13,6 +13,9 @@ Ordered newest-first within each date group.
 ### TD-MEM-02: `LcdGlyphAtlas` sin evicción
 - **Fix:** Epoch-based eviction añadida al `LcdGlyphAtlas` con el mismo patrón que `GlyphAtlas`. `last_used: u64` en `LcdAtlasEntry`, `next_epoch()`, `evict_cold(max_age)`. Cuando `upload()` falla con Full, llama a `evict_cold()` y reintenta.
 
+### TD-MEM-04: `SwashCache` de cosmic-text — falso positivo de leak
+- **Resolución:** El código usa `get_image_uncached()`, no `get_image()`. `SwashCache` nunca cachea en la ruta actual — cada llamada va directo al rasterizador sin acumulación. No hay leak de RAM. El consumo de 20 GB tenía otras causas (TD-MEM-07 + TD-MEM-09). Nota: usar `get_image_uncached` implica re-rasterizar el mismo glifo en cada frame sin cache; un LRU acotado sería una mejora de *performance*, no de memoria — candidato para un ítem TD-PERF futuro.
+
 ### TD-MEM-03: Bind groups stale tras atlas clear
 - **Fix:** Re-creación de bind groups en el path de `clear()`. No había sección independiente; referenciado solo en la tabla de resumen.
 

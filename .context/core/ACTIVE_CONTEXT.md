@@ -1,17 +1,31 @@
 # Active Context
 
-**Current Focus:** **Phase 3.5 — Performance Sprint** (en curso)
+**Current Focus:** **TD-RENDER-01/02 — Visual regression fixes** (próxima sesión)
 **Last Active:** 2026-04-15
 
 ## Estado actual del proyecto
 
-**Phase 1–3 COMPLETE. Phase 3.5 (memory + perf) EN PROGRESO.**
+**Phase 1–3 COMPLETE. Phase 3.5 PERF sprint COMPLETO.**
+**Debt registry limpio: 46 items abiertos (3 P1 / 24 P2 / 19 P3).**
 
-> Todas las features de Phase 1–3 verificadas. Phase 4 (plugins) bloqueada hasta Phase 3.5 exit criteria.
+> Dos regresiones visuales P1 introducidas en el sprint PERF-10. Atacar antes de Phase 4.
 
 ---
 
-## Phase 3.5 — Resumen de progreso
+## Regresiones P1 activas (introducidas en PERF-10 sprint)
+
+### TD-RENDER-02: Flickering zona "Thinking..." — regresión confirmada
+- **Archivos calientes:** `src/app/renderer.rs` (zona input block / status row del panel), `src/app/mod.rs` (dirty flag + frame_counter interaction)
+- **Causa probable:** El split de `build_chat_panel_instances` (PERF-10) reconstruye la fila del spinner fuera de sync con el overlay del bloque. Verificar si el `frame_counter` (PERF-13) toca la `dirty` flag del panel en lugar de solo el rect del spinner.
+- **Pista:** Buscar dónde se marca `panel.dirty = true` — debe ser solo contenido, nunca el spinner/input rows.
+
+### TD-RENDER-01: Artefactos visuales en bloques del panel de chat
+- **Archivos calientes:** `src/app/renderer.rs:build_chat_panel_instances()`, `src/llm/chat_panel.rs`
+- **Causa probable:** `panel_instances_cache` emite vértices con coordenadas incorrectas cuando el panel tiene scroll o el historial supera la altura visible. La lógica de content cache introducida en PERF-10 puede no estar aplicando el `scroll_offset` correctamente al recalcular coordenadas.
+
+---
+
+## Phase 3.5 — Sprint PERF completo
 
 ### Memory leaks — todos los P1 resueltos
 
@@ -20,43 +34,43 @@
 | TD-MEM-01 | GlyphAtlas `cursor_fill_ratio()` + preemptive clear | RESUELTO |
 | TD-MEM-02 | LcdGlyphAtlas epoch/evict + `clear_lcd_rasterizer_cache()` | RESUELTO |
 | TD-MEM-03 | `GpuRenderer::rebuild_atlas_bind_groups()` tras atlas.clear() | RESUELTO |
-| TD-MEM-04 | SwashCache — falso positivo, usa `get_image_uncached` | NO ES LEAK |
+| TD-MEM-04 | SwashCache — **falso positivo**, usa `get_image_uncached` | ARCHIVADO |
 | TD-MEM-05 | `word_cache` HashMap → `lru::LruCache(1024)` | RESUELTO |
 | TD-MEM-06 | `byte_to_col_buf` shrink condicional | RESUELTO |
 | TD-MEM-07 | `ChatPanel.messages` cap 200 + drain `wrapped_cache` | RESUELTO |
 | TD-MEM-08 | `Mux.closed_ids` drain → limpieza de `terminal_shell_ctxs` | RESUELTO |
 
-### Performance — resueltos
+### Performance — sprint resueltos
 
 | ID | Fix | Estado |
 |----|-----|--------|
 | TD-PERF-06 | Skip `rasterize_to_atlas` cuando LCD atlas tiene hit | RESUELTO |
-| TD-PERF-07 | `clear_all_row_caches()` solo en branch `clear()`, no en `evict_cold()` | RESUELTO |
+| TD-PERF-07 | `clear_all_row_caches()` solo en branch `clear()` | RESUELTO |
 | TD-PERF-08 | `PresentMode::Mailbox` + `desired_maximum_frame_latency=1` | RESUELTO |
-| TD-PERF-09 | mtime guard en `terminal_shell_ctxs` (evita disk read por frame) | RESUELTO |
-| TD-PERF-10 | Split panel render: content cache + input rows vivos | RESUELTO |
-| TD-PERF-11 | Búsqueda incremental: `filter_matches()` extiende query anterior | RESUELTO |
-| TD-PERF-12 | Scratch buffers en `push_shaped_row` (`scratch_chars/str/colors`) | RESUELTO |
+| TD-PERF-09 | mtime guard en `terminal_shell_ctxs` | RESUELTO |
+| TD-PERF-10 | Split panel render: content cache + input rows vivos | RESUELTO ⚠ |
+| TD-PERF-11 | Búsqueda incremental: `filter_matches()` extiende query | RESUELTO |
+| TD-PERF-12 | Scratch buffers en `push_shaped_row` | RESUELTO |
 | TD-PERF-13 | `scratch_lines` reuse + `frame_counter` spinner O(1) | RESUELTO |
 
-### Performance — próximos candidatos (P1 primero)
+> ⚠ TD-PERF-10 introdujo regresiones TD-RENDER-01/02.
 
-- **TD-PERF-20** (P2): Truncación con `chars().count()` en varios lugares — fix trivial con `char_indices().nth(N)`
-- **TD-PERF-15** (P2): Clipboard (`arboard`) bloquea event loop en copy/paste grande
-- **TD-PERF-14** (P2): Scroll bar como N `CellVertex` → 2 `RoundedRectInstance`
-- **TD-PERF-16** (P2): Hash key de tab bar / status bar recalculado por frame
-- **TD-PERF-17** (P2): Config hot-reload sin debounce
-- **TD-PERF-18** (P2): Tokio pool `num_cpus` → 2 workers
-- **TD-PERF-19** (P2): `poll_git_branch` sin guard de vuelo
-- **TD-PERF-21** (P2): Palette fuzzy matcher no incremental
-- **TD-PERF-22** (P2): Search highlight O(matches) por celda en render
+### P1 abiertos post-sprint
 
-### Memory P2 abiertos (menor urgencia)
+| ID | Descripción |
+|----|-------------|
+| TD-RENDER-02 | Flickering zona "Thinking..." del panel (regresión PERF-10) |
+| TD-RENDER-01 | Artefactos visuales en bloques de mensaje (regresión PERF-10) |
+| TD-PERF-36 | MAX_INSTANCES/MAX_RECT_INSTANCES overflow silencioso |
 
-- TD-MEM-09: Scrollback sin límite global (40-200 MB con muchos tabs)
-- TD-MEM-10/11: `file_picker_items` no se limpia + `SkimMatcherV2` por frame
-- TD-MEM-12: Tokio tasks de streaming LLM colgados al cerrar panel
-- TD-MEM-19: Cursor blink + reloj + git poll corren con ventana sin foco
+### Quick wins P2 para próxima sesión (post renders)
+
+| ID | Archivo | Fix |
+|----|---------|-----|
+| TD-PERF-32 | `src/app/renderer.rs:191` | Mover `colors_scratch` a `RenderContext` |
+| TD-PERF-20 | `src/app/renderer.rs:662,663,754` | `char_indices().nth(N)` zero-alloc |
+| TD-PERF-19 | `src/app/ui.rs:265` | `git_branch_in_flight: bool` guard |
+| TD-PERF-36 | `src/renderer/gpu.rs:20` | `MAX_RECT_INSTANCES` → 1 024 + `log::warn!` |
 
 ---
 
@@ -73,13 +87,13 @@
 - Detección: `cursor_fill_ratio() > 0.75` después de evicción → preemptive `clear()`
 
 **`Mux.closed_ids` patrón:**
-- `cmd_close_tab/pane()` pusean IDs a `Mux.closed_ids`
-- App drena `closed_ids` en dos puntos: tras `handle_key_input` y en `close_exited_terminals`
+- `cmd_close_tab/pane()` pushean IDs a `Mux.closed_ids`
+- App drena `closed_ids` tras `handle_key_input` y en `close_exited_terminals`
 - Permite limpiar estado externo sin pasar `App` a `Mux`
 
 **`RenderContext` scratch fields (TD-PERF-12/13):**
 - `scratch_chars/str/colors`: usados por `push_shaped_row` via `mem::take`
-- `scratch_lines: Vec<(String,[f32;4])>`: reutilizado por `build_chat_panel_instances`; strings sobreescritas in-place con `push_str` para reusar capacidad
+- `scratch_lines: Vec<(String,[f32;4])>`: reutilizado por `build_chat_panel_instances`; strings sobreescritas in-place con `push_str`
 - `frame_counter: u64`: incrementado en `RedrawRequested`; spinners = `(frame_counter/4)%8`
 - `fmt_buf: String`: scratch de una sola línea para callers de `push_shaped_row`
 
@@ -87,6 +101,7 @@
 - Content section (`build_chat_panel_instances`): solo reconstruye cuando `ChatPanel::dirty`
 - Input rows (`build_chat_panel_input_rows`): reconstruidas cada frame (cursor blink, hint text)
 - Blink solo toca input rows, no invalida cache de mensajes
+- ⚠ Ruta de regresión: si coordenadas del content cache no incluyen `scroll_offset`, los bloques renderizan en posición incorrecta
 
 ## Keybinds actuales
 

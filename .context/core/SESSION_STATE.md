@@ -1,13 +1,14 @@
 # Session State
 
 **Last Updated:** 2026-04-15
-**Session Focus:** Phase 3.5 — Performance Sprint
+**Session Focus:** Phase 3.5 — Debt cleanup + visual regression
 
 ## Branch: `master`
 
 ## Estado actual
 
-**Phase 1–3 COMPLETE. Phase 3.5 (performance + memory) EN PROGRESO.**
+**Phase 1–3 COMPLETE. Phase 3.5 (performance + memory) SPRINT COMPLETO.**
+**Dos regresiones visuales P1 abiertas (TD-RENDER-01/02) — próxima prioridad.**
 
 ## Build
 
@@ -19,6 +20,7 @@
 
 | Commit | Descripción |
 |--------|-------------|
+| `4e75c54` | chore: archive resolved debt + reprioritize kiro/codex audit |
 | `b28165e` | [TD-PERF-12/13] scratch_lines reuse + frame_counter spinner |
 | `b5372a8` | [TD-PERF-11] incremental text search |
 | `3270614` | [TD-PERF-10] split panel render: content cache + live input rows |
@@ -28,8 +30,6 @@
 | `188c1e8` | [TD-MEM-01/02] atlas eviction reclaims physical space + LCD eviction |
 | `d0c3b1b` | [TD-MEM-03] rebuild atlas bind groups after atlas.clear() |
 | `6730465` | [TD-MEM-05/08] word_cache LRU + terminal_shell_ctxs cleanup |
-| `86683c7` | Phase 3.5-E/H: PTY QoS + Lua cache + native build profile |
-| `3030c29` | Phase 3.5-D: scratch buffers + mimalloc |
 
 ---
 
@@ -37,48 +37,51 @@
 
 ### Memory (todos los P1 resueltos)
 - TD-MEM-01, 02, 03, 05, 06, 07, 08 — RESUELTOS
-- TD-MEM-04 — falso positivo (usa `get_image_uncached`, no crece)
+- TD-MEM-04 — **falso positivo** (usa `get_image_uncached`, no crece; ver archive)
 
 ### Performance
 - TD-PERF-06, 07, 08, 09, 10, 11, 12, 13 — RESUELTOS
 
 ---
 
-## Próxima sesión — candidatos sugeridos
+## Regresiones abiertas (P1 — próxima sesión)
 
-### Quick wins (1-2 h)
+### TD-RENDER-02: Flickering en zona "Thinking..." — REGRESIÓN
+- Área: inline AI block status row (donde aparece "Thinking... / press Esc")
+- Causa probable: split de TD-PERF-10 desincroniza la fila del spinner con el overlay del bloque
+- Ver: `src/app/renderer.rs:build_chat_panel_instances()`, `src/app/mod.rs` dirty flag
 
-1. **TD-PERF-20** — Truncación O(n) con `chars().count()` → `char_indices().nth(N)` zero-alloc
-   - `src/app/renderer.rs:464` (spinner — ya resuelto), `662, 663, 754` (truncación paths/hints)
-   - Fix de 3 líneas por sitio, cero riesgo
+### TD-RENDER-01: Bloques del panel de chat con artefactos visuales
+- Área: bloques de mensaje/respuesta del modelo en el panel de chat
+- Causa probable: content cache de TD-PERF-10 emite vértices con coordenadas incorrectas en scroll / historial largo
+- Ver: `src/app/renderer.rs:build_chat_panel_instances()`
 
-2. **TD-PERF-19** — `poll_git_branch` sin guard de vuelo en `src/app/ui.rs:265-293`
-   - Añadir `git_branch_in_flight: bool` al estado; guard de una línea
+---
 
-3. **TD-PERF-18** — Tokio pool `new_multi_thread()` → `.worker_threads(2)` en `src/app/ui.rs:93`
-   - Cambio de 1 línea; 2 workers suficientes para I/O-bound tasks
+## Próxima sesión — candidatos
 
-### Impacto medio (2-4 h)
+### P1 — Atacar primero
+1. **TD-RENDER-02** — Flickering "Thinking..." zone (regresión)
+2. **TD-RENDER-01** — Artefactos en bloques del chat
 
-4. **TD-PERF-15** — Clipboard async: `arboard` bloquea event loop en paste grande
-   - `src/app/mod.rs:703,709`, `src/app/input/mod.rs:481,488`, `src/app/mux.rs:134,136`
-   - Mover a `tokio::task::spawn_blocking`; paste via canal
+### Quick wins P2 (post-render fixes)
+3. **TD-PERF-32** — Mover `colors_scratch` a `RenderContext` (`src/app/renderer.rs:191`)
+4. **TD-PERF-20** — Truncación `char_indices().nth(N)` en `src/app/renderer.rs:662,663,754`
+5. **TD-PERF-19** — `poll_git_branch` in-flight guard en `src/app/ui.rs:265`
+6. **TD-PERF-36** — `MAX_RECT_INSTANCES` warning + increase a 1 024 (`src/renderer/gpu.rs:20`)
 
-5. **TD-PERF-16** — Hash key tab bar / status bar recalculado por frame
-   - `src/app/mod.rs:454-461` (tab_key), `mod.rs:554-568` (sb_key)
-   - Cachear inputs previos como tupla copiable; `==` directo antes del hash
-
-6. **TD-PERF-22** — Search highlight O(matches) por celda
-   - `src/app/mux.rs:441-454` → `HashMap<i32, Vec<(col_start, col_end)>>` indexado por línea
-
-### Siguiente milestone (Phase 4)
-- Phase 3.5 exit criteria: todos los P1 y P2 de alto impacto resueltos
-- TD-OP-02 (P1): fragile Nerd Font glyph ID override — abierto
+### Siguiente milestone
+- Phase 3.5 exit: TD-RENDER-01/02 resueltos + quick wins P2 completados
 - Phase 4 (plugins): Lua API pública, auto-scan `~/.config/petruterm/plugins/`
 
 ---
 
 ## Sesiones anteriores (resumen)
+
+### 2026-04-15 — Phase 3.5 Debt audit + cleanup
+- Dos regresiones visuales identificadas en screenshot: TD-RENDER-01/02 (P1)
+- Deuda técnica: archivados 12 items resueltos (MEM + PERF)
+- Reprioritización auditoría kiro/codex: PERF-36 subido a P1, PERF-32 bajado a P2, varios P2→P3
 
 ### 2026-04-15 — Phase 3.5 Performance + Memory
 - Memory audit completo: 12 items (TD-MEM-01..12 + TD-MEM-19)
