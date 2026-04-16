@@ -1,7 +1,7 @@
 # Session State
 
 **Last Updated:** 2026-04-15
-**Session Focus:** Phase 3.5 — Memory Leak Sprint (en curso)
+**Session Focus:** Phase 3.5 — Performance Sprint (en curso)
 
 ## Branch: `master`
 
@@ -10,6 +10,8 @@
 **Phase 1–3 COMPLETE. Phase 3.5 (performance + memory) EN PROGRESO.**
 
 Commits de esta sesión:
+- `334dee0` perf: TD-PERF-06/07/09 — skip double rasterization + lazy row cache + mtime guard
+- `9a2fcb8` fix: TD-MEM-06/07 — byte_to_col_buf shrink + ChatPanel message cap
 - `86683c7` perf: Phase 3.5-E/H — PTY QoS + Lua cache + native build profile
 - `6730465` fix: TD-MEM-05 + TD-MEM-08 — word_cache LRU + terminal_shell_ctxs cleanup
 - `d0c3b1b` fix: TD-MEM-03 — rebuild atlas bind groups after atlas.clear()
@@ -40,12 +42,17 @@ Commits de esta sesión:
 - TD-MEM-12: Tokio tasks de streaming LLM no cancelados al cerrar panel
 - TD-MEM-19: cursor blink + reloj + git polling cuando ventana sin foco
 
-## Deuda técnica abierta (performance, pre-auditoría)
+## Deuda técnica abierta (performance)
 
-30 items originales (TD-PERF-06..30 + TD-MAINT-01). Top P1:
-- TD-PERF-06 — doble rasterización LCD+Swash
-- TD-PERF-07 — reshape storm en atlas evict
-- TD-PERF-09 — shell context disk read por evento PTY
+- ~~TD-PERF-06~~: skip Swash cuando LCD tiene hit — RESUELTO
+- ~~TD-PERF-07~~: reshape storm movido a branch de clear() — RESUELTO
+- ~~TD-PERF-09~~: mtime guard en shell context — RESUELTO
+- ~~TD-PERF-10~~: cursor blink invalida panel de chat — RESUELTO
+- ~~TD-PERF-11~~: text search incremental — RESUELTO
+- ~~TD-PERF-12~~: scratch buffers en push_shaped_row — RESUELTO
+- ~~TD-PERF-13~~: format! spam + O(n) spinner → scratch_lines + frame_counter — RESUELTO
+- TD-PERF-08 (P1): PresentMode::Fifo → Mailbox para menor latencia input-to-pixel
+- ... (ver TECHNICAL_DEBT.md para lista completa)
 
 ---
 

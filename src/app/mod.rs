@@ -377,6 +377,10 @@ impl ApplicationHandler<()> for App {
 
                 let frame_start = std::time::Instant::now();
 
+                if let Some(rc) = &mut self.render_ctx {
+                    rc.frame_counter = rc.frame_counter.wrapping_add(1);
+                }
+
                 self.check_config_reload();
                 let (data_ids, exited) = self.mux.poll_pty_events();
                 if self.close_exited_terminals(exited) { event_loop.exit(); return; }

@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-04-15
-**Open Items:** 36
-**Critical (P0):** 0 | **P1:** 3 | **P2:** 21 | **P3:** 12
+**Open Items:** 34
+**Critical (P0):** 0 | **P1:** 3 | **P2:** 19 | **P3:** 12
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -294,19 +294,13 @@ Sesión de auditoría completa con objetivo declarado: **hacer de PetruTerm el t
 
 ---
 
-### TD-PERF-12: Allocaciones repetidas en `push_shaped_row` para cada fila de overlay UI
-- **Archivo:** `src/app/renderer.rs:343-424` (concretamente líneas 374, 376-379, 381)
-- **Descripción:** `push_shaped_row` se invoca ~40 veces por frame dirty de chat panel / status bar / AI block. Cada invocación aloca: `Vec<char>` (línea 374), `String` padded (línea 376-379), y `Vec<([f32;4],[f32;4])>` colors (línea 381). Son ~120 allocaciones/heap frees por reconstrucción de panel.
-- **Fix:** Mover los tres buffers a `RenderContext` como `scratch_chars: Vec<char>`, `scratch_padded: String`, `scratch_colors: Vec<(...)>`. `clear()` al inicio de cada `push_shaped_row` y reusar la capacidad.
-- **Severidad:** P2 — alocaciones en cascada presionan el allocator y thrashean L1/L2.
+### ~~TD-PERF-12~~: Allocaciones repetidas en `push_shaped_row` — RESUELTO
+- `scratch_chars`, `scratch_str`, `scratch_colors` en `RenderContext`; `push_shaped_row` los toma con `mem::take`, reutiliza la capacidad y los devuelve. ~120 allocs/rebuild eliminadas.
 
 ---
 
-### TD-PERF-13: `format!` spam en `build_chat_panel_instances` (~40+ llamadas por rebuild)
-- **Archivo:** `src/app/renderer.rs:488, 496, 540-541, 578, 601-606, 634, 643, 648, 655, 666, 684, 701-702, 722-734, 751-754, 811, 819, 824, 831`
-- **Descripción:** Cada rebuild dirty del chat panel genera decenas de strings temporales vía `format!`: prefijos de rol, paths truncados, separadores con `"─".repeat(n)`, mensajes de status, hints, tokens. Todos se descartan inmediatamente después del shape.
-- **Fix:** Un `String` scratch compartido en `RenderContext`, limpio al inicio de cada push (`buf.clear(); write!(buf, "...")`). Separadores (`"─".repeat(w)`) se cachean al tamaño en el propio `ChatPanel` y solo se regeneran en resize.
-- **Severidad:** P2 — contribuye a la presión del allocator junto con TD-PERF-12.
+### ~~TD-PERF-13~~: `format!` spam en `build_chat_panel_instances` — RESUELTO
+- `scratch_lines: Vec<(String, [f32;4])>` en `RenderContext` reutiliza tanto el Vec como la capacidad interna de cada String (index-based overwrite con `push_str`). Spinner cambiado de O(n) `chars().count()` a `frame_counter / 4 % 8` (campo `u64` en `RenderContext`, incrementado en `RedrawRequested`). `fmt_buf` para strings de única línea (separadores, cmd truncado, loading). Elimina ~40+ allocs transitorias por rebuild + O(n) spinner.
 
 ---
 

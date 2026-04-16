@@ -56,6 +56,11 @@ pub struct RenderContext {
     /// General-purpose format scratch for callers of `push_shaped_row` (TD-PERF-13).
     /// Kept separate from `scratch_str` (used inside push_shaped_row) to avoid borrow conflicts.
     pub fmt_buf: String,
+    /// Reusable line buffer for `build_chat_panel_instances` — avoids Vec realloc per rebuild.
+    /// Strings inside are reused across frames when capacity permits (TD-PERF-13).
+    pub scratch_lines: Vec<(String, [f32; 4])>,
+    /// Incremented each rendered frame; used for spinner animation to avoid O(n) chars().count().
+    pub frame_counter: u64,
     /// Rounded rect instances for the tab bar pills and status bar background.
     pub rect_instances: Vec<RoundedRectInstance>,
 
@@ -118,6 +123,8 @@ impl RenderContext {
             scratch_str: String::new(),
             scratch_colors: Vec::new(),
             fmt_buf: String::new(),
+            scratch_lines: Vec::new(),
+            frame_counter: 0,
             rect_instances: Vec::new(),
             hud_visible: false,
             frame_times: std::collections::VecDeque::new(),
@@ -517,7 +524,7 @@ impl RenderContext {
         const PICK_FG:    [f32; 4] = [0.80, 0.80, 0.90, 1.0]; // soft white — picker items
 
         const SPIN: [&str; 8] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"];
-        let spin = SPIN[panel.streaming_buf.chars().count() % 8];
+        let spin = SPIN[(self.frame_counter / 4) as usize % 8];
 
         let co = term_cols; // grid column where panel begins
         let border_fg = if panel_focused { BORDER_FG } else { BORDER_DIM };
@@ -676,7 +683,31 @@ impl RenderContext {
             let history_rows = sep_row.saturating_sub(history_start_row);
             let msg_inner_w = panel_cols.saturating_sub(8);
 
-            let mut all_lines: Vec<(String, [f32; 4])> = Vec::new();
+            // Reuse scratch_lines across frames — Vec capacity is kept, String capacity reused
+            // when the line count is stable (common case). Avoids ~N allocs per rebuild (TD-PERF-13).
+            let mut all_lines = std::mem::take(&mut self.scratch_lines);
+            let mut line_idx: usize = 0;
+
+            // Helper: write `prefix + content` into all_lines[line_idx], reusing String capacity.
+            macro_rules! push_line {
+                ($prefix:expr, $content:expr, $color:expr) => {{
+                    let p: &str = $prefix;
+                    let c: &str = $content;
+                    if line_idx < all_lines.len() {
+                        let (s, col) = &mut all_lines[line_idx];
+                        s.clear();
+                        s.push_str(p);
+                        s.push_str(c);
+                        *col = $color;
+                    } else {
+                        let mut s = String::with_capacity(p.len() + c.len());
+                        s.push_str(p);
+                        s.push_str(c);
+                        all_lines.push((s, $color));
+                    }
+                    line_idx += 1;
+                }};
+            }
 
             // Use pre-wrapped lines from the cache (TD-PERF-05).
             // ensure_wrap_cache() is called in mod.rs before this function runs.
@@ -689,43 +720,61 @@ impl RenderContext {
                 };
                 for (i, line) in panel.wrapped_message(msg_idx).iter().enumerate() {
                     let p = if i == 0 { first_p } else { cont_p };
-                    all_lines.push((format!("{}{}", p, line), fg));
+                    push_line!(p, line.as_str(), fg);
                 }
-                all_lines.push(("│".to_string(), SEP_FG));
+                push_line!("│", "", SEP_FG);
             }
 
             if panel.is_streaming() && !panel.streaming_buf.is_empty() {
                 let wrapped = word_wrap(&panel.streaming_buf, msg_inner_w);
                 for (i, line) in wrapped.iter().enumerate() {
                     let p = if i == 0 { "│   AI  " } else { "│       " };
-                    all_lines.push((format!("{}{}", p, line), STREAM_FG));
+                    push_line!(p, line.as_str(), STREAM_FG);
                 }
             }
 
             if matches!(panel.state, PanelState::Loading) {
-                all_lines.push((format!("│   {}  Thinking\u{2026}", spin), STREAM_FG));
+                let mut buf = std::mem::take(&mut self.fmt_buf);
+                buf.clear();
+                let _ = std::fmt::write(&mut buf, format_args!("│   {}  Thinking\u{2026}", spin));
+                push_line!("", buf.as_str(), STREAM_FG);
+                self.fmt_buf = buf;
             }
 
             if let PanelState::Error(ref err) = panel.state {
                 let wrapped = word_wrap(err, msg_inner_w);
                 for (i, line) in wrapped.iter().enumerate() {
                     let p = if i == 0 { "│  \u{2717}    " } else { "│       " };
-                    all_lines.push((format!("{}{}", p, line), ERR_FG));
+                    push_line!(p, line.as_str(), ERR_FG);
                 }
             }
 
             if panel.is_idle() {
                 if let Some(cmd) = panel.last_assistant_command() {
                     let max_cmd_w = panel_cols.saturating_sub(5);
-                    let display_cmd = if cmd.chars().count() > max_cmd_w {
-                        format!("{}…", cmd.chars().take(max_cmd_w.saturating_sub(1)).collect::<String>())
-                    } else { cmd };
-                    all_lines.push(("│".to_string(), SEP_FG));
-                    all_lines.push((format!("│ \u{23ce}  {}", display_cmd), RUN_FG));
+                    push_line!("│", "", SEP_FG);
+                    let mut buf = std::mem::take(&mut self.fmt_buf);
+                    buf.clear();
+                    buf.push_str("│ \u{23ce}  ");
+                    let cmd_chars: usize = cmd.chars().count();
+                    if cmd_chars > max_cmd_w {
+                        let end = cmd.char_indices().nth(max_cmd_w.saturating_sub(1))
+                            .map(|(i, _)| i).unwrap_or(cmd.len());
+                        buf.push_str(&cmd[..end]);
+                        buf.push('…');
+                    } else {
+                        buf.push_str(&cmd);
+                    }
+                    push_line!("", buf.as_str(), RUN_FG);
+                    self.fmt_buf = buf;
                 }
             }
 
-            let visible_start = all_lines.len()
+            let total_lines = line_idx;
+            // Shrink logical length without dropping capacity.
+            all_lines.truncate(total_lines);
+
+            let visible_start = total_lines
                 .saturating_sub(history_rows + panel.scroll_offset);
 
             for i in 0..history_rows {
@@ -736,6 +785,8 @@ impl RenderContext {
                     .unwrap_or(("│", SEP_FG));
                 self.push_shaped_row(text, fg, panel_bg, row, co, panel_cols, font);
             }
+
+            self.scratch_lines = all_lines;
         }
 
         // ── Separator (use pre-built cache from ChatPanel — TD-PERF-13) ─────
@@ -870,7 +921,7 @@ impl RenderContext {
         const ERR_FG:    [f32; 4] = [1.00, 0.33, 0.33, 1.0]; // red
 
         const SPIN: [&str; 8] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"];
-        let spin = SPIN[block.response.chars().count() % 8];
+        let spin = SPIN[(self.frame_counter / 4) as usize % 8];
 
         // Separator
         let title = " AI ";
