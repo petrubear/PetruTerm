@@ -491,7 +491,7 @@ impl RenderContext {
         screen_rows: usize,
         cursor_blink_on: bool,
     ) {
-        use crate::llm::chat_panel::{word_wrap, wrap_input, ConfirmDisplay, MAX_FILE_ROWS, PanelState};
+        use crate::llm::chat_panel::{word_wrap, ConfirmDisplay, MAX_FILE_ROWS, PanelState};
         use crate::llm::diff::DiffKind;
         use crate::llm::ChatRole;
         use std::fmt::Write as _;
@@ -508,10 +508,9 @@ impl RenderContext {
         const BORDER_FG:  [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // purple
         const BORDER_DIM: [f32; 4] = [0.32, 0.28, 0.50, 1.0]; // dimmed purple
         const STREAM_FG:  [f32; 4] = [0.95, 0.98, 0.55, 1.0]; // yellow
-        const HINT_FG:    [f32; 4] = [0.38, 0.44, 0.64, 1.0]; // comment gray
         const ERR_FG:     [f32; 4] = [1.00, 0.33, 0.33, 1.0]; // red
         const SEP_FG:     [f32; 4] = [0.27, 0.28, 0.36, 1.0]; // current-line
-        const DIM_FG:     [f32; 4] = [0.50, 0.47, 0.60, 1.0]; // dimmed input
+        const DIM_FG:     [f32; 4] = [0.50, 0.47, 0.60, 1.0]; // dimmed (file list)
         const RUN_FG:     [f32; 4] = [0.50, 0.98, 0.60, 1.0]; // green — run bar
         const FILE_FG:    [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached files
         const PICK_SEL:   [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // purple — picker highlight
@@ -524,10 +523,8 @@ impl RenderContext {
         let border_fg = if panel_focused { BORDER_FG } else { BORDER_DIM };
 
         // ── Fixed bottom rows (always present) ───────────────────────────────
-        let hints_row  = screen_rows - 1;
-        let input_row2 = screen_rows - 2;
-        let input_row1 = screen_rows - 3;
-        let sep_row    = screen_rows - 4;
+        // input_row1/2 and hints_row are rendered by build_chat_panel_input_rows (TD-PERF-10).
+        let sep_row = screen_rows - 4;
 
         // ── File section height (0 when no files attached) ───────────────────
         // header row ("│ Selected (N files)") + one row per file, capped at MAX_FILE_ROWS
@@ -743,10 +740,44 @@ impl RenderContext {
 
         // ── Separator (use pre-built cache from ChatPanel — TD-PERF-13) ─────
         self.push_shaped_row(&panel.separator_cache, SEP_FG, panel_bg, sep_row, co, panel_cols, font);
+    }
+
+    /// Build only the input field and key-hint row for the chat panel.
+    ///
+    /// Called every frame when the panel is visible, regardless of `ChatPanel::dirty`.
+    /// The content section (header, messages, separator) is cached separately, so cursor
+    /// blink no longer triggers a full reshape of message history (TD-PERF-10).
+    #[allow(clippy::too_many_arguments)]
+    pub fn build_chat_panel_input_rows(
+        &mut self,
+        panel: &ChatPanel,
+        panel_focused: bool,
+        file_picker_focused: bool,
+        config: &Config,
+        font: &crate::config::schema::FontConfig,
+        term_cols: usize,
+        screen_rows: usize,
+        cursor_blink_on: bool,
+    ) {
+        use crate::llm::chat_panel::{wrap_input, ConfirmDisplay, PanelState};
+        use crate::llm::ChatRole;
+
+        let panel_cols = panel.width_cols as usize;
+        if panel_cols == 0 || screen_rows < 6 { return; }
+
+        let panel_bg  = config.llm.ui.background;
+        let input_fg  = config.llm.ui.input_fg;
+
+        const HINT_FG:    [f32; 4] = [0.38, 0.44, 0.64, 1.0];
+        const DIM_FG:     [f32; 4] = [0.50, 0.47, 0.60, 1.0];
+
+        let co         = term_cols;
+        let hints_row  = screen_rows - 1;
+        let input_row2 = screen_rows - 2;
+        let input_row1 = screen_rows - 3;
 
         // ── Input field (or confirmation prompt) ─────────────────────────────
         if matches!(panel.state, PanelState::AwaitingConfirm) {
-            // Show confirmation buttons instead of the normal input
             let confirm_kind = match panel.confirm_display.as_ref() {
                 Some(ConfirmDisplay::Run { .. }) => "run",
                 _ => "write",
@@ -756,8 +787,8 @@ impl RenderContext {
             } else {
                 ("[y] Apply", "[n] Reject")
             };
-            const CONFIRM_YES: [f32; 4] = [0.50, 0.98, 0.60, 1.0]; // green
-            const CONFIRM_NO:  [f32; 4] = [1.00, 0.47, 0.47, 1.0]; // red
+            const CONFIRM_YES: [f32; 4] = [0.50, 0.98, 0.60, 1.0];
+            const CONFIRM_NO:  [f32; 4] = [1.00, 0.47, 0.47, 1.0];
             let yes_line = format!("│  {yes_label}");
             let no_line  = format!("│  {no_label}");
             self.push_shaped_row(&yes_line, CONFIRM_YES, panel_bg, input_row1, co, panel_cols, font);
@@ -770,9 +801,6 @@ impl RenderContext {
             }
             let input_lines = wrap_input(&input_display, input_inner_w);
             let inp_fg = if panel_focused && !file_picker_focused { input_fg } else { DIM_FG };
-            // Show the last two lines so the cursor is always visible when input is multiline.
-            // When n==1: text goes on the ► row (vis1); vis2 is empty (TD-043 fix).
-            // When n>=2: vis1=second-to-last, vis2=last (scroll view).
             let n = input_lines.len();
             let (vis1, vis2) = if n >= 2 {
                 (input_lines[n - 2].clone(), input_lines[n - 1].clone())
@@ -810,7 +838,6 @@ impl RenderContext {
             };
             format!("{base}   Tokens: {tokens}")
         };
-        // Truncate hints to panel width
         let hints_display: String = hints.chars().take(panel_cols).collect();
         self.push_shaped_row(&hints_display, HINT_FG, panel_bg, hints_row, co, panel_cols, font);
     }

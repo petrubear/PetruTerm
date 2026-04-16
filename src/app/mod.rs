@@ -570,22 +570,22 @@ impl ApplicationHandler<()> for App {
                     let panel_visible = self.ui.is_panel_visible();
                     if panel_visible {
                         let panel_dirty = self.ui.panel_mut().dirty;
+                        let panel_focused = self.ui.panel_focused;
+                        let file_picker_focused = self.ui.file_picker_focused;
+                        let blink = self.input.cursor_blink_on;
                         if panel_dirty {
                             let panel_start = rc.instances.len();
-                            let panel_focused = self.ui.panel_focused;
-                            let blink = self.input.cursor_blink_on;
                             self.ui.panel_mut().dirty = false;
-                            // Pre-wrap message lines once per dirty rebuild instead of every
-                            // word_wrap() call inside the renderer (TD-PERF-05).
+                            // Pre-wrap message lines once per dirty rebuild (TD-PERF-05).
                             let msg_wrap_w = self.ui.panel().width_cols.saturating_sub(8) as usize;
                             self.ui.panel_mut().ensure_wrap_cache(msg_wrap_w);
-                            // Pre-build separator cache (TD-PERF-13): avoids "─".repeat() alloc per rebuild.
+                            // Pre-build separator cache (TD-PERF-13).
                             let panel_cols = self.ui.panel().width_cols as usize;
                             self.ui.panel_mut().separator(panel_cols);
                             rc.build_chat_panel_instances(
                                 self.ui.panel(),
                                 panel_focused,
-                                self.ui.file_picker_focused,
+                                file_picker_focused,
                                 &self.config,
                                 &scaled_font,
                                 total_cols,
@@ -597,6 +597,18 @@ impl ApplicationHandler<()> for App {
                         } else {
                             rc.instances.extend_from_slice(&rc.panel_instances_cache);
                         }
+                        // Input rows (2 lines + hints) are always rebuilt fresh — cursor
+                        // blink only touches these 3 rows, not the full message history (TD-PERF-10).
+                        rc.build_chat_panel_input_rows(
+                            self.ui.panel(),
+                            panel_focused,
+                            file_picker_focused,
+                            &self.config,
+                            &scaled_font,
+                            total_cols,
+                            total_rows,
+                            blink,
+                        );
                     }
 
                     // ── Inline AI block (overlays bottom rows) ──────────────────────────
@@ -1100,9 +1112,14 @@ impl ApplicationHandler<()> for App {
         if !idle {
             // Active: advance cursor blink as usual.
             if self.input.update_cursor_blink() {
-                // Panel input cursor blinks — mark dirty so cached instances are rebuilt.
+                // Input rows are rebuilt fresh every frame (TD-PERF-10), so blink alone does not
+                // require a full content rebuild. Only mark dirty when the file picker is open,
+                // because its search-query cursor lives in the content section.
                 if self.ui.is_panel_visible() && self.ui.panel_focused {
-                    self.ui.panel_mut().dirty = true;
+                    if self.ui.panel().file_picker_open {
+                        self.ui.panel_mut().dirty = true;
+                    }
+                    // else: request_redraw() below is enough; input rows are always rebuilt.
                 }
                 // AI block query cursor blinks when typing.
                 if self.ui.ai_block.is_typing() {
