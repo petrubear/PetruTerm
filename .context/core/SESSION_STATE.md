@@ -1,7 +1,7 @@
 # Session State
 
 **Last Updated:** 2026-04-15
-**Session Focus:** Phase 3.5 — Performance Sprint (en curso)
+**Session Focus:** Phase 3.5 — Performance Sprint
 
 ## Branch: `master`
 
@@ -9,65 +9,85 @@
 
 **Phase 1–3 COMPLETE. Phase 3.5 (performance + memory) EN PROGRESO.**
 
-Commits de esta sesión:
-- `334dee0` perf: TD-PERF-06/07/09 — skip double rasterization + lazy row cache + mtime guard
-- `9a2fcb8` fix: TD-MEM-06/07 — byte_to_col_buf shrink + ChatPanel message cap
-- `86683c7` perf: Phase 3.5-E/H — PTY QoS + Lua cache + native build profile
-- `6730465` fix: TD-MEM-05 + TD-MEM-08 — word_cache LRU + terminal_shell_ctxs cleanup
-- `d0c3b1b` fix: TD-MEM-03 — rebuild atlas bind groups after atlas.clear()
-- `188c1e8` fix: TD-MEM-01 + TD-MEM-02 — atlas eviction reclaims physical space + LCD eviction
-
 ## Build
-- **cargo check:** PASS — 0 errores, 0 warnings (verificado 2026-04-15)
 
-## Deuda técnica: estado post-sesión
-
-### Resueltos hoy (P1)
-- TD-MEM-01: GlyphAtlas cursor_fill_ratio + preemptive clear cuando evicción no reclaim espacio
-- TD-MEM-02: LcdGlyphAtlas epoch tracking + evict_cold + clear_lcd_rasterizer_cache
-- TD-MEM-03: Bind groups stale tras atlas.clear() → GpuRenderer::rebuild_atlas_bind_groups()
-- TD-MEM-05: word_cache HashMap::clear() → lru::LruCache(1024)
-- TD-MEM-08: terminal_shell_ctxs leak por terminal cerrado → Mux.closed_ids drain
-
-### Falso positivo documentado
-- TD-MEM-04: SwashCache NO es el leak — el código usa `get_image_uncached`, no `get_image`
-
-### P1 pendientes
-- ~~TD-MEM-06~~: `byte_to_col_buf` shrink condicional — RESUELTO
-- ~~TD-MEM-07~~: `ChatPanel.messages` truncado a 200 + drain wrapped_cache — RESUELTO
-
-### P2 notables abiertos (ver TECHNICAL_DEBT.md para lista completa)
-- TD-MEM-09: scrollback alto (40-200 MB con muchos tabs)
-- TD-MEM-10/11: file_picker items + SkimMatcherV2 por frame
-- TD-MEM-12: Tokio tasks de streaming LLM no cancelados al cerrar panel
-- TD-MEM-19: cursor blink + reloj + git polling cuando ventana sin foco
-
-## Deuda técnica abierta (performance)
-
-- ~~TD-PERF-06~~: skip Swash cuando LCD tiene hit — RESUELTO
-- ~~TD-PERF-07~~: reshape storm movido a branch de clear() — RESUELTO
-- ~~TD-PERF-09~~: mtime guard en shell context — RESUELTO
-- ~~TD-PERF-10~~: cursor blink invalida panel de chat — RESUELTO
-- ~~TD-PERF-11~~: text search incremental — RESUELTO
-- ~~TD-PERF-12~~: scratch buffers en push_shaped_row — RESUELTO
-- ~~TD-PERF-13~~: format! spam + O(n) spinner → scratch_lines + frame_counter — RESUELTO
-- TD-PERF-08 (P1): PresentMode::Fifo → Mailbox para menor latencia input-to-pixel
-- ... (ver TECHNICAL_DEBT.md para lista completa)
+- **cargo check:** PASS — 0 errores, 0 warnings (verificado 2026-04-15, commit b28165e)
 
 ---
 
-## Sesiones anteriores
+## Historial de commits Phase 3.5
 
-### 2026-04-15 — Phase 3.5-E/H + Memory leak audit
-- PTY thread → QOS_CLASS_UTILITY (efficiency cores) via OnceLock
-- Lua bytecode cache (~/.cache/petruterm/lua-bc/*.luac)
-- release-native profile en Cargo.toml; target-cpu=apple-m1 en bundle.sh
-- Auditoría de memory leaks: 12 items (TD-MEM-01..12 + TD-MEM-19)
-- Resueltos: TD-MEM-01, 02, 03, 05, 08 (5 P1 en una sesión)
+| Commit | Descripción |
+|--------|-------------|
+| `b28165e` | [TD-PERF-12/13] scratch_lines reuse + frame_counter spinner |
+| `b5372a8` | [TD-PERF-11] incremental text search |
+| `3270614` | [TD-PERF-10] split panel render: content cache + live input rows |
+| `334dee0` | [TD-PERF-06/07/09] skip double rasterization + lazy row cache + mtime guard |
+| `9a2fcb8` | [TD-MEM-06/07] byte_to_col_buf shrink + ChatPanel message cap |
+| `64a23c8` | chore: context files Phase 3.5 memory sprint |
+| `188c1e8` | [TD-MEM-01/02] atlas eviction reclaims physical space + LCD eviction |
+| `d0c3b1b` | [TD-MEM-03] rebuild atlas bind groups after atlas.clear() |
+| `6730465` | [TD-MEM-05/08] word_cache LRU + terminal_shell_ctxs cleanup |
+| `86683c7` | Phase 3.5-E/H: PTY QoS + Lua cache + native build profile |
+| `3030c29` | Phase 3.5-D: scratch buffers + mimalloc |
 
-### 2026-04-10 — Exit code per-pane + click para detalles
-- `poll_pty_events()` → `(Vec<usize>, Vec<usize>)` (IDs con datos + IDs que salieron)
-- `terminal_shell_ctxs: HashMap<usize, ShellContext>` — contexto por terminal_id
-- Shell integration: `shell-context-$$.json` per-PID con fallback al global
-- Click en badge rojo → context menu con exit code + comando + "Copy command"
-- `ContextAction::Label` — fila no-interactiva (dim, sin hover)
+---
+
+## Deuda técnica resuelta en Phase 3.5
+
+### Memory (todos los P1 resueltos)
+- TD-MEM-01, 02, 03, 05, 06, 07, 08 — RESUELTOS
+- TD-MEM-04 — falso positivo (usa `get_image_uncached`, no crece)
+
+### Performance
+- TD-PERF-06, 07, 08, 09, 10, 11, 12, 13 — RESUELTOS
+
+---
+
+## Próxima sesión — candidatos sugeridos
+
+### Quick wins (1-2 h)
+
+1. **TD-PERF-20** — Truncación O(n) con `chars().count()` → `char_indices().nth(N)` zero-alloc
+   - `src/app/renderer.rs:464` (spinner — ya resuelto), `662, 663, 754` (truncación paths/hints)
+   - Fix de 3 líneas por sitio, cero riesgo
+
+2. **TD-PERF-19** — `poll_git_branch` sin guard de vuelo en `src/app/ui.rs:265-293`
+   - Añadir `git_branch_in_flight: bool` al estado; guard de una línea
+
+3. **TD-PERF-18** — Tokio pool `new_multi_thread()` → `.worker_threads(2)` en `src/app/ui.rs:93`
+   - Cambio de 1 línea; 2 workers suficientes para I/O-bound tasks
+
+### Impacto medio (2-4 h)
+
+4. **TD-PERF-15** — Clipboard async: `arboard` bloquea event loop en paste grande
+   - `src/app/mod.rs:703,709`, `src/app/input/mod.rs:481,488`, `src/app/mux.rs:134,136`
+   - Mover a `tokio::task::spawn_blocking`; paste via canal
+
+5. **TD-PERF-16** — Hash key tab bar / status bar recalculado por frame
+   - `src/app/mod.rs:454-461` (tab_key), `mod.rs:554-568` (sb_key)
+   - Cachear inputs previos como tupla copiable; `==` directo antes del hash
+
+6. **TD-PERF-22** — Search highlight O(matches) por celda
+   - `src/app/mux.rs:441-454` → `HashMap<i32, Vec<(col_start, col_end)>>` indexado por línea
+
+### Siguiente milestone (Phase 4)
+- Phase 3.5 exit criteria: todos los P1 y P2 de alto impacto resueltos
+- TD-OP-02 (P1): fragile Nerd Font glyph ID override — abierto
+- Phase 4 (plugins): Lua API pública, auto-scan `~/.config/petruterm/plugins/`
+
+---
+
+## Sesiones anteriores (resumen)
+
+### 2026-04-15 — Phase 3.5 Performance + Memory
+- Memory audit completo: 12 items (TD-MEM-01..12 + TD-MEM-19)
+- Todos los P1 de memory resueltos (TD-MEM-01..03, 05..08)
+- Performance sprint: TD-PERF-06..13 resueltos
+- PTY thread QoS, Lua bytecode cache, release-native profile
+
+### 2026-04-10 — Exit code per-pane + shell integration
+- `poll_pty_events()` devuelve IDs con datos + IDs que salieron
+- `terminal_shell_ctxs` per-PID con fallback al global
+- Click en badge rojo → context menu con detalles
+- `ContextAction::Label` — fila no-interactiva

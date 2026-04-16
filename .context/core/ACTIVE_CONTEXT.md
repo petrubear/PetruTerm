@@ -1,61 +1,92 @@
 # Active Context
 
-**Current Focus:** **Phase 3.5 — Memory Leak Sprint** (continuación)
+**Current Focus:** **Phase 3.5 — Performance Sprint** (en curso)
 **Last Active:** 2026-04-15
 
 ## Estado actual del proyecto
 
-**Phase 1–3 COMPLETE. Phase 3.5 EN PROGRESO — sprint de memory leaks activo.**
+**Phase 1–3 COMPLETE. Phase 3.5 (memory + perf) EN PROGRESO.**
 
-> Todas las features de Phase 1–3 verificadas. Ver `build_phases_archive.md` para el checklist completo.
+> Todas las features de Phase 1–3 verificadas. Phase 4 (plugins) bloqueada hasta Phase 3.5 exit criteria.
 
-## Memory Leaks — Estado post-sesión 2026-04-15
+---
 
-### Resueltos (5 de 8 P1)
+## Phase 3.5 — Resumen de progreso
 
-| ID | Fix | Archivos |
-|----|-----|----------|
-| TD-MEM-01 | `cursor_fill_ratio()` + preemptive clear en evicción | `atlas.rs`, `app/mod.rs` |
-| TD-MEM-02 | LcdGlyphAtlas epoch/evict + `clear_lcd_rasterizer_cache()` | `lcd_atlas.rs`, `freetype_lcd.rs`, `shaper.rs`, `app/mod.rs` |
-| TD-MEM-03 | `GpuRenderer::rebuild_atlas_bind_groups()` tras atlas.clear() | `gpu.rs`, `app/mod.rs` |
-| TD-MEM-05 | `word_cache` HashMap → `lru::LruCache(1024)` | `shaper.rs`, `Cargo.toml` |
-| TD-MEM-08 | `Mux.closed_ids` drain → `terminal_shell_ctxs.remove()` | `mux.rs`, `app/mod.rs` |
+### Memory leaks — todos los P1 resueltos
 
-### Pendientes P1
+| ID | Fix | Estado |
+|----|-----|--------|
+| TD-MEM-01 | GlyphAtlas `cursor_fill_ratio()` + preemptive clear | RESUELTO |
+| TD-MEM-02 | LcdGlyphAtlas epoch/evict + `clear_lcd_rasterizer_cache()` | RESUELTO |
+| TD-MEM-03 | `GpuRenderer::rebuild_atlas_bind_groups()` tras atlas.clear() | RESUELTO |
+| TD-MEM-04 | SwashCache — falso positivo, usa `get_image_uncached` | NO ES LEAK |
+| TD-MEM-05 | `word_cache` HashMap → `lru::LruCache(1024)` | RESUELTO |
+| TD-MEM-06 | `byte_to_col_buf` shrink condicional | RESUELTO |
+| TD-MEM-07 | `ChatPanel.messages` cap 200 + drain `wrapped_cache` | RESUELTO |
+| TD-MEM-08 | `Mux.closed_ids` drain → limpieza de `terminal_shell_ctxs` | RESUELTO |
 
-Todos los P1 de memory leaks resueltos (TD-MEM-01..03, 05..08).
+### Performance — resueltos
 
-### Falso positivo (documentado)
-- **TD-MEM-04**: SwashCache NO crece — el código usa `get_image_uncached`, no `get_image`. El atlas (64 MiB) es el cache acotado.
+| ID | Fix | Estado |
+|----|-----|--------|
+| TD-PERF-06 | Skip `rasterize_to_atlas` cuando LCD atlas tiene hit | RESUELTO |
+| TD-PERF-07 | `clear_all_row_caches()` solo en branch `clear()`, no en `evict_cold()` | RESUELTO |
+| TD-PERF-08 | `PresentMode::Mailbox` + `desired_maximum_frame_latency=1` | RESUELTO |
+| TD-PERF-09 | mtime guard en `terminal_shell_ctxs` (evita disk read por frame) | RESUELTO |
+| TD-PERF-10 | Split panel render: content cache + input rows vivos | RESUELTO |
+| TD-PERF-11 | Búsqueda incremental: `filter_matches()` extiende query anterior | RESUELTO |
+| TD-PERF-12 | Scratch buffers en `push_shaped_row` (`scratch_chars/str/colors`) | RESUELTO |
+| TD-PERF-13 | `scratch_lines` reuse + `frame_counter` spinner O(1) | RESUELTO |
 
-## Próximos pasos
+### Performance — próximos candidatos (P1 primero)
 
-1. **P2 pendientes** de TD-MEM-09..19 (scrollback, file_picker, tokio tasks, ventana sin foco)
-2. **Phase 3.5 performance** pendiente: TD-PERF-06 (doble rasterización LCD), TD-PERF-07 (reshape storm), TD-PERF-09 (shell context disk read)
-3. **Phase 4 (plugins)** — bloqueado hasta Phase 3.5 exit criteria
+- **TD-PERF-20** (P2): Truncación con `chars().count()` en varios lugares — fix trivial con `char_indices().nth(N)`
+- **TD-PERF-15** (P2): Clipboard (`arboard`) bloquea event loop en copy/paste grande
+- **TD-PERF-14** (P2): Scroll bar como N `CellVertex` → 2 `RoundedRectInstance`
+- **TD-PERF-16** (P2): Hash key de tab bar / status bar recalculado por frame
+- **TD-PERF-17** (P2): Config hot-reload sin debounce
+- **TD-PERF-18** (P2): Tokio pool `num_cpus` → 2 workers
+- **TD-PERF-19** (P2): `poll_git_branch` sin guard de vuelo
+- **TD-PERF-21** (P2): Palette fuzzy matcher no incremental
+- **TD-PERF-22** (P2): Search highlight O(matches) por celda en render
 
-## Cambios clave de esta sesión
+### Memory P2 abiertos (menor urgencia)
 
-### Nuevas dependencias
-- `lru = "0.12"` en Cargo.toml
+- TD-MEM-09: Scrollback sin límite global (40-200 MB con muchos tabs)
+- TD-MEM-10/11: `file_picker_items` no se limpia + `SkimMatcherV2` por frame
+- TD-MEM-12: Tokio tasks de streaming LLM colgados al cerrar panel
+- TD-MEM-19: Cursor blink + reloj + git poll corren con ventana sin foco
 
-### Patrones arquitectónicos aprendidos
+---
+
+## Patrones arquitectónicos clave
 
 **LcdGlyphAtlas + FreeTypeLcdRasterizer dualidad de cache:**
-- `LcdGlyphAtlas.cache: HashMap<u64, LcdCacheEntry>` — cache principal con epoch tracking
-- `FreeTypeLcdRasterizer.cache: Mutex<HashMap<u64, LcdAtlasEntry>>` — cache LOCAL del rasterizador
-- Cuando se llama `lcd_atlas.clear()`, el cache LOCAL también debe limpiarse via `clear_lcd_rasterizer_cache()`
-- De lo contrario, el rasterizador devuelve UVs apuntando a la textura vacía/destruida
+- `LcdGlyphAtlas.cache` — cache principal con epoch tracking
+- `FreeTypeLcdRasterizer.cache` — cache LOCAL del rasterizador (Mutex interno)
+- Al llamar `lcd_atlas.clear()`, el cache LOCAL también debe limpiarse via `clear_lcd_rasterizer_cache()`
 
 **Atlas eviction física vs lógica:**
-- `evict_cold()` es LÓGICA — elimina del HashMap pero el cursor no retrocede
+- `evict_cold()` es LÓGICA — elimina del HashMap pero el cursor no retrocede; UVs de entradas supervivientes siguen válidas
 - Para reclamar espacio físico, la única opción es `clear()` (nueva textura)
 - Detección: `cursor_fill_ratio() > 0.75` después de evicción → preemptive `clear()`
 
-**Mux.closed_ids patrón:**
-- `cmd_close_tab()` y `cmd_close_pane()` pusean a `Mux.closed_ids`
-- App drena `closed_ids` después de `handle_key_input` y en `close_exited_terminals`
-- Permite limpiar estado externo (terminal_shell_ctxs, chat_panels, etc.) sin pasar App a Mux
+**`Mux.closed_ids` patrón:**
+- `cmd_close_tab/pane()` pusean IDs a `Mux.closed_ids`
+- App drena `closed_ids` en dos puntos: tras `handle_key_input` y en `close_exited_terminals`
+- Permite limpiar estado externo sin pasar `App` a `Mux`
+
+**`RenderContext` scratch fields (TD-PERF-12/13):**
+- `scratch_chars/str/colors`: usados por `push_shaped_row` via `mem::take`
+- `scratch_lines: Vec<(String,[f32;4])>`: reutilizado por `build_chat_panel_instances`; strings sobreescritas in-place con `push_str` para reusar capacidad
+- `frame_counter: u64`: incrementado en `RedrawRequested`; spinners = `(frame_counter/4)%8`
+- `fmt_buf: String`: scratch de una sola línea para callers de `push_shaped_row`
+
+**Panel content vs input rows (TD-PERF-10):**
+- Content section (`build_chat_panel_instances`): solo reconstruye cuando `ChatPanel::dirty`
+- Input rows (`build_chat_panel_input_rows`): reconstruidas cada frame (cursor blink, hint text)
+- Blink solo toca input rows, no invalida cache de mensajes
 
 ## Keybinds actuales
 
