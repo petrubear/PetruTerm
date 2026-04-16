@@ -5,6 +5,55 @@ Ordered newest-first within each date group.
 
 ---
 
+## Resolved 2026-04-15 — Phase 3.5 PERF sprint (TD-PERF-06 through TD-PERF-13, TD-MEM-01/02/06/07)
+
+### TD-MEM-01: `evict_cold()` en GlyphAtlas no reclaima espacio físico
+- **Fix:** `evict_cold()` ahora llama a `clear()` + re-upload de entradas calientes cuando elimina >50% de las entradas. El espacio físico en la textura de 64 MiB se recupera efectivamente.
+
+### TD-MEM-02: `LcdGlyphAtlas` sin evicción
+- **Fix:** Epoch-based eviction añadida al `LcdGlyphAtlas` con el mismo patrón que `GlyphAtlas`. `last_used: u64` en `LcdAtlasEntry`, `next_epoch()`, `evict_cold(max_age)`. Cuando `upload()` falla con Full, llama a `evict_cold()` y reintenta.
+
+### TD-MEM-03: Bind groups stale tras atlas clear
+- **Fix:** Re-creación de bind groups en el path de `clear()`. No había sección independiente; referenciado solo en la tabla de resumen.
+
+### TD-MEM-05: `word_cache` miss storm periódico
+- **Fix:** Resuelto. No había sección independiente; referenciado solo en la tabla de resumen.
+
+### TD-MEM-06: `byte_to_col_buf` crece al tamaño máximo de línea visto y nunca se reduce
+- **Fix:** `shrink_to((n+1)*2)` cuando `capacity > 4 × need`. Evita crecimiento permanente tras líneas excepcionalmente largas.
+
+### TD-MEM-07: `messages` en `ChatPanel` crece indefinidamente
+- **Fix:** `drain oldest` en `mark_done()` cuando `messages.len() >= MAX_MESSAGES`. `wrapped_cache[..drop]` se sincroniza en el mismo punto.
+
+### TD-MEM-08: `terminal_shell_ctxs` leak por terminal cerrado
+- **Fix:** Resuelto vía `Mux.closed_ids` pattern. No había sección independiente.
+
+### TD-PERF-06: Doble rasterización de glifos cuando LCD AA está habilitado
+- **Fix:** `rasterize_to_atlas` se omite cuando `lcd_entry.is_some()`. Solo emoji (que siempre devuelve `None` en LCD) sigue el path sRGB como fallback.
+
+### TD-PERF-07: Invalidación global de row caches al evictar el atlas
+- **Fix:** `clear_all_row_caches()` movido a la rama `clear()` únicamente. `evict_cold()` deja la textura intacta — los UVs siguen siendo válidos para entradas no evictadas.
+
+### TD-PERF-08: `PresentMode::Fifo` con latencia máxima de 2 frames
+- **Fix:** Ya implementado en el sprint: Mailbox → FifoRelaxed → Fifo con fallback. `desired_maximum_frame_latency = 1`.
+
+### TD-PERF-09: Lectura síncrona de disco del shell context por cada evento PTY
+- **Fix:** `terminal_shell_ctxs: HashMap<usize, (ShellContext, SystemTime)>` con mtime guard. `metadata().modified()` comparado antes de `read_to_string`; si coincide, se reutiliza el valor cacheado.
+
+### TD-PERF-10: Cursor blink invalida el cache entero del panel de chat
+- **Fix:** `build_chat_panel_instances` dividido en content cache (reconstruido solo cuando cambia el contenido) + filas de input reconstruidas frescas cada frame. El blink ya no marca el panel `dirty`.
+
+### TD-PERF-11: Text search re-escanea el grid entero en cada tecla
+- **Fix:** `filter_matches()` en `Mux` — búsqueda incremental cuando el query extiende el anterior (`new.starts_with(old)`): filtra los matches previos en lugar de re-escanear el grid completo.
+
+### TD-PERF-12 (kiro): Allocaciones repetidas en `push_shaped_row`
+- **Fix:** `scratch_chars`, `scratch_str`, `scratch_colors` movidos a `RenderContext`. `push_shaped_row` los toma con `mem::take`, reutiliza la capacidad y los devuelve.
+
+### TD-PERF-13 (kiro): `format!` spam en `build_chat_panel_instances` + spinner O(n)
+- **Fix:** `scratch_lines: Vec<(String, [f32;4])>` en `RenderContext` con reuse index-based por `push_str`. Spinner cambiado de `chars().count() % 8` (O(n)) a `frame_counter / 4 % 8` (O(1)); `frame_counter: u64` incrementado en `RedrawRequested`.
+
+---
+
 ## Resolved 2026-04-10 — Full debt sprint (P1/P2/P3)
 
 ### TD-OP-01: `unsafe impl Send` en `TextShaper`
