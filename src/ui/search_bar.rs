@@ -19,6 +19,10 @@ pub struct SearchBar {
     pub dirty: bool,
     /// Current match changed — scroll terminal to it before next render.
     pub scroll_needed: bool,
+    /// Query that produced the current `matches` list.
+    /// Used to detect when the new query extends the old one so we can filter
+    /// existing matches instead of re-scanning the whole grid (TD-PERF-11).
+    pub last_query: String,
 }
 
 
@@ -31,6 +35,7 @@ impl SearchBar {
     pub fn close(&mut self) {
         self.visible = false;
         self.query.clear();
+        self.last_query.clear();
         self.matches.clear();
         self.current = 0;
         self.dirty = true;

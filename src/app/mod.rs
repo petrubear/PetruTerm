@@ -458,9 +458,20 @@ impl ApplicationHandler<()> for App {
                             self.ui.search_bar.matches.clear();
                             self.ui.search_bar.current = 0;
                         } else {
-                            let matches = self.mux.search_active_terminal(&query);
+                            // Incremental path: when the new query extends the previous one,
+                            // filter existing matches instead of scanning the full grid (TD-PERF-11).
+                            let prev_query = self.ui.search_bar.last_query.clone();
+                            let can_filter = !self.ui.search_bar.matches.is_empty()
+                                && query.starts_with(prev_query.as_str())
+                                && !prev_query.is_empty();
+                            let matches = if can_filter {
+                                self.mux.filter_matches(&self.ui.search_bar.matches, &query)
+                            } else {
+                                self.mux.search_active_terminal(&query)
+                            };
                             self.ui.search_bar.set_matches(matches);
                         }
+                        self.ui.search_bar.last_query = query;
                         self.ui.search_bar.dirty = false;
                     }
                     if self.ui.search_bar.visible && self.ui.search_bar.scroll_needed {

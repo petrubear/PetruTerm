@@ -390,6 +390,31 @@ impl Mux {
         });
     }
 
+    /// Incremental filter: given matches from a previous (shorter) query, verify each one
+    /// against the new (longer) query. O(prev_matches × query_len) instead of O(rows × cols).
+    /// Only valid when `new_query.starts_with(prev_query)` — caller is responsible for this check.
+    pub fn filter_matches(&self, prev: &[SearchMatch], new_query: &str) -> Vec<SearchMatch> {
+        use alacritty_terminal::index::{Column, Line};
+        if new_query.is_empty() || prev.is_empty() { return Vec::new(); }
+        let q_lower = new_query.to_lowercase();
+        let q_chars: Vec<char> = q_lower.chars().collect();
+        let q_len = q_chars.len();
+        let Some(terminal) = self.active_terminal() else { return Vec::new() };
+        terminal.with_term(|term| {
+            let cols = term.columns();
+            prev.iter().filter_map(|m| {
+                if m.col + q_len > cols { return None; }
+                let line = Line(m.grid_line);
+                for (i, &qc) in q_chars.iter().enumerate() {
+                    let c = term.grid()[line][Column(m.col + i)].c;
+                    let c = if c == '\0' { ' ' } else { c };
+                    if c.to_lowercase().next().unwrap_or(c) != qc { return None; }
+                }
+                Some(SearchMatch { grid_line: m.grid_line, col: m.col, len: q_len })
+            }).collect()
+        })
+    }
+
     /// Search all visible rows and scrollback history for `query` (case-insensitive).
     /// Returns matches sorted from oldest history to current screen.
     pub fn search_active_terminal(&self, query: &str) -> Vec<SearchMatch> {
