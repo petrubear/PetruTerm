@@ -5,6 +5,44 @@ Ordered newest-first within each date group.
 
 ---
 
+## Resolved 2026-04-16 — Render P1 real fixes (TD-RENDER-01 real, TD-RENDER-03)
+
+### TD-RENDER-01: Franjas de bg distintas en filas con texto vs sin texto (real root cause)
+- **Archivos:** `src/app/renderer.rs:239` (`build_instances`)
+- **Root cause:** `try_word_cached_shape` (`src/font/shaper.rs:573`) hace
+  `text.split(' ')` y descarta los espacios — nunca emite un `ShapedGlyph` para
+  ellos. Cualquier línea con un char disparador de ligaduras (`= < > - | + * / ~ ! : .`)
+  cae por el word-cached path. `try_ascii_fast_path` sí emite glyphs para espacios,
+  pero las líneas típicas de TUI (lazy.nvim, status bar, command line) contienen
+  `:` o `.` y no van por el fast path.
+- **Efecto:** en `build_instances` el bucle iteraba solo sobre `shaped.glyphs`.
+  Celdas con espacio y `bg ≠ default_bg` (widgets flotantes de nvim, status bars,
+  command line, selección, search highlight) quedaban sin vértice emitido.
+  Resultado: el clear color del GPU se veía entre letras y entre filas → franjas
+  horizontales y aspecto "intermitente" del bg.
+- **Fix:** pre-pase en `build_instances` antes del bucle de glyphs. Itera `colors`
+  y emite un vértice bg-only (`atlas_uv=0`, `glyph_size=0`) por cada celda con
+  `!colors_approx_eq(bg, default_bg)`. El `bg_pipeline` pinta el rect completo de
+  la celda; el `cell_pipeline` colapsa a área cero y no produce fragments.
+- **NO confundir con el fix anterior:** el shader-level discard `if uv ≈ [0,0]`
+  agregado previamente era defensivo y NO resolvía este bug — los vértices
+  simplemente no se emitían.
+- **Regression guard:** si alguien toca `build_instances` o el shaper y quita el
+  pre-pase, el bug vuelve para cualquier línea con ligature-trigger chars.
+
+### TD-RENDER-03: Celda blanca persistente donde estuvo el puntero del mouse
+- **Archivos:** `src/app/input/mod.rs:32-37`, `src/app/mod.rs:991-1025`
+- **Root cause:** `start_selection` en `LMB Pressed` crea un `Selection::new` con
+  `start == end` (1 celda). `Selection::to_range()` retorna `Some(range)` no
+  vacío; `cell_in_selection` matchea esa celda y el renderer invierte fg/bg → bg
+  blanco con fg oscuro. Sin drag, nunca se limpiaba → celda blanca persistente.
+- **Fix:** flag `mouse_dragged: bool` en `InputHandler`. Reset en `LMB Pressed`,
+  set en `CursorMoved` cuando corre `update_selection`. En `LMB Released` sin
+  drag → `terminal.clear_selection()` (solo si `mouse_mode_flags().0 == false`,
+  para no pisar apps con mouse reporting propio).
+
+---
+
 ## Resolved 2026-04-15 — Phase 3.5 PERF sprint (TD-PERF-06 through TD-PERF-13, TD-MEM-01/02/06/07)
 
 ### TD-MEM-01: `evict_cold()` en GlyphAtlas no reclaima espacio físico

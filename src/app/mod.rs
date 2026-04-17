@@ -818,6 +818,7 @@ impl ApplicationHandler<()> for App {
                         let (any_mouse, _, motion) = terminal.mouse_mode_flags();
                         if any_mouse && motion { self.input.send_mouse_report(32, col, row, true, &self.mux); }
                     }
+                    self.input.mouse_dragged = true;
                     if let Some(w) = &self.window { w.request_redraw(); }
                 }
             }
@@ -988,6 +989,7 @@ impl ApplicationHandler<()> for App {
                                 }
                             }
                             self.input.mouse_left_pressed = true;
+                            self.input.mouse_dragged = false;
                             if !self.mux.active_terminal().map(|t| t.mouse_mode_flags().0).unwrap_or(false) {
                                 let clicks = self.input.register_click((col, row));
                                 let sel_type = match clicks {
@@ -1008,6 +1010,17 @@ impl ApplicationHandler<()> for App {
                             // Separator drag ended — resize terminals to new pane dimensions.
                             self.resize_terminals_for_panel();
                         } else if !in_panel {
+                            // Plain click (no drag): clear the 1-cell selection alacritty
+                            // starts on press, otherwise that cell lingers with inverted
+                            // colours (white bg where the cursor was).
+                            if !self.input.mouse_dragged {
+                                if let Some(terminal) = self.mux.active_terminal() {
+                                    if !terminal.mouse_mode_flags().0 {
+                                        terminal.clear_selection();
+                                        if let Some(w) = &self.window { w.request_redraw(); }
+                                    }
+                                }
+                            }
                             self.input.send_mouse_report(0, col, row, false, &self.mux);
                         }
                     }

@@ -31,6 +31,10 @@ pub struct InputHandler {
     // Mouse state
     pub mouse_pos: (f64, f64),
     pub mouse_left_pressed: bool,
+    /// True once the mouse moves between LMB press and release. Used to decide
+    /// whether a click was a drag (keep selection) or a plain click (clear it,
+    /// so a single-cell selection doesn't linger with inverted colours).
+    pub mouse_dragged: bool,
     pub scroll_pixel_accum: f64,
     /// Consecutive click count (1 = single, 2 = double, 3+ = triple) for selection type.
     pub click_count: u32,
@@ -75,6 +79,7 @@ impl InputHandler {
             leader_map,
             mouse_pos: (0.0, 0.0),
             mouse_left_pressed: false,
+            mouse_dragged: false,
             scroll_pixel_accum: 0.0,
             click_count: 0,
             last_click_time: Instant::now(),

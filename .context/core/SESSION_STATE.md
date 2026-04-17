@@ -8,11 +8,12 @@
 ## Estado actual
 
 **Phase 1–3 COMPLETE. Phase 3.5 (performance + memory) SPRINT EN CIERRE.**
-**P1 fixes: TD-RENDER-02, TD-PERF-36 resueltos. TD-RENDER-01 verificado como completado.**
+**P1 fixes: TD-RENDER-02, TD-PERF-36, TD-RENDER-01 (real fix), TD-RENDER-03 resueltos.**
 
 ## Build
 
-- **cargo check:** PASS — 0 errores, 0 warnings (verificado 2026-04-16, última commit: e83e731)
+- **cargo check:** PASS — 0 errores, 0 warnings (verificado 2026-04-16 post-RENDER-01-real)
+- **cargo test --lib:** PASS (9 tests)
 
 ---
 
@@ -69,14 +70,25 @@
 
 ## Sesiones anteriores (resumen)
 
-### 2026-04-16 — P1 Rendering fixes (complete)
+### 2026-04-16 (tarde) — TD-RENDER-01 REAL FIX + TD-RENDER-03
+- **TD-RENDER-01 real root cause (user verified)**: el shader-level discard previo
+  era defensivo; el bug real era en `build_instances` (`src/app/renderer.rs`). El
+  shaper's `try_word_cached_shape` y `shape_line_harfbuzz` descartan celdas con
+  espacio. Cualquier línea con chars disparadores de ligaduras (`= < > - | + * / ~ ! : .`)
+  va por el word-cached path. Celdas-espacio con bg ≠ default (widgets nvim, status
+  bar, selección) quedaban sin vértice → clear color → franjas horizontales.
+  - **Fix**: pre-pase en `build_instances` emite un vértice bg-only por cada celda
+    con `bg ≠ default_bg`, antes del bucle de glyphs.
+- **TD-RENDER-03 (nuevo)**: selección de 1 celda persistía al soltar click sin drag
+  (bg blanco en la posición del mouse). Fix: flag `mouse_dragged` en InputHandler;
+  en `Released` sin drag llama `terminal.clear_selection()`.
+- User verification: ✓ rayas desaparecen, ✓ celda blanca resuelta
+
+### 2026-04-16 (mañana) — P1 Rendering fixes (partial)
 - TD-RENDER-02 ✓ (force rebuild during Loading/Streaming for smooth spinner)
 - TD-PERF-36 ✓ (warn on overflow, MAX_RECT_INSTANCES 256→1024)
-- TD-RENDER-01 ✓ (shader: discard zero-size glyph fragments at [0,0])
-  - Root cause: bg striping from sampling atlas at [0,0] for spaces
-  - Fix: fs_main/fs_bg_aware discard when uv ≈ [0,0] (TD-RENDER-01)
+- TD-RENDER-01 intento #1 (shader discard uv≈[0,0]) — no resolvía el bug real
 - 6 commits, cargo check PASS
-- User verification: flickering ✓, artifacts ✓
 
 ### 2026-04-15 — Phase 3.5 Debt audit + cleanup
 - Dos regresiones visuales identificadas en screenshot: TD-RENDER-01/02 (P1)

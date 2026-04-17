@@ -268,15 +268,6 @@ fn vs_main(@builtin(vertex_index) vi: u32, instance: InstanceIn) -> VertexOut {
     return out;
 }
 
-fn srgb_to_lin(c: f32) -> f32 {
-    if c <= 0.04045 { return c / 12.92; }
-    return pow((c + 0.055) / 1.055, 2.4);
-}
-fn lin_to_srgb(c: f32) -> f32 {
-    if c <= 0.0031308 { return c * 12.92; }
-    return 1.055 * pow(c, 1.0 / 2.4) - 0.055;
-}
-
 // Convert a vec4 (rgba) to an array of 4 f32s — enables component-wise indexing.
 fn to_array4(v: vec4<f32>) -> array<f32, 4> {
     return array<f32, 4>(v.r, v.g, v.b, v.a);

@@ -236,6 +236,26 @@ impl RenderContext {
 
             let default_bg = config.colors.background;
 
+            // BG pre-pass: emit a background-only vertex for every cell whose bg
+            // differs from the default. The shaper's word-cached and HarfBuzz
+            // paths drop space runs, so without this pass any space cell with a
+            // non-default bg (widget backgrounds, status/command lines, selection,
+            // search highlight, etc.) would show the GPU clear colour instead of
+            // its real bg, producing horizontal "stripes" between letters and rows.
+            for (col, (_fg, bg)) in colors.iter().enumerate() {
+                if colors_approx_eq(*bg, default_bg) { continue; }
+                row_instances.push(CellVertex {
+                    grid_pos: [col as f32, row_idx as f32],
+                    atlas_uv: [0.0; 4],
+                    fg: [0.0; 4],
+                    bg: *bg,
+                    glyph_offset: [0.0; 2],
+                    glyph_size: [0.0; 2],
+                    flags: 0,
+                    _pad: 0,
+                });
+            }
+
             for glyph in &shaped.glyphs {
                 // Fast path: space cells with the default background color produce no
                 // visible glyph and the GPU clear already fills them with the correct

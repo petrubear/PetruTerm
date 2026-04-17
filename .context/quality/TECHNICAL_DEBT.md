@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-04-15
-**Open Items:** 46
-**Critical (P0):** 0 | **P1:** 3 | **P2:** 24 | **P3:** 19
+**Last Updated:** 2026-04-16
+**Open Items:** 43
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 24 | **P3:** 19
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -19,26 +19,7 @@
 
 ## P1 — Alta prioridad
 
-### TD-RENDER-02: Flickering en la zona "Thinking..." / inline AI block — regresión
-- **Archivo:** `src/app/renderer.rs:build_chat_panel_instances()` (zona de input block y status row), `src/app/mod.rs` (dirty flag interaction)
-- **Descripción:** La zona de estado del inline AI block ("Thinking... / press Esc to cancel") presenta flickering visible. Este problema fue resuelto anteriormente y ha regresado. El área alterna entre estados de forma errática. Causa probable: el split de content cache vs input rows introducido en TD-PERF-10 reconstruye la fila del spinner fuera de sync con el overlay del bloque, o el `frame_counter` de TD-PERF-13 interactúa con la `dirty` flag de manera que fuerza redraws parciales.
-- **Severidad:** P1 — regresión confirmada de sprint anterior; flickering inaceptable en producción.
-
----
-
-### TD-RENDER-01: Bloques del panel de chat renderizan con artefactos visuales
-- **Archivo:** `src/app/renderer.rs:build_chat_panel_instances()`, `src/llm/chat_panel.rs`
-- **Descripción:** Los bloques de contenido del panel de chat (respuestas del modelo) muestran renderizado incorrecto: texto superpuesto, bordes mal dibujados, o fondo con artefactos. Causa probable: el cache de instancias de contenido introducido en TD-PERF-10 emite vértices con coordenadas incorrectas cuando el panel tiene scroll o el historial es largo.
-- **Severidad:** P1 — regresión visual directa del sprint TD-PERF-10.
-
----
-
-### TD-PERF-36: `MAX_INSTANCES` y `MAX_RECT_INSTANCES` descartan instancias silenciosamente
-- **Archivo:** `src/renderer/gpu.rs:17,20,324,335,478,491`
-- **Origen:** kiro
-- **Descripción:** `upload_instances` clampea con `.min(MAX_INSTANCES)` sin log ni error cuando se supera el límite. `upload_rect_instances` hace lo mismo con `MAX_RECT_INSTANCES = 256`. El resultado es **rendering incompleto sin ninguna indicación de error**. Con una terminal grande (200×50 = 10 000 celdas) + panel de chat + tab bar + overlays, el total puede superar 32 768. `MAX_RECT_INSTANCES = 256` es especialmente ajustado: 10 tabs + separadores de panes puede acercarse al límite.
-- **Fix:** (a) Corto plazo: añadir `log::warn!` cuando `instances.len() > MAX_*` para detectar en desarrollo. (b) Largo plazo: buffer dinámico — recrear con `device.create_buffer` al nuevo tamaño (siguiente potencia de 2) cuando se supere la capacidad. Aumentar `MAX_RECT_INSTANCES` a 1 024 como mínimo.
-- **Severidad:** P1 — correctness bug silencioso: rendering incompleto sin error visible.
+_Ninguno abierto. Todos los P1 cerrados 2026-04-16 (TD-RENDER-01/02/03, TD-PERF-36). Ver archive._
 
 ---
 

@@ -1,27 +1,37 @@
 # Active Context
 
-**Current Focus:** **TD-RENDER-01/02 — Visual regression fixes** (próxima sesión)
-**Last Active:** 2026-04-15
+**Current Focus:** Phase 3.5 P1 cerrado. Siguiente: P2 quick wins o Phase 4.
+**Last Active:** 2026-04-16
 
 ## Estado actual del proyecto
 
-**Phase 1–3 COMPLETE. Phase 3.5 PERF sprint COMPLETO.**
-**Debt registry limpio: 46 items abiertos (3 P1 / 24 P2 / 19 P3).**
-
-> Dos regresiones visuales P1 introducidas en el sprint PERF-10. Atacar antes de Phase 4.
+**Phase 1–3 COMPLETE. Phase 3.5 PERF + P1 renders COMPLETO.**
+**Todos los P1 cerrados y verificados por el usuario.**
 
 ---
 
-## Regresiones P1 activas (introducidas en PERF-10 sprint)
+## P1 resueltos esta sesión (2026-04-16)
 
-### TD-RENDER-02: Flickering zona "Thinking..." — regresión confirmada
-- **Archivos calientes:** `src/app/renderer.rs` (zona input block / status row del panel), `src/app/mod.rs` (dirty flag + frame_counter interaction)
-- **Causa probable:** El split de `build_chat_panel_instances` (PERF-10) reconstruye la fila del spinner fuera de sync con el overlay del bloque. Verificar si el `frame_counter` (PERF-13) toca la `dirty` flag del panel en lugar de solo el rect del spinner.
-- **Pista:** Buscar dónde se marca `panel.dirty = true` — debe ser solo contenido, nunca el spinner/input rows.
+### TD-RENDER-01 (real fix): Franjas horizontales bg en filas con texto
+- **Archivos:** `src/app/renderer.rs:239` (`build_instances` pre-pase bg-only)
+- **Root cause real:** `try_word_cached_shape` (`src/font/shaper.rs:573`) hace
+  `text.split(' ')` y nunca emite glyphs para espacios. `try_ascii_fast_path` sí los
+  emite, pero cualquier línea con `= < > - | + * / ~ ! : .` cae en el word-cached
+  path. Celdas-espacio con `bg ≠ default_bg` (widgets nvim, status/command line,
+  selección, search highlight) quedaban sin vértice → clear color del GPU → franjas.
+- **Fix:** pre-pase en `build_instances` que emite un vértice bg-only por cada
+  celda con `!colors_approx_eq(bg, default_bg)`, antes del bucle de glyphs. El
+  shader-level discard introducido antes (`if uv ≈ [0,0] { discard; }`) era
+  defensivo y NO solucionaba esto — los vértices simplemente no se emitían.
 
-### TD-RENDER-01: Artefactos visuales en bloques del panel de chat
-- **Archivos calientes:** `src/app/renderer.rs:build_chat_panel_instances()`, `src/llm/chat_panel.rs`
-- **Causa probable:** `panel_instances_cache` emite vértices con coordenadas incorrectas cuando el panel tiene scroll o el historial supera la altura visible. La lógica de content cache introducida en PERF-10 puede no estar aplicando el `scroll_offset` correctamente al recalcular coordenadas.
+### TD-RENDER-03 (nuevo): Celda blanca persistente en posición del mouse
+- **Archivos:** `src/app/input/mod.rs:32-37`, `src/app/mod.rs:991-1025`
+- **Root cause:** `start_selection` en LMB press crea `Selection::new` con
+  start==end (1 celda). `Selection::to_range()` retorna `Some(range)` no vacío; el
+  renderer invierte fg/bg → bg blanco. Sin drag, nunca se limpiaba.
+- **Fix:** flag `mouse_dragged: bool` en `InputHandler`; activado en `CursorMoved`
+  cuando `update_selection` corre, reset en press. En `Released` sin drag llama
+  `terminal.clear_selection()`. Skip si `mouse_mode_flags().0` (app maneja mouse).
 
 ---
 
@@ -55,13 +65,14 @@
 
 > ⚠ TD-PERF-10 introdujo regresiones TD-RENDER-01/02.
 
-### P1 abiertos post-sprint
+### P1 cerrados
 
-| ID | Descripción |
-|----|-------------|
-| TD-RENDER-02 | Flickering zona "Thinking..." del panel (regresión PERF-10) |
-| TD-RENDER-01 | Artefactos visuales en bloques de mensaje (regresión PERF-10) |
-| TD-PERF-36 | MAX_INSTANCES/MAX_RECT_INSTANCES overflow silencioso |
+| ID | Descripción | Estado |
+|----|-------------|--------|
+| TD-RENDER-02 | Flickering spinner panel | RESUELTO |
+| TD-RENDER-01 | Franjas bg filas con texto (shaper drops spaces) | RESUELTO |
+| TD-RENDER-03 | Celda blanca persistente tras click sin drag | RESUELTO |
+| TD-PERF-36 | Overflow silencioso en instance buffers | RESUELTO |
 
 ### Quick wins P2 para próxima sesión (post renders)
 
