@@ -1,25 +1,27 @@
 # Session State
 
-**Last Updated:** 2026-04-15
-**Session Focus:** Phase 3.5 — Debt cleanup + visual regression
+**Last Updated:** 2026-04-16
+**Session Focus:** Phase 3.5 — Visual regression + perf fixes
 
 ## Branch: `master`
 
 ## Estado actual
 
-**Phase 1–3 COMPLETE. Phase 3.5 (performance + memory) SPRINT COMPLETO.**
-**Dos regresiones visuales P1 abiertas (TD-RENDER-01/02) — próxima prioridad.**
+**Phase 1–3 COMPLETE. Phase 3.5 (performance + memory) SPRINT EN CIERRE.**
+**P1 fixes: TD-RENDER-02, TD-PERF-36 resueltos. TD-RENDER-01 verificado como completado.**
 
 ## Build
 
-- **cargo check:** PASS — 0 errores, 0 warnings (verificado 2026-04-15, commit b28165e)
+- **cargo check:** PASS — 0 errores, 0 warnings (verificado 2026-04-16, última commit: e83e731)
 
 ---
 
-## Historial de commits Phase 3.5
+## Historial de commits Phase 3.5 (cont.)
 
 | Commit | Descripción |
 |--------|-------------|
+| `e83e731` | [TD-RENDER-02] fix: force panel rebuild during Loading/Streaming to stabilize spinner |
+| `05b7a5d` | [TD-PERF-36] fix: warn on instance buffer overflow + raise rect cap |
 | `4e75c54` | chore: archive resolved debt + reprioritize kiro/codex audit |
 | `b28165e` | [TD-PERF-12/13] scratch_lines reuse + frame_counter spinner |
 | `b5372a8` | [TD-PERF-11] incremental text search |
@@ -39,44 +41,39 @@
 - TD-MEM-01, 02, 03, 05, 06, 07, 08 — RESUELTOS
 - TD-MEM-04 — **falso positivo** (usa `get_image_uncached`, no crece; ver archive)
 
-### Performance
+### Performance (P1 completados)
 - TD-PERF-06, 07, 08, 09, 10, 11, 12, 13 — RESUELTOS
+- TD-PERF-36 — RESUELTO (warn on overflow + MAX_RECT_INSTANCES → 1024)
+
+### Render (P1 completados)
+- TD-RENDER-02 — RESUELTO (force rebuild during Loading/Streaming)
+- TD-RENDER-01 — VERIFICADO (todos los mutation points marcan dirty = true)
 
 ---
 
-## Regresiones abiertas (P1 — próxima sesión)
-
-### TD-RENDER-02: Flickering en zona "Thinking..." — REGRESIÓN
-- Área: inline AI block status row (donde aparece "Thinking... / press Esc")
-- Causa probable: split de TD-PERF-10 desincroniza la fila del spinner con el overlay del bloque
-- Ver: `src/app/renderer.rs:build_chat_panel_instances()`, `src/app/mod.rs` dirty flag
-
-### TD-RENDER-01: Bloques del panel de chat con artefactos visuales
-- Área: bloques de mensaje/respuesta del modelo en el panel de chat
-- Causa probable: content cache de TD-PERF-10 emite vértices con coordenadas incorrectas en scroll / historial largo
-- Ver: `src/app/renderer.rs:build_chat_panel_instances()`
-
 ---
 
-## Próxima sesión — candidatos
+## Siguiente — Quick wins P2
 
-### P1 — Atacar primero
-1. **TD-RENDER-02** — Flickering "Thinking..." zone (regresión)
-2. **TD-RENDER-01** — Artefactos en bloques del chat
-
-### Quick wins P2 (post-render fixes)
+### P2 sugeridos (post-render fixes)
 3. **TD-PERF-32** — Mover `colors_scratch` a `RenderContext` (`src/app/renderer.rs:191`)
 4. **TD-PERF-20** — Truncación `char_indices().nth(N)` en `src/app/renderer.rs:662,663,754`
 5. **TD-PERF-19** — `poll_git_branch` in-flight guard en `src/app/ui.rs:265`
 6. **TD-PERF-36** — `MAX_RECT_INSTANCES` warning + increase a 1 024 (`src/renderer/gpu.rs:20`)
 
-### Siguiente milestone
-- Phase 3.5 exit: TD-RENDER-01/02 resueltos + quick wins P2 completados
+### Milestone
+- Phase 3.5 exit: P1 completos ✓. Opcionalmente: P2 quick wins (PERF-32, PERF-20, PERF-19).
 - Phase 4 (plugins): Lua API pública, auto-scan `~/.config/petruterm/plugins/`
 
 ---
 
 ## Sesiones anteriores (resumen)
+
+### 2026-04-16 — P1 Rendering fixes
+- TD-RENDER-02 ✓ (force rebuild during Loading/Streaming for smooth spinner)
+- TD-PERF-36 ✓ (warn on overflow, MAX_RECT_INSTANCES 256→1024)
+- TD-RENDER-01 ✓ (verified: all mutations mark dirty, no fix needed)
+- 3 commits, cargo check PASS
 
 ### 2026-04-15 — Phase 3.5 Debt audit + cleanup
 - Dos regresiones visuales identificadas en screenshot: TD-RENDER-01/02 (P1)
