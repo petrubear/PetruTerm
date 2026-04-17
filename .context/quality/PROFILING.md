@@ -8,13 +8,39 @@ Run all benchmarks:
 cargo bench
 ```
 
-Run only the shaping benchmark:
+Run a specific benchmark:
 
 ```bash
 cargo bench --bench shaping
+cargo bench --bench search
 ```
 
 HTML reports are generated in `target/criterion/`. Open `target/criterion/report/index.html` in a browser to view results.
+
+### Bench coverage
+
+| Bench | Status | Notes |
+|-------|--------|-------|
+| `shaping` | ✅ | ASCII / ligatures / unicode / cached paths |
+| `search` | ✅ | Synthetic grid proxy of `Mux::search_active_terminal` + `filter_matches` |
+| `build_instances` | ❌ blocked | `RenderContext`+`Mux` acoplados a `winit::EventLoopProxy`; requiere extraer CPU path a función pura |
+| `rasterize_to_atlas` | ❌ blocked | Requiere `&wgpu::Queue`; opciones: (a) bench sólo `swash_cache.get_image_uncached` + conversión RGBA, (b) wgpu headless adapter en el bench |
+
+### Baselines (2026-04-16, M4 Max, release profile)
+
+**search.rs** — grid sintético 80 cols × (40 screen + 10 000 scrollback):
+
+| Bench | Tiempo |
+|-------|--------|
+| `search_cold/common_word_the` | 2.00 ms |
+| `search_cold/common_word_error` | 1.81 ms |
+| `search_cold/rare_word_zzz` | 2.17 ms |
+| `search_cold/medium_case_Error` | 1.74 ms |
+| `search_incremental_extend_e_to_error` | 153 µs |
+
+El bench incremental corre ~12× más rápido que el cold scan; confirma empíricamente el valor de TD-PERF-11 (`filter_matches`).
+
+**shaping.rs** — ver tabla en `.context/specs/build_phases.md` Sub-A.
 
 To install the `cargo-criterion` CLI for richer output:
 

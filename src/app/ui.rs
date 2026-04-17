@@ -83,6 +83,9 @@ pub struct UiManager {
     /// CWD used for the last git branch fetch (to detect CWD changes).
     git_branch_cwd: Option<PathBuf>,
 
+    /// Handle for the in-flight LLM streaming task. Aborted on panel close or new query (TD-MEM-12).
+    streaming_handle: Option<tokio::task::JoinHandle<()>>,
+
     // ── Tab rename prompt ─────────────────────────────────────────────────────
     /// When `Some`, the user is typing a new name for the active tab.
     pub tab_rename_input: Option<String>,
@@ -142,6 +145,7 @@ impl UiManager {
             git_tx: git_tx_init,
             git_rx: git_rx_init,
             git_branch_cwd: None,
+            streaming_handle: None,
             tab_rename_input: None,
             search_bar: SearchBar::default(),
         }
@@ -171,6 +175,17 @@ impl UiManager {
         self.chat_panels.entry(self.active_panel_id).or_insert_with(ChatPanel::new)
     }
 
+    /// Drop all state for a closed terminal (TD-MEM-20). Safe to call with any id.
+    pub fn remove_terminal_state(&mut self, tid: usize) {
+        self.chat_panels.remove(&tid);
+        if self.active_panel_id == tid {
+            self.active_panel_id = 0;
+            if let Some(h) = self.streaming_handle.take() { h.abort(); }
+        }
+    }
+
+    pub fn active_panel_id(&self) -> usize { self.active_panel_id }
+
     pub fn is_panel_visible(&self) -> bool {
         self.chat_panels.get(&self.active_panel_id)
             .map(|p| p.is_visible())
@@ -190,7 +205,8 @@ impl UiManager {
         let mut changed = false;
         while let Ok((panel_id, event)) = self.ai_rx.try_recv() {
             changed = true;
-            let panel = self.chat_panels.entry(panel_id).or_insert_with(ChatPanel::new);
+            // Skip events for panels that were removed after the task was spawned (TD-MEM-20).
+            let Some(panel) = self.chat_panels.get_mut(&panel_id) else { continue; };
             match event {
                 AiEvent::Token(tok) => panel.append_token(&tok),
                 AiEvent::Done       => panel.mark_done(),
@@ -201,8 +217,7 @@ impl UiManager {
                 AiEvent::ToolStatus { tool, path, done } => {
                     panel.set_tool_status(&tool, &path, done);
                 }
-                AiEvent::ConfirmWrite { path, new_content, result_tx } => {
-                    let display = ConfirmDisplay::for_write(&path, &new_content);
+                AiEvent::ConfirmWrite { display, result_tx } => {
                     panel.mark_awaiting_confirm(display);
                     self.pending_confirm_tx = Some(result_tx);
                 }
@@ -467,7 +482,9 @@ impl UiManager {
         let tool_specs = AgentTool::all_specs();
         let tx = self.ai_tx.clone();
 
-        self.tokio_rt.spawn(async move {
+        // Cancel any previous in-flight stream for this UI (TD-MEM-12).
+        if let Some(h) = self.streaming_handle.take() { h.abort(); }
+        self.streaming_handle = Some(self.tokio_rt.spawn(async move {
             use futures_util::StreamExt;
 
             const MAX_TOOL_ROUNDS: usize = 10;
@@ -504,9 +521,10 @@ impl UiManager {
                                             let (confirm_tx, confirm_rx) =
                                                 tokio::sync::oneshot::channel::<bool>();
                                             let abs = cwd.join(&path_str);
+                                            // Compute diff in async task — keeps main thread unblocked (TD-PERF-31).
+                                            let display = crate::llm::chat_panel::ConfirmDisplay::for_write(&abs, &new_content);
                                             let _ = tx.send((panel_id, AiEvent::ConfirmWrite {
-                                                path: abs.clone(),
-                                                new_content: new_content.clone(),
+                                                display,
                                                 result_tx: confirm_tx,
                                             }));
                                             let _ = wakeup_proxy.send_event(());
@@ -607,7 +625,7 @@ impl UiManager {
                 }
             }
             let _ = wakeup_proxy.send_event(());
-        });
+        }));
     }
 
     pub fn explain_last_output(&mut self, mux: &Mux, wakeup_proxy: EventLoopProxy<()>) {

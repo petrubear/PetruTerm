@@ -28,11 +28,13 @@
 | `shape_line_unicode` | 5 586 ns | ~5 700 ns (sin cambio) |
 
 - [x] `benches/shaping.rs` con criterion
+- [x] `benches/search.rs` — proxy sintético de `Mux::search_active_terminal` + `filter_matches` (2026-04-16)
 - [x] Tracing + feature flag `profiling`: spans en `build_instances`, `shape_line`, `RedrawRequested`
 - [x] Debug HUD (F12): frame time p50/p95, shape cache hit%, atlas fill%, instance count, GPU upload KB/frame
 - [x] `.context/quality/PROFILING.md`
 - [ ] Frame budget en `term_specs.md`
-- [ ] Benches adicionales: `build_instances`, `search_active_terminal`, `rasterize_to_atlas`
+- [ ] Bench `build_instances` — **bloqueado**: `RenderContext`/`Mux` acoplados a `winit::EventLoopProxy`; requiere extraer CPU path a función pura.
+- [ ] Bench `rasterize_to_atlas` — **bloqueado**: requiere `&wgpu::Queue`. Path forward: (a) bench sólo `swash_cache.get_image_uncached`+conversión RGBA, o (b) wgpu headless adapter en el bench.
 - [ ] CI gating: regresion > 5% falla build
 - [ ] Tracy integration, GPU timestamps, os_signpost, latency probe completo
 

@@ -1,23 +1,27 @@
 # Session State
 
-**Last Updated:** 2026-04-16
-**Session Focus:** Phase 3.5 — Visual regression + perf fixes
+**Last Updated:** 2026-04-17
+**Session Focus:** Phase 3.5 — Tier 1 leaks + Tier 4 quick wins + Tier 2 hot path
 
 ## Branch: `master`
 
 ## Estado actual
 
-**Phase 1–3 COMPLETE. Phase 3.5 (performance + memory) SPRINT EN CIERRE.**
-**P1 fixes: TD-RENDER-02, TD-PERF-36, TD-RENDER-01 (real fix), TD-RENDER-03 resueltos.**
+**Phase 1–3 COMPLETE. Phase 3.5: Tier 1 CERRADO, Tier 2 CERRADO, Tier 4 CERRADO.**
+**Pendiente: Tier 0 (benchmarks no bloqueados), Tier 3 (idle zero-cost), Tier 5 (arquitectura).**
 
 ## Build
 
-- **cargo check:** PASS — 0 errores, 0 warnings (verificado 2026-04-16 post-RENDER-01-real)
+- **cargo check:** PASS — 0 errores, 0 warnings (verificado 2026-04-17)
 - **cargo test --lib:** PASS (9 tests)
 
 ---
 
 ## Historial de commits Phase 3.5 (cont.)
+
+| Commit | Descripción |
+|--------|-------------|
+| (pendiente) | [Tier1+2+4] fix: Tier 1 leaks + Tier 4 quick wins + Tier 2 hot path |
 
 | Commit | Descripción |
 |--------|-------------|
@@ -54,17 +58,59 @@
 
 ---
 
-## Siguiente — Quick wins P2
+## Roadmap priorizado (2026-04-17)
 
-### P2 sugeridos (post-render fixes)
-3. **TD-PERF-32** — Mover `colors_scratch` a `RenderContext` (`src/app/renderer.rs:191`)
-4. **TD-PERF-20** — Truncación `char_indices().nth(N)` en `src/app/renderer.rs:662,663,754`
-5. **TD-PERF-19** — `poll_git_branch` in-flight guard en `src/app/ui.rs:265`
-6. **TD-PERF-36** — `MAX_RECT_INSTANCES` warning + increase a 1 024 (`src/renderer/gpu.rs:20`)
+Orden por impacto y dependencias. Razonamiento: REC-PERF-04 exige métricas antes
+de optimizar; los leaks sin acotar bloquean sesiones largas; las ganancias O(n²)
+se notan en UX inmediatamente; idle cost requiere overlay infra; arquitectura
+pesada va al final para evitar regresiones sin baseline.
+
+### Tier 0 — Infraestructura de medición (bloquea Tier 2+)
+- [x] `benches/search.rs` — proxy sintético (2026-04-16); baselines en `PROFILING.md`
+- [ ] Bench `build_instances` — bloqueado por acoplamiento winit; extraer CPU path
+- [ ] Bench `rasterize_to_atlas` — bloqueado por `wgpu::Queue`; headless adapter o aislar CPU path
+- [ ] Latency probe p50/p95/p99 end-to-end
+- [ ] CI gating criterion (regresión >5% falla build)
+
+### Tier 1 — COMPLETO (2026-04-17)
+- **TD-MEM-20** `chat_panels` retiene tabs cerrados — RESUELTO
+- **TD-MEM-21** `row_caches` retiene terminales cerrados — RESUELTO
+- **TD-MEM-12** Tasks LLM colgadas al cerrar panel — RESUELTO
+
+### Tier 2 — COMPLETO (2026-04-17)
+- **TD-PERF-37** `word_wrap` O(n²) → incremental (`streaming_stable_lines` en `RenderContext`) — RESUELTO
+- **TD-PERF-22** Search highlight O(matches)/celda → `FxHashMap<i32, Vec<...>>` O(1)/celda — RESUELTO
+- **TD-PERF-34** `FxHasher` en `static_hash` + `calculate_row_hash` — RESUELTO
+- **TD-PERF-31** `ConfirmDisplay::for_write` movido al task async (fuera del event loop) — RESUELTO
+
+### Tier 3 — Idle zero-cost
+- **TD-MEM-19** Pausar timers sin foco (cursor blink, reloj, git poll)
+- Cursor overlay independiente (Sub-B)
+- Damage tracking con `Term::damage()` (REC-PERF-03)
+
+### Tier 4 — COMPLETO (2026-04-17, salvo TD-PERF-16)
+- **TD-PERF-32** `colors_scratch` → `RenderContext` — RESUELTO
+- **TD-PERF-33** `filtered_picker_items` devuelve `Vec<&PathBuf>` (render loop zero-clone) — RESUELTO
+- **TD-PERF-20** Truncación con `char_indices().nth(N)` — RESUELTO
+- **TD-MEM-10** `file_picker_items.clear()+shrink_to_fit()` en `close_file_picker` — RESUELTO
+- **TD-MEM-11** `matcher: SkimMatcherV2` campo en `ChatPanel` — RESUELTO
+- **TD-PERF-17** Debounce 300 ms en `check_config_reload` — RESUELTO
+- **TD-PERF-16** Cache inputs tab/status key — POSTERGADO (hash ya actúa como cache; refactor mayor)
+
+### Tier 5 — Arquitectura pesada (último)
+- Sub-E: rayon per-pane + `rtrb` PTY
+- Sub-G: atlas split, ring buffer, unificar bg+glyph pass
+- Sub-H: PGO con workload real
+
+### Próximo trabajo
+- **Tier 0** (desbloqueado): latency probe p50/p95/p99, CI gating. Benches de `build_instances` y `rasterize_to_atlas` siguen bloqueados.
+- **Tier 3**: TD-MEM-19 (pausar timers sin foco), cursor overlay independiente, damage tracking.
+- **Tier 5**: arquitectura pesada (rayon, atlas split, PGO) — al final.
+- **TD-OP-02** (P1 abierto): Nerd Font glyph ID override frágil.
 
 ### Milestone
-- Phase 3.5 exit: P1 completos ✓. Opcionalmente: P2 quick wins (PERF-32, PERF-20, PERF-19).
-- Phase 4 (plugins): Lua API pública, auto-scan `~/.config/petruterm/plugins/`
+- Phase 3.5 exit: Tier 0 completo (métricas validan KPIs) + Tier 3 (idle zero-cost)
+- Phase 4 (plugins): bloqueada hasta Phase 3.5 exit criteria
 
 ---
 

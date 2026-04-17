@@ -1,12 +1,22 @@
 # Active Context
 
-**Current Focus:** Phase 3.5 P1 cerrado. Siguiente: P2 quick wins o Phase 4.
-**Last Active:** 2026-04-16
+**Current Focus:** Phase 3.5 — Tier 3 (idle zero-cost) + Tier 0 desbloqueados
+**Last Active:** 2026-04-17
 
 ## Estado actual del proyecto
 
-**Phase 1–3 COMPLETE. Phase 3.5 PERF + P1 renders COMPLETO.**
-**Todos los P1 cerrados y verificados por el usuario.**
+**Phase 1–3 COMPLETE. Phase 3.5: Tier 1 + Tier 2 + Tier 4 COMPLETOS.**
+**Pendiente: Tier 0 (latency probe, CI gating), Tier 3 (idle), Tier 5 (arquitectura).**
+
+## Roadmap activo (próximo trabajo)
+
+**Tier 0 desbloqueados** — latency probe p50/p95/p99 end-to-end, CI gating
+criterion. Benches de `build_instances` y `rasterize_to_atlas` siguen bloqueados.
+
+**Tier 3** — idle zero-cost: TD-MEM-19 (pausar timers sin foco), cursor overlay
+independiente, damage tracking con `Term::damage()`.
+
+Tier 5 (arquitectura pesada) en `SESSION_STATE.md`.
 
 ---
 
@@ -74,14 +84,17 @@
 | TD-RENDER-03 | Celda blanca persistente tras click sin drag | RESUELTO |
 | TD-PERF-36 | Overflow silencioso en instance buffers | RESUELTO |
 
-### Quick wins P2 para próxima sesión (post renders)
+### Tier 4 — Quick wins P2 (batch en un PR, <20 LoC c/u)
 
 | ID | Archivo | Fix |
 |----|---------|-----|
 | TD-PERF-32 | `src/app/renderer.rs:191` | Mover `colors_scratch` a `RenderContext` |
+| TD-PERF-33 | `src/llm/chat_panel.rs` | `filtered_picker_items` → `Vec<&PathBuf>` |
 | TD-PERF-20 | `src/app/renderer.rs:662,663,754` | `char_indices().nth(N)` zero-alloc |
-| TD-PERF-19 | `src/app/ui.rs:265` | `git_branch_in_flight: bool` guard |
-| TD-PERF-36 | `src/renderer/gpu.rs:20` | `MAX_RECT_INSTANCES` → 1 024 + `log::warn!` |
+| TD-MEM-10  | `src/llm/chat_panel.rs` | `file_picker_items.clear()` en `close_file_picker` |
+| TD-MEM-11  | `src/llm/chat_panel.rs` | `matcher: SkimMatcherV2` campo en `ChatPanel` |
+| TD-PERF-16 | `src/app/mod.rs:454,554` | Cachear inputs previos de tab/status key, `==` directo |
+| TD-PERF-17 | `src/config/watcher.rs` | Debounce 300 ms para hot-reload |
 
 ---
 

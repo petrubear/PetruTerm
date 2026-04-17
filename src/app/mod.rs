@@ -51,6 +51,8 @@ pub struct App {
     /// instead of every frame.
     cached_cwd: Option<std::path::PathBuf>,
 
+    /// Debounce timer for config hot-reload — actual reload deferred 300 ms after last event (TD-PERF-17).
+    config_reload_at: Option<std::time::Instant>,
     /// Per-terminal shell context (exit code + last command), keyed by terminal_id.
     /// Stored with the mtime of the context file to skip redundant disk reads when
     /// the file has not changed since the last PTY event (TD-PERF-09).
@@ -78,6 +80,7 @@ impl App {
             last_pty_batch_size: 0,
             window_occluded: false,
             cached_cwd: None,
+            config_reload_at: None,
             terminal_shell_ctxs: std::collections::HashMap::new(),
         }
     }
@@ -206,6 +209,8 @@ impl App {
         if exited.is_empty() { return false; }
         for tid in exited {
             self.terminal_shell_ctxs.remove(&tid);
+            self.ui.remove_terminal_state(tid);
+            if let Some(rc) = &mut self.render_ctx { rc.row_caches.remove(&tid); }
             if self.mux.close_terminal(tid) { return true; }
         }
         self.apply_tab_bar_padding();
@@ -232,7 +237,16 @@ impl App {
     fn check_config_reload(&mut self) {
         if let Some(watcher) = &self.config_watcher {
             if watcher.poll().is_some() {
-                if let Ok(new_cfg) = config::reload() {
+                // Debounce: defer reload 300 ms after the last event (TD-PERF-17).
+                self.config_reload_at = Some(std::time::Instant::now()
+                    + std::time::Duration::from_millis(300));
+            }
+        }
+        let ready = self.config_reload_at
+            .is_some_and(|t| std::time::Instant::now() >= t);
+        if ready {
+            self.config_reload_at = None;
+            if let Ok(new_cfg) = config::reload() {
                     self.config = new_cfg;
                     if let Some(rc) = &mut self.render_ctx { rc.renderer.update_bg_color(self.config.colors.background_wgpu()); }
                     self.ui.palette.rebuild_keybinds(&self.config);
@@ -241,7 +255,6 @@ impl App {
                     self.ui.rewire_llm_provider(&self.config);
                     log::info!("Config hot-reloaded.");
                 }
-            }
         }
     }
 
@@ -605,6 +618,7 @@ impl ApplicationHandler<()> for App {
                             self.ui.panel_mut().separator(panel_cols);
                             rc.build_chat_panel_instances(
                                 self.ui.panel(),
+                                self.ui.active_panel_id(),
                                 panel_focused,
                                 file_picker_focused,
                                 &self.config,
@@ -776,6 +790,8 @@ impl ApplicationHandler<()> for App {
                     // Clean up per-terminal state for any panes/tabs closed by input (TD-MEM-08).
                     for tid in self.mux.closed_ids.drain(..) {
                         self.terminal_shell_ctxs.remove(&tid);
+                        self.ui.remove_terminal_state(tid);
+                        if let Some(rc) = &mut self.render_ctx { rc.row_caches.remove(&tid); }
                     }
                     if self.ui.is_panel_visible() != panel_was_visible {
                         self.resize_terminals_for_panel();
@@ -1258,7 +1274,7 @@ impl Drop for App {
 /// changed since the last frame, so we can skip rebuilding their GPU instances.
 fn static_hash(parts: &[&[u8]]) -> u64 {
     use std::hash::{Hash, Hasher};
-    let mut h = std::collections::hash_map::DefaultHasher::new();
+    let mut h = rustc_hash::FxHasher::default();
     for p in parts { p.hash(&mut h); }
     h.finish()
 }

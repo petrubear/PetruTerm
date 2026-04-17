@@ -360,6 +360,23 @@ impl Mux {
             buf.clear();
             return;
         };
+
+        // Build line-indexed search map once — O(matches) — so per-cell lookup is O(1) (TD-PERF-22).
+        // Each entry: (col_start, col_end_exclusive, is_current_match).
+        let search_idx: rustc_hash::FxHashMap<i32, Vec<(usize, usize, bool)>> =
+            if let Some((matches, current_idx)) = search {
+                let mut idx: rustc_hash::FxHashMap<i32, Vec<(usize, usize, bool)>> =
+                    rustc_hash::FxHashMap::default();
+                for (i, m) in matches.iter().enumerate() {
+                    idx.entry(m.grid_line)
+                        .or_default()
+                        .push((m.col, m.col + m.len, i == current_idx));
+                }
+                idx
+            } else {
+                rustc_hash::FxHashMap::default()
+            };
+
         terminal.with_term(|term| {
             let rows = term.screen_lines();
             let cols = term.columns();
@@ -382,7 +399,7 @@ impl Mux {
                     text.push(if cell.c == '\0' { ' ' } else { cell.c });
                     let (fg, bg) = if cell.flags.contains(Flags::INVERSE) { (cell.bg, cell.fg) } else { (cell.fg, cell.bg) };
                     let (fg, bg) = if cell_in_selection(grid_line, Column(col), &sel_range) { (bg, fg) } else { (fg, bg) };
-                    let (fg, bg) = search_highlight_at(grid_line.0, col, search)
+                    let (fg, bg) = search_highlight_at(grid_line.0, col, &search_idx)
                         .unwrap_or((fg, bg));
                     colors.push((fg, bg));
                 }
@@ -468,16 +485,15 @@ fn cell_in_selection(line: Line, col: Column, sel_range: &Option<SelectionRange>
 }
 
 /// Return overridden (fg, bg) colors if (grid_line, col) falls inside any search match.
-/// Returns `None` if no match covers this cell.
+/// Uses a pre-built per-line index for O(1) line lookup + O(matches_on_line) range check (TD-PERF-22).
 fn search_highlight_at(
     grid_line: i32,
     col: usize,
-    search: Option<(&[SearchMatch], usize)>,
+    idx: &rustc_hash::FxHashMap<i32, Vec<(usize, usize, bool)>>,
 ) -> Option<(AnsiColor, AnsiColor)> {
-    let (matches, current) = search?;
-    for (idx, m) in matches.iter().enumerate() {
-        if m.grid_line == grid_line && col >= m.col && col < m.col + m.len {
-            let bg = if idx == current { SEARCH_CURRENT_BG } else { SEARCH_MATCH_BG };
+    for &(start, end, is_current) in idx.get(&grid_line)? {
+        if col >= start && col < end {
+            let bg = if is_current { SEARCH_CURRENT_BG } else { SEARCH_MATCH_BG };
             return Some((SEARCH_MATCH_FG, bg));
         }
     }

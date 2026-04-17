@@ -357,7 +357,8 @@ impl InputHandler {
                         let cwd = mux.active_cwd()
                             .or_else(|| std::env::current_dir().ok())
                             .unwrap_or_default();
-                        let filtered = ui.panel().filtered_picker_items();
+                        let filtered: Vec<std::path::PathBuf> =
+                            ui.panel().filtered_picker_items().into_iter().cloned().collect();
                         ui.panel_mut().picker_confirm(&cwd, &filtered);
                     }
                     Key::Named(NamedKey::ArrowUp) => ui.panel_mut().picker_move_up(),

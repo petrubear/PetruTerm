@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-04-16
-**Open Items:** 43
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 24 | **P3:** 19
+**Last Updated:** 2026-04-17
+**Open Items:** 32
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 13 | **P3:** 19
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -33,27 +33,7 @@ _Ninguno abierto. Todos los P1 cerrados 2026-04-16 (TD-RENDER-01/02/03, TD-PERF-
 
 ---
 
-### TD-MEM-10: `file_picker_items` no se limpia al cerrar el file picker
-- **Archivo:** `src/llm/chat_panel.rs:close_file_picker()`
-- **Descripción:** `close_file_picker()` pone `file_picker_open = false` pero no limpia `file_picker_items`. El `Vec<PathBuf>` con todos los archivos escaneados permanece hasta la próxima apertura.
-- **Fix:** `self.file_picker_items.clear(); self.file_picker_items.shrink_to_fit();` en `close_file_picker()`.
-- **Severidad:** P2 — menor pero fácil.
-
----
-
-### TD-MEM-11: `SkimMatcherV2` instanciado en cada llamada a `filtered_picker_items()`
-- **Archivo:** `src/llm/chat_panel.rs:filtered_picker_items()`
-- **Descripción:** Se llama en cada frame mientras el file picker está abierto. `SkimMatcherV2::default()` tiene costo de inicialización no trivial y aloca internamente — decenas de alocaciones/liberaciones por segundo.
-- **Fix:** Campo `matcher: SkimMatcherV2` en `ChatPanel`, inicializado una vez en `new()`.
-- **Severidad:** P2 — alocaciones innecesarias en el render loop.
-
----
-
-### TD-MEM-12: Task de streaming LLM puede quedar colgada si el usuario cierra el panel
-- **Archivo:** `src/app/ui.rs` (spawn del task de streaming), `src/llm/openrouter.rs:stream()`
-- **Descripción:** Si el usuario cierra el panel durante streaming, el task tokio continúa hasta que el stream se agota o el timeout de 120 s expira. La conexión HTTP permanece abierta. Con múltiples queries canceladas, pueden acumularse varios tasks.
-- **Fix:** `tokio::task::JoinHandle` + `CancellationToken` (tokio-util). Al cerrar el panel, cancelar el token del task anterior. El task hace `select!` entre el stream y el token de cancelación.
-- **Severidad:** P2 — con uso intensivo puede acumular tasks y conexiones HTTP.
+_TD-MEM-10, 11, 12 — RESUELTOS 2026-04-17. Ver archivo._
 
 ---
 
@@ -73,21 +53,7 @@ _Ninguno abierto. Todos los P1 cerrados 2026-04-16 (TD-RENDER-01/02/03, TD-PERF-
 
 ---
 
-### TD-MEM-20: `UiManager.chat_panels` retiene historial de terminales cerrados
-- **Archivo:** `src/app/ui.rs:set_active_terminal()`, `src/app/mod.rs:close_exited_terminals()`
-- **Origen:** codex
-- **Descripción:** `chat_panels: HashMap<usize, ChatPanel>` no elimina entradas cuando un pane/tab se cierra. El `ChatPanel` completo de terminales muertos — `messages`, `wrapped_cache`, `attached_files`, `streaming_buf` — permanece en RAM indefinidamente.
-- **Fix:** `UiManager::remove_terminal_state(terminal_id)` llamado en los mismos puntos donde se limpia `terminal_shell_ctxs`. Si el panel activo pertenece al terminal eliminado, redirigir `active_panel_id`.
-- **Severidad:** P2 — crecimiento acumulativo silencioso en sesiones largas con tabs/panes efímeros.
-
----
-
-### TD-MEM-21: `row_caches` retiene entradas de terminales cerrados
-- **Archivo:** `src/app/renderer.rs:RenderContext` — campo `row_caches: HashMap<usize, RowCache>`
-- **Origen:** kiro
-- **Descripción:** Cuando un pane/tab se cierra, `close_exited_terminals` y `cmd_close_pane` limpian `terminal_shell_ctxs` pero **no notifican a `RenderContext`**. La entrada `RowCache` del terminal cerrado permanece en el HashMap. Cada `RowCache` contiene `Vec<Option<RowCacheEntry>>` con `Vec<CellVertex>` por fila (~40 filas × ~80 celdas). Con muchos ciclos de apertura/cierre, el HashMap crece sin límite.
-- **Fix:** `rc.row_caches.remove(&tid)` en `close_exited_terminals()` y en el drenado de `mux.closed_ids`, junto con la limpieza existente de `terminal_shell_ctxs`.
-- **Severidad:** P2 — crecimiento acumulativo silencioso en sesiones largas.
+_TD-MEM-20, 21 — RESUELTOS 2026-04-17. Ver archivo._
 
 ---
 
@@ -140,11 +106,7 @@ _Ninguno abierto. Todos los P1 cerrados 2026-04-16 (TD-RENDER-01/02/03, TD-PERF-
 
 ---
 
-### TD-PERF-17: Config hot-reload sin debounce
-- **Archivo:** `src/config/watcher.rs` → `src/app/mod.rs:219-233`
-- **Descripción:** Editores como Neovim con `atomic_save` generan 2-3 eventos `notify` por guardado. Cada evento dispara reparse Lua completo + validación + rebuild de palette + potencial invalidación de atlas.
-- **Fix:** Debounce de 300 ms. Primer evento arma un `Instant` futuro; eventos subsecuentes lo reinician; reload real cuando el timer expira.
-- **Severidad:** P2 — reloads duplicados durante edición activa del config.
+_TD-PERF-17 — RESUELTO 2026-04-17. Ver archivo._
 
 ---
 
@@ -156,11 +118,7 @@ _Ninguno abierto. Todos los P1 cerrados 2026-04-16 (TD-RENDER-01/02/03, TD-PERF-
 
 ---
 
-### TD-PERF-20: `char_indices` truncación en hot paths (spinner resuelto por TD-PERF-13)
-- **Archivo:** `src/app/renderer.rs:662,663,754` (truncación de paths/hints)
-- **Descripción:** La truncación de paths y hints usa `chars().take(N).collect::<String>()`, alocando un string nuevo para cortar a N chars. El spinner fue resuelto en TD-PERF-13 (frame_counter). Solo queda la truncación.
-- **Fix:** `s.char_indices().nth(N).map(|(i, _)| &s[..i]).unwrap_or(s)` — cero alocación, O(N) en chars.
-- **Severidad:** P2 — micro, se suma con los demás scratch buffers del render path.
+_TD-PERF-20 — RESUELTO 2026-04-17. Ver archivo._
 
 ---
 
@@ -172,56 +130,7 @@ _Ninguno abierto. Todos los P1 cerrados 2026-04-16 (TD-RENDER-01/02/03, TD-PERF-
 
 ---
 
-### TD-PERF-22: Highlight de search lookup O(matches) por celda en el render
-- **Archivo:** `src/app/mux.rs:441-454` (`search_highlight_at`), llamado en `collect_grid_cells_for`
-- **Descripción:** Para cada celda visible se recorre el `Vec<SearchMatch>` entero. Con 100 matches × 3 200 celdas (80×40), son 320 000 comparaciones por frame.
-- **Fix:** `HashMap<i32, Vec<(col_start, col_end, match_idx)>>` indexado por `grid_line`, construido una sola vez cuando los matches cambian. Lookup O(1) por celda.
-- **Severidad:** P2 — solo activo con search visible; degrada frame rate cuando activo.
-
----
-
-### TD-PERF-31: Diff de confirmación de escritura calculado síncronamente en el event loop
-- **Archivo:** `src/app/ui.rs:poll_ai_events()`, `src/llm/chat_panel.rs:ConfirmDisplay::for_write()`
-- **Origen:** codex
-- **Descripción:** Cuando el agente propone `write_file`, `poll_ai_events()` llama `ConfirmDisplay::for_write()` en el hilo principal: `std::fs::read_to_string(path)` + `diff_lines()` + `compress_diff()`. Para archivos grandes, mete I/O y CPU intensivos dentro del event loop de winit, causando freeze de UI visible.
-- **Fix:** Precomputar el diff en el task async antes de enviar el evento, o en un worker dedicado. Enviar a la UI solo el resultado comprimido. Añadir límites por bytes/líneas.
-- **Severidad:** P2 — stall interactivo en una ruta frecuente del panel AI.
-
----
-
-### TD-PERF-32: `colors_scratch` re-alocado por llamada a `build_pane_instances`
-- **Archivo:** `src/app/renderer.rs:191` — `let mut colors_scratch: Vec<([f32;4],[f32;4])> = Vec::with_capacity(cols);`
-- **Origen:** kiro (descripción ajustada — kiro dijo "per row", verificado como "per pane per call")
-- **Descripción:** `colors_scratch` se declara como local dentro de `build_pane_instances`, no en `RenderContext`. Aloca una vez por pane por frame con cache-miss. Con 3 panes visibles, son 3 alocaciones de heap por frame aunque ninguna fila haya cambiado. Los otros scratch buffers (`scratch_chars`, `scratch_str`, `scratch_colors`) ya viven en `RenderContext`.
-- **Fix:** Mover `colors_scratch` a `RenderContext` como campo `pub colors_scratch: Vec<([f32;4],[f32;4])>`. En `build_pane_instances`, `.clear()` + `.extend()` en lugar de `Vec::with_capacity()`.
-- **Severidad:** P2 — alocación evitable por pane; fácil de corregir siguiendo el patrón existente.
-
----
-
-### TD-PERF-33: `filtered_picker_items()` clona todos los `PathBuf` en cada frame
-- **Archivo:** `src/llm/chat_panel.rs:filtered_picker_items()`
-- **Origen:** kiro
-- **Descripción:** Llamada en cada frame mientras el file picker está abierto. Clona cada `PathBuf` candidato en el Vec `scored` y luego en el `collect()` final. En un proyecto con 500 archivos, son 500+ clones de `PathBuf` por frame (~30 000 clones/s mientras el picker está abierto).
-- **Fix:** Cambiar firma a `filtered_picker_items(&self) -> Vec<&PathBuf>` — devolver referencias. El caller solo necesita leer los paths para mostrarlos.
-- **Severidad:** P2 — 30 000+ alocaciones de heap por segundo mientras el picker está abierto.
-
----
-
-### TD-PERF-34: `static_hash()` y `calculate_row_hash()` usan SipHash-1-3 (DoS-resistant, innecesario)
-- **Archivo:** `src/app/mod.rs:static_hash()`, `src/app/renderer.rs:calculate_row_hash()`
-- **Origen:** kiro
-- **Descripción:** `DefaultHasher` en Rust usa SipHash-1-3, diseñado para resistencia a DoS. Para cache keys internas (títulos de tabs, CWD, branch name, contenido de filas), SipHash es innecesariamente lento. `calculate_row_hash()` se llama en el hot path del renderer (una vez por fila con cache-miss). FxHash o AHash son 2-4× más rápidos para inputs cortos.
-- **Fix:** Añadir `rustc-hash` (FxHash). Reemplazar `DefaultHasher` en `static_hash()` y `calculate_row_hash()` con `FxHasher`. Una línea por función; no afecta correctness.
-- **Severidad:** P2 — `calculate_row_hash` en hot path; FxHash ~3× más rápido para strings cortos.
-
----
-
-### TD-PERF-37: `word_wrap` re-envuelve el `streaming_buf` completo en cada token
-- **Archivo:** `src/app/renderer.rs:729` — `let wrapped = word_wrap(&panel.streaming_buf, msg_inner_w);`
-- **Origen:** kiro
-- **Descripción:** Durante streaming, `build_chat_panel_instances` llama `word_wrap(&panel.streaming_buf, msg_inner_w)` en cada frame donde el panel está dirty (es decir, en cada token). `word_wrap` itera todo el contenido desde el principio construyendo un `Vec<String>` nuevo. Con respuestas de 500 tokens, son 500 llamadas a `word_wrap` procesando buffers de 1-500 tokens = O(n²) trabajo total.
-- **Fix:** `streaming_wrapped: Vec<String>` en `ChatPanel` actualizado incrementalmente: cuando llega un nuevo token, solo re-envolver la última línea parcial.
-- **Severidad:** P2 — lag creciente en respuestas largas de LLM.
+_TD-PERF-22, 31, 32, 33, 34, 37 — RESUELTOS 2026-04-17. Ver archivo._
 
 ---
 

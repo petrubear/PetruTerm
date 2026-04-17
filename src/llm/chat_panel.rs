@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use fuzzy_matcher::skim::SkimMatcherV2;
 use crate::llm::{ChatMessage, ChatRole};
 use crate::llm::diff::{DiffLine, diff_lines, compress_diff};
 
@@ -16,10 +17,9 @@ pub enum AiEvent {
     Error(String),
     /// Agent called a tool. `done=false` = started, `done=true` = finished.
     ToolStatus { tool: String, path: String, done: bool },
-    /// LLM wants to write a file — show diff and ask user to confirm.
+    /// LLM wants to write a file — diff pre-computed in async task (TD-PERF-31).
     ConfirmWrite {
-        path: PathBuf,
-        new_content: String,
+        display: ConfirmDisplay,
         result_tx: tokio::sync::oneshot::Sender<bool>,
     },
     /// LLM wants to run a command — ask user to confirm.
@@ -129,6 +129,8 @@ pub struct ChatPanel {
     pub file_picker_items: Vec<PathBuf>,
     /// Index of the highlighted item in the filtered list.
     pub file_picker_cursor: usize,
+    /// Reusable fuzzy matcher — avoids re-init on every filtered_picker_items call (TD-MEM-11).
+    matcher: SkimMatcherV2,
 }
 
 impl ChatPanel {
@@ -148,6 +150,7 @@ impl ChatPanel {
             file_picker_query: String::new(),
             file_picker_items: Vec::new(),
             file_picker_cursor: 0,
+            matcher: SkimMatcherV2::default(),
             wrapped_cache: Vec::new(),
             wrapped_cache_width: 0,
             separator_cache: String::new(),
@@ -417,6 +420,8 @@ impl ChatPanel {
     }
 
     pub fn close_file_picker(&mut self) {
+        self.file_picker_items.clear();
+        self.file_picker_items.shrink_to_fit();
         self.file_picker_open = false;
         self.dirty = true;
     }
@@ -477,17 +482,16 @@ impl ChatPanel {
     }
 
     /// Returns filtered file picker items matching the current query (fuzzy).
-    pub fn filtered_picker_items(&self) -> Vec<PathBuf> {
-        if self.file_picker_query.is_empty() {
-            return self.file_picker_items.clone();
-        }
+    /// Returns references — callers must not outlive `self` (TD-PERF-33).
+    pub fn filtered_picker_items(&self) -> Vec<&PathBuf> {
         use fuzzy_matcher::FuzzyMatcher;
-        use fuzzy_matcher::skim::SkimMatcherV2;
-        let matcher = SkimMatcherV2::default();
+        if self.file_picker_query.is_empty() {
+            return self.file_picker_items.iter().collect();
+        }
         let query = &self.file_picker_query;
-        let mut scored: Vec<(i64, PathBuf)> = self.file_picker_items.iter()
+        let mut scored: Vec<(i64, &PathBuf)> = self.file_picker_items.iter()
             .filter_map(|p| {
-                matcher.fuzzy_match(&p.to_string_lossy(), query).map(|s| (s, p.clone()))
+                self.matcher.fuzzy_match(&p.to_string_lossy(), query).map(|s| (s, p))
             })
             .collect();
         scored.sort_by(|a, b| b.0.cmp(&a.0));

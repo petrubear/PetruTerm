@@ -55,6 +55,14 @@ pub struct RenderContext {
     pub scratch_chars: Vec<char>,
     pub scratch_str: String,
     pub scratch_colors: Vec<([f32; 4], [f32; 4])>,
+    /// Per-pane color resolve scratch — avoids Vec alloc per pane per frame (TD-PERF-32).
+    pub colors_scratch: Vec<([f32; 4], [f32; 4])>,
+    /// Incremental streaming wrap cache — avoids re-wrapping the full buf each token (TD-PERF-37).
+    streaming_stable_lines: Vec<String>,
+    /// Byte offset in streaming_buf up to which streaming_stable_lines is valid.
+    streaming_stable_end: usize,
+    /// Panel id and width used for the current streaming cache entry.
+    streaming_cache_key: Option<(usize, usize)>,
     /// General-purpose format scratch for callers of `push_shaped_row` (TD-PERF-13).
     /// Kept separate from `scratch_str` (used inside push_shaped_row) to avoid borrow conflicts.
     pub fmt_buf: String,
@@ -125,6 +133,10 @@ impl RenderContext {
             scratch_chars: Vec::new(),
             scratch_str: String::new(),
             scratch_colors: Vec::new(),
+            colors_scratch: Vec::new(),
+            streaming_stable_lines: Vec::new(),
+            streaming_stable_end: 0,
+            streaming_cache_key: None,
             fmt_buf: String::new(),
             scratch_lines: Vec::new(),
             frame_counter: 0,
@@ -190,18 +202,15 @@ impl RenderContext {
             cache.rows.resize(cell_data.len(), None);
         }
 
-        let cols = cell_data.first().map(|(_, c)| c.len()).unwrap_or(256);
-        let mut colors_scratch: Vec<([f32; 4], [f32; 4])> = Vec::with_capacity(cols);
-
         for (row_idx, (text, raw_colors)) in cell_data.iter().enumerate() {
-            colors_scratch.clear();
-            colors_scratch.extend(raw_colors.iter().map(|(fg, bg)| {
+            self.colors_scratch.clear();
+            self.colors_scratch.extend(raw_colors.iter().map(|(fg, bg)| {
                 (
                     resolve_color(*fg, &config.colors),
                     resolve_color(*bg, &config.colors),
                 )
             }));
-            let colors: &[([f32; 4], [f32; 4])] = &colors_scratch;
+            let colors: &[([f32; 4], [f32; 4])] = &self.colors_scratch;
 
             let row_hash = calculate_row_hash(text, colors);
 
@@ -513,6 +522,7 @@ impl RenderContext {
     pub fn build_chat_panel_instances(
         &mut self,
         panel: &ChatPanel,
+        panel_id: usize,
         panel_focused: bool,
         file_picker_focused: bool,
         config: &Config,
@@ -664,7 +674,9 @@ impl RenderContext {
                     // Row 1: title
                     self.push_shaped_row(title, title_fg, panel_bg, 1, co, panel_cols, font);
                     // Row 2: command
-                    let cmd_line = format!("│   {}", cmd.chars().take(panel_cols.saturating_sub(5)).collect::<String>());
+                    let max_cmd = panel_cols.saturating_sub(5);
+                    let cmd_trunc = cmd.char_indices().nth(max_cmd).map(|(i, _)| &cmd[..i]).unwrap_or(cmd);
+                    let cmd_line = format!("│   {}", cmd_trunc);
                     self.push_shaped_row(&cmd_line, ADD_FG, panel_bg, 2, co, panel_cols, font);
                     // Rest: empty
                     for row in 3..sep_row {
@@ -691,8 +703,9 @@ impl RenderContext {
                         .map(|n| n.to_string_lossy().into_owned())
                         .unwrap_or_else(|| path.to_string_lossy().into_owned());
                     let max_w = panel_cols.saturating_sub(6);
-                    let trimmed = if name.chars().count() > max_w {
-                        format!("{}…", name.chars().take(max_w.saturating_sub(1)).collect::<String>())
+                    let trimmed = if let Some((i, _)) = name.char_indices().nth(max_w) {
+                        let cut = name.char_indices().nth(max_w.saturating_sub(1)).map(|(j, _)| j).unwrap_or(i);
+                        format!("{}…", &name[..cut])
                     } else { name };
                     let line = format!("│   {}", trimmed);
                     self.push_shaped_row(&line, DIM_FG, panel_bg, 2 + i, co, panel_cols, font);
@@ -749,10 +762,39 @@ impl RenderContext {
             }
 
             if panel.is_streaming() && !panel.streaming_buf.is_empty() {
-                let wrapped = word_wrap(&panel.streaming_buf, msg_inner_w);
-                for (i, line) in wrapped.iter().enumerate() {
+                let buf = &panel.streaming_buf;
+                let cache_key = (panel_id, msg_inner_w);
+
+                // Invalidate if panel or width changed, or buf was reset (new query).
+                if self.streaming_cache_key != Some(cache_key)
+                    || self.streaming_stable_end > buf.len()
+                {
+                    self.streaming_stable_lines.clear();
+                    self.streaming_stable_end = 0;
+                    self.streaming_cache_key = Some(cache_key);
+                }
+
+                // Advance stable prefix to the end of the last complete line (TD-PERF-37).
+                let new_stable_end = buf[self.streaming_stable_end..]
+                    .rfind('\n')
+                    .map(|i| self.streaming_stable_end + i + 1)
+                    .unwrap_or(self.streaming_stable_end);
+
+                if new_stable_end > self.streaming_stable_end {
+                    let seg = &buf[self.streaming_stable_end..new_stable_end];
+                    self.streaming_stable_lines.extend(word_wrap(seg, msg_inner_w));
+                    self.streaming_stable_end = new_stable_end;
+                }
+
+                // Re-wrap only the partial last line (no newline yet) — O(partial_len).
+                let partial = &buf[self.streaming_stable_end..];
+                let partial_lines = if partial.is_empty() { vec![] } else { word_wrap(partial, msg_inner_w) };
+
+                let all_lines = self.streaming_stable_lines.iter().map(|s| s.as_str())
+                    .chain(partial_lines.iter().map(|s| s.as_str()));
+                for (i, line) in all_lines.enumerate() {
                     let p = if i == 0 { "│   AI  " } else { "│       " };
-                    push_line!(p, line.as_str(), STREAM_FG);
+                    push_line!(p, line, STREAM_FG);
                 }
             }
 
@@ -976,8 +1018,9 @@ impl RenderContext {
             AiState::Done => {
                 if let Some(cmd) = block.command_to_run() {
                     let max_cmd = w.saturating_sub(5);
-                    let display = if cmd.chars().count() > max_cmd {
-                        format!("{}…", cmd.chars().take(max_cmd.saturating_sub(1)).collect::<String>())
+                    let display = if let Some((i, _)) = cmd.char_indices().nth(max_cmd) {
+                        let cut = cmd.char_indices().nth(max_cmd.saturating_sub(1)).map(|(j, _)| j).unwrap_or(i);
+                        format!("{}…", &cmd[..cut])
                     } else { cmd };
                     self.push_shaped_row(&format!("  \u{2192} {}", display), RESP_FG, BLOCK_BG, resp_row, 0, w, font);
                 } else {
@@ -1413,7 +1456,7 @@ fn colors_approx_eq(a: [f32; 4], b: [f32; 4]) -> bool {
 
 fn calculate_row_hash(text: &str, colors: &[([f32; 4], [f32; 4])]) -> u64 {
     use std::hash::{Hash, Hasher};
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    let mut hasher = rustc_hash::FxHasher::default();
     text.hash(&mut hasher);
     for (fg, bg) in colors {
         // Hash all 4 channels of each color packed into a u32 (not just red).
