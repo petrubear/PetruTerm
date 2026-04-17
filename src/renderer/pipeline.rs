@@ -84,6 +84,10 @@ fn to_array4(v: vec4<f32>) -> array<f32, 4> {
 
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
+    // Skip rendering if uv is [0, 0] (background-only cell without glyph).
+    // Avoids sampling uninitialized atlas data at origin (TD-RENDER-01).
+    if in.uv.x < 0.001 && in.uv.y < 0.001 { discard; }
+
     // Color glyphs (emoji): atlas stores pre-colored RGBA — sample directly.
     if (in.flags & FLAG_COLOR_GLYPH) != 0u {
         let color = textureSample(t_atlas, s_atlas, in.uv);
@@ -116,6 +120,8 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
 // TD-026b: Background-aware gamma-correct blend.
 @fragment
 fn fs_bg_aware(in: VertexOut) -> @location(0) vec4<f32> {
+    // Skip rendering if uv is [0, 0] (background-only cell without glyph).
+    if in.uv.x < 0.001 && in.uv.y < 0.001 { discard; }
     let alpha = textureSample(t_atlas, s_atlas, in.uv).r;
     let corrected_alpha = pow(alpha, 1.0 / 1.4);
 
@@ -136,6 +142,9 @@ fn fs_bg_aware(in: VertexOut) -> @location(0) vec4<f32> {
 
 @fragment
 fn fs_lcd(in: VertexOut) -> @location(0) vec4<f32> {
+    // Skip rendering if uv is [0, 0] (background-only cell without glyph).
+    if in.uv.x < 0.001 && in.uv.y < 0.001 { discard; }
+
     let lcd = textureSample(t_lcd_atlas, s_lcd_atlas, in.uv);
     let coverage = pow(lcd.rgb, vec3(1.0 / 1.4));
 
@@ -232,6 +241,15 @@ const QUAD: array<vec2<f32>, 6> = array<vec2<f32>, 6>(
     vec2(1.0, 0.0), vec2(1.0, 1.0), vec2(0.0, 1.0),
 );
 
+fn srgb_to_lin(c: f32) -> f32 {
+    if c <= 0.04045 { return c / 12.92; }
+    return pow((c + 0.055) / 1.055, 2.4);
+}
+fn lin_to_srgb(c: f32) -> f32 {
+    if c <= 0.0031308 { return c * 12.92; }
+    return 1.055 * pow(c, 1.0 / 2.4) - 0.055;
+}
+
 @vertex
 fn vs_main(@builtin(vertex_index) vi: u32, instance: InstanceIn) -> VertexOut {
     let q = QUAD[vi];
@@ -299,6 +317,9 @@ fn fs_bg_aware(in: VertexOut) -> @location(0) vec4<f32> {
 // TD-026c: LCD subpixel AA — reads 3×-resolution LCD glyphs, blends per-channel in linear space.
 @fragment
 fn fs_lcd(in: VertexOut) -> @location(0) vec4<f32> {
+    // Skip rendering if uv is [0, 0] (background-only cell without glyph).
+    if in.uv.x < 0.001 && in.uv.y < 0.001 { discard; }
+
     let lcd = textureSample(t_lcd_atlas, s_lcd_atlas, in.uv);
     let coverage = pow(lcd.rgb, vec3(1.0 / 1.4));
     let fg = to_array4(in.fg);
