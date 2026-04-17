@@ -17,7 +17,7 @@ use crate::renderer::rounded_rect::{RoundedRectInstance, RoundedRectPipeline};
 const MAX_INSTANCES: usize = 32_768;
 
 /// Maximum number of rounded rect instances per frame (tab bar pills + overdraw).
-const MAX_RECT_INSTANCES: usize = 256;
+const MAX_RECT_INSTANCES: usize = 1024;
 
 /// Core wgpu renderer: owns the surface, device, queue, pipeline, and glyph atlas.
 pub struct GpuRenderer {
@@ -321,6 +321,9 @@ impl GpuRenderer {
     /// Upload cell instances for this frame. Supports partial updates via offset.
     pub fn upload_instances(&mut self, instances: &[CellVertex], offset: usize) {
         let count = instances.len();
+        if offset + count > MAX_INSTANCES {
+            log::warn!("upload_instances overflow: offset={offset} count={count} max={MAX_INSTANCES}");
+        }
         if count > 0 && offset + count <= MAX_INSTANCES {
             self.queue.write_buffer(
                 &self.instance_buffer,
@@ -476,6 +479,9 @@ impl GpuRenderer {
     /// Upload rounded rect instances for this frame (TD-013). Must be called before `render()`.
     pub fn upload_rect_instances(&mut self, instances: &[RoundedRectInstance]) {
         let count = instances.len().min(MAX_RECT_INSTANCES);
+        if instances.len() > MAX_RECT_INSTANCES {
+            log::warn!("upload_rect_instances overflow: count={} max={MAX_RECT_INSTANCES}", instances.len());
+        }
         if count > 0 {
             self.queue.write_buffer(
                 &self.rect_instance_buffer,
@@ -489,6 +495,9 @@ impl GpuRenderer {
     /// Upload LCD cell instances for this frame. Must be called before `render()`.
     pub fn upload_lcd_instances(&mut self, instances: &[CellVertex]) {
         let count = instances.len().min(MAX_INSTANCES);
+        if instances.len() > MAX_INSTANCES {
+            log::warn!("upload_lcd_instances overflow: count={} max={MAX_INSTANCES}", instances.len());
+        }
         if count > 0 {
             self.queue.write_buffer(
                 &self.lcd_instance_buffer,
