@@ -47,6 +47,8 @@ pub struct RenderContext {
     pub lcd_instances: Vec<CellVertex>,
     /// Cached GPU instances for the AI chat panel — rebuilt only when `ChatPanel::dirty`.
     pub panel_instances_cache: Vec<CellVertex>,
+    /// Capture of `term_cols` when panel cache was built. If it changes, mark panel dirty.
+    pub panel_cache_term_cols: usize,
     /// Scratch buffer for `collect_grid_cells_for` — reused across frames (TD-PERF-12).
     pub cell_data_scratch: Vec<(String, Vec<(alacritty_terminal::vte::ansi::Color, alacritty_terminal::vte::ansi::Color)>)>,
     /// Scratch buffers for `push_shaped_row` — reused per call to avoid hot-path allocs (TD-PERF-13).
@@ -117,6 +119,7 @@ impl RenderContext {
             row_caches: HashMap::new(),
             instances: Vec::new(),
             lcd_instances: Vec::new(),
+            panel_cache_term_cols: 0,
             panel_instances_cache: Vec::new(),
             cell_data_scratch: Vec::new(),
             scratch_chars: Vec::new(),

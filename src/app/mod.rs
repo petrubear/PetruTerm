@@ -592,7 +592,9 @@ impl ApplicationHandler<()> for App {
                             self.ui.panel().state,
                             crate::llm::chat_panel::PanelState::Loading | crate::llm::chat_panel::PanelState::Streaming
                         );
-                        if panel_dirty || force_rebuild {
+                        // If window was resized, term_cols changed — invalidate panel cache.
+                        let panel_cols_changed = rc.panel_cache_term_cols != total_cols;
+                        if panel_dirty || force_rebuild || panel_cols_changed {
                             let panel_start = rc.instances.len();
                             self.ui.panel_mut().dirty = false;
                             // Pre-wrap message lines once per dirty rebuild (TD-PERF-05).
@@ -613,6 +615,7 @@ impl ApplicationHandler<()> for App {
                             );
                             rc.panel_instances_cache.clear();
                             rc.panel_instances_cache.extend_from_slice(&rc.instances[panel_start..]);
+                            rc.panel_cache_term_cols = total_cols;
                         } else {
                             rc.instances.extend_from_slice(&rc.panel_instances_cache);
                         }
