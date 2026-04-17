@@ -588,7 +588,11 @@ impl ApplicationHandler<()> for App {
                         let panel_focused = self.ui.panel_focused;
                         let file_picker_focused = self.ui.file_picker_focused;
                         let blink = self.input.cursor_blink_on;
-                        if panel_dirty {
+                        let force_rebuild = matches!(
+                            self.ui.panel().state,
+                            crate::llm::chat_panel::PanelState::Loading | crate::llm::chat_panel::PanelState::Streaming
+                        );
+                        if panel_dirty || force_rebuild {
                             let panel_start = rc.instances.len();
                             self.ui.panel_mut().dirty = false;
                             // Pre-wrap message lines once per dirty rebuild (TD-PERF-05).
