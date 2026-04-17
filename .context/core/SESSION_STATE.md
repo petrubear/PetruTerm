@@ -72,8 +72,9 @@
 ### 2026-04-16 — P1 Rendering fixes
 - TD-RENDER-02 ✓ (force rebuild during Loading/Streaming for smooth spinner)
 - TD-PERF-36 ✓ (warn on overflow, MAX_RECT_INSTANCES 256→1024)
-- TD-RENDER-01 ✓ (verified: all mutations mark dirty, no fix needed)
-- 3 commits, cargo check PASS
+- TD-RENDER-01 ✓ (panel cache invalidation on window resize — term_cols changed)
+- 4 commits, cargo check PASS
+- User verification: flickering fixed; artifacts should be gone
 
 ### 2026-04-15 — Phase 3.5 Debt audit + cleanup
 - Dos regresiones visuales identificadas en screenshot: TD-RENDER-01/02 (P1)
