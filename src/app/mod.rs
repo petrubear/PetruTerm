@@ -48,6 +48,9 @@ pub struct App {
     /// True when the window has OS focus. When false, cursor blink and git polling
     /// are suspended and the event loop parks until a real event arrives (TD-MEM-19).
     window_focused: bool,
+    /// Set when only cursor blink changed. Triggers the fast render path that
+    /// skips full cell rebuild and uploads only the cursor vertex (cursor overlay).
+    cursor_blink_dirty: bool,
 
     /// Cached CWD of the active shell (TD-PERF-02).
     /// Refreshed via proc_pidinfo only when PTY data arrives or terminal focus changes,
@@ -83,6 +86,7 @@ impl App {
             last_pty_batch_size: 0,
             window_occluded: false,
             window_focused: true,
+            cursor_blink_dirty: false,
             cached_cwd: None,
             config_reload_at: None,
             terminal_shell_ctxs: std::collections::HashMap::new(),
@@ -405,9 +409,38 @@ impl ApplicationHandler<()> for App {
                 let (data_ids, exited) = self.mux.poll_pty_events();
                 if self.close_exited_terminals(exited) { event_loop.exit(); return; }
                 for id in &data_ids { self.update_terminal_shell_ctx(*id); }
-                self.ui.poll_ai_events();
-                self.ui.poll_ai_block_events();
+                let had_ai = self.ui.poll_ai_events();
+                let had_ai_block = self.ui.poll_ai_block_events();
                 self.flush_pending_pty_run();
+
+                // ── Fast blink path ─────────────────────────────────────────────────────
+                // When only cursor blink changed (no PTY data, no AI events, no panel
+                // cursor), skip the full cell rebuild and update just the cursor vertex.
+                // The GPU instance buffer retains cell content from the previous full frame.
+                let blink_only = self.cursor_blink_dirty
+                    && data_ids.is_empty()
+                    && !had_ai && !had_ai_block
+                    && !self.pending_pty_redraw;
+                if blink_only {
+                    self.cursor_blink_dirty = false;
+                    if let Some(rc) = &mut self.render_ctx {
+                        let blink_on = self.input.cursor_blink_on;
+                        let cell_count = if blink_on {
+                            if let Some(v) = rc.cursor_vertex_template {
+                                rc.renderer.upload_instances(std::slice::from_ref(&v), rc.content_end);
+                                rc.content_end + 1
+                            } else {
+                                rc.content_end
+                            }
+                        } else {
+                            rc.content_end
+                        };
+                        rc.renderer.set_cell_count(cell_count);
+                        rc.renderer.set_overlay_start(cell_count);
+                        let _ = rc.renderer.render();
+                    }
+                    return;
+                }
 
                 // Sync per-pane chat panel to the focused terminal.
                 let terminal_id = self.mux.focused_terminal_id();
@@ -1184,6 +1217,13 @@ impl ApplicationHandler<()> for App {
                 if self.ui.ai_block.is_typing() {
                     self.ui.ai_block.dirty = true;
                 }
+                // Fast blink path: when only the terminal cursor changed, flag it so
+                // RedrawRequested can skip the full cell rebuild (cursor overlay).
+                let needs_full = (self.ui.is_panel_visible() && self.ui.panel_focused)
+                    || self.ui.ai_block.is_typing();
+                if !needs_full {
+                    self.cursor_blink_dirty = true;
+                }
                 if let Some(w) = &self.window { w.request_redraw(); }
             }
         }
@@ -1252,26 +1292,24 @@ fn build_all_pane_instances(
         });
         mux.collect_grid_cells_for(info.terminal_id, &mut cell_data_scratch, search_arg);
         let cell_data = &cell_data_scratch[..];
-        let cursor = if info.focused {
-            mux.terminals
-                .get(info.terminal_id)
-                .and_then(|s| s.as_ref())
-                .map(|t| t.cursor_info())
-        } else {
-            None
-        };
-        rc.build_instances(
-            cell_data,
-            config,
-            font,
-            cursor.as_ref(),
-            cursor_blink_on,
-            info.terminal_id,
-            info.col_offset,
-            info.row_offset,
-        )?;
+        rc.build_instances(cell_data, config, font, info.terminal_id, info.col_offset, info.row_offset)?;
     }
     rc.cell_data_scratch = cell_data_scratch;
+
+    // Record content boundary before cursor — used by the fast blink path.
+    rc.content_end = rc.instances.len();
+
+    // Emit cursor for the focused pane (always after content_end).
+    if let Some(info) = pane_infos.iter().find(|i| i.focused) {
+        if let Some(cursor) = mux.terminals.get(info.terminal_id).and_then(|s| s.as_ref()).map(|t| t.cursor_info()) {
+            rc.build_cursor_instance(&cursor, cursor_blink_on, info.col_offset, info.row_offset, config);
+        } else {
+            rc.cursor_vertex_template = None;
+        }
+    } else {
+        rc.cursor_vertex_template = None;
+    }
+
     Ok(())
 }
 

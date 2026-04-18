@@ -74,6 +74,16 @@ pub struct RenderContext {
     /// Rounded rect instances for the tab bar pills and status bar background.
     pub rect_instances: Vec<RoundedRectInstance>,
 
+    // ── Cursor overlay (fast blink path) ─────────────────────────────────────
+    /// Number of non-cursor instances after the last full frame build.
+    /// The cursor vertex is always appended at this slot so it can be
+    /// updated in-place on blink without rebuilding the whole cell buffer.
+    pub content_end: usize,
+    /// Cursor vertex template (blink=on state) from the last full frame.
+    /// None when the cursor is hidden or shape is Hidden.
+    /// Reused on blink-only fast renders to avoid a full rebuild.
+    pub cursor_vertex_template: Option<CellVertex>,
+
     // ── Debug HUD (F12) ───────────────────────────────────────────────────────
     pub hud_visible: bool,
     /// Ring buffer of the last 120 frame times in milliseconds.
@@ -155,6 +165,8 @@ impl RenderContext {
             status_bar_key: 0,
             status_bar_instances_cache: Vec::new(),
             status_bar_rect_cache: Vec::new(),
+            content_end: 0,
+            cursor_vertex_template: None,
         })
     }
 
@@ -187,8 +199,6 @@ impl RenderContext {
         cell_data: &[(String, Vec<(AnsiColor, AnsiColor)>)],
         config: &Config,
         font: &crate::config::schema::FontConfig,
-        cursor: Option<&CursorInfo>,
-        cursor_blink_on: bool,
         terminal_id: usize,
         col_offset: usize,
         row_offset: usize,
@@ -370,30 +380,45 @@ impl RenderContext {
             }
         }
 
-        // Cursor (only for the focused pane, where cursor is Some).
-        if let Some(info) = cursor {
-            if info.visible && cursor_blink_on {
-                let cw = self.shaper.cell_width;
-                let ch = self.shaper.cell_height;
-                let (glyph_offset, glyph_size) = match info.shape {
-                    CursorShape::Block | CursorShape::HollowBlock => ([0.0f32, 0.0], [cw, ch]),
-                    CursorShape::Underline => ([0.0, (ch - 2.0).max(0.0)], [cw, 2.0]),
-                    CursorShape::Beam      => ([0.0, 0.0], [2.0, ch]),
-                    CursorShape::Hidden    => ([0.0; 2], [0.0; 2]),
-                };
-                self.instances.push(CellVertex {
-                    grid_pos:     [(col_offset + info.col) as f32, (row_offset + info.row) as f32],
-                    atlas_uv:     [0.0; 4],
-                    fg:           config.colors.cursor_fg,
-                    bg:           config.colors.cursor_bg,
-                    glyph_offset,
-                    glyph_size,
-                    flags:        FLAG_CURSOR,
-                    _pad:         0,
-                });
-            }
-        }
         Ok(())
+    }
+
+    /// Emit the cursor vertex for the focused terminal pane.
+    ///
+    /// Must be called AFTER `build_instances` for all panes and BEFORE any overlay
+    /// instances so that `content_end` accurately marks the cell/cursor boundary.
+    /// Stores a blink-on template in `cursor_vertex_template` for the fast blink path.
+    pub fn build_cursor_instance(
+        &mut self,
+        info: &CursorInfo,
+        blink_on: bool,
+        col_offset: usize,
+        row_offset: usize,
+        config: &Config,
+    ) {
+        let cw = self.shaper.cell_width;
+        let ch = self.shaper.cell_height;
+        let (glyph_offset, glyph_size) = match info.shape {
+            CursorShape::Block | CursorShape::HollowBlock => ([0.0f32, 0.0], [cw, ch]),
+            CursorShape::Underline => ([0.0, (ch - 2.0).max(0.0)], [cw, 2.0]),
+            CursorShape::Beam      => ([0.0, 0.0], [2.0, ch]),
+            CursorShape::Hidden    => { self.cursor_vertex_template = None; return; }
+        };
+        if !info.visible { self.cursor_vertex_template = None; return; }
+        let v = CellVertex {
+            grid_pos:     [(col_offset + info.col) as f32, (row_offset + info.row) as f32],
+            atlas_uv:     [0.0; 4],
+            fg:           config.colors.cursor_fg,
+            bg:           config.colors.cursor_bg,
+            glyph_offset,
+            glyph_size,
+            flags:        FLAG_CURSOR,
+            _pad:         0,
+        };
+        self.cursor_vertex_template = Some(v);
+        if blink_on {
+            self.instances.push(v);
+        }
     }
 
     /// Draw 1-pixel separator lines between panes.
