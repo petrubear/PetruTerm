@@ -13,7 +13,7 @@ env:
 jobs:
   check:
     name: check + test
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -46,7 +46,7 @@ jobs:
 
   bench-regression:
     name: bench regression gate
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     # Only run on PRs — master pushes update the stored baseline.
     if: github.event_name == 'pull_request'
     steps:
@@ -89,7 +89,7 @@ jobs:
 
   bench-baseline:
     name: update bench baseline
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     # Only runs on master pushes to update the stored baseline.
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     steps:
