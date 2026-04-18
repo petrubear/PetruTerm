@@ -8,7 +8,7 @@
 ## Estado actual
 
 **Phase 1–3 COMPLETE. Phase 3.5: Tiers 1–4 CERRADOS. Tier 0 CERRADO (accionable). Tier 3 CERRADO.**
-**Pendiente: TD-OP-02 (P1 abierto), Tier 5 (arquitectura pesada).**
+**TD-OP-02 CERRADO (2026-04-18). Sin P1 abiertos. Tier 5 (arquitectura pesada) pendiente.**
 **Phase 3.5 exit criteria ALCANZADOS. Phase 4 (plugins) desbloqueada.**
 
 ## Build
@@ -81,7 +81,6 @@
 - Sub-H: PGO con workload real
 
 ### Próximo trabajo
-- **TD-OP-02** (P1 abierto): Nerd Font glyph ID override frágil.
 - **Phase 4** (plugins): desbloqueada — lazy.nvim-style plugin loader en Lua.
 - **Tier 5**: arquitectura pesada — solo con profiling previo (REC-PERF-04).
 

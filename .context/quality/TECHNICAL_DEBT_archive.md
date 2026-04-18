@@ -5,6 +5,16 @@ Ordered newest-first within each date group.
 
 ---
 
+## Resolved 2026-04-18 — TD-OP-02 (3rd iteration): font_index threading
+
+### TD-OP-02: FreeType cmap opens wrong face for .ttc collection fonts
+- **Files:** `src/font/locator.rs`, `src/font/loader.rs`, `src/font/shaper.rs`, `benches/shaping.rs`
+- **Root cause:** `locate_via_font_kit` discarded `font_index` from font_kit's `Handle::Path`, hardcoding `0`. `FT_New_Face` always opened face 0. `build_font_system` matched by path only, ignoring `FaceInfo.index`. For `.ttc` fonts with the target face at index > 0, FreeType and fontdb both used the wrong face, producing incorrect PUA glyph IDs.
+- **Fix:** `locate_via_font_kit` now captures `font_index` from `Handle::Path`. `build_font_system` matches by path AND `face.index == font_location.index`. `FreeTypeCmapLookup::new` takes `face_index: u32` and passes it to `FT_New_Face`. `build_font_system` returns `(FontSystem, String, fontdb::ID, PathBuf, u32)`. `TextShaper::new` takes and threads `face_index: u32`.
+- `#[allow(dead_code)]` on `FontPath.index` removed (field is now used).
+
+---
+
 ## Resolved 2026-04-16 — Render P1 real fixes (TD-RENDER-01 real, TD-RENDER-03)
 
 ### TD-RENDER-01: Franjas de bg distintas en filas con texto vs sin texto (real root cause)

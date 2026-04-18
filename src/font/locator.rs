@@ -3,7 +3,6 @@ use std::path::PathBuf;
 #[derive(Debug, Clone)]
 pub struct FontPath {
     pub path: PathBuf,
-    #[allow(dead_code)]
     pub index: u32,
 }
 
@@ -49,7 +48,7 @@ impl FontLocator {
             .ok()?;
 
         match handle {
-            font_kit::handle::Handle::Path { path, .. } => Some(FontPath { path, index: 0 }),
+            font_kit::handle::Handle::Path { path, font_index } => Some(FontPath { path, index: font_index }),
             font_kit::handle::Handle::Memory { .. } => None,
         }
     }

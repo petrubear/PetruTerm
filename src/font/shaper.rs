@@ -92,7 +92,7 @@ struct FreeTypeCmapLookup {
 }
 
 impl FreeTypeCmapLookup {
-    fn new(font_path: &std::path::Path, font_size: f32) -> Option<Self> {
+    fn new(font_path: &std::path::Path, face_index: u32, font_size: f32) -> Option<Self> {
         use freetype::freetype as ft;
 
         let mut library: ft::FT_Library = std::ptr::null_mut();
@@ -118,7 +118,7 @@ impl FreeTypeCmapLookup {
         };
 
         let mut face: ft::FT_Face = std::ptr::null_mut();
-        let err = unsafe { ft::FT_New_Face(library, c_path.as_ptr(), 0, &mut face) };
+        let err = unsafe { ft::FT_New_Face(library, c_path.as_ptr(), face_index as ft::FT_Long, &mut face) };
         if err != 0 || face.is_null() {
             unsafe { ft::FT_Done_FreeType(library) };
             log::warn!("PUA lookup: FT_New_Face failed ({err})");
@@ -276,6 +276,7 @@ impl TextShaper {
         actual_family: String,
         font_id: fontdb::ID,
         font_path: std::path::PathBuf,
+        face_index: u32,
         font_config: &FontConfig,
         lcd_atlas: Option<Rc<RefCell<LcdGlyphAtlas>>>,
     ) -> Self {
@@ -305,7 +306,7 @@ impl TextShaper {
             None
         };
 
-        let ft_cmap = FreeTypeCmapLookup::new(&font_path, font_config.size);
+        let ft_cmap = FreeTypeCmapLookup::new(&font_path, face_index, font_config.size);
         if ft_cmap.is_none() {
             log::warn!("FreeType cmap lookup unavailable — Nerd Font PUA icons may not render.");
         }

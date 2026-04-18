@@ -12,10 +12,10 @@ use crate::font::locator::FontLocator;
 ///   - String      — actual internal family name (queried from fontdb, may differ from config)
 ///   - fontdb::ID  — fontdb face ID (needed to build CacheKeys for PUA glyph override)
 ///   - PathBuf     — resolved font file path (for FreeType cmap lookup)
-pub fn build_font_system(font_config: &FontConfig) -> Result<(FontSystem, String, fontdb::ID, PathBuf)> {
+pub fn build_font_system(font_config: &FontConfig) -> Result<(FontSystem, String, fontdb::ID, PathBuf, u32)> {
     let locator = FontLocator::new();
-    let font_path = match locator.locate_font(&font_config.family) {
-        Some(fp) => fp.path,
+    let font_location = match locator.locate_font(&font_config.family) {
+        Some(fp) => fp,
         None => bail!(
             "Font '{}' not found in any font directory.\n\
              Make sure the font is installed in ~/Library/Fonts or /Library/Fonts.\n\
@@ -26,28 +26,37 @@ pub fn build_font_system(font_config: &FontConfig) -> Result<(FontSystem, String
 
     let mut db = fontdb::Database::new();
     db.load_system_fonts();
-    if let Err(e) = db.load_font_file(&font_path) {
+    if let Err(e) = db.load_font_file(&font_location.path) {
         bail!(
             "Font '{}' was found at {:?} but failed to load: {}",
             font_config.family,
-            font_path,
+            font_location.path,
             e
         );
     }
 
-    // Read the actual internal family name and face ID for the selected file.
-    // The internal name may differ from the config string (e.g. "MonoLisa Nerd Font"
-    // vs "Monolisa Nerd Font"). Using the family from the chosen file ensures the
-    // primary face is selected first, while the rest of the system database remains
-    // available for fallback glyphs that the primary font does not contain.
+    // Find the face at the exact index selected by font_kit. FaceInfo.index is the
+    // face index within the source file (0 for .ttf; 0+ for .ttc collections).
+    // Matching on both path and index avoids picking the wrong face from a collection.
     let face = db
         .faces()
-        .find(|face| match &face.source {
-            fontdb::Source::File(path) => path == &font_path,
-            fontdb::Source::SharedFile(path, _) => path == &font_path,
-            _ => false,
+        .find(|face| {
+            let path_ok = match &face.source {
+                fontdb::Source::File(path) => path == &font_location.path,
+                fontdb::Source::SharedFile(path, _) => path == &font_location.path,
+                _ => false,
+            };
+            path_ok && face.index == font_location.index
         })
-        .ok_or_else(|| anyhow!("No faces found for selected font file {:?}", font_path))?;
+        .or_else(|| {
+            // Fallback: path-only match for fonts where index is unavailable.
+            db.faces().find(|face| match &face.source {
+                fontdb::Source::File(path) => path == &font_location.path,
+                fontdb::Source::SharedFile(path, _) => path == &font_location.path,
+                _ => false,
+            })
+        })
+        .ok_or_else(|| anyhow!("No faces found for selected font file {:?}", font_location.path))?;
 
     // Prioritize the family name that matches the config exactly, or one that contains "Mono"
     let actual_family: String = face
@@ -60,17 +69,19 @@ pub fn build_font_system(font_config: &FontConfig) -> Result<(FontSystem, String
         .unwrap_or_else(|| font_config.family.clone());
 
     let face_id = face.id;
+    let face_index = face.index;
 
     log::info!(
-        "Font loaded: internal family='{}' (config='{}') {}pt from {:?}",
+        "Font loaded: internal family='{}' (config='{}') {}pt from {:?} (face {})",
         actual_family,
         font_config.family,
         font_config.size,
-        font_path,
+        font_location.path,
+        face_index,
     );
 
     let font_system = FontSystem::new_with_locale_and_db("en-US".to_string(), db);
-    Ok((font_system, actual_family, face_id, font_path))
+    Ok((font_system, actual_family, face_id, font_location.path, face_index))
 }
 
 /// Locates the user-selected font for LCD AA and sets font_path in the config.

@@ -119,10 +119,10 @@ impl RenderContext {
         scaled_font.size *= scale_factor;
         crate::font::loader::locate_font_for_lcd(&mut scaled_font);
 
-        let (font_system, actual_family, face_id, font_path) = build_font_system(&scaled_font)?;
+        let (font_system, actual_family, face_id, font_path, face_index) = build_font_system(&scaled_font)?;
         let lcd_atlas = renderer.get_lcd_atlas();
 
-        let mut shaper = TextShaper::new(Some(&renderer.device()), font_system, actual_family, face_id, font_path, &scaled_font, lcd_atlas);
+        let mut shaper = TextShaper::new(Some(&renderer.device()), font_system, actual_family, face_id, font_path, face_index, &scaled_font, lcd_atlas);
         
         // Finalize renderer setup with shaper info
         let mut renderer = renderer;

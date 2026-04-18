@@ -56,6 +56,7 @@ fn make_shaper() -> (TextShaper, FontConfig) {
         family,
         font_id,
         font_path,
+        0,
         &font_config,
         None,
     );
