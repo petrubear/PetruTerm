@@ -1,6 +1,6 @@
 # Session State
 
-**Last Updated:** 2026-04-17
+**Last Updated:** 2026-04-18
 **Session Focus:** Phase 3.5 — Tier 1 leaks + Tier 4 quick wins + Tier 2 hot path
 
 ## Branch: `master`
@@ -83,10 +83,10 @@ pesada va al final para evitar regresiones sin baseline.
 - **TD-PERF-34** `FxHasher` en `static_hash` + `calculate_row_hash` — RESUELTO
 - **TD-PERF-31** `ConfirmDisplay::for_write` movido al task async (fuera del event loop) — RESUELTO
 
-### Tier 3 — Idle zero-cost
-- **TD-MEM-19** Pausar timers sin foco (cursor blink, reloj, git poll)
-- Cursor overlay independiente (Sub-B)
-- Damage tracking con `Term::damage()` (REC-PERF-03)
+### Tier 3 — COMPLETO (2026-04-18)
+- **TD-MEM-19** Pausar timers sin foco — RESUELTO (`window_focused` flag + ControlFlow::Wait)
+- Cursor overlay independiente — RESUELTO (`content_end` + `cursor_vertex_template` + fast blink path)
+- Damage tracking — RESUELTO (REC-PERF-03: `TermDamage` API en `collect_grid_cells_for`)
 
 ### Tier 4 — COMPLETO (2026-04-17, salvo TD-PERF-16)
 - **TD-PERF-32** `colors_scratch` → `RenderContext` — RESUELTO
@@ -104,7 +104,6 @@ pesada va al final para evitar regresiones sin baseline.
 
 ### Próximo trabajo
 - **Tier 0** (desbloqueado): latency probe p50/p95/p99, CI gating. Benches de `build_instances` y `rasterize_to_atlas` siguen bloqueados.
-- **Tier 3**: TD-MEM-19 (pausar timers sin foco), cursor overlay independiente, damage tracking.
 - **Tier 5**: arquitectura pesada (rayon, atlas split, PGO) — al final.
 - **TD-OP-02** (P1 abierto): Nerd Font glyph ID override frágil.
 
