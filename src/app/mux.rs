@@ -377,34 +377,55 @@ impl Mux {
                 rustc_hash::FxHashMap::default()
             };
 
-        terminal.with_term(|term| {
-            let rows = term.screen_lines();
-            let cols = term.columns();
-            let display_offset = term.grid().display_offset() as i32;
-            let sel_range = term.selection.as_ref().and_then(|s| s.to_range(term));
+        let mut term = terminal.term.lock();
+        let rows = term.screen_lines();
+        let cols = term.columns();
+        let display_offset = term.grid().display_offset() as i32;
+        let sel_range = term.selection.as_ref().and_then(|s| s.to_range(&*term));
 
-            // Resize to exact row count, keeping existing allocations.
-            if buf.len() < rows {
-                buf.resize_with(rows, || (String::with_capacity(cols), Vec::with_capacity(cols)));
-            } else {
-                buf.truncate(rows);
+        // Damage-aware skip: when no selection or search is active, read damage info
+        // and skip undamaged rows — their stale data in `buf` will produce the same hash
+        // as last frame, giving a row-cache hit in build_instances without grid reads.
+        // REC-PERF-03: integrates alacritty_terminal's TermDamage API.
+        let can_skip = sel_range.is_none() && search.is_none();
+        let damage_set: Option<rustc_hash::FxHashSet<usize>> = {
+            use alacritty_terminal::term::TermDamage;
+            match term.damage() {
+                TermDamage::Full => None,
+                TermDamage::Partial(iter) if can_skip => Some(iter.map(|l| l.line).collect()),
+                _ => None,
             }
+        };
+        term.reset_damage();
 
-            for (row, (text, colors)) in buf.iter_mut().enumerate() {
-                text.clear();
-                colors.clear();
-                let grid_line = Line(row as i32 - display_offset);
-                for col in 0..cols {
-                    let cell = &term.grid()[grid_line][Column(col)];
-                    text.push(if cell.c == '\0' { ' ' } else { cell.c });
-                    let (fg, bg) = if cell.flags.contains(Flags::INVERSE) { (cell.bg, cell.fg) } else { (cell.fg, cell.bg) };
-                    let (fg, bg) = if cell_in_selection(grid_line, Column(col), &sel_range) { (bg, fg) } else { (fg, bg) };
-                    let (fg, bg) = search_highlight_at(grid_line.0, col, &search_idx)
-                        .unwrap_or((fg, bg));
-                    colors.push((fg, bg));
+        // Resize to exact row count, keeping existing allocations.
+        if buf.len() < rows {
+            buf.resize_with(rows, || (String::with_capacity(cols), Vec::with_capacity(cols)));
+        } else {
+            buf.truncate(rows);
+        }
+
+        for (row, (text, colors)) in buf.iter_mut().enumerate() {
+            // Skip undamaged rows: retain previous-frame data so the row-cache hash matches.
+            if let Some(ref ds) = damage_set {
+                if !ds.contains(&row) {
+                    continue;
                 }
             }
-        });
+
+            text.clear();
+            colors.clear();
+            let grid_line = Line(row as i32 - display_offset);
+            for col in 0..cols {
+                let cell = &term.grid()[grid_line][Column(col)];
+                text.push(if cell.c == '\0' { ' ' } else { cell.c });
+                let (fg, bg) = if cell.flags.contains(Flags::INVERSE) { (cell.bg, cell.fg) } else { (cell.fg, cell.bg) };
+                let (fg, bg) = if cell_in_selection(grid_line, Column(col), &sel_range) { (bg, fg) } else { (fg, bg) };
+                let (fg, bg) = search_highlight_at(grid_line.0, col, &search_idx)
+                    .unwrap_or((fg, bg));
+                colors.push((fg, bg));
+            }
+        }
     }
 
     /// Incremental filter: given matches from a previous (shorter) query, verify each one
