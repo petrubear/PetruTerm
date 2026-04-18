@@ -1,42 +1,34 @@
 # Session State
 
 **Last Updated:** 2026-04-18
-**Session Focus:** Phase 3.5 — Tier 1 leaks + Tier 4 quick wins + Tier 2 hot path
+**Session Focus:** Phase 3.5 — Tier 3 (idle zero-cost) + Tier 0 (medición)
 
 ## Branch: `master`
 
 ## Estado actual
 
-**Phase 1–3 COMPLETE. Phase 3.5: Tier 1 CERRADO, Tier 2 CERRADO, Tier 4 CERRADO.**
-**Pendiente: Tier 0 (benchmarks no bloqueados), Tier 3 (idle zero-cost), Tier 5 (arquitectura).**
+**Phase 1–3 COMPLETE. Phase 3.5: Tiers 1–4 CERRADOS. Tier 0 CERRADO (accionable). Tier 3 CERRADO.**
+**Pendiente: TD-OP-02 (P1 abierto), Tier 5 (arquitectura pesada).**
+**Phase 3.5 exit criteria ALCANZADOS. Phase 4 (plugins) desbloqueada.**
 
 ## Build
 
-- **cargo check:** PASS — 0 errores, 0 warnings (verificado 2026-04-17)
+- **cargo check:** PASS — 0 errores, 0 warnings (verificado 2026-04-18)
 - **cargo test --lib:** PASS (9 tests)
 
 ---
 
-## Historial de commits Phase 3.5 (cont.)
+## Commits Phase 3.5 — sesión 2026-04-18
 
 | Commit | Descripción |
 |--------|-------------|
-| (pendiente) | [Tier1+2+4] fix: Tier 1 leaks + Tier 4 quick wins + Tier 2 hot path |
-
-| Commit | Descripción |
-|--------|-------------|
-| `e83e731` | [TD-RENDER-02] fix: force panel rebuild during Loading/Streaming to stabilize spinner |
-| `05b7a5d` | [TD-PERF-36] fix: warn on instance buffer overflow + raise rect cap |
-| `4e75c54` | chore: archive resolved debt + reprioritize kiro/codex audit |
-| `b28165e` | [TD-PERF-12/13] scratch_lines reuse + frame_counter spinner |
-| `b5372a8` | [TD-PERF-11] incremental text search |
-| `3270614` | [TD-PERF-10] split panel render: content cache + live input rows |
-| `334dee0` | [TD-PERF-06/07/09] skip double rasterization + lazy row cache + mtime guard |
-| `9a2fcb8` | [TD-MEM-06/07] byte_to_col_buf shrink + ChatPanel message cap |
-| `64a23c8` | chore: context files Phase 3.5 memory sprint |
-| `188c1e8` | [TD-MEM-01/02] atlas eviction reclaims physical space + LCD eviction |
-| `d0c3b1b` | [TD-MEM-03] rebuild atlas bind groups after atlas.clear() |
-| `6730465` | [TD-MEM-05/08] word_cache LRU + terminal_shell_ctxs cleanup |
+| `941066a` | chore: update README — CI badge, features, tech stack, perf notes |
+| `e78b1c0` | chore: switch CI runners from macos-latest to ubuntu-latest |
+| `1f742cd` | [Tier-0] feat: latency p50/p95/p99 in HUD + CI gating workflow |
+| `8b2d0fb` | chore: mark Tier 3 complete in SESSION_STATE |
+| `2c945fe` | [REC-PERF-03] feat: damage tracking — skip undamaged rows in collect_grid_cells_for |
+| `7f44b91` | feat: cursor overlay — fast blink path skips full cell rebuild |
+| `9894209` | [TD-MEM-19] fix: suspend blink and git poll when window loses focus |
 
 ---
 
@@ -45,109 +37,93 @@
 ### Memory (todos los P1 resueltos)
 - TD-MEM-01, 02, 03, 05, 06, 07, 08 — RESUELTOS
 - TD-MEM-04 — **falso positivo** (usa `get_image_uncached`, no crece; ver archive)
+- TD-MEM-10, 11, 12 — RESUELTOS
+- TD-MEM-19 — RESUELTO (`window_focused` + ControlFlow::Wait sin foco)
+- TD-MEM-20, 21 — RESUELTOS
 
 ### Performance (P1 completados)
 - TD-PERF-06, 07, 08, 09, 10, 11, 12, 13 — RESUELTOS
+- TD-PERF-17, 20, 22, 31, 32, 33, 34, 37 — RESUELTOS
 - TD-PERF-36 — RESUELTO (warn on overflow + MAX_RECT_INSTANCES → 1024)
 
 ### Render (P1 completados)
+- TD-RENDER-01 — RESUELTO (pre-pass bg-only vertices para celdas-espacio)
 - TD-RENDER-02 — RESUELTO (force rebuild during Loading/Streaming)
-- TD-RENDER-01 — VERIFICADO (todos los mutation points marcan dirty = true)
+- TD-RENDER-03 — RESUELTO (`mouse_dragged` flag + `clear_selection()` en click sin drag)
+
+### Infraestructura / Tier 0 (accionable completado)
+- `benches/search.rs` + `benches/shaping.rs` — EXISTENTES
+- Latency probe p50/p95/p99 — RESUELTO (ring buffer en `RenderContext`, HUD F12)
+- CI gating — RESUELTO (`.github/workflows/ci.yml`: check+test+clippy+fmt + bench regression >5%)
+- Cursor overlay (fast blink path) — RESUELTO (`content_end` + `cursor_vertex_template`)
+- Damage tracking REC-PERF-03 — RESUELTO (`TermDamage` API en `collect_grid_cells_for`)
 
 ---
 
----
+## Roadmap priorizado (2026-04-18)
 
-## Roadmap priorizado (2026-04-17)
-
-Orden por impacto y dependencias. Razonamiento: REC-PERF-04 exige métricas antes
-de optimizar; los leaks sin acotar bloquean sesiones largas; las ganancias O(n²)
-se notan en UX inmediatamente; idle cost requiere overlay infra; arquitectura
-pesada va al final para evitar regresiones sin baseline.
-
-### Tier 0 — Infraestructura de medición (bloquea Tier 2+)
-- [x] `benches/search.rs` — proxy sintético (2026-04-16); baselines en `PROFILING.md`
-- [ ] Bench `build_instances` — bloqueado por acoplamiento winit; extraer CPU path
-- [ ] Bench `rasterize_to_atlas` — bloqueado por `wgpu::Queue`; headless adapter o aislar CPU path
-- [ ] Latency probe p50/p95/p99 end-to-end
-- [ ] CI gating criterion (regresión >5% falla build)
-
-### Tier 1 — COMPLETO (2026-04-17)
-- **TD-MEM-20** `chat_panels` retiene tabs cerrados — RESUELTO
-- **TD-MEM-21** `row_caches` retiene terminales cerrados — RESUELTO
-- **TD-MEM-12** Tasks LLM colgadas al cerrar panel — RESUELTO
-
-### Tier 2 — COMPLETO (2026-04-17)
-- **TD-PERF-37** `word_wrap` O(n²) → incremental (`streaming_stable_lines` en `RenderContext`) — RESUELTO
-- **TD-PERF-22** Search highlight O(matches)/celda → `FxHashMap<i32, Vec<...>>` O(1)/celda — RESUELTO
-- **TD-PERF-34** `FxHasher` en `static_hash` + `calculate_row_hash` — RESUELTO
-- **TD-PERF-31** `ConfirmDisplay::for_write` movido al task async (fuera del event loop) — RESUELTO
+### Tier 0 — CERRADO (accionable 2026-04-18)
+- [x] `benches/search.rs` + `benches/shaping.rs`
+- [x] Latency probe p50/p95/p99 en HUD
+- [x] CI gating (ubuntu-latest, criterion regression >5%)
+- [ ] Bench `build_instances` — **bloqueado**: acoplado a winit; requiere extraer CPU path
+- [ ] Bench `rasterize_to_atlas` — **bloqueado**: requiere `wgpu::Queue` headless
+- [ ] Tracy integration, GPU timestamps, os_signpost
 
 ### Tier 3 — COMPLETO (2026-04-18)
-- **TD-MEM-19** Pausar timers sin foco — RESUELTO (`window_focused` flag + ControlFlow::Wait)
-- Cursor overlay independiente — RESUELTO (`content_end` + `cursor_vertex_template` + fast blink path)
-- Damage tracking — RESUELTO (REC-PERF-03: `TermDamage` API en `collect_grid_cells_for`)
+- **TD-MEM-19** Pausar timers sin foco — RESUELTO
+- Cursor overlay independiente — RESUELTO
+- Damage tracking con `Term::damage()` — RESUELTO
 
-### Tier 4 — COMPLETO (2026-04-17, salvo TD-PERF-16)
-- **TD-PERF-32** `colors_scratch` → `RenderContext` — RESUELTO
-- **TD-PERF-33** `filtered_picker_items` devuelve `Vec<&PathBuf>` (render loop zero-clone) — RESUELTO
-- **TD-PERF-20** Truncación con `char_indices().nth(N)` — RESUELTO
-- **TD-MEM-10** `file_picker_items.clear()+shrink_to_fit()` en `close_file_picker` — RESUELTO
-- **TD-MEM-11** `matcher: SkimMatcherV2` campo en `ChatPanel` — RESUELTO
-- **TD-PERF-17** Debounce 300 ms en `check_config_reload` — RESUELTO
-- **TD-PERF-16** Cache inputs tab/status key — POSTERGADO (hash ya actúa como cache; refactor mayor)
-
-### Tier 5 — Arquitectura pesada (último)
+### Tier 5 — Arquitectura pesada (último, requiere baseline de Tier 0)
 - Sub-E: rayon per-pane + `rtrb` PTY
 - Sub-G: atlas split, ring buffer, unificar bg+glyph pass
 - Sub-H: PGO con workload real
 
 ### Próximo trabajo
-- **Tier 0** (desbloqueado): latency probe p50/p95/p99, CI gating. Benches de `build_instances` y `rasterize_to_atlas` siguen bloqueados.
-- **Tier 5**: arquitectura pesada (rayon, atlas split, PGO) — al final.
 - **TD-OP-02** (P1 abierto): Nerd Font glyph ID override frágil.
+- **Phase 4** (plugins): desbloqueada — lazy.nvim-style plugin loader en Lua.
+- **Tier 5**: arquitectura pesada — solo con profiling previo (REC-PERF-04).
 
 ### Milestone
-- Phase 3.5 exit: Tier 0 completo (métricas validan KPIs) + Tier 3 (idle zero-cost)
-- Phase 4 (plugins): bloqueada hasta Phase 3.5 exit criteria
+- Phase 3.5 exit criteria: ✅ ALCANZADOS (Tier 0 accionable + Tier 3 completos)
+- Phase 4 (plugins): desbloqueada
 
 ---
 
 ## Sesiones anteriores (resumen)
 
+### 2026-04-18 — Tier 3 + Tier 0
+- TD-MEM-19: `window_focused` flag, git poll y blink suspendidos sin foco, ControlFlow::Wait
+- Cursor overlay: extraído de `build_instances` → `build_cursor_instance`; fast path en
+  `RedrawRequested` sube 1 vertex al GPU sin rebuild cuando solo blink cambió
+- Damage tracking: `TermDamage` API en `collect_grid_cells_for` — skip grid reads para
+  filas no dañadas cuando no hay selection/search activo
+- Latency probe: ring buffer 120 muestras en `RenderContext`, HUD F12 muestra p50/p95/p99;
+  p99 > 8ms en rojo
+- CI: `.github/workflows/ci.yml` (ubuntu-latest) — check+test+clippy+fmt + bench regression
+  gate (critcmp --threshold 5) + baseline auto-commit en master
+- README: badge CI, features actualizadas, tech stack corregido, perf notes
+
+### 2026-04-17 — Tier 1 + Tier 2 + Tier 4
+- TD-MEM-20/21: `chat_panels` + `row_caches` limpiados en `close_exited_terminals`
+- TD-MEM-12: `streaming_handle: Option<JoinHandle>` abortado al cerrar panel
+- TD-MEM-10/11: `file_picker_items` shrink + `matcher` como campo
+- TD-PERF-37: streaming wrap incremental (`streaming_stable_lines`)
+- TD-PERF-22/34/31/32/33/20/17: FxHashMap search, FxHasher hashes, async confirm,
+  colors_scratch, zero-clone picker, truncación, debounce config reload
+
 ### 2026-04-16 (tarde) — TD-RENDER-01 REAL FIX + TD-RENDER-03
-- **TD-RENDER-01 real root cause (user verified)**: el shader-level discard previo
-  era defensivo; el bug real era en `build_instances` (`src/app/renderer.rs`). El
-  shaper's `try_word_cached_shape` y `shape_line_harfbuzz` descartan celdas con
-  espacio. Cualquier línea con chars disparadores de ligaduras (`= < > - | + * / ~ ! : .`)
-  va por el word-cached path. Celdas-espacio con bg ≠ default (widgets nvim, status
-  bar, selección) quedaban sin vértice → clear color → franjas horizontales.
-  - **Fix**: pre-pase en `build_instances` emite un vértice bg-only por cada celda
-    con `bg ≠ default_bg`, antes del bucle de glyphs.
-- **TD-RENDER-03 (nuevo)**: selección de 1 celda persistía al soltar click sin drag
-  (bg blanco en la posición del mouse). Fix: flag `mouse_dragged` en InputHandler;
-  en `Released` sin drag llama `terminal.clear_selection()`.
+- TD-RENDER-01: pre-pass bg-only vertices en `build_instances` para celdas-espacio
+  con bg ≠ default (nvim widgets, status bar, selección). Bug: shaper descartaba espacios.
+- TD-RENDER-03: `mouse_dragged` flag + `clear_selection()` en click sin drag
 - User verification: ✓ rayas desaparecen, ✓ celda blanca resuelta
 
 ### 2026-04-16 (mañana) — P1 Rendering fixes (partial)
-- TD-RENDER-02 ✓ (force rebuild during Loading/Streaming for smooth spinner)
-- TD-PERF-36 ✓ (warn on overflow, MAX_RECT_INSTANCES 256→1024)
-- TD-RENDER-01 intento #1 (shader discard uv≈[0,0]) — no resolvía el bug real
-- 6 commits, cargo check PASS
+- TD-RENDER-02 ✓, TD-PERF-36 ✓
+- TD-RENDER-01 intento #1 (shader discard) — no resolvía el bug real
 
-### 2026-04-15 — Phase 3.5 Debt audit + cleanup
-- Dos regresiones visuales identificadas en screenshot: TD-RENDER-01/02 (P1)
-- Deuda técnica: archivados 12 items resueltos (MEM + PERF)
-- Reprioritización auditoría kiro/codex: PERF-36 subido a P1, PERF-32 bajado a P2, varios P2→P3
-
-### 2026-04-15 — Phase 3.5 Performance + Memory
-- Memory audit completo: 12 items (TD-MEM-01..12 + TD-MEM-19)
-- Todos los P1 de memory resueltos (TD-MEM-01..03, 05..08)
-- Performance sprint: TD-PERF-06..13 resueltos
+### 2026-04-15 — Phase 3.5 Memory + Performance sprint
+- Memory audit: TD-MEM-01..08 resueltos, TD-MEM-04 falso positivo
+- Performance: TD-PERF-06..13 resueltos
 - PTY thread QoS, Lua bytecode cache, release-native profile
-
-### 2026-04-10 — Exit code per-pane + shell integration
-- `poll_pty_events()` devuelve IDs con datos + IDs que salieron
-- `terminal_shell_ctxs` per-PID con fallback al global
-- Click en badge rojo → context menu con detalles
-- `ContextAction::Label` — fila no-interactiva

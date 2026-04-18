@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-04-17
-**Open Items:** 32
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 13 | **P3:** 19
+**Last Updated:** 2026-04-18
+**Open Items:** 31
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 13 | **P3:** 18
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -301,8 +301,9 @@ El 95%+ de los glifos tipeados son ASCII imprimible (32-126). Pre-shape + pre-ra
 ### REC-PERF-02: `parking_lot::Mutex` en lugar de `std::sync::Mutex`
 En macOS `parking_lot` es ~2× más rápido en paths no contendidos. Relevante si aparece contention con PTY reader + main thread. Auditar dónde se usa `Arc<Mutex<...>>`.
 
-### REC-PERF-03: Damage tracking de alacritty_terminal
-`alacritty_terminal::Term` expone `damage()` con las filas modificadas desde el último reset. Hoy `collect_grid_cells` itera todas las filas visibles. Integrar damage permitiría saltar filas no tocadas.
+### REC-PERF-03: Damage tracking de alacritty_terminal — RESUELTO 2026-04-18
+`collect_grid_cells_for` integra `TermDamage` API. Filas no dañadas se saltan
+cuando no hay selection/search activo. Ver commit `2c945fe`.
 
 ### REC-PERF-04: Medir antes de optimizar
 **Ningún fix P2/P3 debe implementarse sin profiling previo**. Instalar TD-PERF-30 primero. Algunos items pueden resultar irrelevantes en la práctica; otros no detectados aquí pueden ser los verdaderos cuellos de botella.
