@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  check:
+    name: check + test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: cargo check
+        run: cargo check --all-features
+
+      - name: cargo test
+        run: cargo test --lib
+
+      - name: cargo clippy
+        run: cargo clippy --all-features -- -D warnings
+
+      - name: cargo fmt
+        run: cargo fmt --check
+
+  bench-regression:
+    name: bench regression gate
+    runs-on: macos-latest
+    # Only run on PRs — master pushes update the stored baseline.
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-bench-
+
+      - name: Install critcmp
+        run: cargo install critcmp --quiet
+
+      - name: Run benchmarks on PR branch
+        run: cargo bench --bench search --bench shaping -- --save-baseline pr
+
+      - name: Checkout master baseline
+        run: |
+          git stash
+          git checkout origin/master -- .criterion-baselines/ 2>/dev/null || echo "No stored baseline yet; skipping comparison"
+
+      - name: Compare against master baseline
+        run: |
+          if [ -d ".criterion-baselines" ]; then
+            cp -r .criterion-baselines/. target/criterion/
+            critcmp master pr --threshold 5
+          else
+            echo "No master baseline found — this is the first bench run. Skipping regression check."
+          fi
+
+  bench-baseline:
+    name: update bench baseline
+    runs-on: macos-latest
+    # Only runs on master pushes to update the stored baseline.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-bench-
+
+      - name: Run benchmarks and save baseline
+        run: cargo bench --bench search --bench shaping -- --save-baseline master
+
+      - name: Copy baseline to tracked directory
+        run: |
+          mkdir -p .criterion-baselines
+          cp -r target/criterion/master/. .criterion-baselines/ 2>/dev/null || true
+          cp -r target/criterion/search/. .criterion-baselines/search/ 2>/dev/null || true
+          cp -r target/criterion/shaping/. .criterion-baselines/shaping/ 2>/dev/null || true
+
+      - name: Commit updated baseline
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .criterion-baselines/
+          git diff --staged --quiet || git commit -m "chore: update bench baseline [skip ci]"
+          git push

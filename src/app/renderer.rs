@@ -88,6 +88,8 @@ pub struct RenderContext {
     pub hud_visible: bool,
     /// Ring buffer of the last 120 frame times in milliseconds.
     pub frame_times: std::collections::VecDeque<f32>,
+    /// Ring buffer of the last 120 input-to-pixel latency samples in milliseconds.
+    pub latency_samples: std::collections::VecDeque<f32>,
     pub shape_cache_hits: u64,
     pub shape_cache_misses: u64,
     pub last_instance_count: usize,
@@ -153,6 +155,7 @@ impl RenderContext {
             rect_instances: Vec::new(),
             hud_visible: false,
             frame_times: std::collections::VecDeque::new(),
+            latency_samples: std::collections::VecDeque::new(),
             shape_cache_hits: 0,
             shape_cache_misses: 0,
             last_instance_count: 0,
@@ -1590,7 +1593,7 @@ impl RenderContext {
         const VALUE_FG: [f32; 4] = [0.95, 0.98, 0.55, 1.0];  // Dracula yellow
         const WARN_FG:  [f32; 4] = [1.00, 0.47, 0.47, 1.0];  // red for high frame times
 
-        let hud_width = 44usize;
+        let hud_width = 56usize;
 
         // ── Frame time statistics from ring buffer ───────────────────────────
         let (avg_ms, p50_ms, p95_ms) = if self.frame_times.is_empty() {
@@ -1603,6 +1606,16 @@ impl RenderContext {
             let p50 = sorted[n / 2];
             let p95 = sorted[(n * 95 / 100).min(n - 1)];
             (avg, p50, p95)
+        };
+
+        // ── Latency percentiles ──────────────────────────────────────────────
+        let (lat_p50, lat_p95, lat_p99) = if self.latency_samples.len() < 2 {
+            (0.0f32, 0.0f32, 0.0f32)
+        } else {
+            let mut s: Vec<f32> = self.latency_samples.iter().copied().collect();
+            let n = s.len();
+            s.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            (s[n / 2], s[(n * 95 / 100).min(n - 1)], s[(n * 99 / 100).min(n - 1)])
         };
 
         // ── Shape cache ──────────────────────────────────────────────────────
@@ -1623,9 +1636,13 @@ impl RenderContext {
         // ── Build HUD text lines ─────────────────────────────────────────────
         let frame_fg = if avg_ms > 16.67 { WARN_FG } else { VALUE_FG };
 
+        let lat_fg = if lat_p99 > 8.0 { WARN_FG } else { VALUE_FG };
+        let n_samples = self.latency_samples.len();
+
         let hud_lines: Vec<(String, [f32; 4])> = vec![
             (format!(" F12 HUD"), TITLE_FG),
             (format!(" {:10} {:.1}ms  p50:{:.1}ms  p95:{:.1}ms", "frame", avg_ms, p50_ms, p95_ms), frame_fg),
+            (format!(" {:10} p50:{:.1}ms  p95:{:.1}ms  p99:{:.1}ms  n={}", "latency", lat_p50, lat_p95, lat_p99, n_samples), lat_fg),
             (format!(" {:10} hits={} miss={} ({}%)", "shape", shape_hits, shape_misses, hit_pct), VALUE_FG),
             (format!(" {:10} {}", "instances", instance_count), VALUE_FG),
             (format!(" {:10} {:.1}%", "atlas", atlas_pct), VALUE_FG),

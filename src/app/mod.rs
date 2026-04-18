@@ -788,6 +788,10 @@ impl ApplicationHandler<()> for App {
                         if let Some(t) = self.input.last_key_instant.take() {
                             let latency_ms = t.elapsed().as_secs_f32() * 1000.0;
                             log::debug!("input-to-pixel: {:.1}ms", latency_ms);
+                            rc.latency_samples.push_back(latency_ms);
+                            if rc.latency_samples.len() > 120 {
+                                rc.latency_samples.pop_front();
+                            }
                         }
                     }
 
