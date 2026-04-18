@@ -1,5 +1,7 @@
 # PetruTerm
 
+[![CI](https://github.com/petrubear/PetruTerm/actions/workflows/ci.yml/badge.svg)](https://github.com/petrubear/PetruTerm/actions/workflows/ci.yml)
+
 A developer-first GPU-accelerated terminal emulator written in Rust. Built for speed and extensibility, with first-class AI integration, a Lua configuration DSL, font ligatures, and a tmux-style tab/pane system.
 
 > **Platform:** macOS (primary). Linux planned for Phase 2+.
@@ -8,19 +10,22 @@ A developer-first GPU-accelerated terminal emulator written in Rust. Built for s
 
 ## Features
 
-- **GPU rendering** via wgpu (Metal on macOS) — 60 fps, low latency
+- **GPU rendering** via wgpu (Metal on macOS) — 60/120 fps, sub-8 ms input-to-pixel latency
 - **Full terminal emulation** — xterm-256color, truecolor, bracketed paste, SGR mouse, OSC 52 clipboard
-- **Font ligatures** — HarfBuzz shaping with `calt`, `liga`, `dlig` OpenType features
+- **Font ligatures** — HarfBuzz shaping with `calt`, `liga`, `dlig` OpenType features; per-word shape cache
 - **Emoji & color glyphs** — full RGBA emoji rendering via Apple Color Emoji (and any color font)
 - **Tabs & split panes** — tmux-style keybinds, binary-tree layout; each pane has an independent PTY; exiting a shell closes only that pane
-- **Status bar** — GPU-rendered bottom bar with leader mode, CWD, git branch, exit code, and time
+- **Status bar** — Powerline-style bottom bar with leader mode, CWD, git branch, exit code, and time
 - **AI agent panel** — context-aware chat with file attachment, NL→command, explain output, fix errors, write files
 - **LLM tool use** — AI agent can read files, list directories, write files, and run commands (sandboxed to CWD, with confirmation)
 - **Inline AI block** — `Ctrl+Space` for quick NL→shell command without leaving the terminal
+- **Multiple LLM providers** — OpenRouter, Ollama, LM Studio; per-pane independent chat history
 - **Right-click context menu** — Copy, Paste, Clear, and **Ask AI** (sends selection directly to chat panel)
 - **Command palette** — fuzzy-search for all actions (`Leader+o`)
+- **Snippets** — Tab-expandable text templates, configurable in Lua
 - **Lua configuration** — hot-reload on save, no restart required
 - **Scrollback** — configurable depth with GPU scroll bar
+- **Debug HUD** — `F12` overlay: frame time p50/p95, input latency p50/p95/p99, shape cache hit rate, atlas fill, GPU upload KB/frame
 
 ---
 
@@ -428,10 +433,11 @@ Place an `AGENTS.md` file in your project root to give the AI panel automatic co
 | GPU rendering | `wgpu` 29 (Metal on macOS) |
 | Windowing | `winit` 0.30 |
 | Terminal emulation | `alacritty_terminal` 0.25 |
-| Font shaping | `cosmic-text` 0.18 + HarfBuzz |
+| Font shaping | `cosmic-text` 0.18 + HarfBuzz + FreeType LCD |
 | Config DSL | `mlua` 0.11 (Lua 5.4) |
 | Async / LLM | `tokio` + `reqwest` |
-| Fuzzy search | `fuzzy-matcher` |
+| Fuzzy search | `skim` + `fuzzy-matcher` |
+| Hashing | `rustc-hash` (FxHasher) |
 
 ---
 
@@ -444,8 +450,16 @@ Place an `AGENTS.md` file in your project root to give the AI panel automatic co
 ├── perf.lua              # Scrollback, FPS, GPU
 ├── keybinds.lua          # Leader key and all bindings
 ├── llm.lua               # AI provider and features
+├── plugins/              # Auto-scanned Lua plugins
 └── shell-integration.zsh # Optional: source in ~/.zshrc
 ```
+
+### Performance notes
+
+- Row cache: unchanged terminal rows are served from a per-pane shape cache — HarfBuzz runs only on dirty rows.
+- Damage tracking: alacritty's `TermDamage` API skips grid reads for undamaged rows when no selection or search is active.
+- Cursor overlay: cursor blink updates a single GPU vertex without rebuilding the cell buffer.
+- Idle: event loop parks when the window loses focus — no timer wakeups, no git polling, no redraws.
 
 ---
 
