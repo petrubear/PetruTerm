@@ -808,6 +808,9 @@ impl TextShaper {
             return Ok(entry);
         }
 
+        #[cfg(feature = "profiling")]
+        let _span = tracing::info_span!("rasterize_to_atlas").entered();
+
         let image = self
             .swash_cache
             .get_image_uncached(&mut self.font_system, cache_key)

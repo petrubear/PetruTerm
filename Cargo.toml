@@ -14,12 +14,13 @@ name = "petruterm"
 path = "src/lib.rs"
 
 [features]
-profiling = ["tracing", "tracing-subscriber"]
+profiling = ["tracing", "tracing-subscriber", "tracing-tracy"]
 
 [dependencies]
 # Profiling / tracing (optional, enabled by --features profiling)
 tracing = { version = "0.1", optional = true }
 tracing-subscriber = { version = "0.3", optional = true, features = ["env-filter"] }
+tracing-tracy = { version = "0.11.4", optional = true }
 
 # GPU rendering
 wgpu = "29"

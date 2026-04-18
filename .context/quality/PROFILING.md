@@ -13,6 +13,7 @@ Run a specific benchmark:
 ```bash
 cargo bench --bench shaping
 cargo bench --bench search
+cargo bench --bench rasterize
 ```
 
 HTML reports are generated in `target/criterion/`. Open `target/criterion/report/index.html` in a browser to view results.
@@ -24,7 +25,7 @@ HTML reports are generated in `target/criterion/`. Open `target/criterion/report
 | `shaping` | ✅ | ASCII / ligatures / unicode / cached paths |
 | `search` | ✅ | Synthetic grid proxy of `Mux::search_active_terminal` + `filter_matches` |
 | `build_instances` | ❌ blocked | `RenderContext`+`Mux` acoplados a `winit::EventLoopProxy`; requiere extraer CPU path a función pura |
-| `rasterize_to_atlas` | ❌ blocked | Requiere `&wgpu::Queue`; opciones: (a) bench sólo `swash_cache.get_image_uncached` + conversión RGBA, (b) wgpu headless adapter en el bench |
+| `rasterize_to_atlas` | ✅ | CPU path: `swash_cache.get_image_uncached` + Mask→RGBA (sin wgpu). Baselines en tabla abajo. |
 
 ### Baselines (2026-04-16, M4 Max, release profile)
 
@@ -39,6 +40,15 @@ HTML reports are generated in `target/criterion/`. Open `target/criterion/report
 | `search_incremental_extend_e_to_error` | 153 µs |
 
 El bench incremental corre ~12× más rápido que el cold scan; confirma empíricamente el valor de TD-PERF-11 (`filter_matches`).
+
+**rasterize.rs** — `swash_cache.get_image_uncached` + Mask→RGBA (M4 Max, release, 2026-04-18):
+
+| Bench | Tiempo |
+|-------|--------|
+| `rasterize_glyph_ascii` | 1.35 µs |
+| `rasterize_line_ascii` (26 chars) | 34.2 µs |
+| `rasterize_line_ligatures` (42 chars) | 51.5 µs |
+| `rasterize_line_unicode` (28 chars) | 44.1 µs |
 
 **shaping.rs** — ver tabla en `.context/specs/build_phases.md` Sub-A.
 
@@ -99,22 +109,26 @@ Then use Instruments **GPU Frame Capture** or Xcode's GPU debugger to inspect dr
 
 ## Tracing / Tracy
 
-Enable the `profiling` feature to activate `tracing` spans on hot paths:
+Enable the `profiling` feature to activate `tracing` spans and stream them to Tracy:
 
 ```bash
-cargo run --features profiling
+cargo run --release --features profiling
 ```
 
 Spans instrumented:
 - `redraw_frame` — full `RedrawRequested` handler
 - `build_instances` — per-pane cell instance generation (row cache hit/miss)
 - `shape_line` — HarfBuzz text shaping via cosmic-text
+- `rasterize_to_atlas` — swash rasterization on atlas cache miss
 
-To integrate with Tracy profiler:
+### Tracy setup
 
-1. Add `tracing-tracy` to `[dependencies]` (behind `profiling` feature)
-2. Initialize the Tracy subscriber in `main.rs` when `cfg!(feature = "profiling")`
-3. Run with Tracy client open to see live span timelines
+1. Download Tracy from https://github.com/wolfpld/tracy/releases (use the version matching `tracy-client-sys = "0.28"` → Tracy 0.11.x)
+2. Launch the Tracy profiler GUI
+3. Run PetruTerm with `--features profiling` — spans stream live over localhost
+4. Interact with the terminal; Tracy captures frame timelines, span durations, and call stacks
+
+Tracy connects automatically on startup. If Tracy is not running, the layer does nothing (no crash).
 
 ## Debug HUD (F12)
 

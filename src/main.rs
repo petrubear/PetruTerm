@@ -19,6 +19,18 @@ fn main() -> Result<()> {
     // Initialize logging. RUST_LOG env var controls level; default to "info".
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
+    // When built with --features profiling, connect tracing spans to Tracy.
+    // Run Tracy before launching PetruTerm; spans stream live over localhost.
+    #[cfg(feature = "profiling")]
+    {
+        use tracing_subscriber::layer::SubscriberExt;
+        use tracing_subscriber::util::SubscriberInitExt;
+        tracing_subscriber::registry()
+            .with(tracing_tracy::TracyLayer::default())
+            .init();
+        log::info!("Tracy profiling subscriber active.");
+    }
+
     log::info!("PetruTerm starting up");
 
     // Load config (copies defaults to ~/.config/petruterm/ on first launch).
