@@ -45,6 +45,9 @@ pub struct App {
     last_pty_batch_size: usize,
     /// True when the window is occluded/minimized — skip render to save CPU/GPU.
     window_occluded: bool,
+    /// True when the window has OS focus. When false, cursor blink and git polling
+    /// are suspended and the event loop parks until a real event arrives (TD-MEM-19).
+    window_focused: bool,
 
     /// Cached CWD of the active shell (TD-PERF-02).
     /// Refreshed via proc_pidinfo only when PTY data arrives or terminal focus changes,
@@ -79,6 +82,7 @@ impl App {
             last_pty_activity: std::time::Instant::now(),
             last_pty_batch_size: 0,
             window_occluded: false,
+            window_focused: true,
             cached_cwd: None,
             config_reload_at: None,
             terminal_shell_ctxs: std::collections::HashMap::new(),
@@ -380,6 +384,9 @@ impl ApplicationHandler<()> for App {
             WindowEvent::CloseRequested => { event_loop.exit(); }
             WindowEvent::Occluded(occluded) => {
                 self.window_occluded = occluded;
+            }
+            WindowEvent::Focused(focused) => {
+                self.window_focused = focused;
             }
             WindowEvent::RedrawRequested => {
                 // Skip rendering when the window is occluded or minimized.
@@ -1136,6 +1143,7 @@ impl ApplicationHandler<()> for App {
         // Runs at most once per second, regardless of PTY/render activity.
         // Removed from the render hot path (was called every RedrawRequested).
         if self.config.status_bar.enabled
+            && self.window_focused
             && self.ui.git_branch_last_poll.elapsed() >= std::time::Duration::from_secs(1)
         {
             self.ui.git_branch_last_poll = std::time::Instant::now();
@@ -1160,8 +1168,8 @@ impl ApplicationHandler<()> for App {
         let any_drag = self.input.dragging_separator.is_some() || self.input.mouse_left_pressed;
         let idle = !had_pty_data && !had_ai && !self.pending_pty_redraw && !any_overlay && !any_drag;
 
-        if !idle {
-            // Active: advance cursor blink as usual.
+        // Blink only when focused and not idle (TD-MEM-19: no wasted redraws in background).
+        if !idle && self.window_focused {
             if self.input.update_cursor_blink() {
                 // Input rows are rebuilt fresh every frame (TD-PERF-10), so blink alone does not
                 // require a full content rebuild. Only mark dirty when the file picker is open,
@@ -1179,7 +1187,7 @@ impl ApplicationHandler<()> for App {
                 if let Some(w) = &self.window { w.request_redraw(); }
             }
         }
-        // When idle: skip blink entirely — saves a 530ms-periodic reshape + GPU upload.
+        // When idle or unfocused: skip blink entirely — saves periodic reshape + GPU upload.
 
         // PTY render coalescing: fire the deferred redraw once the PTY has been
         // quiet for 4ms. This window is long enough to catch Gemini/TUI "erase +
@@ -1195,10 +1203,15 @@ impl ApplicationHandler<()> for App {
             // else: WaitUntil below will wake us at pty_deadline to retry.
         }
 
-        if idle {
-            // Fully idle: let the OS park the thread until a real event arrives.
-            // winit will wake us for key presses, PTY data (via user_event), mouse, etc.
-            event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
+        if idle || !self.window_focused {
+            // Fully idle or window not focused: park the thread.
+            // When unfocused, blink is suspended — no need to schedule a wakeup for it.
+            // PTY data still arrives via user_event (winit wakes us), so background processes run.
+            if self.pending_pty_redraw {
+                event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(pty_deadline));
+            } else {
+                event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
+            }
         } else {
             let blink_deadline = self.input.cursor_last_blink + std::time::Duration::from_millis(530);
             let wake = if self.pending_pty_redraw {
