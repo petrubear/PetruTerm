@@ -268,18 +268,30 @@ pub struct TextShaper {
     ascii_glyph_cache_ready: bool,
 }
 
+pub struct TextShaperConfig<'a> {
+    pub actual_family: String,
+    pub font_id: fontdb::ID,
+    pub font_path: std::path::PathBuf,
+    pub face_index: u32,
+    pub font_config: &'a FontConfig,
+    pub lcd_atlas: Option<Rc<RefCell<LcdGlyphAtlas>>>,
+}
 
 impl TextShaper {
     pub fn new(
         device: Option<&wgpu::Device>,
         font_system: FontSystem,
-        actual_family: String,
-        font_id: fontdb::ID,
-        font_path: std::path::PathBuf,
-        face_index: u32,
-        font_config: &FontConfig,
-        lcd_atlas: Option<Rc<RefCell<LcdGlyphAtlas>>>,
+        config: TextShaperConfig<'_>,
     ) -> Self {
+        let TextShaperConfig {
+            actual_family,
+            font_id,
+            font_path,
+            face_index,
+            font_config,
+            lcd_atlas,
+        } = config;
+
         let line_height = font_config.size * font_config.line_height;
         let metrics = Metrics::new(font_config.size, line_height);
 
@@ -977,4 +989,3 @@ mod tests {
         assert!(!should_use_lcd(symbol_key, font_id, '⇡'));
     }
 }
-

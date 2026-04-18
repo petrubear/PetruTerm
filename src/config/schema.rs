@@ -21,7 +21,7 @@ pub struct Config {
 }
 
 /// Keyboard behaviour options.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct KeyboardConfig {
     /// When `true`, the Option/Alt key sends an ESC prefix (Meta key — useful for
     /// Emacs / readline Alt+letter shortcuts).
@@ -29,12 +29,6 @@ pub struct KeyboardConfig {
     /// character is sent as-is — correct for non-US keyboards (Spanish, ISO, etc.)
     /// where characters like `{`, `}`, `@`, `#` require Option+key.
     pub option_as_meta: bool,
-}
-
-impl Default for KeyboardConfig {
-    fn default() -> Self {
-        Self { option_as_meta: false }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

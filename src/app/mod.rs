@@ -1007,8 +1007,8 @@ impl ApplicationHandler<()> for App {
                                                     exit_code,
                                                     &last_cmd,
                                                     col,
-                                                    term_rows as usize,
-                                                    term_cols as usize,
+                                                    term_rows,
+                                                    term_cols,
                                                 );
                                                 if let Some(w) = &self.window { w.request_redraw(); }
                                             }
@@ -1206,30 +1206,28 @@ impl ApplicationHandler<()> for App {
         let idle = !had_pty_data && !had_ai && !self.pending_pty_redraw && !any_overlay && !any_drag;
 
         // Blink only when focused and not idle (TD-MEM-19: no wasted redraws in background).
-        if !idle && self.window_focused {
-            if self.input.update_cursor_blink() {
-                // Input rows are rebuilt fresh every frame (TD-PERF-10), so blink alone does not
-                // require a full content rebuild. Only mark dirty when the file picker is open,
-                // because its search-query cursor lives in the content section.
-                if self.ui.is_panel_visible() && self.ui.panel_focused {
-                    if self.ui.panel().file_picker_open {
-                        self.ui.panel_mut().dirty = true;
-                    }
-                    // else: request_redraw() below is enough; input rows are always rebuilt.
-                }
-                // AI block query cursor blinks when typing.
-                if self.ui.ai_block.is_typing() {
-                    self.ui.ai_block.dirty = true;
-                }
-                // Fast blink path: when only the terminal cursor changed, flag it so
-                // RedrawRequested can skip the full cell rebuild (cursor overlay).
-                let needs_full = (self.ui.is_panel_visible() && self.ui.panel_focused)
-                    || self.ui.ai_block.is_typing();
-                if !needs_full {
-                    self.cursor_blink_dirty = true;
-                }
-                if let Some(w) = &self.window { w.request_redraw(); }
+        if !idle && self.window_focused && self.input.update_cursor_blink() {
+            // Input rows are rebuilt fresh every frame (TD-PERF-10), so blink alone does not
+            // require a full content rebuild. Only mark dirty when the file picker is open,
+            // because its search-query cursor lives in the content section.
+            if self.ui.is_panel_visible() && self.ui.panel_focused
+                && self.ui.panel().file_picker_open
+            {
+                self.ui.panel_mut().dirty = true;
             }
+            // else: request_redraw() below is enough; input rows are always rebuilt.
+            // AI block query cursor blinks when typing.
+            if self.ui.ai_block.is_typing() {
+                self.ui.ai_block.dirty = true;
+            }
+            // Fast blink path: when only the terminal cursor changed, flag it so
+            // RedrawRequested can skip the full cell rebuild (cursor overlay).
+            let needs_full = (self.ui.is_panel_visible() && self.ui.panel_focused)
+                || self.ui.ai_block.is_typing();
+            if !needs_full {
+                self.cursor_blink_dirty = true;
+            }
+            if let Some(w) = &self.window { w.request_redraw(); }
         }
         // When idle or unfocused: skip blink entirely — saves periodic reshape + GPU upload.
 

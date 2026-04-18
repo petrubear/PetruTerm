@@ -122,7 +122,18 @@ impl RenderContext {
         let (font_system, actual_family, face_id, font_path, face_index) = build_font_system(&scaled_font)?;
         let lcd_atlas = renderer.get_lcd_atlas();
 
-        let mut shaper = TextShaper::new(Some(&renderer.device()), font_system, actual_family, face_id, font_path, face_index, &scaled_font, lcd_atlas);
+        let mut shaper = TextShaper::new(
+            Some(&renderer.device()),
+            font_system,
+            crate::font::shaper::TextShaperConfig {
+                actual_family,
+                font_id: face_id,
+                font_path,
+                face_index,
+                font_config: &scaled_font,
+                lcd_atlas,
+            },
+        );
         
         // Finalize renderer setup with shaper info
         let mut renderer = renderer;
@@ -1640,7 +1651,7 @@ impl RenderContext {
         let n_samples = self.latency_samples.len();
 
         let hud_lines: Vec<(String, [f32; 4])> = vec![
-            (format!(" F12 HUD"), TITLE_FG),
+            (" F12 HUD".to_string(), TITLE_FG),
             (format!(" {:10} {:.1}ms  p50:{:.1}ms  p95:{:.1}ms", "frame", avg_ms, p50_ms, p95_ms), frame_fg),
             (format!(" {:10} p50:{:.1}ms  p95:{:.1}ms  p99:{:.1}ms  n={}", "latency", lat_p50, lat_p95, lat_p99, n_samples), lat_fg),
             (format!(" {:10} hits={} miss={} ({}%)", "shape", shape_hits, shape_misses, hit_pct), VALUE_FG),
