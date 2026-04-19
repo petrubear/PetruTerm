@@ -4,6 +4,70 @@ Completed phases. Active phases in [`build_phases.md`](./build_phases.md).
 
 ---
 
+## Phase 3.5: Performance Sprint — Sub-phases completadas
+**Archivado:** 2026-04-18 | **Activo:** ver Sprint cierre en `build_phases.md`
+
+### KPIs (baselines 2026-04-14, M4 Max, release)
+| Benchmark | Antes | Después |
+|-----------|-------|---------|
+| `shape_line_ascii` | 5 643 ns | 317 ns (-94%) |
+| `shape_line_ligatures` | 8 766 ns | 659 ns (-92%) |
+| `shape_line_unicode` | 5 586 ns | ~5 700 ns (sin cambio) |
+
+### Sub-phase A: Measurement Infrastructure ✅ (parcial)
+- [x] `benches/shaping.rs` con criterion
+- [x] `benches/search.rs` — proxy sintético `Mux::search_active_terminal` + `filter_matches`
+- [x] Tracing + feature flag `profiling`: spans en `build_instances`, `shape_line`, `RedrawRequested`
+- [x] Debug HUD (F12): frame time p50/p95, shape cache hit%, atlas fill%, instance count, GPU upload KB/frame
+- [x] `.context/quality/PROFILING.md`
+- Pendiente → Sprint cierre: bench `build_instances`, bench `rasterize_to_atlas`, CI gating
+- Descartado: Tracy integration, GPU timestamps, os_signpost
+
+### Sub-phase B: Idle Zero-Cost ✅ COMPLETA
+- [x] `ControlFlow::Wait` cuando idle
+- [x] Cursor blink pausado en idle
+- [x] GPU upload bytes counter en HUD
+- [x] `poll_git_branch` → timer 1 Hz + in-flight guard (TD-PERF-19)
+- [x] Cursor como overlay independiente — `build_cursor_instance`, fast path RedrawRequested (2026-04-18)
+- [x] Damage tracking `Term::damage()` / `reset_damage()` en `collect_grid_cells_for` (2026-04-18)
+
+### Sub-phase C: Hot Path Fast Paths ✅ (parcial)
+- [x] Ligature scan bit: `bytes().any()` antes de HarfBuzz
+- [x] ASCII fast path: skip HarfBuzz (317 ns vs 5 643 ns baseline)
+- [x] Per-word shape cache: `HashMap<(u64,u32), ShapedRun>`, cap 512 entries
+- [x] Space cell fast path: `' '` + default bg salta glyph pipeline
+- [x] Row hash fix: hashea los 4 canales RGBA
+- Descartado: pre-shape warmup ASCII 32-126, subpixel position quantization
+
+### Sub-phase D: Memory & Allocator ✅ (parcial)
+- [x] `mimalloc` como `#[global_allocator]`
+- [x] Scratch buffers en `RenderContext`: `scratch_chars`, `scratch_str`, `scratch_colors`, `fmt_buf`
+- [x] `ChatPanel` separator cached — `'─'.repeat(n)` solo en resize
+- Descartado: Bumpalo arena, `smallvec`, `compact_str`
+
+### Sub-phase E: Parallel Rendering — DESCARTADA (→ Phase 2)
+- [x] PTY reader thread steered to efficiency cores via `QOS_CLASS_UTILITY`
+- Descartado: rayon per-pane, parallel row shaping, `rtrb` lock-free PTY ring buffer
+
+### Sub-phase F: Latency Minimization ✅ (parcial)
+- [x] `PresentMode::Mailbox → FifoRelaxed → Fifo` (auto por caps)
+- [x] `desired_maximum_frame_latency: 2 → 1`
+- [x] Adaptive PTY coalescing: ≤2 eventos = redraw inmediato; >2 = 4 ms window
+- [x] Skip render cuando window ocluida (`WindowEvent::Occluded`)
+- [x] Input-to-pixel latency probe (`RUST_LOG=petruterm=debug`)
+- Descartado: input event priority, CVDisplayLink, CAMetalLayer
+
+### Sub-phase G: GPU Architecture — DESCARTADA (→ Phase 2)
+Todos los items diferidos: atlas split, persistent ring buffer, indirect draw, unify passes, GPU-resident grid.
+
+### Sub-phase H: Build & Release ✅ (parcial)
+- [x] `target-cpu=apple-m1` en `bundle.sh`
+- [x] `release-native` profile en `Cargo.toml`
+- [x] Lua bytecode cache (`~/.cache/petruterm/lua-bc/*.luac`, mtime-validated)
+- Descartado: PGO (requiere workloads reales), config eager-load
+
+---
+
 ## Phase 0.5: Integration Spike (Risk Reduction)
 **Status: COMPLETE** (partial — Spike 2 funcional pero drag desde título area no wired)
 

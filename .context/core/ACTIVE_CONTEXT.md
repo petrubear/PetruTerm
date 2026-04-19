@@ -31,40 +31,6 @@
 | `benches/` | Desbloquear build_instances + rasterize_to_atlas |
 | `.github/workflows/ci.yml` | CI gating criterion regresión >5% |
 
-## Bugs resueltos en sesion 2026-04-18 (noche)
-
-### Tab en blanco al cambiar tabs
-- **Root cause:** damage-skip en `collect_grid_cells_for` saltaba filas del buffer recien limpiado.
-- `src/app/mux.rs`: param `force_full: bool` en `collect_grid_cells_for`
-- `src/app/mod.rs`: `force_full = terminal_changed` en `build_all_pane_instances`
-
-### LLM error message + Apple Keychain
-- `src/app/ui.rs`: `llm_init_error: Option<String>` — muestra error real de `build_provider`
-- `src/llm/openrouter.rs`: `keychain_api_key()` — fallback 3 via `security` CLI de macOS
-  - Almacenar: `security add-generic-password -s PetruTerm -a OPENROUTER_API_KEY -w <key>`
-
-### AI panel focus keybind (leader+A con Shift no funcionaba)
-- `leader+a` (minuscula) → `FocusAiPanel`: alterna focus terminal↔chat, abre si cerrado
-- `Escape` en panel → quita focus sin cerrar (antes cerraba)
-- `/q` en input → cierra el panel
-- `config/default/keybinds.lua`: actualizado
-
-## Bugs resueltos en sesion 2026-04-18 (tarde) — commit a5d691e
-
-### KKP — Shift+Enter en apps modernas (Claude Code CLI, etc.)
-- `src/term/mod.rs:97`: `kitty_keyboard: true`
-- `src/app/input/key_map.rs:109`: Shift+Enter → `\x1b[13;2u` cuando DISAMBIGUATE_ESC_CODES
-
-### Tab bleed — TUI app visible en todos los tabs
-- `src/app/renderer.rs:53`: `scratch_terminal_id: Option<usize>` en `RenderContext`
-- `src/app/mod.rs` (`build_all_pane_instances`): `cell_data_scratch.clear()` cuando terminal_id cambia
-
-### .app bundle env vars — OPENROUTER_API_KEY invisible en Finder
-- `src/main.rs`: `inherit_login_shell_env()` spawn `$SHELL -l -c 'env -0'` antes de threads
-
-### CI clippy — manual_checked_ops
-- `src/app/renderer.rs`: `.checked_div().unwrap_or(0)`
-
 ## Invariantes arquitectonicos clave (no romper)
 
 **Shaper drops space cells (TD-RENDER-01):**
