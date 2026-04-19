@@ -1,16 +1,16 @@
-pub mod pty;
 pub mod color;
+pub mod pty;
 
-pub use pty::{Pty, PtyEvent, PtyEventProxy};
 pub use alacritty_terminal::vte::ansi::CursorShape;
+pub use pty::{Pty, PtyEvent, PtyEventProxy};
 
-use anyhow::Result;
 use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::index::{Column, Direction, Line, Point};
 use alacritty_terminal::selection::{Selection, SelectionType};
+use alacritty_terminal::sync::FairMutex;
 use alacritty_terminal::term::{Config as TermConfig, TermMode};
 use alacritty_terminal::Term;
-use alacritty_terminal::sync::FairMutex;
+use anyhow::Result;
 use std::sync::Arc;
 
 use crate::config::Config;
@@ -94,6 +94,7 @@ impl Terminal {
 
         let term_config = TermConfig {
             scrolling_history: config.scrollback_lines as usize,
+            kitty_keyboard: true,
             ..Default::default()
         };
 
@@ -104,18 +105,45 @@ impl Terminal {
         };
 
         let term = Arc::new(FairMutex::new(Term::new(term_config, &size, proxy)));
-        let pty = Pty::spawn(config, Arc::clone(&term), cols, rows, cell_width, cell_height, wakeup, direct_notifier, working_directory)?;
+        let pty = Pty::spawn(
+            config,
+            Arc::clone(&term),
+            cols,
+            rows,
+            cell_width,
+            cell_height,
+            wakeup,
+            direct_notifier,
+            working_directory,
+        )?;
         let child_pid = pty.child_pid;
 
-        Ok(Self { term, pty, cols, rows, child_pid })
+        Ok(Self {
+            term,
+            pty,
+            cols,
+            rows,
+            child_pid,
+        })
     }
 
     /// Resize the terminal grid and PTY.
-    pub fn resize(&mut self, cols: u16, rows: u16, scrollback: usize, cell_width: u16, cell_height: u16) {
+    pub fn resize(
+        &mut self,
+        cols: u16,
+        rows: u16,
+        scrollback: usize,
+        cell_width: u16,
+        cell_height: u16,
+    ) {
         self.cols = cols;
         self.rows = rows;
 
-        let new_size = TermSize { cols: cols as usize, rows: rows as usize, scrollback };
+        let new_size = TermSize {
+            cols: cols as usize,
+            rows: rows as usize,
+            scrollback,
+        };
         self.term.lock().resize(new_size);
 
         self.pty.resize(cols, rows, cell_width, cell_height);
@@ -185,8 +213,7 @@ impl Terminal {
                 col: content.cursor.point.column.0,
                 row: content.cursor.point.line.0.max(0) as usize,
                 shape: content.cursor.shape,
-                visible: content.display_offset == 0
-                    && content.cursor.shape != CursorShape::Hidden,
+                visible: content.display_offset == 0 && content.cursor.shape != CursorShape::Hidden,
             }
         })
     }
@@ -236,18 +263,19 @@ pub fn process_cwd(pid: u32) -> Option<std::path::PathBuf> {
                 size,
             )
         };
-        if ret <= 0 { return None; }
+        if ret <= 0 {
+            return None;
+        }
         // vip_path is [[c_char; 32]; 32] = 1024 bytes; reinterpret in-place, no allocation.
         // SAFETY: c_char is i8 on macOS; reinterpreting as u8 is always valid for path bytes.
         let path_bytes: &[u8] = unsafe {
-            std::slice::from_raw_parts(
-                info.pvi_cdir.vip_path.as_ptr() as *const u8,
-                1024,
-            )
+            std::slice::from_raw_parts(info.pvi_cdir.vip_path.as_ptr() as *const u8, 1024)
         };
         let end = path_bytes.iter().position(|&b| b == 0).unwrap_or(1024);
         let s = std::str::from_utf8(&path_bytes[..end]).ok()?;
-        if s.is_empty() { return None; }
+        if s.is_empty() {
+            return None;
+        }
         Some(std::path::PathBuf::from(s))
     }
     #[cfg(not(target_os = "macos"))]

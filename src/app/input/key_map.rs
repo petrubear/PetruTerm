@@ -1,6 +1,6 @@
+use alacritty_terminal::term::TermMode;
 use winit::event::Modifiers;
 use winit::keyboard::{Key, NamedKey};
-use alacritty_terminal::term::TermMode;
 
 /// Translates a winit key event into an ANSI escape sequence.
 ///
@@ -22,7 +22,7 @@ pub fn translate_key(
     // 1. Handle Characters (with Ctrl/Alt modifiers)
     if let Key::Character(s) = key {
         let c = s.chars().next()?;
-        
+
         // Ctrl + Key
         if ctrl && !alt && !logo {
             let byte = c.to_ascii_lowercase() as u8;
@@ -40,7 +40,7 @@ pub fn translate_key(
                 _ => Some(s.as_bytes().to_vec()),
             };
         }
-        
+
         // Alt + Key: only add ESC prefix when option_as_meta is explicitly enabled.
         // By default (option_as_meta = false) the OS has already composed the character
         // (e.g. Option+2 → "@" on Spanish layout) and we send it as-is.
@@ -59,13 +59,13 @@ pub fn translate_key(
         // Determine xterm modifier code
         // 2=Shift, 3=Alt, 4=Shift+Alt, 5=Ctrl, 6=Shift+Ctrl, 7=Alt+Ctrl, 8=Shift+Alt+Ctrl
         let mod_code = match (shift, alt, ctrl) {
-            (true,  false, false) => Some(2),
-            (false, true,  false) => Some(3),
-            (true,  true,  false) => Some(4),
-            (false, false, true ) => Some(5),
-            (true,  false, true ) => Some(6),
-            (false, true,  true ) => Some(7),
-            (true,  true,  true ) => Some(8),
+            (true, false, false) => Some(2),
+            (false, true, false) => Some(3),
+            (true, true, false) => Some(4),
+            (false, false, true) => Some(5),
+            (true, false, true) => Some(6),
+            (false, true, true) => Some(7),
+            (true, true, true) => Some(8),
             _ => None,
         };
 
@@ -77,10 +77,10 @@ pub fn translate_key(
             NamedKey::ArrowDown => Some(format_csi('B', mod_code, app_cursor)),
             NamedKey::ArrowRight => Some(format_csi('C', mod_code, app_cursor)),
             NamedKey::ArrowLeft => Some(format_csi('D', mod_code, app_cursor)),
-            
+
             NamedKey::Home => Some(format_csi('H', mod_code, app_cursor)),
             NamedKey::End => Some(format_csi('F', mod_code, app_cursor)),
-            
+
             NamedKey::PageUp => Some(format_tilde(5, mod_code)),
             NamedKey::PageDown => Some(format_tilde(6, mod_code)),
             NamedKey::Insert => Some(format_tilde(2, mod_code)),
@@ -101,12 +101,18 @@ pub fn translate_key(
 
             NamedKey::Tab => {
                 if shift {
-                    Some(b"\x1b[Z".to_vec())  // Shift+Tab → reverse-tab (CSI Z)
+                    Some(b"\x1b[Z".to_vec()) // Shift+Tab → reverse-tab (CSI Z)
                 } else {
                     Some(b"\t".to_vec())
                 }
             }
-            NamedKey::Enter => Some(b"\r".to_vec()),
+            NamedKey::Enter => {
+                if shift && mode.contains(TermMode::DISAMBIGUATE_ESC_CODES) {
+                    Some(b"\x1b[13;2u".to_vec())
+                } else {
+                    Some(b"\r".to_vec())
+                }
+            }
             NamedKey::Escape => Some(b"\x1b".to_vec()),
             NamedKey::Backspace => Some(b"\x7f".to_vec()),
             NamedKey::Space => Some(b" ".to_vec()),

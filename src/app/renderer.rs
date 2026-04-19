@@ -5,16 +5,16 @@ use winit::window::Window;
 
 use crate::config::Config;
 use crate::font::{build_font_system, TextShaper};
+use crate::llm::ai_block::{AiBlock, AiState, AI_BLOCK_ROWS};
+use crate::llm::chat_panel::ChatPanel;
 use crate::renderer::cell::{CellVertex, FLAG_COLOR_GLYPH, FLAG_CURSOR, FLAG_LCD};
 use crate::renderer::rounded_rect::RoundedRectInstance;
 use crate::renderer::GpuRenderer;
-use crate::term::{CursorInfo, CursorShape};
 use crate::term::color::resolve_color;
-use alacritty_terminal::vte::ansi::Color as AnsiColor;
-use crate::llm::chat_panel::ChatPanel;
-use crate::llm::ai_block::{AiBlock, AiState, AI_BLOCK_ROWS};
-use crate::ui::{CommandPalette, PaneSeparator, Tab};
+use crate::term::{CursorInfo, CursorShape};
 use crate::ui::search_bar::SearchBar;
+use crate::ui::{CommandPalette, PaneSeparator, Tab};
+use alacritty_terminal::vte::ansi::Color as AnsiColor;
 
 /// Cache for a single shaped row to avoid re-shaping every frame.
 #[derive(Clone)]
@@ -50,7 +50,17 @@ pub struct RenderContext {
     /// Capture of `term_cols` when panel cache was built. If it changes, mark panel dirty.
     pub panel_cache_term_cols: usize,
     /// Scratch buffer for `collect_grid_cells_for` — reused across frames (TD-PERF-12).
-    pub cell_data_scratch: Vec<(String, Vec<(alacritty_terminal::vte::ansi::Color, alacritty_terminal::vte::ansi::Color)>)>,
+    pub cell_data_scratch: Vec<(
+        String,
+        Vec<(
+            alacritty_terminal::vte::ansi::Color,
+            alacritty_terminal::vte::ansi::Color,
+        )>,
+    )>,
+    /// Which terminal's data is currently in `cell_data_scratch`.
+    /// Used to detect tab/pane switches and force a full grid re-read instead of
+    /// trusting damage-skip data that belongs to a different terminal.
+    pub scratch_terminal_id: Option<usize>,
     /// Scratch buffers for `push_shaped_row` — reused per call to avoid hot-path allocs (TD-PERF-13).
     pub scratch_chars: Vec<char>,
     pub scratch_str: String,
@@ -119,7 +129,8 @@ impl RenderContext {
         scaled_font.size *= scale_factor;
         crate::font::loader::locate_font_for_lcd(&mut scaled_font);
 
-        let (font_system, actual_family, face_id, font_path, face_index) = build_font_system(&scaled_font)?;
+        let (font_system, actual_family, face_id, font_path, face_index) =
+            build_font_system(&scaled_font)?;
         let lcd_atlas = renderer.get_lcd_atlas();
 
         let mut shaper = TextShaper::new(
@@ -134,7 +145,7 @@ impl RenderContext {
                 lcd_atlas,
             },
         );
-        
+
         // Finalize renderer setup with shaper info
         let mut renderer = renderer;
         renderer.set_cell_size(shaper.cell_width, shaper.cell_height);
@@ -153,6 +164,7 @@ impl RenderContext {
             panel_cache_term_cols: 0,
             panel_instances_cache: Vec::new(),
             cell_data_scratch: Vec::new(),
+            scratch_terminal_id: None,
             scratch_chars: Vec::new(),
             scratch_str: String::new(),
             scratch_colors: Vec::new(),
@@ -221,25 +233,33 @@ impl RenderContext {
         let _span = tracing::info_span!("build_instances", rows = cell_data.len()).entered();
 
         // Retrieve or create the per-terminal row cache.
-        let cache = self.row_caches.entry(terminal_id).or_insert_with(RowCache::new);
+        let cache = self
+            .row_caches
+            .entry(terminal_id)
+            .or_insert_with(RowCache::new);
         if cache.rows.len() < cell_data.len() {
             cache.rows.resize(cell_data.len(), None);
         }
 
         for (row_idx, (text, raw_colors)) in cell_data.iter().enumerate() {
             self.colors_scratch.clear();
-            self.colors_scratch.extend(raw_colors.iter().map(|(fg, bg)| {
-                (
-                    resolve_color(*fg, &config.colors),
-                    resolve_color(*bg, &config.colors),
-                )
-            }));
+            self.colors_scratch
+                .extend(raw_colors.iter().map(|(fg, bg)| {
+                    (
+                        resolve_color(*fg, &config.colors),
+                        resolve_color(*bg, &config.colors),
+                    )
+                }));
             let colors: &[([f32; 4], [f32; 4])] = &self.colors_scratch;
 
             let row_hash = calculate_row_hash(text, colors);
 
             // Cache hit: copy local-coordinate instances and apply pane offset.
-            if let Some(Some(entry)) = self.row_caches.get(&terminal_id).and_then(|c| c.rows.get(row_idx)) {
+            if let Some(Some(entry)) = self
+                .row_caches
+                .get(&terminal_id)
+                .and_then(|c| c.rows.get(row_idx))
+            {
                 if entry.hash == row_hash {
                     self.shape_cache_hits = self.shape_cache_hits.saturating_add(1);
                     let co = col_offset as f32;
@@ -276,7 +296,9 @@ impl RenderContext {
             // search highlight, etc.) would show the GPU clear colour instead of
             // its real bg, producing horizontal "stripes" between letters and rows.
             for (col, (_fg, bg)) in colors.iter().enumerate() {
-                if colors_approx_eq(*bg, default_bg) { continue; }
+                if colors_approx_eq(*bg, default_bg) {
+                    continue;
+                }
                 row_instances.push(CellVertex {
                     grid_pos: [col as f32, row_idx as f32],
                     atlas_uv: [0.0; 4],
@@ -299,7 +321,8 @@ impl RenderContext {
                 }
 
                 let lcd_entry = if let Some(queue) = self.renderer.lcd_queue() {
-                    self.shaper.rasterize_lcd_to_atlas(glyph.cache_key, glyph.ch, queue)
+                    self.shaper
+                        .rasterize_lcd_to_atlas(glyph.cache_key, glyph.ch, queue)
                 } else {
                     None
                 };
@@ -309,7 +332,9 @@ impl RenderContext {
                 // LCD entry and always fall through to the Swash path (TD-PERF-06).
                 let (atlas_uv, glyph_offset, glyph_size, color_flag) = if lcd_entry.is_none() {
                     let (atlas, queue) = self.renderer.atlas_and_queue();
-                    let se = self.shaper.rasterize_to_atlas(glyph.cache_key, atlas, queue)?;
+                    let se = self
+                        .shaper
+                        .rasterize_to_atlas(glyph.cache_key, atlas, queue)?;
                     let ox = se.bearing_x as f32;
                     let oy = shaped.ascent - se.bearing_y as f32;
                     let gw = se.width as f32;
@@ -323,7 +348,12 @@ impl RenderContext {
                         let fy0 = (y0 - oy) / gh;
                         let fy1 = (y1 - oy) / gh;
                         let [u0, v0, u1, v1] = se.uv;
-                        ([u0, v0 + fy0 * (v1 - v0), u1, v0 + fy1 * (v1 - v0)], [ox, y0], [gw, y1 - y0], flag)
+                        (
+                            [u0, v0 + fy0 * (v1 - v0), u1, v0 + fy1 * (v1 - v0)],
+                            [ox, y0],
+                            [gw, y1 - y0],
+                            flag,
+                        )
                     }
                 } else {
                     // LCD path: emit a background-only vertex (zeroed UVs; GPU reads bg color).
@@ -415,19 +445,28 @@ impl RenderContext {
         let (glyph_offset, glyph_size) = match info.shape {
             CursorShape::Block | CursorShape::HollowBlock => ([0.0f32, 0.0], [cw, ch]),
             CursorShape::Underline => ([0.0, (ch - 2.0).max(0.0)], [cw, 2.0]),
-            CursorShape::Beam      => ([0.0, 0.0], [2.0, ch]),
-            CursorShape::Hidden    => { self.cursor_vertex_template = None; return; }
+            CursorShape::Beam => ([0.0, 0.0], [2.0, ch]),
+            CursorShape::Hidden => {
+                self.cursor_vertex_template = None;
+                return;
+            }
         };
-        if !info.visible { self.cursor_vertex_template = None; return; }
+        if !info.visible {
+            self.cursor_vertex_template = None;
+            return;
+        }
         let v = CellVertex {
-            grid_pos:     [(col_offset + info.col) as f32, (row_offset + info.row) as f32],
-            atlas_uv:     [0.0; 4],
-            fg:           config.colors.cursor_fg,
-            bg:           config.colors.cursor_bg,
+            grid_pos: [
+                (col_offset + info.col) as f32,
+                (row_offset + info.row) as f32,
+            ],
+            atlas_uv: [0.0; 4],
+            fg: config.colors.cursor_fg,
+            bg: config.colors.cursor_bg,
             glyph_offset,
             glyph_size,
-            flags:        FLAG_CURSOR,
-            _pad:         0,
+            flags: FLAG_CURSOR,
+            _pad: 0,
         };
         self.cursor_vertex_template = Some(v);
         if blink_on {
@@ -453,10 +492,10 @@ impl RenderContext {
                 (sep.length as f32 * cw, 1.0_f32)
             };
             self.rect_instances.push(RoundedRectInstance {
-                rect:   [x, y, w, h],
-                color:  SEP_COLOR,
+                rect: [x, y, w, h],
+                color: SEP_COLOR,
                 radius: 0.0,
-                _pad:   [0.0; 3],
+                _pad: [0.0; 3],
             });
         }
     }
@@ -472,7 +511,9 @@ impl RenderContext {
         width: usize,
         font: &crate::config::schema::FontConfig,
     ) {
-        if width == 0 { return; }
+        if width == 0 {
+            return;
+        }
 
         // Step 1: push one background-coverage vertex per cell.
         // This guarantees full-row background even when shape_line collapses
@@ -486,7 +527,7 @@ impl RenderContext {
                 fg,
                 bg,
                 glyph_offset: [0.0; 2],
-                glyph_size:   [0.0; 2],
+                glyph_size: [0.0; 2],
                 flags: 0,
                 _pad: 0,
             });
@@ -503,7 +544,12 @@ impl RenderContext {
         scratch_chars.extend(text.chars().take(width));
         let len = scratch_chars.len();
         scratch_str.clear();
-        scratch_str.extend(scratch_chars.iter().copied().chain(std::iter::repeat_n(' ', width.saturating_sub(len))));
+        scratch_str.extend(
+            scratch_chars
+                .iter()
+                .copied()
+                .chain(std::iter::repeat_n(' ', width.saturating_sub(len))),
+        );
 
         scratch_colors.clear();
         scratch_colors.extend((0..width).map(|_| (fg, bg)));
@@ -516,10 +562,15 @@ impl RenderContext {
         self.scratch_colors = scratch_colors;
 
         for glyph in shaped.glyphs {
-            if glyph.col >= width { continue; }
+            if glyph.col >= width {
+                continue;
+            }
 
             let (atlas, queue) = self.renderer.atlas_and_queue();
-            let entry = match self.shaper.rasterize_to_atlas(glyph.cache_key, atlas, queue) {
+            let entry = match self
+                .shaper
+                .rasterize_to_atlas(glyph.cache_key, atlas, queue)
+            {
                 Ok(e) => e,
                 Err(_) => continue, // skip; bg-coverage vertex already pushed above
             };
@@ -530,18 +581,22 @@ impl RenderContext {
             let gh = entry.height as f32;
 
             // Skip zero-size glyphs (spaces): bg-coverage vertex already handles bg.
-            if gw == 0.0 || gh == 0.0 { continue; }
+            if gw == 0.0 || gh == 0.0 {
+                continue;
+            }
 
             let y0 = oy.max(0.0);
             let y1 = (oy + gh).min(self.shaper.cell_height);
-            if y1 <= y0 { continue; }
+            if y1 <= y0 {
+                continue;
+            }
 
             let fy0 = (y0 - oy) / gh;
             let fy1 = (y1 - oy) / gh;
             let [u0, v0, u1, v1] = entry.uv;
-            let atlas_uv    = [u0, v0 + fy0 * (v1 - v0), u1, v0 + fy1 * (v1 - v0)];
+            let atlas_uv = [u0, v0 + fy0 * (v1 - v0), u1, v0 + fy1 * (v1 - v0)];
             let glyph_offset = [ox, y0];
-            let glyph_size   = [gw, y1 - y0];
+            let glyph_size = [gw, y1 - y0];
 
             let color_flag = if entry.is_color { FLAG_COLOR_GLYPH } else { 0 };
             self.instances.push(CellVertex {
@@ -570,30 +625,32 @@ impl RenderContext {
         screen_rows: usize,
         cursor_blink_on: bool,
     ) {
-        use crate::llm::chat_panel::{word_wrap, ConfirmDisplay, MAX_FILE_ROWS, PanelState};
+        use crate::llm::chat_panel::{word_wrap, ConfirmDisplay, PanelState, MAX_FILE_ROWS};
         use crate::llm::diff::DiffKind;
         use crate::llm::ChatRole;
         use std::fmt::Write as _;
 
         let panel_cols = panel.width_cols as usize;
-        if panel_cols == 0 || screen_rows < 6 { return; }
+        if panel_cols == 0 || screen_rows < 6 {
+            return;
+        }
 
         // ── Colors (Dracula Pro palette) ─────────────────────────────────────
         let panel_bg = config.llm.ui.background;
-        let user_fg  = config.llm.ui.user_fg;
-        let asst_fg  = config.llm.ui.assistant_fg;
+        let user_fg = config.llm.ui.user_fg;
+        let asst_fg = config.llm.ui.assistant_fg;
         let input_fg = config.llm.ui.input_fg;
 
-        const BORDER_FG:  [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // purple
+        const BORDER_FG: [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // purple
         const BORDER_DIM: [f32; 4] = [0.32, 0.28, 0.50, 1.0]; // dimmed purple
-        const STREAM_FG:  [f32; 4] = [0.95, 0.98, 0.55, 1.0]; // yellow
-        const ERR_FG:     [f32; 4] = [1.00, 0.33, 0.33, 1.0]; // red
-        const SEP_FG:     [f32; 4] = [0.27, 0.28, 0.36, 1.0]; // current-line
-        const DIM_FG:     [f32; 4] = [0.50, 0.47, 0.60, 1.0]; // dimmed (file list)
-        const RUN_FG:     [f32; 4] = [0.50, 0.98, 0.60, 1.0]; // green — run bar
-        const FILE_FG:    [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached files
-        const PICK_SEL:   [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // purple — picker highlight
-        const PICK_FG:    [f32; 4] = [0.80, 0.80, 0.90, 1.0]; // soft white — picker items
+        const STREAM_FG: [f32; 4] = [0.95, 0.98, 0.55, 1.0]; // yellow
+        const ERR_FG: [f32; 4] = [1.00, 0.33, 0.33, 1.0]; // red
+        const SEP_FG: [f32; 4] = [0.27, 0.28, 0.36, 1.0]; // current-line
+        const DIM_FG: [f32; 4] = [0.50, 0.47, 0.60, 1.0]; // dimmed (file list)
+        const RUN_FG: [f32; 4] = [0.50, 0.98, 0.60, 1.0]; // green — run bar
+        const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached files
+        const PICK_SEL: [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // purple — picker highlight
+        const PICK_FG: [f32; 4] = [0.80, 0.80, 0.90, 1.0]; // soft white — picker items
 
         const SPIN: [&str; 8] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"];
         let spin = SPIN[(self.frame_counter / 4) as usize % 8];
@@ -616,7 +673,7 @@ impl RenderContext {
 
         // ── Row 0: panel header ───────────────────────────────────────────────
         let title = " Petrubot ";
-        let left  = "│───";
+        let left = "│───";
         let dashes = panel_cols.saturating_sub(left.chars().count() + title.chars().count());
         {
             let mut buf = std::mem::take(&mut self.fmt_buf);
@@ -664,12 +721,17 @@ impl RenderContext {
             }
         } else if matches!(panel.state, PanelState::AwaitingConfirm) {
             // ── Confirmation view: diff preview + [y]/[n] ────────────────────
-            const ADD_FG:  [f32; 4] = [0.50, 0.98, 0.60, 1.0]; // green
-            const REM_FG:  [f32; 4] = [1.00, 0.47, 0.47, 1.0]; // red
+            const ADD_FG: [f32; 4] = [0.50, 0.98, 0.60, 1.0]; // green
+            const REM_FG: [f32; 4] = [1.00, 0.47, 0.47, 1.0]; // red
             const CTX_FG2: [f32; 4] = [0.60, 0.60, 0.70, 1.0]; // dimmed context
 
             match panel.confirm_display.as_ref() {
-                Some(ConfirmDisplay::Write { path, diff, added, removed }) => {
+                Some(ConfirmDisplay::Write {
+                    path,
+                    diff,
+                    added,
+                    removed,
+                }) => {
                     // Row 1: title
                     let rel_path = std::path::Path::new(path)
                         .file_name()
@@ -677,7 +739,15 @@ impl RenderContext {
                         .unwrap_or(path.as_str());
                     let title_line = format!("│ Write: {} (+{added} -{removed})", rel_path);
                     let title_trimmed: String = title_line.chars().take(panel_cols).collect();
-                    self.push_shaped_row(&title_trimmed, BORDER_FG, panel_bg, 1, co, panel_cols, font);
+                    self.push_shaped_row(
+                        &title_trimmed,
+                        BORDER_FG,
+                        panel_bg,
+                        1,
+                        co,
+                        panel_cols,
+                        font,
+                    );
 
                     // Rows 2..sep_row: diff lines
                     let diff_rows = sep_row.saturating_sub(2);
@@ -685,7 +755,7 @@ impl RenderContext {
                         let row = 2 + i;
                         if let Some(dl) = diff.get(i) {
                             let (prefix, fg) = match dl.kind {
-                                DiffKind::Added   => ("│ + ", ADD_FG),
+                                DiffKind::Added => ("│ + ", ADD_FG),
                                 DiffKind::Removed => ("│ - ", REM_FG),
                                 DiffKind::Context => ("│   ", CTX_FG2),
                             };
@@ -700,11 +770,23 @@ impl RenderContext {
                 }
                 Some(ConfirmDisplay::Run { cmd }) => {
                     const WARN_FG: [f32; 4] = [1.00, 0.72, 0.20, 1.0]; // amber
-                    // Detect potentially destructive patterns (TD-034).
-                    let is_risky = ["rm ", "rm\t", "rm -", ":(){", "dd ", "mkfs",
-                                    "curl | sh", "curl|sh", "wget | sh", "wget|sh",
-                                    "chmod -R 777", "> /dev/"]
-                        .iter().any(|p| cmd.contains(p));
+                                                                       // Detect potentially destructive patterns (TD-034).
+                    let is_risky = [
+                        "rm ",
+                        "rm\t",
+                        "rm -",
+                        ":(){",
+                        "dd ",
+                        "mkfs",
+                        "curl | sh",
+                        "curl|sh",
+                        "wget | sh",
+                        "wget|sh",
+                        "chmod -R 777",
+                        "> /dev/",
+                    ]
+                    .iter()
+                    .any(|p| cmd.contains(p));
                     let (title, title_fg) = if is_risky {
                         ("│ \u{26a0} Run command (destructive):", WARN_FG)
                     } else {
@@ -714,7 +796,11 @@ impl RenderContext {
                     self.push_shaped_row(title, title_fg, panel_bg, 1, co, panel_cols, font);
                     // Row 2: command
                     let max_cmd = panel_cols.saturating_sub(5);
-                    let cmd_trunc = cmd.char_indices().nth(max_cmd).map(|(i, _)| &cmd[..i]).unwrap_or(cmd);
+                    let cmd_trunc = cmd
+                        .char_indices()
+                        .nth(max_cmd)
+                        .map(|(i, _)| &cmd[..i])
+                        .unwrap_or(cmd);
                     let cmd_line = format!("│   {}", cmd_trunc);
                     self.push_shaped_row(&cmd_line, ADD_FG, panel_bg, 2, co, panel_cols, font);
                     // Rest: empty
@@ -734,27 +820,50 @@ impl RenderContext {
             // File section (rows 1..1+file_section_rows)
             if file_section_rows > 0 {
                 // Header: "│ Selected (N files)"
-                let fhdr = format!("│ Selected ({} file{})", file_count, if file_count == 1 { "" } else { "s" });
+                let fhdr = format!(
+                    "│ Selected ({} file{})",
+                    file_count,
+                    if file_count == 1 { "" } else { "s" }
+                );
                 self.push_shaped_row(&fhdr, FILE_FG, panel_bg, 1, co, panel_cols, font);
                 // File list
                 for (i, path) in panel.attached_files.iter().take(MAX_FILE_ROWS).enumerate() {
-                    let name = path.file_name()
+                    let name = path
+                        .file_name()
                         .map(|n| n.to_string_lossy().into_owned())
                         .unwrap_or_else(|| path.to_string_lossy().into_owned());
                     let max_w = panel_cols.saturating_sub(6);
                     let trimmed = if let Some((i, _)) = name.char_indices().nth(max_w) {
-                        let cut = name.char_indices().nth(max_w.saturating_sub(1)).map(|(j, _)| j).unwrap_or(i);
+                        let cut = name
+                            .char_indices()
+                            .nth(max_w.saturating_sub(1))
+                            .map(|(j, _)| j)
+                            .unwrap_or(i);
                         format!("{}…", &name[..cut])
-                    } else { name };
+                    } else {
+                        name
+                    };
                     let line = format!("│   {}", trimmed);
                     self.push_shaped_row(&line, DIM_FG, panel_bg, 2 + i, co, panel_cols, font);
                 }
                 // Thin separator after file section (use pre-built cache from ChatPanel — TD-PERF-13)
-                self.push_shaped_row(&panel.thin_separator_cache, SEP_FG, panel_bg, 1 + file_section_rows, co, panel_cols, font);
+                self.push_shaped_row(
+                    &panel.thin_separator_cache,
+                    SEP_FG,
+                    panel_bg,
+                    1 + file_section_rows,
+                    co,
+                    panel_cols,
+                    font,
+                );
             }
 
             // History area: rows after file section up to sep_row
-            let history_start_row = 1 + if file_section_rows > 0 { file_section_rows + 1 } else { 0 };
+            let history_start_row = 1 + if file_section_rows > 0 {
+                file_section_rows + 1
+            } else {
+                0
+            };
             let history_rows = sep_row.saturating_sub(history_start_row);
             let msg_inner_w = panel_cols.saturating_sub(8);
 
@@ -788,10 +897,10 @@ impl RenderContext {
             // ensure_wrap_cache() is called in mod.rs before this function runs.
             for (msg_idx, msg) in panel.messages.iter().enumerate() {
                 let (first_p, cont_p, fg) = match msg.role {
-                    ChatRole::User      => ("│  You  ", "│       ", user_fg),
+                    ChatRole::User => ("│  You  ", "│       ", user_fg),
                     ChatRole::Assistant => ("│   AI  ", "│       ", asst_fg),
-                    ChatRole::System    => continue,
-                    ChatRole::Tool(_)   => continue,
+                    ChatRole::System => continue,
+                    ChatRole::Tool(_) => continue,
                 };
                 for (i, line) in panel.wrapped_message(msg_idx).iter().enumerate() {
                     let p = if i == 0 { first_p } else { cont_p };
@@ -821,15 +930,23 @@ impl RenderContext {
 
                 if new_stable_end > self.streaming_stable_end {
                     let seg = &buf[self.streaming_stable_end..new_stable_end];
-                    self.streaming_stable_lines.extend(word_wrap(seg, msg_inner_w));
+                    self.streaming_stable_lines
+                        .extend(word_wrap(seg, msg_inner_w));
                     self.streaming_stable_end = new_stable_end;
                 }
 
                 // Re-wrap only the partial last line (no newline yet) — O(partial_len).
                 let partial = &buf[self.streaming_stable_end..];
-                let partial_lines = if partial.is_empty() { vec![] } else { word_wrap(partial, msg_inner_w) };
+                let partial_lines = if partial.is_empty() {
+                    vec![]
+                } else {
+                    word_wrap(partial, msg_inner_w)
+                };
 
-                let all_lines = self.streaming_stable_lines.iter().map(|s| s.as_str())
+                let all_lines = self
+                    .streaming_stable_lines
+                    .iter()
+                    .map(|s| s.as_str())
                     .chain(partial_lines.iter().map(|s| s.as_str()));
                 for (i, line) in all_lines.enumerate() {
                     let p = if i == 0 { "│   AI  " } else { "│       " };
@@ -848,7 +965,11 @@ impl RenderContext {
             if let PanelState::Error(ref err) = panel.state {
                 let wrapped = word_wrap(err, msg_inner_w);
                 for (i, line) in wrapped.iter().enumerate() {
-                    let p = if i == 0 { "│  \u{2717}    " } else { "│       " };
+                    let p = if i == 0 {
+                        "│  \u{2717}    "
+                    } else {
+                        "│       "
+                    };
                     push_line!(p, line.as_str(), ERR_FG);
                 }
             }
@@ -862,8 +983,11 @@ impl RenderContext {
                     buf.push_str("│ \u{23ce}  ");
                     let cmd_chars: usize = cmd.chars().count();
                     if cmd_chars > max_cmd_w {
-                        let end = cmd.char_indices().nth(max_cmd_w.saturating_sub(1))
-                            .map(|(i, _)| i).unwrap_or(cmd.len());
+                        let end = cmd
+                            .char_indices()
+                            .nth(max_cmd_w.saturating_sub(1))
+                            .map(|(i, _)| i)
+                            .unwrap_or(cmd.len());
                         buf.push_str(&cmd[..end]);
                         buf.push('…');
                     } else {
@@ -878,8 +1002,7 @@ impl RenderContext {
             // Shrink logical length without dropping capacity.
             all_lines.truncate(total_lines);
 
-            let visible_start = total_lines
-                .saturating_sub(history_rows + panel.scroll_offset);
+            let visible_start = total_lines.saturating_sub(history_rows + panel.scroll_offset);
 
             for i in 0..history_rows {
                 let row = history_start_row + i;
@@ -894,7 +1017,15 @@ impl RenderContext {
         }
 
         // ── Separator (use pre-built cache from ChatPanel — TD-PERF-13) ─────
-        self.push_shaped_row(&panel.separator_cache, SEP_FG, panel_bg, sep_row, co, panel_cols, font);
+        self.push_shaped_row(
+            &panel.separator_cache,
+            SEP_FG,
+            panel_bg,
+            sep_row,
+            co,
+            panel_cols,
+            font,
+        );
     }
 
     /// Build only the input field and key-hint row for the chat panel.
@@ -918,16 +1049,18 @@ impl RenderContext {
         use crate::llm::ChatRole;
 
         let panel_cols = panel.width_cols as usize;
-        if panel_cols == 0 || screen_rows < 6 { return; }
+        if panel_cols == 0 || screen_rows < 6 {
+            return;
+        }
 
-        let panel_bg  = config.llm.ui.background;
-        let input_fg  = config.llm.ui.input_fg;
+        let panel_bg = config.llm.ui.background;
+        let input_fg = config.llm.ui.input_fg;
 
-        const HINT_FG:    [f32; 4] = [0.38, 0.44, 0.64, 1.0];
-        const DIM_FG:     [f32; 4] = [0.50, 0.47, 0.60, 1.0];
+        const HINT_FG: [f32; 4] = [0.38, 0.44, 0.64, 1.0];
+        const DIM_FG: [f32; 4] = [0.50, 0.47, 0.60, 1.0];
 
-        let co         = term_cols;
-        let hints_row  = screen_rows - 1;
+        let co = term_cols;
+        let hints_row = screen_rows - 1;
         let input_row2 = screen_rows - 2;
         let input_row1 = screen_rows - 3;
 
@@ -943,11 +1076,21 @@ impl RenderContext {
                 ("[y] Apply", "[n] Reject")
             };
             const CONFIRM_YES: [f32; 4] = [0.50, 0.98, 0.60, 1.0];
-            const CONFIRM_NO:  [f32; 4] = [1.00, 0.47, 0.47, 1.0];
+            const CONFIRM_NO: [f32; 4] = [1.00, 0.47, 0.47, 1.0];
             let yes_line = format!("│  {yes_label}");
-            let no_line  = format!("│  {no_label}");
-            self.push_shaped_row(&yes_line, CONFIRM_YES, panel_bg, input_row1, co, panel_cols, font);
-            self.push_shaped_row(&no_line,  CONFIRM_NO,  panel_bg, input_row2, co, panel_cols, font);
+            let no_line = format!("│  {no_label}");
+            self.push_shaped_row(
+                &yes_line,
+                CONFIRM_YES,
+                panel_bg,
+                input_row1,
+                co,
+                panel_cols,
+                font,
+            );
+            self.push_shaped_row(
+                &no_line, CONFIRM_NO, panel_bg, input_row2, co, panel_cols, font,
+            );
         } else {
             let input_inner_w = panel_cols.saturating_sub(5);
             let mut input_display = panel.input.clone();
@@ -955,12 +1098,19 @@ impl RenderContext {
                 input_display.push('\u{258b}');
             }
             let input_lines = wrap_input(&input_display, input_inner_w);
-            let inp_fg = if panel_focused && !file_picker_focused { input_fg } else { DIM_FG };
+            let inp_fg = if panel_focused && !file_picker_focused {
+                input_fg
+            } else {
+                DIM_FG
+            };
             let n = input_lines.len();
             let (vis1, vis2) = if n >= 2 {
                 (input_lines[n - 2].clone(), input_lines[n - 1].clone())
             } else {
-                (input_lines.first().cloned().unwrap_or_default(), String::new())
+                (
+                    input_lines.first().cloned().unwrap_or_default(),
+                    String::new(),
+                )
             };
             let line1 = format!("│ \u{25b8}  {}", vis1);
             let line2 = format!("│    {}", vis2);
@@ -970,31 +1120,38 @@ impl RenderContext {
 
         // ── Key hints + token count ───────────────────────────────────────────
         let tokens = panel.estimated_tokens();
-        let has_assistant = panel.messages.iter().any(|m| matches!(m.role, ChatRole::Assistant));
+        let has_assistant = panel
+            .messages
+            .iter()
+            .any(|m| matches!(m.role, ChatRole::Assistant));
         let hints: String = if file_picker_focused {
             format!("│ ↑↓ navigate   Enter: attach   Tab: close  Tokens: {tokens}")
         } else if !panel_focused {
             format!("│ <Leader>a: focus   Esc: close   Tokens: {tokens}")
         } else {
             let base = match &panel.state {
-                PanelState::Idle if !panel.input.trim().is_empty()
-                    => "│ Enter: send   Tab: files   Esc: close",
-                PanelState::Idle if has_assistant
-                    => "│ Enter: run \u{23ce}   Tab: files",
-                PanelState::Idle
-                    => "│ Enter: send   Tab: files   Esc: close",
-                PanelState::Loading | PanelState::Streaming
-                    => "│ streaming\u{2026}",
-                PanelState::Error(_)
-                    => "│ Esc: dismiss",
-                PanelState::AwaitingConfirm
-                    => "│ y/Enter: confirm   n/Esc: reject",
+                PanelState::Idle if !panel.input.trim().is_empty() => {
+                    "│ Enter: send   Tab: files   Esc: close"
+                }
+                PanelState::Idle if has_assistant => "│ Enter: run \u{23ce}   Tab: files",
+                PanelState::Idle => "│ Enter: send   Tab: files   Esc: close",
+                PanelState::Loading | PanelState::Streaming => "│ streaming\u{2026}",
+                PanelState::Error(_) => "│ Esc: dismiss",
+                PanelState::AwaitingConfirm => "│ y/Enter: confirm   n/Esc: reject",
                 PanelState::Hidden => "│",
             };
             format!("{base}   Tokens: {tokens}")
         };
         let hints_display: String = hints.chars().take(panel_cols).collect();
-        self.push_shaped_row(&hints_display, HINT_FG, panel_bg, hints_row, co, panel_cols, font);
+        self.push_shaped_row(
+            &hints_display,
+            HINT_FG,
+            panel_bg,
+            hints_row,
+            co,
+            panel_cols,
+            font,
+        );
     }
 
     /// Render the inline AI block, overlaying the bottom `AI_BLOCK_ROWS` rows of the terminal.
@@ -1008,21 +1165,23 @@ impl RenderContext {
     ) {
         use crate::llm::chat_panel::word_wrap;
 
-        if screen_rows < AI_BLOCK_ROWS + 1 || term_cols < 4 { return; }
+        if screen_rows < AI_BLOCK_ROWS + 1 || term_cols < 4 {
+            return;
+        }
 
         let w = term_cols;
-        let sep_row   = screen_rows - AI_BLOCK_ROWS;
+        let sep_row = screen_rows - AI_BLOCK_ROWS;
         let input_row = screen_rows - AI_BLOCK_ROWS + 1;
-        let resp_row  = screen_rows - AI_BLOCK_ROWS + 2;
-        let hint_row  = screen_rows - AI_BLOCK_ROWS + 3;
+        let resp_row = screen_rows - AI_BLOCK_ROWS + 2;
+        let hint_row = screen_rows - AI_BLOCK_ROWS + 3;
 
-        const BLOCK_BG:  [f32; 4] = [0.11, 0.11, 0.18, 1.0]; // dark bg
+        const BLOCK_BG: [f32; 4] = [0.11, 0.11, 0.18, 1.0]; // dark bg
         const BORDER_FG: [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // purple
-        const INPUT_FG:  [f32; 4] = [0.95, 0.95, 0.95, 1.0]; // white
-        const RESP_FG:   [f32; 4] = [0.50, 0.98, 0.60, 1.0]; // green
+        const INPUT_FG: [f32; 4] = [0.95, 0.95, 0.95, 1.0]; // white
+        const RESP_FG: [f32; 4] = [0.50, 0.98, 0.60, 1.0]; // green
         const STREAM_FG: [f32; 4] = [0.95, 0.98, 0.55, 1.0]; // yellow
-        const HINT_FG:   [f32; 4] = [0.38, 0.44, 0.64, 1.0]; // dim gray
-        const ERR_FG:    [f32; 4] = [1.00, 0.33, 0.33, 1.0]; // red
+        const HINT_FG: [f32; 4] = [0.38, 0.44, 0.64, 1.0]; // dim gray
+        const ERR_FG: [f32; 4] = [1.00, 0.33, 0.33, 1.0]; // red
 
         const SPIN: [&str; 8] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"];
         let spin = SPIN[(self.frame_counter / 4) as usize % 8];
@@ -1030,11 +1189,20 @@ impl RenderContext {
         // Separator
         let title = " AI ";
         let side = (w.saturating_sub(title.chars().count())) / 2;
-        let sep = format!("{}{}{}", "─".repeat(side), title, "─".repeat(w.saturating_sub(side + title.chars().count())));
+        let sep = format!(
+            "{}{}{}",
+            "─".repeat(side),
+            title,
+            "─".repeat(w.saturating_sub(side + title.chars().count()))
+        );
         self.push_shaped_row(&sep, BORDER_FG, BLOCK_BG, sep_row, 0, w, font);
 
         // Input row: "⚡ > <query>[cursor]"
-        let cursor = if matches!(block.state, AiState::Typing) { "▋" } else { "" };
+        let cursor = if matches!(block.state, AiState::Typing) {
+            "▋"
+        } else {
+            ""
+        };
         let query_row = format!("⚡ > {}{}", block.query, cursor);
         self.push_shaped_row(&query_row, INPUT_FG, BLOCK_BG, input_row, 0, w, font);
 
@@ -1042,32 +1210,78 @@ impl RenderContext {
         match &block.state {
             AiState::Typing => {
                 self.push_shaped_row("", BLOCK_BG, BLOCK_BG, resp_row, 0, w, font);
-                self.push_shaped_row("  Enter: send   Esc: cancel", HINT_FG, BLOCK_BG, hint_row, 0, w, font);
+                self.push_shaped_row(
+                    "  Enter: send   Esc: cancel",
+                    HINT_FG,
+                    BLOCK_BG,
+                    hint_row,
+                    0,
+                    w,
+                    font,
+                );
             }
             AiState::Loading => {
-                self.push_shaped_row(&format!("  {} thinking\u{2026}", spin), STREAM_FG, BLOCK_BG, resp_row, 0, w, font);
+                self.push_shaped_row(
+                    &format!("  {} thinking\u{2026}", spin),
+                    STREAM_FG,
+                    BLOCK_BG,
+                    resp_row,
+                    0,
+                    w,
+                    font,
+                );
                 self.push_shaped_row("  Esc: cancel", HINT_FG, BLOCK_BG, hint_row, 0, w, font);
             }
             AiState::Streaming => {
                 let lines = word_wrap(&block.response, w.saturating_sub(4));
                 let line = format!("  \u{2192} {}", lines.first().cloned().unwrap_or_default()); // →
                 self.push_shaped_row(&line, STREAM_FG, BLOCK_BG, resp_row, 0, w, font);
-                self.push_shaped_row(&format!("  {} streaming\u{2026}   Esc: cancel", spin), HINT_FG, BLOCK_BG, hint_row, 0, w, font);
+                self.push_shaped_row(
+                    &format!("  {} streaming\u{2026}   Esc: cancel", spin),
+                    HINT_FG,
+                    BLOCK_BG,
+                    hint_row,
+                    0,
+                    w,
+                    font,
+                );
             }
             AiState::Done => {
                 if let Some(cmd) = block.command_to_run() {
                     let max_cmd = w.saturating_sub(5);
                     let display = if let Some((i, _)) = cmd.char_indices().nth(max_cmd) {
-                        let cut = cmd.char_indices().nth(max_cmd.saturating_sub(1)).map(|(j, _)| j).unwrap_or(i);
+                        let cut = cmd
+                            .char_indices()
+                            .nth(max_cmd.saturating_sub(1))
+                            .map(|(j, _)| j)
+                            .unwrap_or(i);
                         format!("{}…", &cmd[..cut])
-                    } else { cmd };
-                    self.push_shaped_row(&format!("  \u{2192} {}", display), RESP_FG, BLOCK_BG, resp_row, 0, w, font);
+                    } else {
+                        cmd
+                    };
+                    self.push_shaped_row(
+                        &format!("  \u{2192} {}", display),
+                        RESP_FG,
+                        BLOCK_BG,
+                        resp_row,
+                        0,
+                        w,
+                        font,
+                    );
                 } else {
                     let lines = word_wrap(&block.response, w.saturating_sub(4));
                     let line = format!("  {}", lines.first().cloned().unwrap_or_default());
                     self.push_shaped_row(&line, RESP_FG, BLOCK_BG, resp_row, 0, w, font);
                 }
-                self.push_shaped_row("  Enter: run \u{23ce}   Esc: dismiss", HINT_FG, BLOCK_BG, hint_row, 0, w, font);
+                self.push_shaped_row(
+                    "  Enter: run \u{23ce}   Esc: dismiss",
+                    HINT_FG,
+                    BLOCK_BG,
+                    hint_row,
+                    0,
+                    w,
+                    font,
+                );
             }
             AiState::Error(err) => {
                 let lines = word_wrap(err, w.saturating_sub(4));
@@ -1102,12 +1316,20 @@ impl RenderContext {
         let prompt_fg = [0.5, 0.8, 1.0, 1.0];
 
         let prompt = format!(" > {}▋", palette.query);
-        self.push_shaped_row(&prompt, prompt_fg, bg, start_row, start_col, palette_width, font);
+        self.push_shaped_row(
+            &prompt,
+            prompt_fg,
+            bg,
+            start_row,
+            start_col,
+            palette_width,
+            font,
+        );
 
         let keybind_fg = [0.5, 0.5, 0.7, 1.0];
 
         let max_visible = palette_height - 1; // rows available for results (below query row)
-        // Keep selected item in view: scroll down when it goes past the last visible row.
+                                              // Keep selected item in view: scroll down when it goes past the last visible row.
         let scroll_offset = if palette.selected >= max_visible {
             palette.selected - max_visible + 1
         } else {
@@ -1123,7 +1345,15 @@ impl RenderContext {
             if let Some(action) = palette.results.get(result_idx) {
                 // Name on the left, keybind right-aligned.
                 let name_text = format!("  {}", action.name);
-                self.push_shaped_row(&name_text, fg, current_bg, row, start_col, palette_width, font);
+                self.push_shaped_row(
+                    &name_text,
+                    fg,
+                    current_bg,
+                    row,
+                    start_col,
+                    palette_width,
+                    font,
+                );
 
                 if let Some(kb) = &action.keybind {
                     // Pad keybind to right edge with one space margin.
@@ -1132,7 +1362,15 @@ impl RenderContext {
                     if kb_len < palette_width {
                         let kb_col = start_col + palette_width - kb_len;
                         // Use transparent bg so name bg shows through.
-                        self.push_shaped_row(&kb_display, keybind_fg, current_bg, row, kb_col, kb_len, font);
+                        self.push_shaped_row(
+                            &kb_display,
+                            keybind_fg,
+                            current_bg,
+                            row,
+                            kb_col,
+                            kb_len,
+                            font,
+                        );
                     }
                 }
             } else {
@@ -1151,17 +1389,21 @@ impl RenderContext {
     ) {
         use crate::ui::context_menu::CONTEXT_MENU_WIDTH;
 
-        if !menu.visible || menu.items.is_empty() { return; }
+        if !menu.visible || menu.items.is_empty() {
+            return;
+        }
 
         let width = CONTEXT_MENU_WIDTH;
         let height = menu.items.len();
 
-        if menu.col + width > total_cols || menu.row + height > total_rows { return; }
+        if menu.col + width > total_cols || menu.row + height > total_rows {
+            return;
+        }
 
-        let bg          = [0.05, 0.05, 0.10, 0.97];
-        let fg          = [1.0,  1.0,  1.0,  1.0];
-        let hover_bg    = [0.2,  0.2,  0.4,  1.0];
-        let keybind_fg  = [0.5,  0.5,  0.7,  1.0];
+        let bg = [0.05, 0.05, 0.10, 0.97];
+        let fg = [1.0, 1.0, 1.0, 1.0];
+        let hover_bg = [0.2, 0.2, 0.4, 1.0];
+        let keybind_fg = [0.5, 0.5, 0.7, 1.0];
 
         let sep_fg = [0.3, 0.3, 0.5, 1.0];
 
@@ -1196,7 +1438,15 @@ impl RenderContext {
                 let kb_len = kb_display.chars().count();
                 if kb_len < width {
                     let kb_col = menu.col + width - kb_len;
-                    self.push_shaped_row(&kb_display, keybind_fg, current_bg, row, kb_col, kb_len, font);
+                    self.push_shaped_row(
+                        &kb_display,
+                        keybind_fg,
+                        current_bg,
+                        row,
+                        kb_col,
+                        kb_len,
+                        font,
+                    );
                 }
             }
         }
@@ -1225,20 +1475,21 @@ impl RenderContext {
 
         const SB_EXTRA_PX: f32 = 8.0;
 
-        let bar_bg  = StatusBar::bar_bg();
+        let bar_bg = StatusBar::bar_bg();
 
         // Full-width background rect: covers the cell row + SB_EXTRA_PX extension below.
         // Renders before cell backgrounds (rect pass is first), filling left/right padding
         // areas and the extension strip with the bar's background color.
         {
             let cell_h = self.shaper.cell_height;
-            let bar_y  = pad_y + row as f32 * cell_h;
-            self.rect_instances.push(crate::renderer::rounded_rect::RoundedRectInstance {
-                rect:   [0.0, bar_y, win_w, cell_h + SB_EXTRA_PX],
-                color:  bar_bg,
-                radius: 0.0,
-                _pad:   [0.0; 3],
-            });
+            let bar_y = pad_y + row as f32 * cell_h;
+            self.rect_instances
+                .push(crate::renderer::rounded_rect::RoundedRectInstance {
+                    rect: [0.0, bar_y, win_w, cell_h + SB_EXTRA_PX],
+                    color: bar_bg,
+                    radius: 0.0,
+                    _pad: [0.0; 3],
+                });
         }
         use crate::config::schema::StatusBarStyle;
         let powerline = bar.style == StatusBarStyle::Powerline;
@@ -1249,7 +1500,9 @@ impl RenderContext {
         for (i, seg) in bar.left.iter().enumerate() {
             let text = &seg.text;
             let len = text.chars().count();
-            if col + len > total_cols { break; }
+            if col + len > total_cols {
+                break;
+            }
             self.push_shaped_row(text, seg.fg, seg.bg, row, col, len, font);
             col += len;
 
@@ -1259,13 +1512,17 @@ impl RenderContext {
                 if powerline {
                     // Powerline: "" with fg = current segment bg, bg = next segment bg.
                     let arrow = StatusBar::pl_left_arrow();
-                    if col + 1 > total_cols { break; }
+                    if col + 1 > total_cols {
+                        break;
+                    }
                     self.push_shaped_row(arrow, seg.bg, next_bg, row, col, 1, font);
                     col += 1;
                 } else {
                     let sep = " › ";
                     let sep_len = sep.chars().count();
-                    if col + sep_len > total_cols { break; }
+                    if col + sep_len > total_cols {
+                        break;
+                    }
                     self.push_shaped_row(sep, plain_sep_fg, next_bg, row, col, sep_len, font);
                     col += sep_len;
                 }
@@ -1276,9 +1533,12 @@ impl RenderContext {
         let rsep_w = bar.right_sep_width();
         // In Powerline mode a leading "" transitions from bar_bg to the first right segment.
         let leading_arrow = powerline && !bar.right.is_empty();
-        let right_total: usize =
-            (if leading_arrow { 1 } else { 0 })
-            + bar.right.iter().map(|s| s.text.chars().count()).sum::<usize>()
+        let right_total: usize = (if leading_arrow { 1 } else { 0 })
+            + bar
+                .right
+                .iter()
+                .map(|s| s.text.chars().count())
+                .sum::<usize>()
             + bar.right.len().saturating_sub(1) * rsep_w;
 
         let right_start = total_cols.saturating_sub(right_total);
@@ -1294,14 +1554,24 @@ impl RenderContext {
         // Powerline leading arrow before first right segment.
         if leading_arrow {
             let first_bg = bar.right[0].bg;
-            self.push_shaped_row(StatusBar::pl_right_arrow(), first_bg, bar_bg, row, rcol, 1, font);
+            self.push_shaped_row(
+                StatusBar::pl_right_arrow(),
+                first_bg,
+                bar_bg,
+                row,
+                rcol,
+                1,
+                font,
+            );
             rcol += 1;
         }
 
         for (i, seg) in bar.right.iter().enumerate() {
             let text = &seg.text;
             let len = text.chars().count();
-            if rcol + len > total_cols { break; }
+            if rcol + len > total_cols {
+                break;
+            }
             self.push_shaped_row(text, seg.fg, seg.bg, row, rcol, len, font);
             rcol += len;
 
@@ -1309,11 +1579,23 @@ impl RenderContext {
                 if powerline {
                     // Powerline: "" with fg = next segment bg, bg = current segment bg.
                     let next_bg = bar.right[i + 1].bg;
-                    if rcol + 1 > total_cols { break; }
-                    self.push_shaped_row(StatusBar::pl_right_arrow(), next_bg, seg.bg, row, rcol, 1, font);
+                    if rcol + 1 > total_cols {
+                        break;
+                    }
+                    self.push_shaped_row(
+                        StatusBar::pl_right_arrow(),
+                        next_bg,
+                        seg.bg,
+                        row,
+                        rcol,
+                        1,
+                        font,
+                    );
                     rcol += 1;
                 } else {
-                    if rcol + rsep_w > total_cols { break; }
+                    if rcol + rsep_w > total_cols {
+                        break;
+                    }
                     self.push_shaped_row(" │ ", plain_sep_fg, bar_bg, row, rcol, rsep_w, font);
                     rcol += rsep_w;
                 }
@@ -1344,13 +1626,15 @@ impl RenderContext {
         // bar_bg is applied via the renderer clear color (TD-014); no fill needed here.
         let _ = bar_bg;
 
-        if tabs.is_empty() || total_cols == 0 { return; }
+        if tabs.is_empty() || total_cols == 0 {
+            return;
+        }
 
         // Dracula palette (pill colors)
-        const ACTIVE_PILL:   [f32; 4] = [0.74, 0.58, 0.98, 1.0]; // Dracula purple #bd93f9
-        const ACTIVE_FG:     [f32; 4] = [0.97, 0.97, 0.95, 1.0]; // near-white
+        const ACTIVE_PILL: [f32; 4] = [0.74, 0.58, 0.98, 1.0]; // Dracula purple #bd93f9
+        const ACTIVE_FG: [f32; 4] = [0.97, 0.97, 0.95, 1.0]; // near-white
         const INACTIVE_PILL: [f32; 4] = [0.27, 0.28, 0.35, 1.0]; // Dracula current-line
-        const INACTIVE_FG:   [f32; 4] = [0.61, 0.64, 0.75, 1.0]; // comment gray
+        const INACTIVE_FG: [f32; 4] = [0.61, 0.64, 0.75, 1.0]; // comment gray
         let transparent = [0.0f32; 4];
 
         let cell_w = self.shaper.cell_width;
@@ -1362,15 +1646,23 @@ impl RenderContext {
         let mut col = 0usize;
 
         for (i, tab) in tabs.iter().enumerate() {
-            if col >= total_cols { break; }
+            if col >= total_cols {
+                break;
+            }
 
             let is_active = i == active_idx;
-            let pill_color = if is_active { ACTIVE_PILL } else { INACTIVE_PILL };
+            let pill_color = if is_active {
+                ACTIVE_PILL
+            } else {
+                INACTIVE_PILL
+            };
             let fg = if is_active { ACTIVE_FG } else { INACTIVE_FG };
 
             // 1-cell gap — window bg (clear color) shows through
             col += 1;
-            if col >= total_cols { break; }
+            if col >= total_cols {
+                break;
+            }
 
             // Badge text " N "
             let badge = format!(" {} ", i + 1);
@@ -1387,7 +1679,10 @@ impl RenderContext {
                 format!(" {} ", tab.title)
             };
             let title: String = raw.chars().take(16).collect(); // +2 for rename cursor
-            let title_w = title.chars().count().min(total_cols.saturating_sub(col + badge_w));
+            let title_w = title
+                .chars()
+                .count()
+                .min(total_cols.saturating_sub(col + badge_w));
 
             let pill_w = (badge_w + title_w) as f32 * cell_w;
             let pill_x = pad_left + col as f32 * cell_w;
@@ -1395,10 +1690,10 @@ impl RenderContext {
             // Emit rounded rect for the pill background
             if pill_w > 0.0 {
                 self.rect_instances.push(RoundedRectInstance {
-                    rect:   [pill_x, pill_y, pill_w, pill_h],
-                    color:  pill_color,
+                    rect: [pill_x, pill_y, pill_w, pill_h],
+                    color: pill_color,
                     radius,
-                    _pad:   [0.0; 3],
+                    _pad: [0.0; 3],
                 });
             }
 
@@ -1407,17 +1702,23 @@ impl RenderContext {
             if badge_w_clamped > 0 {
                 let start = self.instances.len();
                 self.push_shaped_row(&badge, fg, transparent, 0, col, badge_w_clamped, font);
-                for inst in &mut self.instances[start..] { inst.grid_pos[1] = -1.0; }
+                for inst in &mut self.instances[start..] {
+                    inst.grid_pos[1] = -1.0;
+                }
             }
             col += badge_w_clamped;
-            if col >= total_cols { break; }
+            if col >= total_cols {
+                break;
+            }
 
             // Title text with transparent bg
             let title_w_clamped = title_w.min(total_cols - col);
             if title_w_clamped > 0 {
                 let start = self.instances.len();
                 self.push_shaped_row(&title, fg, transparent, 0, col, title_w_clamped, font);
-                for inst in &mut self.instances[start..] { inst.grid_pos[1] = -1.0; }
+                for inst in &mut self.instances[start..] {
+                    inst.grid_pos[1] = -1.0;
+                }
             }
             col += title_w_clamped;
         }
@@ -1433,7 +1734,9 @@ impl RenderContext {
         screen_rows: usize,
         term_cols: usize,
     ) {
-        if history_size == 0 || screen_rows == 0 || term_cols == 0 { return; }
+        if history_size == 0 || screen_rows == 0 || term_cols == 0 {
+            return;
+        }
 
         const SCROLLBAR_PX: f32 = 6.0;
         const TRACK_COLOR: [f32; 4] = [0.18, 0.17, 0.24, 1.0];
@@ -1457,19 +1760,23 @@ impl RenderContext {
 
         let col = (term_cols - 1) as f32;
         let glyph_offset = [cell_w - SCROLLBAR_PX, 0.0];
-        let glyph_size   = [SCROLLBAR_PX, cell_h];
+        let glyph_size = [SCROLLBAR_PX, cell_h];
 
         for row in 0..screen_rows {
-            let color = if row >= thumb_start && row < thumb_end { THUMB_COLOR } else { TRACK_COLOR };
+            let color = if row >= thumb_start && row < thumb_end {
+                THUMB_COLOR
+            } else {
+                TRACK_COLOR
+            };
             self.instances.push(CellVertex {
-                grid_pos:     [col, row as f32],
-                atlas_uv:     [0.0; 4],
-                fg:           [0.0; 4],
-                bg:           color,
+                grid_pos: [col, row as f32],
+                atlas_uv: [0.0; 4],
+                fg: [0.0; 4],
+                bg: color,
                 glyph_offset,
                 glyph_size,
-                flags:        FLAG_CURSOR,
-                _pad:         0,
+                flags: FLAG_CURSOR,
+                _pad: 0,
             });
         }
     }
@@ -1519,12 +1826,14 @@ impl RenderContext {
         total_cols: usize,
         total_rows: usize,
     ) {
-        if total_cols == 0 || total_rows == 0 { return; }
+        if total_cols == 0 || total_rows == 0 {
+            return;
+        }
 
-        const BAR_BG:    [f32; 4] = [0.22, 0.22, 0.30, 1.0]; // subdued dark
-        const QUERY_FG:  [f32; 4] = [0.97, 0.97, 0.95, 1.0]; // near-white
-        const COUNT_FG:  [f32; 4] = [0.95, 0.98, 0.55, 1.0]; // Dracula yellow
-        const HINT_FG:   [f32; 4] = [0.38, 0.44, 0.64, 1.0]; // comment gray
+        const BAR_BG: [f32; 4] = [0.22, 0.22, 0.30, 1.0]; // subdued dark
+        const QUERY_FG: [f32; 4] = [0.97, 0.97, 0.95, 1.0]; // near-white
+        const COUNT_FG: [f32; 4] = [0.95, 0.98, 0.55, 1.0]; // Dracula yellow
+        const HINT_FG: [f32; 4] = [0.38, 0.44, 0.64, 1.0]; // comment gray
         const CURSOR_FG: [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // Dracula purple
 
         let count_label = search.count_label();
@@ -1539,24 +1848,42 @@ impl RenderContext {
         };
         let hint = " ↑↓ esc ";
 
-        let bar_width = (query_display.chars().count()
-            + count_display.chars().count()
-            + hint.chars().count())
-            .max(24)
-            .min(total_cols);
+        let bar_width =
+            (query_display.chars().count() + count_display.chars().count() + hint.chars().count())
+                .max(24)
+                .min(total_cols);
 
         let col_offset = total_cols.saturating_sub(bar_width);
         let row = 0usize; // top row
 
         // Segment 1: query
         let q_width = query_display.chars().count().min(bar_width);
-        self.push_shaped_row(&query_display, QUERY_FG, BAR_BG, row, col_offset, q_width, font);
+        self.push_shaped_row(
+            &query_display,
+            QUERY_FG,
+            BAR_BG,
+            row,
+            col_offset,
+            q_width,
+            font,
+        );
 
         // Segment 2: match count
         let mut seg_offset = col_offset + q_width;
         if !count_display.is_empty() {
-            let c_width = count_display.chars().count().min(bar_width.saturating_sub(q_width));
-            self.push_shaped_row(&count_display, COUNT_FG, BAR_BG, row, seg_offset, c_width, font);
+            let c_width = count_display
+                .chars()
+                .count()
+                .min(bar_width.saturating_sub(q_width));
+            self.push_shaped_row(
+                &count_display,
+                COUNT_FG,
+                BAR_BG,
+                row,
+                seg_offset,
+                c_width,
+                font,
+            );
             seg_offset += c_width;
         }
 
@@ -1593,16 +1920,15 @@ impl RenderContext {
     /// Shows frame time statistics, shape cache hit/miss ratio, instance count,
     /// and atlas fill percentage. Uses `push_shaped_row` so it shares the same
     /// overlay render pass as the palette and search bar.
-    pub fn build_debug_hud_instances(
-        &mut self,
-        font: &crate::config::schema::FontConfig,
-    ) {
-        if !self.hud_visible { return; }
+    pub fn build_debug_hud_instances(&mut self, font: &crate::config::schema::FontConfig) {
+        if !self.hud_visible {
+            return;
+        }
 
-        const HUD_BG:   [f32; 4] = [0.08, 0.08, 0.14, 0.90]; // dark semi-transparent
-        const TITLE_FG: [f32; 4] = [0.58, 0.50, 1.00, 1.0];  // Dracula purple
-        const VALUE_FG: [f32; 4] = [0.95, 0.98, 0.55, 1.0];  // Dracula yellow
-        const WARN_FG:  [f32; 4] = [1.00, 0.47, 0.47, 1.0];  // red for high frame times
+        const HUD_BG: [f32; 4] = [0.08, 0.08, 0.14, 0.90]; // dark semi-transparent
+        const TITLE_FG: [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // Dracula purple
+        const VALUE_FG: [f32; 4] = [0.95, 0.98, 0.55, 1.0]; // Dracula yellow
+        const WARN_FG: [f32; 4] = [1.00, 0.47, 0.47, 1.0]; // red for high frame times
 
         let hud_width = 56usize;
 
@@ -1626,16 +1952,18 @@ impl RenderContext {
             let mut s: Vec<f32> = self.latency_samples.iter().copied().collect();
             let n = s.len();
             s.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-            (s[n / 2], s[(n * 95 / 100).min(n - 1)], s[(n * 99 / 100).min(n - 1)])
+            (
+                s[n / 2],
+                s[(n * 95 / 100).min(n - 1)],
+                s[(n * 99 / 100).min(n - 1)],
+            )
         };
 
         // ── Shape cache ──────────────────────────────────────────────────────
         let total_shapes = self.shape_cache_hits + self.shape_cache_misses;
-        let hit_pct = if total_shapes == 0 {
-            0u32
-        } else {
-            (self.shape_cache_hits * 100 / total_shapes) as u32
-        };
+        let hit_pct = (self.shape_cache_hits * 100)
+            .checked_div(total_shapes)
+            .unwrap_or(0) as u32;
 
         // ── Atlas fill ───────────────────────────────────────────────────────
         let atlas_pct = self.renderer.atlas.current_fill_percent();
@@ -1652,12 +1980,33 @@ impl RenderContext {
 
         let hud_lines: Vec<(String, [f32; 4])> = vec![
             (" F12 HUD".to_string(), TITLE_FG),
-            (format!(" {:10} {:.1}ms  p50:{:.1}ms  p95:{:.1}ms", "frame", avg_ms, p50_ms, p95_ms), frame_fg),
-            (format!(" {:10} p50:{:.1}ms  p95:{:.1}ms  p99:{:.1}ms  n={}", "latency", lat_p50, lat_p95, lat_p99, n_samples), lat_fg),
-            (format!(" {:10} hits={} miss={} ({}%)", "shape", shape_hits, shape_misses, hit_pct), VALUE_FG),
+            (
+                format!(
+                    " {:10} {:.1}ms  p50:{:.1}ms  p95:{:.1}ms",
+                    "frame", avg_ms, p50_ms, p95_ms
+                ),
+                frame_fg,
+            ),
+            (
+                format!(
+                    " {:10} p50:{:.1}ms  p95:{:.1}ms  p99:{:.1}ms  n={}",
+                    "latency", lat_p50, lat_p95, lat_p99, n_samples
+                ),
+                lat_fg,
+            ),
+            (
+                format!(
+                    " {:10} hits={} miss={} ({}%)",
+                    "shape", shape_hits, shape_misses, hit_pct
+                ),
+                VALUE_FG,
+            ),
             (format!(" {:10} {}", "instances", instance_count), VALUE_FG),
             (format!(" {:10} {:.1}%", "atlas", atlas_pct), VALUE_FG),
-            (format!(" {:10} {:.1} KB/frame", "upload", upload_kb), VALUE_FG),
+            (
+                format!(" {:10} {:.1} KB/frame", "upload", upload_kb),
+                VALUE_FG,
+            ),
         ];
 
         for (row, (text, fg)) in hud_lines.iter().enumerate() {
