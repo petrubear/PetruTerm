@@ -1300,3 +1300,143 @@ fn list_git_branches_sync(cwd: &std::path::Path) -> Vec<String> {
     branches.sort();
     branches
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_git_branch_in_flight_prevents_duplicate_spawn() {
+        let config = crate::config::Config::default();
+
+        // Create a minimal UiManager for testing.
+        let (git_tx, git_rx) = crossbeam_channel::bounded::<String>(1);
+        let (block_tx, block_rx) = crossbeam_channel::bounded::<AiEvent>(1);
+        let (ai_tx, ai_rx) = crossbeam_channel::bounded::<(usize, AiEvent)>(1);
+
+        let ui = UiManager {
+            palette: CommandPalette::new(&config),
+            context_menu: ContextMenu::new(),
+            chat_panels: HashMap::new(),
+            active_panel_id: 0,
+            panel_width_cols: 80,
+            panel_focused: false,
+            file_picker_focused: false,
+            ai_block: AiBlock::new(),
+            block_tx,
+            block_rx,
+            llm_provider: None,
+            llm_init_error: None,
+            tokio_rt: tokio::runtime::Runtime::new().unwrap(),
+            ai_tx,
+            ai_rx,
+            pending_confirm_tx: None,
+            undo_stack: VecDeque::new(),
+            pending_pty_run: None,
+            git_branch_cache: None,
+            git_branch_fetched_at: None,
+            git_branch_last_poll: std::time::Instant::now(),
+            git_branch_in_flight: false,
+            git_branch_spawn_time: None,
+            git_tx,
+            git_rx,
+            git_branch_cwd: None,
+            streaming_handle: None,
+            tab_rename_input: None,
+            search_bar: SearchBar::default(),
+            file_scan_rx: None,
+            pending_paste_rx: None,
+            branch_scan_rx: None,
+            branch_scan_cwd: None,
+        };
+
+        // Simulate an in-flight fetch by setting the flag and spawn time.
+        let mut ui = UiManager {
+            git_branch_in_flight: true,
+            git_branch_spawn_time: Some(std::time::Instant::now()),
+            ..ui
+        };
+        let test_cwd = std::path::PathBuf::from("/tmp/test");
+
+        // Call poll_git_branch — it should NOT spawn a new fetch because in_flight is true.
+        let updated = ui.poll_git_branch(Some(&test_cwd));
+
+        // We expect that in_flight remains true (no new spawn triggered).
+        assert!(
+            ui.git_branch_in_flight,
+            "Flag should remain true, preventing duplicate spawn"
+        );
+        assert!(!updated, "No message received, so updated should be false");
+    }
+
+    #[test]
+    fn test_git_branch_timeout_recovery() {
+        let config = crate::config::Config::default();
+
+        // Create a minimal UiManager for testing.
+        let (git_tx, git_rx) = crossbeam_channel::bounded::<String>(1);
+        let (block_tx, block_rx) = crossbeam_channel::bounded::<AiEvent>(1);
+        let (ai_tx, ai_rx) = crossbeam_channel::bounded::<(usize, AiEvent)>(1);
+
+        let mut ui = UiManager {
+            palette: CommandPalette::new(&config),
+            context_menu: ContextMenu::new(),
+            chat_panels: HashMap::new(),
+            active_panel_id: 0,
+            panel_width_cols: 80,
+            panel_focused: false,
+            file_picker_focused: false,
+            ai_block: AiBlock::new(),
+            block_tx,
+            block_rx,
+            llm_provider: None,
+            llm_init_error: None,
+            tokio_rt: tokio::runtime::Runtime::new().unwrap(),
+            ai_tx,
+            ai_rx,
+            pending_confirm_tx: None,
+            undo_stack: VecDeque::new(),
+            pending_pty_run: None,
+            git_branch_cache: Some("main".to_string()),
+            git_branch_fetched_at: Some(std::time::Instant::now()),
+            git_branch_last_poll: std::time::Instant::now(),
+            git_branch_in_flight: true,
+            // Simulate a fetch that was spawned >30s ago
+            git_branch_spawn_time: Some(
+                std::time::Instant::now() - std::time::Duration::from_secs(35),
+            ),
+            git_tx,
+            git_rx,
+            git_branch_cwd: Some(std::path::PathBuf::from("/tmp/test")),
+            streaming_handle: None,
+            tab_rename_input: None,
+            search_bar: SearchBar::default(),
+            file_scan_rx: None,
+            pending_paste_rx: None,
+            branch_scan_rx: None,
+            branch_scan_cwd: None,
+        };
+
+        // Cache should still be "main" before the call.
+        assert_eq!(ui.git_branch_cache, Some("main".to_string()));
+        assert!(ui.git_branch_in_flight);
+
+        // Call poll_git_branch — it should detect the timeout (>30s) and reset in_flight.
+        let updated = ui.poll_git_branch(Some(&std::path::PathBuf::from("/tmp/test")));
+
+        // After timeout recovery:
+        // - in_flight should be false (timeout recovered)
+        // - cache should still be "main" (not cleared)
+        // - updated should be false (no message received, just timeout recovery)
+        assert!(
+            !ui.git_branch_in_flight,
+            "in_flight should be reset after >30s timeout"
+        );
+        assert_eq!(
+            ui.git_branch_cache,
+            Some("main".to_string()),
+            "cache should remain unchanged (stale result preserved)"
+        );
+        assert!(!updated, "No message received, so updated should be false");
+    }
+}
