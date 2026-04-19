@@ -105,6 +105,9 @@ pub struct RenderContext {
     pub shape_cache_hits: u64,
     pub shape_cache_misses: u64,
     pub last_instance_count: usize,
+    /// overlay_start from the last full frame — used by the blink fast path so it
+    /// can keep overlay rendering correct without a full rebuild.
+    pub last_overlay_start: usize,
     /// Bytes written to GPU buffers in the current frame (instances + LCD + rects).
     pub last_gpu_upload_bytes: usize,
 
@@ -185,6 +188,7 @@ impl RenderContext {
             shape_cache_hits: 0,
             shape_cache_misses: 0,
             last_instance_count: 0,
+            last_overlay_start: 0,
             last_gpu_upload_bytes: 0,
             scroll_bar_state: None,
             scroll_bar_cache: Vec::new(),

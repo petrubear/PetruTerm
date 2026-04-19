@@ -576,19 +576,25 @@ impl ApplicationHandler<()> for App {
                     self.cursor_blink_dirty = false;
                     if let Some(rc) = &mut self.render_ctx {
                         let blink_on = self.input.cursor_blink_on;
-                        let cell_count = if blink_on {
-                            if let Some(v) = rc.cursor_vertex_template {
-                                rc.renderer
-                                    .upload_instances(std::slice::from_ref(&v), rc.content_end);
-                                rc.content_end + 1
+                        // Upload cursor (or a transparent placeholder) at content_end so the
+                        // status bar / tab bar / scroll bar at content_end+1.. remain in the
+                        // GPU buffer and are drawn. cell_count = last_instance_count draws
+                        // everything; last_overlay_start preserves correct overlay split.
+                        if let Some(v) = rc.cursor_vertex_template {
+                            let upload_v = if blink_on {
+                                v
                             } else {
-                                rc.content_end
-                            }
-                        } else {
-                            rc.content_end
-                        };
-                        rc.renderer.set_cell_count(cell_count);
-                        rc.renderer.set_overlay_start(cell_count);
+                                // Transparent cursor — shader discards when bg.a < 0.01.
+                                crate::renderer::cell::CellVertex {
+                                    bg: [0.0, 0.0, 0.0, 0.0],
+                                    ..v
+                                }
+                            };
+                            rc.renderer
+                                .upload_instances(std::slice::from_ref(&upload_v), rc.content_end);
+                        }
+                        rc.renderer.set_cell_count(rc.last_instance_count);
+                        rc.renderer.set_overlay_start(rc.last_overlay_start);
                         let _ = rc.renderer.render();
                     }
                     return;
@@ -1016,6 +1022,7 @@ impl ApplicationHandler<()> for App {
 
                     // ── GPU upload ──────────────────────────────────────────────────────
                     rc.last_instance_count = rc.instances.len();
+                    rc.last_overlay_start = overlay_start;
                     {
                         use crate::renderer::cell::CellVertex;
                         use crate::renderer::rounded_rect::RoundedRectInstance;
