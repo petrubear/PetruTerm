@@ -1,7 +1,7 @@
-use std::path::{Path, PathBuf};
-use fuzzy_matcher::skim::SkimMatcherV2;
+use crate::llm::diff::{compress_diff, diff_lines, DiffLine};
 use crate::llm::{ChatMessage, ChatRole};
-use crate::llm::diff::{DiffLine, diff_lines, compress_diff};
+use fuzzy_matcher::skim::SkimMatcherV2;
+use std::path::{Path, PathBuf};
 
 /// Default panel width in terminal cell columns.
 pub const PANEL_COLS: u16 = 55;
@@ -16,7 +16,11 @@ pub enum AiEvent {
     Done,
     Error(String),
     /// Agent called a tool. `done=false` = started, `done=true` = finished.
-    ToolStatus { tool: String, path: String, done: bool },
+    ToolStatus {
+        tool: String,
+        path: String,
+        done: bool,
+    },
     /// LLM wants to write a file — diff pre-computed in async task (TD-PERF-31).
     ConfirmWrite {
         display: ConfirmDisplay,
@@ -28,7 +32,10 @@ pub enum AiEvent {
         result_tx: tokio::sync::oneshot::Sender<bool>,
     },
     /// Original file content to store for single-step undo (sent before writing).
-    UndoState { path: PathBuf, content: String },
+    UndoState {
+        path: PathBuf,
+        content: String,
+    },
 }
 
 /// Data displayed during a confirmation prompt (sender lives in UiManager).
@@ -53,8 +60,14 @@ impl ConfirmDisplay {
     pub fn for_write(path: &Path, new_content: &str) -> Self {
         let old_content = std::fs::read_to_string(path).unwrap_or_default();
         let full_diff = diff_lines(&old_content, new_content);
-        let added   = full_diff.iter().filter(|l| l.kind == crate::llm::diff::DiffKind::Added).count();
-        let removed = full_diff.iter().filter(|l| l.kind == crate::llm::diff::DiffKind::Removed).count();
+        let added = full_diff
+            .iter()
+            .filter(|l| l.kind == crate::llm::diff::DiffKind::Added)
+            .count();
+        let removed = full_diff
+            .iter()
+            .filter(|l| l.kind == crate::llm::diff::DiffKind::Removed)
+            .count();
         let diff = compress_diff(&full_diff, 2);
         ConfirmDisplay::Write {
             path: path.display().to_string(),
@@ -174,14 +187,18 @@ impl ChatPanel {
         // Lazily wrap any messages added since the last call.
         while self.wrapped_cache.len() < self.messages.len() {
             let idx = self.wrapped_cache.len();
-            self.wrapped_cache.push(word_wrap(&self.messages[idx].content, width));
+            self.wrapped_cache
+                .push(word_wrap(&self.messages[idx].content, width));
         }
     }
 
     /// Return the pre-wrapped lines for message `idx`.
     /// Panics if `ensure_wrap_cache` was not called first for the current width.
     pub fn wrapped_message(&self, idx: usize) -> &[String] {
-        self.wrapped_cache.get(idx).map(|v| v.as_slice()).unwrap_or(&[])
+        self.wrapped_cache
+            .get(idx)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 
     pub fn is_visible(&self) -> bool {
@@ -341,11 +358,16 @@ impl ChatPanel {
     /// Returns the last assistant message stripped of markdown fences and
     /// tool-status lines (⟳/✓), suitable for writing directly to the PTY.
     pub fn last_assistant_command(&self) -> Option<String> {
-        let msg = self.messages.iter().rev()
+        let msg = self
+            .messages
+            .iter()
+            .rev()
             .find(|m| matches!(m.role, ChatRole::Assistant))?;
 
         // Strip tool-status lines injected by the agent loop (⟳ in-progress, ✓ done).
-        let filtered: String = msg.content.lines()
+        let filtered: String = msg
+            .content
+            .lines()
             .filter(|l| {
                 let t = l.trim();
                 !t.starts_with('⟳') && !t.starts_with('✓')
@@ -366,7 +388,11 @@ impl ChatPanel {
         } else {
             s
         };
-        if cmd.is_empty() { None } else { Some(cmd.to_string()) }
+        if cmd.is_empty() {
+            None
+        } else {
+            Some(cmd.to_string())
+        }
     }
 
     // ── File context ─────────────────────────────────────────────────────────
@@ -382,7 +408,9 @@ impl ChatPanel {
     /// Attach a file, reading its char count once for token estimation.
     /// No-op if already attached.
     pub fn attach_file(&mut self, path: PathBuf) {
-        if self.attached_files.contains(&path) { return; }
+        if self.attached_files.contains(&path) {
+            return;
+        }
         let chars = std::fs::read_to_string(&path).map(|s| s.len()).unwrap_or(0);
         self.attached_files.push(path);
         self.attached_file_chars.push(chars);
@@ -489,9 +517,13 @@ impl ChatPanel {
             return self.file_picker_items.iter().collect();
         }
         let query = &self.file_picker_query;
-        let mut scored: Vec<(i64, &PathBuf)> = self.file_picker_items.iter()
+        let mut scored: Vec<(i64, &PathBuf)> = self
+            .file_picker_items
+            .iter()
             .filter_map(|p| {
-                self.matcher.fuzzy_match(&p.to_string_lossy(), query).map(|s| (s, p))
+                self.matcher
+                    .fuzzy_match(&p.to_string_lossy(), query)
+                    .map(|s| (s, p))
             })
             .collect();
         scored.sort_by(|a, b| b.0.cmp(&a.0));
@@ -510,25 +542,51 @@ pub fn scan_files(dir: &Path, max_depth: usize) -> Vec<PathBuf> {
 }
 
 fn scan_dir(base: &Path, dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
-    if depth == 0 { return; }
-    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    if depth == 0 {
+        return;
+    }
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
     for entry in entries.flatten() {
         let path = entry.path();
         let name = entry.file_name();
         let name_str = name.to_string_lossy();
-        if name_str.starts_with('.') { continue; }
-        if matches!(name_str.as_ref(), "target" | "node_modules" | "dist" | "build" | ".git") {
+        if name_str.starts_with('.') {
+            continue;
+        }
+        if matches!(
+            name_str.as_ref(),
+            "target" | "node_modules" | "dist" | "build" | ".git"
+        ) {
             continue;
         }
         if path.is_dir() {
             scan_dir(base, &path, depth - 1, out);
         } else {
             let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-            if matches!(ext,
-                "rs" | "toml" | "lua" | "md" | "json" | "yaml" | "yml" |
-                "txt" | "sh" | "zsh" | "py" | "js" | "ts" | "go" |
-                "c" | "cpp" | "h" | "hpp" | "lock"
-            ) || ext.is_empty() {
+            if matches!(
+                ext,
+                "rs" | "toml"
+                    | "lua"
+                    | "md"
+                    | "json"
+                    | "yaml"
+                    | "yml"
+                    | "txt"
+                    | "sh"
+                    | "zsh"
+                    | "py"
+                    | "js"
+                    | "ts"
+                    | "go"
+                    | "c"
+                    | "cpp"
+                    | "h"
+                    | "hpp"
+                    | "lock"
+            ) || ext.is_empty()
+            {
                 if let Ok(rel) = path.strip_prefix(base) {
                     out.push(rel.to_path_buf());
                 }
@@ -649,7 +707,10 @@ mod tests {
     fn panel_with_assistant(content: &str) -> ChatPanel {
         let mut p = ChatPanel::new();
         p.state = PanelState::Idle;
-        p.messages.push(ChatMessage { role: ChatRole::Assistant, content: content.to_string() });
+        p.messages.push(ChatMessage {
+            role: ChatRole::Assistant,
+            content: content.to_string(),
+        });
         p
     }
 

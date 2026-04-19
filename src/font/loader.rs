@@ -12,7 +12,9 @@ use crate::font::locator::FontLocator;
 ///   - String      — actual internal family name (queried from fontdb, may differ from config)
 ///   - fontdb::ID  — fontdb face ID (needed to build CacheKeys for PUA glyph override)
 ///   - PathBuf     — resolved font file path (for FreeType cmap lookup)
-pub fn build_font_system(font_config: &FontConfig) -> Result<(FontSystem, String, fontdb::ID, PathBuf, u32)> {
+pub fn build_font_system(
+    font_config: &FontConfig,
+) -> Result<(FontSystem, String, fontdb::ID, PathBuf, u32)> {
     let locator = FontLocator::new();
     let font_location = match locator.locate_font(&font_config.family) {
         Some(fp) => fp,
@@ -56,7 +58,12 @@ pub fn build_font_system(font_config: &FontConfig) -> Result<(FontSystem, String
                 _ => false,
             })
         })
-        .ok_or_else(|| anyhow!("No faces found for selected font file {:?}", font_location.path))?;
+        .ok_or_else(|| {
+            anyhow!(
+                "No faces found for selected font file {:?}",
+                font_location.path
+            )
+        })?;
 
     // Prioritize the family name that matches the config exactly, or one that contains "Mono"
     let actual_family: String = face
@@ -81,7 +88,13 @@ pub fn build_font_system(font_config: &FontConfig) -> Result<(FontSystem, String
     );
 
     let font_system = FontSystem::new_with_locale_and_db("en-US".to_string(), db);
-    Ok((font_system, actual_family, face_id, font_location.path, face_index))
+    Ok((
+        font_system,
+        actual_family,
+        face_id,
+        font_location.path,
+        face_index,
+    ))
 }
 
 /// Locates the user-selected font for LCD AA and sets font_path in the config.

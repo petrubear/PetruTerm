@@ -17,18 +17,18 @@ const DEFAULT_SNIPPETS: &str = include_str!("../../config/default/snippets.lua")
 const SHELL_INTEGRATION_ZSH: &str = include_str!("../../scripts/shell-integration.zsh");
 
 // Bundled theme files — seeded into ~/.config/petruterm/themes/ on first launch.
-const THEME_DRACULA_PRO:      &str = include_str!("../../assets/themes/dracula-pro.lua");
-const THEME_TOKYO_NIGHT:      &str = include_str!("../../assets/themes/tokyo-night.lua");
+const THEME_DRACULA_PRO: &str = include_str!("../../assets/themes/dracula-pro.lua");
+const THEME_TOKYO_NIGHT: &str = include_str!("../../assets/themes/tokyo-night.lua");
 const THEME_CATPPUCCIN_MOCHA: &str = include_str!("../../assets/themes/catppuccin-mocha.lua");
-const THEME_ONE_DARK:         &str = include_str!("../../assets/themes/one-dark.lua");
-const THEME_GRUVBOX_DARK:     &str = include_str!("../../assets/themes/gruvbox-dark.lua");
+const THEME_ONE_DARK: &str = include_str!("../../assets/themes/one-dark.lua");
+const THEME_GRUVBOX_DARK: &str = include_str!("../../assets/themes/gruvbox-dark.lua");
 
 /// Modules preloaded for the embedded fallback config (no filesystem access).
 pub const EMBEDDED_MODULES: &[(&str, &str)] = &[
-    ("ui",       DEFAULT_UI),
-    ("perf",     DEFAULT_PERF),
+    ("ui", DEFAULT_UI),
+    ("perf", DEFAULT_PERF),
     ("keybinds", DEFAULT_KEYBINDS),
-    ("llm",      DEFAULT_LLM),
+    ("llm", DEFAULT_LLM),
     ("snippets", DEFAULT_SNIPPETS),
 ];
 
@@ -61,7 +61,9 @@ pub fn themes_dir() -> PathBuf {
 /// Scan the themes directory and return a sorted list of theme names (stem of each .lua file).
 pub fn list_themes() -> Vec<String> {
     let dir = themes_dir();
-    if !dir.exists() { return vec![]; }
+    if !dir.exists() {
+        return vec![];
+    }
     let mut names: Vec<String> = std::fs::read_dir(&dir)
         .into_iter()
         .flatten()
@@ -122,9 +124,7 @@ pub fn reload() -> Result<Config> {
 /// User-customizable files (ui.lua, perf.lua, llm.lua) are intentionally NOT versioned
 /// so this function never overwrites them.
 fn update_managed_configs(dir: &std::path::Path) {
-    let managed: &[(&str, &str)] = &[
-        ("keybinds.lua", DEFAULT_KEYBINDS),
-    ];
+    let managed: &[(&str, &str)] = &[("keybinds.lua", DEFAULT_KEYBINDS)];
     for (name, bundled) in managed {
         let dest = dir.join(name);
         let needs_update = if dest.exists() {
@@ -158,7 +158,8 @@ fn read_first_bytes(path: &std::path::Path, max_bytes: usize) -> Option<String> 
 
 /// Extract the `-- petruterm-config-version: N` tag from a Lua config file.
 fn extract_lua_version(content: &str) -> Option<&str> {
-    content.lines()
+    content
+        .lines()
         .find(|l| l.trim_start().starts_with("-- petruterm-config-version:"))
         .map(|l| l.trim())
 }
@@ -167,12 +168,18 @@ fn extract_lua_version(content: &str) -> Option<&str> {
 /// so user customisations are never overwritten. Safe to call on every launch.
 fn ensure_default_configs(dir: &std::path::Path) -> Result<()> {
     let files: &[(&str, &str)] = &[
-        ("config.lua",   include_str!("../../config/default/config.lua")),
-        ("ui.lua",       include_str!("../../config/default/ui.lua")),
-        ("perf.lua",     include_str!("../../config/default/perf.lua")),
-        ("keybinds.lua",  include_str!("../../config/default/keybinds.lua")),
-        ("llm.lua",       include_str!("../../config/default/llm.lua")),
-        ("snippets.lua",  DEFAULT_SNIPPETS),
+        (
+            "config.lua",
+            include_str!("../../config/default/config.lua"),
+        ),
+        ("ui.lua", include_str!("../../config/default/ui.lua")),
+        ("perf.lua", include_str!("../../config/default/perf.lua")),
+        (
+            "keybinds.lua",
+            include_str!("../../config/default/keybinds.lua"),
+        ),
+        ("llm.lua", include_str!("../../config/default/llm.lua")),
+        ("snippets.lua", DEFAULT_SNIPPETS),
     ];
 
     for (name, content) in files {
@@ -190,11 +197,11 @@ fn ensure_default_configs(dir: &std::path::Path) -> Result<()> {
         log::info!("Created themes dir: {}", themes_dir.display());
     }
     let bundled_themes: &[(&str, &str)] = &[
-        ("dracula-pro.lua",      THEME_DRACULA_PRO),
-        ("tokyo-night.lua",      THEME_TOKYO_NIGHT),
+        ("dracula-pro.lua", THEME_DRACULA_PRO),
+        ("tokyo-night.lua", THEME_TOKYO_NIGHT),
         ("catppuccin-mocha.lua", THEME_CATPPUCCIN_MOCHA),
-        ("one-dark.lua",         THEME_ONE_DARK),
-        ("gruvbox-dark.lua",     THEME_GRUVBOX_DARK),
+        ("one-dark.lua", THEME_ONE_DARK),
+        ("gruvbox-dark.lua", THEME_GRUVBOX_DARK),
     ];
     for (name, content) in bundled_themes {
         let dest = themes_dir.join(name);
@@ -230,7 +237,8 @@ fn install_shell_integration(dir: &std::path::Path) -> Result<()> {
 
 /// Extract the `# version: X` comment from a shell script, if present.
 fn extract_version(content: &str) -> Option<&str> {
-    content.lines()
+    content
+        .lines()
         .find(|l| l.trim_start().starts_with("# version:"))
         .map(|l| l.trim())
 }

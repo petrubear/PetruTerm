@@ -1,13 +1,14 @@
-use std::path::PathBuf;
-use std::sync::LazyLock;
 use regex::Regex;
 use serde::Deserialize;
+use std::path::PathBuf;
+use std::sync::LazyLock;
 
 static EXPORT_REGEX: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r##"(?i)(password|token|key|secret|auth|pass|pwd)=[^ \t\n\r|;&<>]+"##).unwrap()
 });
 static AUTH_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r##"(?i)(-H|--header)\s+['"]?(authorization|x-api-key):\s*[^ \t\n\r'"|;&<>]+['"]?"##).unwrap()
+    Regex::new(r##"(?i)(-H|--header)\s+['"]?(authorization|x-api-key):\s*[^ \t\n\r'"|;&<>]+['"]?"##)
+        .unwrap()
 });
 
 /// Shell state written by `scripts/shell-integration.zsh` after each command.

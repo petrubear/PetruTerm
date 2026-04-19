@@ -1672,7 +1672,8 @@ fn build_all_pane_instances(
         // clear the scratch buffer so collect_grid_cells_for treats all rows as damaged.
         // Without this, undamaged-row skipping retains stale data from the previous
         // terminal, causing TUI app content to bleed into unrelated tabs.
-        if last_scratch_tid != Some(info.terminal_id) {
+        let terminal_changed = last_scratch_tid != Some(info.terminal_id);
+        if terminal_changed {
             cell_data_scratch.clear();
         }
         // Pass search highlight info only for the active pane with a non-empty query.
@@ -1686,7 +1687,12 @@ fn build_all_pane_instances(
                 None
             }
         });
-        mux.collect_grid_cells_for(info.terminal_id, &mut cell_data_scratch, search_arg);
+        mux.collect_grid_cells_for(
+            info.terminal_id,
+            &mut cell_data_scratch,
+            search_arg,
+            terminal_changed,
+        );
         let cell_data = &cell_data_scratch[..];
         rc.build_instances(
             cell_data,

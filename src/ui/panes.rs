@@ -64,18 +64,45 @@ impl PaneNode {
     pub fn layout(&mut self, rect: Rect) {
         match self {
             PaneNode::Leaf { rect: r, .. } => *r = rect,
-            PaneNode::Split { dir, ratio, left, right, rect: r, .. } => {
+            PaneNode::Split {
+                dir,
+                ratio,
+                left,
+                right,
+                rect: r,
+                ..
+            } => {
                 *r = rect;
                 match dir {
                     SplitDir::Horizontal => {
                         let split_x = rect.x + rect.w * *ratio;
-                        left.layout(Rect { x: rect.x, y: rect.y, w: split_x - rect.x, h: rect.h });
-                        right.layout(Rect { x: split_x, y: rect.y, w: rect.x + rect.w - split_x, h: rect.h });
+                        left.layout(Rect {
+                            x: rect.x,
+                            y: rect.y,
+                            w: split_x - rect.x,
+                            h: rect.h,
+                        });
+                        right.layout(Rect {
+                            x: split_x,
+                            y: rect.y,
+                            w: rect.x + rect.w - split_x,
+                            h: rect.h,
+                        });
                     }
                     SplitDir::Vertical => {
                         let split_y = rect.y + rect.h * *ratio;
-                        left.layout(Rect { x: rect.x, y: rect.y, w: rect.w, h: split_y - rect.y });
-                        right.layout(Rect { x: rect.x, y: split_y, w: rect.w, h: rect.y + rect.h - split_y });
+                        left.layout(Rect {
+                            x: rect.x,
+                            y: rect.y,
+                            w: rect.w,
+                            h: split_y - rect.y,
+                        });
+                        right.layout(Rect {
+                            x: rect.x,
+                            y: split_y,
+                            w: rect.w,
+                            h: rect.y + rect.h - split_y,
+                        });
                     }
                 }
             }
@@ -126,7 +153,10 @@ pub struct PaneManager {
 impl PaneManager {
     pub fn new(viewport: Rect, terminal_id: usize) -> Self {
         let root = PaneNode::leaf(terminal_id, viewport);
-        Self { root, focused_terminal: terminal_id }
+        Self {
+            root,
+            focused_terminal: terminal_id,
+        }
     }
 
     /// Relayout the tree to fill the given viewport.
@@ -201,7 +231,9 @@ impl PaneManager {
         let mut best_dist = f32::MAX;
 
         for id in leaves {
-            if id == self.focused_terminal { continue; }
+            if id == self.focused_terminal {
+                continue;
+            }
             let rect = match find_rect(&self.root, id) {
                 Some(r) => r,
                 None => continue,
@@ -210,12 +242,14 @@ impl PaneManager {
             let cy = rect.y + rect.h * 0.5;
 
             let in_dir = match dir {
-                FocusDir::Left  => cx < fc_x,
+                FocusDir::Left => cx < fc_x,
                 FocusDir::Right => cx > fc_x,
-                FocusDir::Up    => cy < fc_y,
-                FocusDir::Down  => cy > fc_y,
+                FocusDir::Up => cy < fc_y,
+                FocusDir::Down => cy > fc_y,
             };
-            if !in_dir { continue; }
+            if !in_dir {
+                continue;
+            }
 
             let dist = (cx - fc_x).powi(2) + (cy - fc_y).powi(2);
             if dist < best_dist {
@@ -259,7 +293,9 @@ fn split_node(node: &mut PaneNode, target: usize, dir: SplitDir, new_id: usize) 
 fn remove_leaf(node: &mut PaneNode, target: usize) -> bool {
     match node {
         PaneNode::Leaf { .. } => false,
-        PaneNode::Split { left, right, rect, .. } => {
+        PaneNode::Split {
+            left, right, rect, ..
+        } => {
             let left_is_target = matches!(left.as_ref(), PaneNode::Leaf { terminal_id, .. } if *terminal_id == target);
             let right_is_target = matches!(right.as_ref(), PaneNode::Leaf { terminal_id, .. } if *terminal_id == target);
             let old_rect = *rect;
@@ -331,8 +367,15 @@ impl PaneManager {
     /// content never renders flush against the divider line.
     pub fn pane_infos(&self, viewport: Rect, cell_w: f32, cell_h: f32) -> Vec<PaneInfo> {
         let mut result = Vec::new();
-        collect_leaf_infos_impl(&self.root, viewport, cell_w, cell_h, self.focused_terminal,
-            PanePad::default(), &mut result);
+        collect_leaf_infos_impl(
+            &self.root,
+            viewport,
+            cell_w,
+            cell_h,
+            self.focused_terminal,
+            PanePad::default(),
+            &mut result,
+        );
         result
     }
 
@@ -346,7 +389,12 @@ impl PaneManager {
 
 /// 1-cell inset flags: which sides of a pane border an adjacent separator.
 #[derive(Clone, Copy, Default)]
-struct PanePad { left: bool, right: bool, top: bool, bottom: bool }
+struct PanePad {
+    left: bool,
+    right: bool,
+    top: bool,
+    bottom: bool,
+}
 
 fn collect_leaf_infos_impl(
     node: &PaneNode,
@@ -359,9 +407,9 @@ fn collect_leaf_infos_impl(
 ) {
     match node {
         PaneNode::Leaf { terminal_id, rect } => {
-            let pl = pad.left   as usize;
-            let pr = pad.right  as usize;
-            let pt = pad.top    as usize;
+            let pl = pad.left as usize;
+            let pr = pad.right as usize;
+            let pt = pad.top as usize;
             let pb = pad.bottom as usize;
             let col_offset = ((rect.x - viewport.x) / cell_w).round() as usize + pl;
             let row_offset = ((rect.y - viewport.y) / cell_h).round() as usize + pt;
@@ -369,28 +417,60 @@ fn collect_leaf_infos_impl(
             let rows = ((rect.h / cell_h).floor() as usize).saturating_sub(pt + pb);
             result.push(PaneInfo {
                 terminal_id: *terminal_id,
-                col_offset, row_offset,
+                col_offset,
+                row_offset,
                 cols: cols.max(1),
                 rows: rows.max(1),
                 focused: *terminal_id == focused,
             });
         }
-        PaneNode::Split { dir, left, right, .. } => {
-            match dir {
-                SplitDir::Horizontal => {
-                    collect_leaf_infos_impl(left,  viewport, cell_w, cell_h, focused,
-                        PanePad { right: true, ..pad }, result);
-                    collect_leaf_infos_impl(right, viewport, cell_w, cell_h, focused,
-                        PanePad { left: true,  ..pad }, result);
-                }
-                SplitDir::Vertical => {
-                    collect_leaf_infos_impl(left,  viewport, cell_w, cell_h, focused,
-                        PanePad { bottom: true, ..pad }, result);
-                    collect_leaf_infos_impl(right, viewport, cell_w, cell_h, focused,
-                        PanePad { top: true,    ..pad }, result);
-                }
+        PaneNode::Split {
+            dir, left, right, ..
+        } => match dir {
+            SplitDir::Horizontal => {
+                collect_leaf_infos_impl(
+                    left,
+                    viewport,
+                    cell_w,
+                    cell_h,
+                    focused,
+                    PanePad { right: true, ..pad },
+                    result,
+                );
+                collect_leaf_infos_impl(
+                    right,
+                    viewport,
+                    cell_w,
+                    cell_h,
+                    focused,
+                    PanePad { left: true, ..pad },
+                    result,
+                );
             }
-        }
+            SplitDir::Vertical => {
+                collect_leaf_infos_impl(
+                    left,
+                    viewport,
+                    cell_w,
+                    cell_h,
+                    focused,
+                    PanePad {
+                        bottom: true,
+                        ..pad
+                    },
+                    result,
+                );
+                collect_leaf_infos_impl(
+                    right,
+                    viewport,
+                    cell_w,
+                    cell_h,
+                    focused,
+                    PanePad { top: true, ..pad },
+                    result,
+                );
+            }
+        },
     }
 }
 
@@ -403,25 +483,46 @@ fn collect_separators_impl(
 ) {
     match node {
         PaneNode::Leaf { .. } => {}
-        PaneNode::Split { node_id, dir, left, right, rect, .. } => {
+        PaneNode::Split {
+            node_id,
+            dir,
+            left,
+            right,
+            rect,
+            ..
+        } => {
             let rect = *rect;
-            let nid  = *node_id;
+            let nid = *node_id;
             match dir {
                 SplitDir::Horizontal => {
                     // Vertical separator at the right edge of the left child.
                     let left_rect = left.rect();
-                    let sep_col = ((left_rect.x + left_rect.w - viewport.x) / cell_w).round() as usize;
+                    let sep_col =
+                        ((left_rect.x + left_rect.w - viewport.x) / cell_w).round() as usize;
                     let sep_row = ((rect.y - viewport.y) / cell_h).round() as usize;
                     let length = (rect.h / cell_h).floor() as usize;
-                    result.push(PaneSeparator { vertical: true, col: sep_col, row: sep_row, length, node_id: nid });
+                    result.push(PaneSeparator {
+                        vertical: true,
+                        col: sep_col,
+                        row: sep_row,
+                        length,
+                        node_id: nid,
+                    });
                 }
                 SplitDir::Vertical => {
                     // Horizontal separator at the bottom edge of the top child.
                     let left_rect = left.rect();
-                    let sep_row = ((left_rect.y + left_rect.h - viewport.y) / cell_h).round() as usize;
+                    let sep_row =
+                        ((left_rect.y + left_rect.h - viewport.y) / cell_h).round() as usize;
                     let sep_col = ((rect.x - viewport.x) / cell_w).round() as usize;
                     let length = (rect.w / cell_w).floor() as usize;
-                    result.push(PaneSeparator { vertical: false, col: sep_col, row: sep_row, length, node_id: nid });
+                    result.push(PaneSeparator {
+                        vertical: false,
+                        col: sep_col,
+                        row: sep_row,
+                        length,
+                        node_id: nid,
+                    });
                 }
             }
             collect_separators_impl(left, viewport, cell_w, cell_h, result);
@@ -440,11 +541,11 @@ impl PaneManager {
     pub fn adjust_ratio(&mut self, focused_id: usize, dir: FocusDir, delta: f32) {
         let target_dir = match dir {
             FocusDir::Left | FocusDir::Right => SplitDir::Horizontal,
-            FocusDir::Up   | FocusDir::Down  => SplitDir::Vertical,
+            FocusDir::Up | FocusDir::Down => SplitDir::Vertical,
         };
         let signed = match dir {
-            FocusDir::Right | FocusDir::Down =>  delta,
-            FocusDir::Left  | FocusDir::Up   => -delta,
+            FocusDir::Right | FocusDir::Down => delta,
+            FocusDir::Left | FocusDir::Up => -delta,
         };
         if adjust_parent_split(&mut self.root, focused_id, target_dir, signed) {
             let r = self.root.rect();
@@ -453,12 +554,7 @@ impl PaneManager {
     }
 
     /// Drag the separator owned by the Split with `node_id` to the current mouse position.
-    pub fn drag_separator(
-        &mut self,
-        node_id: u32,
-        mouse_x: f32,
-        mouse_y: f32,
-    ) {
+    pub fn drag_separator(&mut self, node_id: u32, mouse_x: f32, mouse_y: f32) {
         if drag_split_ratio(&mut self.root, node_id, mouse_x, mouse_y) {
             let r = self.root.rect();
             self.root.layout(r);
@@ -486,7 +582,13 @@ fn adjust_parent_split(
 ) -> bool {
     match node {
         PaneNode::Leaf { .. } => false,
-        PaneNode::Split { dir, ratio, left, right, .. } => {
+        PaneNode::Split {
+            dir,
+            ratio,
+            left,
+            right,
+            ..
+        } => {
             let in_left = contains_leaf(left, target);
             if !in_left && !contains_leaf(right, target) {
                 return false;
@@ -497,7 +599,9 @@ fn adjust_parent_split(
             } else {
                 adjust_parent_split(right, target, target_dir, delta)
             };
-            if child_found { return true; }
+            if child_found {
+                return true;
+            }
             // No closer match — try this node.
             if *dir == target_dir {
                 *ratio = (*ratio + delta).clamp(0.1, 0.9);
@@ -513,11 +617,18 @@ fn adjust_parent_split(
 fn drag_split_ratio(node: &mut PaneNode, target_id: u32, mouse_x: f32, mouse_y: f32) -> bool {
     match node {
         PaneNode::Leaf { .. } => false,
-        PaneNode::Split { node_id, dir, ratio, left, right, rect } => {
+        PaneNode::Split {
+            node_id,
+            dir,
+            ratio,
+            left,
+            right,
+            rect,
+        } => {
             if *node_id == target_id {
                 let new_ratio = match dir {
                     SplitDir::Horizontal => (mouse_x - rect.x) / rect.w,
-                    SplitDir::Vertical   => (mouse_y - rect.y) / rect.h,
+                    SplitDir::Vertical => (mouse_y - rect.y) / rect.h,
                 };
                 *ratio = new_ratio.clamp(0.1, 0.9);
                 return true;

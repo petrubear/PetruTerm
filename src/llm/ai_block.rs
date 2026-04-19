@@ -32,9 +32,15 @@ impl AiBlock {
         }
     }
 
-    pub fn is_visible(&self) -> bool { !matches!(self.state, AiState::Hidden) }
-    pub fn is_typing(&self)  -> bool { matches!(self.state, AiState::Typing) }
-    pub fn is_done(&self)    -> bool { matches!(self.state, AiState::Done) }
+    pub fn is_visible(&self) -> bool {
+        !matches!(self.state, AiState::Hidden)
+    }
+    pub fn is_typing(&self) -> bool {
+        matches!(self.state, AiState::Typing)
+    }
+    pub fn is_done(&self) -> bool {
+        matches!(self.state, AiState::Done)
+    }
 
     pub fn open(&mut self) {
         self.state = AiState::Typing;
@@ -49,11 +55,17 @@ impl AiBlock {
     }
 
     pub fn type_char(&mut self, c: char) {
-        if self.is_typing() { self.query.push(c); self.dirty = true; }
+        if self.is_typing() {
+            self.query.push(c);
+            self.dirty = true;
+        }
     }
 
     pub fn backspace(&mut self) {
-        if self.is_typing() { self.query.pop(); self.dirty = true; }
+        if self.is_typing() {
+            self.query.pop();
+            self.dirty = true;
+        }
     }
 
     pub fn set_loading(&mut self) {
@@ -81,9 +93,13 @@ impl AiBlock {
     /// Returns the shell command ready to write to the PTY.
     /// Strips markdown code fences the model may have emitted.
     pub fn command_to_run(&self) -> Option<String> {
-        if !matches!(self.state, AiState::Done | AiState::Streaming) { return None; }
+        if !matches!(self.state, AiState::Done | AiState::Streaming) {
+            return None;
+        }
         let s = self.response.trim();
-        if s.is_empty() { return None; }
+        if s.is_empty() {
+            return None;
+        }
         let cmd = if s.starts_with("```") {
             s.split('\n')
                 .nth(1)
@@ -93,6 +109,10 @@ impl AiBlock {
         } else {
             s
         };
-        if cmd.is_empty() { None } else { Some(cmd.to_string()) }
+        if cmd.is_empty() {
+            None
+        } else {
+            Some(cmd.to_string())
+        }
     }
 }

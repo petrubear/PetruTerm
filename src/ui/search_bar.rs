@@ -25,7 +25,6 @@ pub struct SearchBar {
     pub last_query: String,
 }
 
-
 impl SearchBar {
     pub fn open(&mut self) {
         self.visible = true;
@@ -69,7 +68,10 @@ impl SearchBar {
 
     pub fn prev_match(&mut self) {
         if !self.matches.is_empty() {
-            self.current = self.current.checked_sub(1).unwrap_or(self.matches.len() - 1);
+            self.current = self
+                .current
+                .checked_sub(1)
+                .unwrap_or(self.matches.len() - 1);
             self.scroll_needed = true;
         }
     }

@@ -1,8 +1,3 @@
-/// OpenAI-compatible provider — works with Ollama and LMStudio out of the box.
-///
-/// Both expose the same `/v1/chat/completions` endpoint with SSE streaming.
-/// No API key is required by default; `api_key` is forwarded if present.
-use std::time::Duration;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use futures_util::StreamExt;
@@ -10,10 +5,15 @@ use reqwest::Client;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+/// OpenAI-compatible provider — works with Ollama and LMStudio out of the box.
+///
+/// Both expose the same `/v1/chat/completions` endpoint with SSE streaming.
+/// No API key is required by default; `api_key` is forwarded if present.
+use std::time::Duration;
 
-use crate::config::schema::LlmConfig;
-use super::{ChatMessage, LlmProvider, TokenStream};
 use super::tools::{AgentStepResult, ToolCall};
+use super::{ChatMessage, LlmProvider, TokenStream};
+use crate::config::schema::LlmConfig;
 
 pub struct OpenAICompatProvider {
     client: Client,
@@ -103,16 +103,25 @@ struct Delta {
 fn build_api_messages<'a>(messages: &'a [ChatMessage]) -> Vec<ApiMessage<'a>> {
     messages
         .iter()
-        .map(|m| ApiMessage { role: m.role.as_str(), content: &m.content })
+        .map(|m| ApiMessage {
+            role: m.role.as_str(),
+            content: &m.content,
+        })
         .collect()
 }
 
 fn parse_sse_chunk(chunk: &str) -> Result<Option<String>> {
     let mut tokens = String::new();
     for line in chunk.lines() {
-        let Some(data) = line.strip_prefix("data: ") else { continue };
-        if data == "[DONE]" { break; }
-        let Ok(val) = serde_json::from_str::<serde_json::Value>(data) else { continue };
+        let Some(data) = line.strip_prefix("data: ") else {
+            continue;
+        };
+        if data == "[DONE]" {
+            break;
+        }
+        let Ok(val) = serde_json::from_str::<serde_json::Value>(data) else {
+            continue;
+        };
         if let Some(msg) = val.pointer("/error/message").and_then(|v| v.as_str()) {
             anyhow::bail!("{msg}");
         }
@@ -126,7 +135,11 @@ fn parse_sse_chunk(chunk: &str) -> Result<Option<String>> {
             }
         }
     }
-    Ok(if tokens.is_empty() { None } else { Some(tokens) })
+    Ok(if tokens.is_empty() {
+        None
+    } else {
+        Some(tokens)
+    })
 }
 
 // ── LlmProvider impl ─────────────────────────────────────────────────────────
@@ -161,8 +174,8 @@ impl LlmProvider for OpenAICompatProvider {
             .filter_map(|result| async move {
                 match result {
                     Ok(Some(tok)) => Some(Ok(tok)),
-                    Ok(None)      => None,
-                    Err(e)        => Some(Err(e)),
+                    Ok(None) => None,
+                    Err(e) => Some(Err(e)),
                 }
             });
 
@@ -207,7 +220,10 @@ fn parse_agent_response(resp: Value) -> Result<AgentStepResult> {
         .and_then(|a| a.first())
         .context("Agent response had no choices")?;
 
-    let finish_reason = choice.get("finish_reason").and_then(|v| v.as_str()).unwrap_or("");
+    let finish_reason = choice
+        .get("finish_reason")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     let msg = &choice["message"];
 
     if finish_reason == "tool_calls" || msg.get("tool_calls").is_some() {
@@ -222,7 +238,11 @@ fn parse_agent_response(resp: Value) -> Result<AgentStepResult> {
                 let func = c.get("function")?;
                 let name = func.get("name")?.as_str()?.to_string();
                 let arguments = func.get("arguments")?.as_str().unwrap_or("{}").to_string();
-                Some(ToolCall { id, name, arguments })
+                Some(ToolCall {
+                    id,
+                    name,
+                    arguments,
+                })
             })
             .collect();
 
@@ -230,9 +250,13 @@ fn parse_agent_response(resp: Value) -> Result<AgentStepResult> {
             anyhow::bail!("tool_calls finish_reason but no parseable tool calls");
         }
 
-        Ok(AgentStepResult::ToolCalls { assistant_msg: msg.clone(), calls })
+        Ok(AgentStepResult::ToolCalls {
+            assistant_msg: msg.clone(),
+            calls,
+        })
     } else {
-        let text = msg.get("content")
+        let text = msg
+            .get("content")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();

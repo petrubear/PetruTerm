@@ -1,16 +1,18 @@
 use anyhow::Result;
+use dirs;
 use mlua::prelude::*;
 use mlua::StdLib;
-use std::path::Path;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use dirs;
+use std::path::Path;
 
 use super::schema::{ColorScheme, Config, TitleBarStyle};
 
 fn parse_hex_linear(s: &str) -> [f32; 4] {
     let s = s.trim_start_matches('#');
-    if s.len() < 6 { return [0.0, 0.0, 0.0, 1.0]; }
+    if s.len() < 6 {
+        return [0.0, 0.0, 0.0, 1.0];
+    }
     let r = u8::from_str_radix(&s[0..2], 16).unwrap_or(0) as f32 / 255.0;
     let g = u8::from_str_radix(&s[2..4], 16).unwrap_or(0) as f32 / 255.0;
     let b = u8::from_str_radix(&s[4..6], 16).unwrap_or(0) as f32 / 255.0;
@@ -71,11 +73,7 @@ fn mtime(path: &Path) -> Option<std::time::SystemTime> {
 
 /// Try to load bytecode from cache; compile from source and cache on miss.
 /// On any cache I/O error, silently falls back to fresh compilation.
-fn load_or_compile_config(
-    lua: &Lua,
-    src_path: &Path,
-    src: &str,
-) -> LuaResult<LuaTable> {
+fn load_or_compile_config(lua: &Lua, src_path: &Path, src: &str) -> LuaResult<LuaTable> {
     // Attempt to use bytecode cache.
     if let Some(cache_path) = bytecode_cache_path(src_path) {
         let src_mtime = mtime(src_path);
@@ -89,9 +87,16 @@ fn load_or_compile_config(
 
         if use_cache {
             if let Ok(bytecode) = std::fs::read(&cache_path) {
-                match lua.load(&bytecode[..]).set_name("config.lua").eval::<LuaTable>() {
+                match lua
+                    .load(&bytecode[..])
+                    .set_name("config.lua")
+                    .eval::<LuaTable>()
+                {
                     Ok(t) => {
-                        log::debug!("Loaded Lua config from bytecode cache: {}", cache_path.display());
+                        log::debug!(
+                            "Loaded Lua config from bytecode cache: {}",
+                            cache_path.display()
+                        );
                         return Ok(t);
                     }
                     Err(e) => {
@@ -114,7 +119,10 @@ fn load_or_compile_config(
         if let Some(parent) = cache_path.parent() {
             if std::fs::create_dir_all(parent).is_ok() {
                 if let Err(e) = std::fs::write(&cache_path, &bytecode) {
-                    log::warn!("Failed to write Lua bytecode cache {}: {e}", cache_path.display());
+                    log::warn!(
+                        "Failed to write Lua bytecode cache {}: {e}",
+                        cache_path.display()
+                    );
                 } else {
                     log::debug!("Cached Lua bytecode: {}", cache_path.display());
                 }
@@ -172,7 +180,8 @@ pub fn load_theme(path: &Path) -> Result<ColorScheme> {
 /// Parse a Lua table (hex strings) into a `ColorScheme`.
 fn table_to_color_scheme(table: LuaTable) -> LuaResult<ColorScheme> {
     let get_color = |key: &str| -> [f32; 4] {
-        table.get::<String>(key)
+        table
+            .get::<String>(key)
             .map(|s| parse_hex_linear(&s))
             .unwrap_or([0.0, 0.0, 0.0, 1.0])
     };
@@ -188,15 +197,15 @@ fn table_to_color_scheme(table: LuaTable) -> LuaResult<ColorScheme> {
         arr
     };
     Ok(ColorScheme {
-        foreground:    get_color("foreground"),
-        background:    get_color("background"),
-        cursor_bg:     get_color("cursor_bg"),
-        cursor_fg:     get_color("cursor_fg"),
+        foreground: get_color("foreground"),
+        background: get_color("background"),
+        cursor_bg: get_color("cursor_bg"),
+        cursor_fg: get_color("cursor_fg"),
         cursor_border: get_color("cursor_border"),
-        selection_bg:  get_color("selection_bg"),
-        selection_fg:  get_color("selection_fg"),
-        ansi:          get_palette("ansi"),
-        brights:       get_palette("brights"),
+        selection_bg: get_color("selection_bg"),
+        selection_fg: get_color("selection_fg"),
+        ansi: get_palette("ansi"),
+        brights: get_palette("brights"),
     })
 }
 
@@ -220,12 +229,18 @@ fn inject_petruterm_global(lua: &Lua) -> LuaResult<()> {
         }
 
         // None found — try to pick the first monospace family from the system.
-        log::warn!("petruterm.font: none of [{}] found on system, scanning for monospace fallback", families_str);
+        log::warn!(
+            "petruterm.font: none of [{}] found on system, scanning for monospace fallback",
+            families_str
+        );
         let source = SystemSource::new();
         if let Ok(families) = source.all_families() {
             if let Some(fb) = families.into_iter().find(|name| {
                 let n = name.to_lowercase();
-                n.contains("mono") || n.contains("code") || n.contains("courier") || n.contains("consol")
+                n.contains("mono")
+                    || n.contains("code")
+                    || n.contains("courier")
+                    || n.contains("consol")
             }) {
                 log::warn!("petruterm.font: using system fallback '{fb}'");
                 return Ok(fb);
@@ -233,8 +248,14 @@ fn inject_petruterm_global(lua: &Lua) -> LuaResult<()> {
         }
 
         // Absolute last resort: return the first entry and let build_font_system error clearly.
-        let first = families_str.split(',').next().map(|s| s.trim().to_string()).unwrap_or_default();
-        log::warn!("petruterm.font: no monospace font found, using '{first}' (may fail at startup)");
+        let first = families_str
+            .split(',')
+            .next()
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        log::warn!(
+            "petruterm.font: no monospace font found, using '{first}' (may fail at startup)"
+        );
         Ok(first)
     })?;
     petruterm.set("font", font_fn)?;
@@ -246,7 +267,7 @@ fn inject_petruterm_global(lua: &Lua) -> LuaResult<()> {
     for name in &[
         "CommandPalette",
         "ToggleAiPanel",
-        "ToggleAiMode",   // legacy alias kept for compatibility
+        "ToggleAiMode", // legacy alias kept for compatibility
         "FocusAiPanel",
         "ExplainLastOutput",
         "ToggleStatusBar",
@@ -427,7 +448,9 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
             let key: String = entry.get("key").unwrap_or_default();
             let action: String = entry.get("action").unwrap_or_default();
             if !mods.is_empty() && !key.is_empty() && !action.is_empty() {
-                config.keys.push(super::schema::KeyBind { mods, key, action });
+                config
+                    .keys
+                    .push(super::schema::KeyBind { mods, key, action });
             }
         }
     }
@@ -477,7 +500,11 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
             let body: String = entry.get("body").unwrap_or_default();
             let trigger: Option<String> = entry.get("trigger").ok();
             if !name.is_empty() && !body.is_empty() {
-                config.snippets.push(super::schema::SnippetConfig { name, body, trigger });
+                config.snippets.push(super::schema::SnippetConfig {
+                    name,
+                    body,
+                    trigger,
+                });
             }
         }
     }

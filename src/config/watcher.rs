@@ -32,7 +32,10 @@ impl ConfigWatcher {
         watcher.watch(config_dir, RecursiveMode::Recursive)?;
         log::info!("Config watcher started on: {}", config_dir.display());
 
-        Ok(Self { _watcher: watcher, rx })
+        Ok(Self {
+            _watcher: watcher,
+            rx,
+        })
     }
 
     /// Non-blocking check for pending change events. Returns the first changed path if any.

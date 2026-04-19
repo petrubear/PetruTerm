@@ -1,5 +1,5 @@
-use std::path::Path;
 use serde_json::Value;
+use std::path::Path;
 
 /// Tool definitions available to the LLM agent.
 #[derive(Debug, Clone)]
@@ -14,8 +14,8 @@ impl AgentTool {
     #[allow(dead_code)]
     pub fn name(&self) -> &'static str {
         match self {
-            AgentTool::ReadFile  => "read_file",
-            AgentTool::ListDir   => "list_dir",
+            AgentTool::ReadFile => "read_file",
+            AgentTool::ListDir => "list_dir",
             AgentTool::WriteFile => "write_file",
             AgentTool::RunCommand => "run_command",
         }
@@ -101,7 +101,12 @@ impl AgentTool {
 
     /// All available tools.
     pub fn all() -> Vec<AgentTool> {
-        vec![AgentTool::ReadFile, AgentTool::ListDir, AgentTool::WriteFile, AgentTool::RunCommand]
+        vec![
+            AgentTool::ReadFile,
+            AgentTool::ListDir,
+            AgentTool::WriteFile,
+            AgentTool::RunCommand,
+        ]
     }
 
     /// Spec array ready to include in the API request.
@@ -126,17 +131,20 @@ impl ToolCall {
 
     /// Extract the `path` argument, if present.
     pub fn path_arg(&self) -> Option<String> {
-        self.args_json().and_then(|v| v.get("path").and_then(|p| p.as_str()).map(String::from))
+        self.args_json()
+            .and_then(|v| v.get("path").and_then(|p| p.as_str()).map(String::from))
     }
 
     /// Extract the `content` argument (for `write_file`), if present.
     pub fn content_arg(&self) -> Option<String> {
-        self.args_json().and_then(|v| v.get("content").and_then(|p| p.as_str()).map(String::from))
+        self.args_json()
+            .and_then(|v| v.get("content").and_then(|p| p.as_str()).map(String::from))
     }
 
     /// Extract the `cmd` argument (for `run_command`), if present.
     pub fn cmd_arg(&self) -> Option<String> {
-        self.args_json().and_then(|v| v.get("cmd").and_then(|p| p.as_str()).map(String::from))
+        self.args_json()
+            .and_then(|v| v.get("cmd").and_then(|p| p.as_str()).map(String::from))
     }
 
     /// Returns true if this tool call requires user confirmation before execution.
@@ -195,27 +203,29 @@ pub fn execute_tool(call: &ToolCall, cwd: &Path) -> String {
             let rel = call.path_arg().unwrap_or_else(|| ".".to_string());
             let abs = cwd.join(&rel);
             match abs.canonicalize() {
-                Ok(canon) if canon.starts_with(cwd) => {
-                    match std::fs::read_dir(&canon) {
-                        Ok(entries) => {
-                            let mut lines: Vec<String> = entries
-                                .flatten()
-                                .map(|e| {
-                                    let name = e.file_name().to_string_lossy().to_string();
-                                    let is_dir = e.file_type().map(|t| t.is_dir()).unwrap_or(false);
-                                    if is_dir { format!("{name}/") } else { name }
-                                })
-                                .collect();
-                            lines.sort();
-                            if lines.is_empty() {
-                                "(empty directory)".to_string()
-                            } else {
-                                lines.join("\n")
-                            }
+                Ok(canon) if canon.starts_with(cwd) => match std::fs::read_dir(&canon) {
+                    Ok(entries) => {
+                        let mut lines: Vec<String> = entries
+                            .flatten()
+                            .map(|e| {
+                                let name = e.file_name().to_string_lossy().to_string();
+                                let is_dir = e.file_type().map(|t| t.is_dir()).unwrap_or(false);
+                                if is_dir {
+                                    format!("{name}/")
+                                } else {
+                                    name
+                                }
+                            })
+                            .collect();
+                        lines.sort();
+                        if lines.is_empty() {
+                            "(empty directory)".to_string()
+                        } else {
+                            lines.join("\n")
                         }
-                        Err(e) => format!("Error listing directory: {e}"),
                     }
-                }
+                    Err(e) => format!("Error listing directory: {e}"),
+                },
                 _ => format!("Error: path '{rel}' is outside the working directory"),
             }
         }

@@ -27,8 +27,10 @@ function module.apply_to_config(config)
     { mods = "LEADER", key = "o",  action = petruterm.action.CommandPalette },
 
     -- ── AI panel ──────────────────────────────────────────────────────────
-    { mods = "LEADER", key = "a",  action = petruterm.action.ToggleAiPanel },  -- abrir / cerrar
-    { mods = "LEADER", key = "A",  action = petruterm.action.FocusAiPanel  },  -- mover focus terminal ↔ chat
+    -- leader+a: abre el panel (si cerrado) o alterna focus terminal↔chat (si abierto)
+    -- Escape en el panel: quita focus (vuelve a terminal) sin cerrar
+    -- /q en el input del panel: cierra el panel
+    { mods = "LEADER", key = "a",  action = petruterm.action.FocusAiPanel  },
 
     -- ── AI context actions ─────────────────────────────────────────────────
     { mods = "LEADER", key = "e",  action = petruterm.action.ExplainLastOutput },

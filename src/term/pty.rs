@@ -1,15 +1,15 @@
-use anyhow::{Context, Result};
+use alacritty_terminal::event::EventListener;
 use alacritty_terminal::event::WindowSize;
 use alacritty_terminal::event_loop::{EventLoop as PtyEventLoop, Msg, Notifier};
-use alacritty_terminal::event::EventListener;
+use alacritty_terminal::sync::FairMutex;
 use alacritty_terminal::tty::{self, Options as PtyOptions, Shell};
 use alacritty_terminal::Term;
-use alacritty_terminal::sync::FairMutex;
+use anyhow::{Context, Result};
 use crossbeam_channel::Sender;
-use std::sync::{Arc, OnceLock};
-use winit::event_loop::EventLoopProxy;
 #[cfg(target_os = "macos")]
 use libc::{self, qos_class_t::QOS_CLASS_UTILITY};
+use std::sync::{Arc, OnceLock};
+use winit::event_loop::EventLoopProxy;
 
 use crate::config::Config;
 use dirs;
@@ -25,7 +25,9 @@ impl EventListener for PtyEventProxy {
         self.qos_set.get_or_init(|| {
             // SAFETY: pthread_set_qos_class_self_np is safe to call from any thread.
             // QOS_CLASS_UTILITY steers the thread towards efficiency cores on Apple Silicon.
-            unsafe { libc::pthread_set_qos_class_self_np(QOS_CLASS_UTILITY, 0); }
+            unsafe {
+                libc::pthread_set_qos_class_self_np(QOS_CLASS_UTILITY, 0);
+            }
         });
 
         // PtyWrite responses (cursor position, DA, DECRQSS, etc.) must be forwarded
@@ -41,13 +43,13 @@ impl EventListener for PtyEventProxy {
         }
 
         let pty_event = match event {
-            Event::Wakeup               => PtyEvent::DataReady,
+            Event::Wakeup => PtyEvent::DataReady,
             Event::Exit | Event::ChildExit(_) => PtyEvent::Exit,
-            Event::Title(t)             => PtyEvent::TitleChanged(t),
-            Event::Bell                 => PtyEvent::Bell,
+            Event::Title(t) => PtyEvent::TitleChanged(t),
+            Event::Bell => PtyEvent::Bell,
             Event::ClipboardStore(_, text) => PtyEvent::ClipboardStore(text),
-            Event::ClipboardLoad(_, fmt)   => PtyEvent::ClipboardLoad(fmt),
-            _                           => return,
+            Event::ClipboardLoad(_, fmt) => PtyEvent::ClipboardLoad(fmt),
+            _ => return,
         };
         if self.tx.send(pty_event).is_ok() {
             let _ = self.wakeup.send_event(());
@@ -140,9 +142,9 @@ impl Pty {
         };
 
         let mut env = std::collections::HashMap::new();
-        env.insert("TERM".into(),          "xterm-256color".into());
-        env.insert("COLORTERM".into(),     "truecolor".into());
-        env.insert("TERM_PROGRAM".into(),  "PetruTerm".into());
+        env.insert("TERM".into(), "xterm-256color".into());
+        env.insert("COLORTERM".into(), "truecolor".into());
+        env.insert("TERM_PROGRAM".into(), "PetruTerm".into());
 
         let pty_options = PtyOptions {
             shell: Some(Shell::new(config.shell.clone(), vec!["-l".into()])),
@@ -152,14 +154,13 @@ impl Pty {
         };
 
         let window_size = WindowSize {
-            num_cols:    cols,
-            num_lines:   rows,
+            num_cols: cols,
+            num_lines: rows,
             cell_width,
             cell_height,
         };
 
-        let pty = tty::new(&pty_options, window_size, 0)
-            .context("Failed to spawn PTY")?;
+        let pty = tty::new(&pty_options, window_size, 0).context("Failed to spawn PTY")?;
 
         // Capture child PID before the pty is consumed by the EventLoop.
         let child_pid = pty.child().id();
@@ -170,7 +171,8 @@ impl Pty {
             pty,
             false, // drain_on_exit
             false, // ref_test
-        ).context("Failed to create PTY event loop")?;
+        )
+        .context("Failed to create PTY event loop")?;
 
         let notifier = Notifier(pty_event_loop.channel());
         // Give the proxy a direct path to write responses back to the PTY,
@@ -180,7 +182,12 @@ impl Pty {
         let thread_handle = pty_event_loop.spawn();
 
         log::info!("PTY spawned: shell={} pid={}", config.shell, child_pid);
-        Ok(Self { notifier, rx, thread_handle: Some(Box::new(thread_handle)), child_pid })
+        Ok(Self {
+            notifier,
+            rx,
+            thread_handle: Some(Box::new(thread_handle)),
+            child_pid,
+        })
     }
 
     /// Cleanly shut down the PTY thread.

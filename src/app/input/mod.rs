@@ -1,15 +1,15 @@
-use std::collections::HashMap;
-use std::time::Instant;
-use winit::event::{Modifiers, ElementState, KeyEvent};
-use winit::event_loop::ActiveEventLoop;
-use winit::keyboard::{Key, NamedKey, PhysicalKey, KeyCode};
-use crate::config::Config;
 use crate::app::mux::Mux;
-use crate::app::ui::UiManager;
-use crate::llm::chat_panel::PanelState;
 use crate::app::renderer::RenderContext;
+use crate::app::ui::UiManager;
+use crate::config::Config;
+use crate::llm::chat_panel::PanelState;
 use crate::ui::palette::Action;
 use alacritty_terminal::term::TermMode;
+use std::collections::HashMap;
+use std::time::Instant;
+use winit::event::{ElementState, KeyEvent, Modifiers};
+use winit::event_loop::ActiveEventLoop;
+use winit::keyboard::{Key, KeyCode, NamedKey, PhysicalKey};
 
 pub mod key_map;
 
@@ -63,7 +63,9 @@ pub struct InputHandler {
 
 impl InputHandler {
     pub fn new(config: &Config) -> Self {
-        let leader_map = config.keys.iter()
+        let leader_map = config
+            .keys
+            .iter()
             .filter(|kb| kb.mods.eq_ignore_ascii_case("LEADER"))
             .filter_map(|kb| {
                 let action = kb.action.parse::<Action>().ok()?;
@@ -99,7 +101,11 @@ impl InputHandler {
         const DOUBLE_CLICK_MS: u128 = 500;
         let same_cell = self.last_click_cell == cell;
         let within_time = self.last_click_time.elapsed().as_millis() < DOUBLE_CLICK_MS;
-        self.click_count = if same_cell && within_time { (self.click_count + 1).min(3) } else { 1 };
+        self.click_count = if same_cell && within_time {
+            (self.click_count + 1).min(3)
+        } else {
+            1
+        };
         self.last_click_time = Instant::now();
         self.last_click_cell = cell;
         self.click_count
@@ -115,9 +121,17 @@ impl InputHandler {
         false
     }
 
-    pub fn pixel_to_cell(&self, x: f64, y: f64, config: &Config, render_ctx: &Option<RenderContext>, mux: &Mux) -> (usize, usize) {
+    pub fn pixel_to_cell(
+        &self,
+        x: f64,
+        y: f64,
+        config: &Config,
+        render_ctx: &Option<RenderContext>,
+        mux: &Mux,
+    ) -> (usize, usize) {
         let pad = &config.window.padding;
-        let (cw, ch) = render_ctx.as_ref()
+        let (cw, ch) = render_ctx
+            .as_ref()
             .map(|rc| (rc.shaper.cell_width as f64, rc.shaper.cell_height as f64))
             .unwrap_or((8.0, 16.0));
         // Offset y origin past the tab bar row when it is visible (2+ tabs).
@@ -125,20 +139,27 @@ impl InputHandler {
         let col = ((x - pad.left as f64) / cw).floor().max(0.0) as usize;
         let row = ((y - (pad.top as f64 + tab_h)) / ch).floor().max(0.0) as usize;
         let (term_cols, term_rows) = mux.active_terminal_size();
-        (col.min(term_cols.saturating_sub(1)), row.min(term_rows.saturating_sub(1)))
+        (
+            col.min(term_cols.saturating_sub(1)),
+            row.min(term_rows.saturating_sub(1)),
+        )
     }
 
     pub fn send_mouse_report(&self, button: u8, col: usize, row: usize, pressed: bool, mux: &Mux) {
-        let Some(terminal) = mux.active_terminal() else { return };
+        let Some(terminal) = mux.active_terminal() else {
+            return;
+        };
         let (any_mouse, sgr, _) = terminal.mouse_mode_flags();
-        if !any_mouse { return; }
+        if !any_mouse {
+            return;
+        }
         if sgr {
             let c = if pressed { 'M' } else { 'm' };
-            terminal.write_input(format!("\x1b[<{button};{};{}{c}", col+1, row+1).as_bytes());
+            terminal.write_input(format!("\x1b[<{button};{};{}{c}", col + 1, row + 1).as_bytes());
         } else if pressed {
             let b = button.saturating_add(32);
-            let x = ((col+1) as u8).saturating_add(32);
-            let y = ((row+1) as u8).saturating_add(32);
+            let x = ((col + 1) as u8).saturating_add(32);
+            let y = ((row + 1) as u8).saturating_add(32);
             terminal.write_input(&[0x1b, b'[', b'M', b, x, y]);
         }
     }
@@ -155,7 +176,9 @@ impl InputHandler {
         window: Option<&winit::window::Window>,
         wakeup_proxy: winit::event_loop::EventLoopProxy<()>,
     ) {
-        if event.state != ElementState::Pressed { return; }
+        if event.state != ElementState::Pressed {
+            return;
+        }
         self.cursor_blink_on = true;
         self.cursor_last_blink = Instant::now();
 
@@ -183,15 +206,15 @@ impl InputHandler {
         if self.resize_mode && self.modifiers.state().alt_key() {
             use crate::ui::panes::FocusDir;
             let dir_opt = match &event.logical_key {
-                Key::Named(NamedKey::ArrowLeft)  => Some(FocusDir::Left),
+                Key::Named(NamedKey::ArrowLeft) => Some(FocusDir::Left),
                 Key::Named(NamedKey::ArrowRight) => Some(FocusDir::Right),
-                Key::Named(NamedKey::ArrowUp)    => Some(FocusDir::Up),
-                Key::Named(NamedKey::ArrowDown)  => Some(FocusDir::Down),
+                Key::Named(NamedKey::ArrowUp) => Some(FocusDir::Up),
+                Key::Named(NamedKey::ArrowDown) => Some(FocusDir::Down),
                 _ => match &event.physical_key {
-                    PhysicalKey::Code(KeyCode::ArrowLeft)  => Some(FocusDir::Left),
+                    PhysicalKey::Code(KeyCode::ArrowLeft) => Some(FocusDir::Left),
                     PhysicalKey::Code(KeyCode::ArrowRight) => Some(FocusDir::Right),
-                    PhysicalKey::Code(KeyCode::ArrowUp)    => Some(FocusDir::Up),
-                    PhysicalKey::Code(KeyCode::ArrowDown)  => Some(FocusDir::Down),
+                    PhysicalKey::Code(KeyCode::ArrowUp) => Some(FocusDir::Up),
+                    PhysicalKey::Code(KeyCode::ArrowDown) => Some(FocusDir::Down),
                     _ => None,
                 },
             };
@@ -205,12 +228,22 @@ impl InputHandler {
         // ── Tab rename prompt ────────────────────────────────────────────────
         if ui.is_renaming_tab() {
             match &event.logical_key {
-                Key::Named(NamedKey::Escape)    => { ui.tab_rename_cancel(); }
-                Key::Named(NamedKey::Enter)     => { ui.tab_rename_confirm(mux); }
-                Key::Named(NamedKey::Backspace) => { ui.tab_rename_backspace(); }
-                Key::Named(NamedKey::Space)     => { ui.tab_rename_type(' '); }
+                Key::Named(NamedKey::Escape) => {
+                    ui.tab_rename_cancel();
+                }
+                Key::Named(NamedKey::Enter) => {
+                    ui.tab_rename_confirm(mux);
+                }
+                Key::Named(NamedKey::Backspace) => {
+                    ui.tab_rename_backspace();
+                }
+                Key::Named(NamedKey::Space) => {
+                    ui.tab_rename_type(' ');
+                }
                 Key::Character(s) if !cmd && !ctrl => {
-                    for ch in s.chars() { ui.tab_rename_type(ch); }
+                    for ch in s.chars() {
+                        ui.tab_rename_type(ch);
+                    }
                 }
                 _ => {}
             }
@@ -237,8 +270,12 @@ impl InputHandler {
             if matches!(
                 &event.logical_key,
                 Key::Named(
-                    NamedKey::Shift | NamedKey::Alt | NamedKey::Control
-                    | NamedKey::Super | NamedKey::Meta | NamedKey::Hyper
+                    NamedKey::Shift
+                        | NamedKey::Alt
+                        | NamedKey::Control
+                        | NamedKey::Super
+                        | NamedKey::Meta
+                        | NamedKey::Hyper
                 )
             ) {
                 return;
@@ -254,17 +291,17 @@ impl InputHandler {
                 use crate::ui::panes::FocusDir;
                 let dir_opt = match &event.logical_key {
                     Key::Named(named) => match named {
-                        NamedKey::ArrowLeft  => Some(FocusDir::Left),
+                        NamedKey::ArrowLeft => Some(FocusDir::Left),
                         NamedKey::ArrowRight => Some(FocusDir::Right),
-                        NamedKey::ArrowUp    => Some(FocusDir::Up),
-                        NamedKey::ArrowDown  => Some(FocusDir::Down),
+                        NamedKey::ArrowUp => Some(FocusDir::Up),
+                        NamedKey::ArrowDown => Some(FocusDir::Down),
                         _ => None,
                     },
                     _ => match &event.physical_key {
-                        PhysicalKey::Code(KeyCode::ArrowLeft)  => Some(FocusDir::Left),
+                        PhysicalKey::Code(KeyCode::ArrowLeft) => Some(FocusDir::Left),
                         PhysicalKey::Code(KeyCode::ArrowRight) => Some(FocusDir::Right),
-                        PhysicalKey::Code(KeyCode::ArrowUp)    => Some(FocusDir::Up),
-                        PhysicalKey::Code(KeyCode::ArrowDown)  => Some(FocusDir::Down),
+                        PhysicalKey::Code(KeyCode::ArrowUp) => Some(FocusDir::Up),
+                        PhysicalKey::Code(KeyCode::ArrowDown) => Some(FocusDir::Down),
                         _ => None,
                     },
                 };
@@ -285,7 +322,9 @@ impl InputHandler {
                     }
                 }
                 let key = s.to_ascii_lowercase();
-                let action = self.leader_map.get(s.as_str())
+                let action = self
+                    .leader_map
+                    .get(s.as_str())
                     .or_else(|| self.leader_map.get(key.as_str()))
                     .cloned();
                 if let Some(action) = action {
@@ -316,7 +355,9 @@ impl InputHandler {
         // ── Inline AI block input ────────────────────────────────────────────
         if ui.ai_block.is_visible() && !cmd {
             match &event.logical_key {
-                Key::Named(NamedKey::Escape) => { ui.ai_block.close(); }
+                Key::Named(NamedKey::Escape) => {
+                    ui.ai_block.close();
+                }
                 Key::Named(NamedKey::Enter) => {
                     if ui.ai_block.is_typing() {
                         ui.submit_ai_block_query(wakeup_proxy);
@@ -325,8 +366,12 @@ impl InputHandler {
                     }
                 }
                 Key::Named(NamedKey::Backspace) => ui.ai_block.backspace(),
-                Key::Named(NamedKey::Space)     => ui.ai_block.type_char(' '),
-                Key::Character(s) => { for ch in s.chars() { ui.ai_block.type_char(ch); } }
+                Key::Named(NamedKey::Space) => ui.ai_block.type_char(' '),
+                Key::Character(s) => {
+                    for ch in s.chars() {
+                        ui.ai_block.type_char(ch);
+                    }
+                }
                 _ => {}
             }
             return;
@@ -335,7 +380,10 @@ impl InputHandler {
         // ── Chat panel input ─────────────────────────────────────────────────
         if ui.is_panel_visible() && ui.panel_focused && !cmd {
             // ── Confirmation prompt mode ──────────────────────────────────────
-            if matches!(ui.panel().state, crate::llm::chat_panel::PanelState::AwaitingConfirm) {
+            if matches!(
+                ui.panel().state,
+                crate::llm::chat_panel::PanelState::AwaitingConfirm
+            ) {
                 match &event.logical_key {
                     Key::Character(s) if s.as_str() == "y" => ui.confirm_yes(),
                     Key::Named(NamedKey::Enter) => ui.confirm_yes(),
@@ -354,11 +402,16 @@ impl InputHandler {
                         ui.file_picker_focused = false;
                     }
                     Key::Named(NamedKey::Enter) => {
-                        let cwd = mux.active_cwd()
+                        let cwd = mux
+                            .active_cwd()
                             .or_else(|| std::env::current_dir().ok())
                             .unwrap_or_default();
-                        let filtered: Vec<std::path::PathBuf> =
-                            ui.panel().filtered_picker_items().into_iter().cloned().collect();
+                        let filtered: Vec<std::path::PathBuf> = ui
+                            .panel()
+                            .filtered_picker_items()
+                            .into_iter()
+                            .cloned()
+                            .collect();
                         ui.panel_mut().picker_confirm(&cwd, &filtered);
                     }
                     Key::Named(NamedKey::ArrowUp) => ui.panel_mut().picker_move_up(),
@@ -367,8 +420,12 @@ impl InputHandler {
                         ui.panel_mut().picker_move_down(len);
                     }
                     Key::Named(NamedKey::Backspace) => ui.panel_mut().picker_backspace(),
-                    Key::Named(NamedKey::Space)     => ui.panel_mut().picker_type_char(' '),
-                    Key::Character(s) => { for ch in s.chars() { ui.panel_mut().picker_type_char(ch); } }
+                    Key::Named(NamedKey::Space) => ui.panel_mut().picker_type_char(' '),
+                    Key::Character(s) => {
+                        for ch in s.chars() {
+                            ui.panel_mut().picker_type_char(ch);
+                        }
+                    }
                     _ => {}
                 }
                 return;
@@ -377,8 +434,14 @@ impl InputHandler {
             // ── Chat input mode ───────────────────────────────────────────────
             match &event.logical_key {
                 Key::Named(NamedKey::Escape) => {
-                    if matches!(ui.panel().state, PanelState::Error(_)) { ui.panel_mut().dismiss_error(); }
-                    else if !ui.panel().is_streaming() { ui.panel_mut().close(); ui.panel_focused = false; ui.file_picker_focused = false; }
+                    if matches!(ui.panel().state, PanelState::Error(_)) {
+                        ui.panel_mut().dismiss_error();
+                    } else {
+                        // Escape unfocuses the panel (returns to terminal) without closing it.
+                        // Use leader+a or /q to close.
+                        ui.panel_focused = false;
+                        ui.file_picker_focused = false;
+                    }
                 }
                 Key::Named(NamedKey::Enter) => {
                     if shift {
@@ -391,9 +454,12 @@ impl InputHandler {
                                 ui.panel_focused = false;
                                 ui.file_picker_focused = false;
                             }
-                            "" => { ui.chat_panel_run_command(mux); }
+                            "" => {
+                                ui.chat_panel_run_command(mux);
+                            }
                             _ => {
-                                let cwd = mux.active_cwd()
+                                let cwd = mux
+                                    .active_cwd()
                                     .or_else(|| std::env::current_dir().ok())
                                     .unwrap_or_default();
                                 ui.submit_ai_query(wakeup_proxy, cwd);
@@ -403,24 +469,30 @@ impl InputHandler {
                 }
                 Key::Named(NamedKey::Tab) => {
                     // Open file picker — CWD from the active terminal's shell process.
-                    let cwd = mux.active_cwd()
+                    let cwd = mux
+                        .active_cwd()
                         .or_else(|| std::env::current_dir().ok())
                         .unwrap_or_default();
                     ui.panel_mut().open_file_picker(&cwd);
                     ui.file_picker_focused = true;
                 }
                 Key::Named(NamedKey::Backspace) => ui.panel_mut().backspace(),
-                Key::Named(NamedKey::Space)     => ui.panel_mut().type_char(' '),
+                Key::Named(NamedKey::Space) => ui.panel_mut().type_char(' '),
                 Key::Character(s) if ctrl && s.as_str() == "s" => {
                     // Ctrl+S: submit query (alternative to Enter).
                     if ui.panel().is_idle() && !ui.panel().input.trim().is_empty() {
-                        let cwd = mux.active_cwd()
+                        let cwd = mux
+                            .active_cwd()
                             .or_else(|| std::env::current_dir().ok())
                             .unwrap_or_default();
                         ui.submit_ai_query(wakeup_proxy, cwd);
                     }
                 }
-                Key::Character(s) => { for ch in s.chars() { ui.panel_mut().type_char(ch); } }
+                Key::Character(s) => {
+                    for ch in s.chars() {
+                        ui.panel_mut().type_char(ch);
+                    }
+                }
                 _ => {}
             }
             return;
@@ -429,8 +501,8 @@ impl InputHandler {
         if ui.palette.visible {
             match &event.logical_key {
                 Key::Named(NamedKey::Escape) => ui.palette.close(),
-                Key::Named(NamedKey::Enter) => { 
-                    if let Some(action) = ui.palette.confirm() { 
+                Key::Named(NamedKey::Enter) => {
+                    if let Some(action) = ui.palette.confirm() {
                         let rc = render_ctx.as_mut().expect("RenderContext");
                         ui.handle_palette_action(action, mux, rc, config, window, wakeup_proxy);
                     }
@@ -438,7 +510,11 @@ impl InputHandler {
                 Key::Named(NamedKey::ArrowUp) => ui.palette.select_up(),
                 Key::Named(NamedKey::ArrowDown) => ui.palette.select_down(),
                 Key::Named(NamedKey::Backspace) => ui.palette.backspace(),
-                Key::Character(s) => { for ch in s.chars() { ui.palette.type_char(ch); } }
+                Key::Character(s) => {
+                    for ch in s.chars() {
+                        ui.palette.type_char(ch);
+                    }
+                }
                 _ => {}
             }
             return;
@@ -461,13 +537,23 @@ impl InputHandler {
         // ── Search bar input ─────────────────────────────────────────────────
         if ui.search_bar.visible && !cmd {
             match &event.logical_key {
-                Key::Named(NamedKey::Escape) => { ui.search_bar.close(); }
+                Key::Named(NamedKey::Escape) => {
+                    ui.search_bar.close();
+                }
                 Key::Named(NamedKey::Enter) => {
-                    if shift { ui.search_bar.prev_match(); } else { ui.search_bar.next_match(); }
+                    if shift {
+                        ui.search_bar.prev_match();
+                    } else {
+                        ui.search_bar.next_match();
+                    }
                 }
                 Key::Named(NamedKey::Backspace) => ui.search_bar.backspace(),
                 Key::Named(NamedKey::Space) => ui.search_bar.type_char(' '),
-                Key::Character(s) => { for ch in s.chars() { ui.search_bar.type_char(ch); } }
+                Key::Character(s) => {
+                    for ch in s.chars() {
+                        ui.search_bar.type_char(ch);
+                    }
+                }
                 _ => {}
             }
             return;
@@ -485,7 +571,10 @@ impl InputHandler {
             if let Key::Character(s) = &event.logical_key {
                 match s.as_str() {
                     // System clipboard — always Cmd+C / Cmd+V, not configurable via leader.
-                    "q" => { event_loop.exit(); return; }
+                    "q" => {
+                        event_loop.exit();
+                        return;
+                    }
                     "k" => {
                         if let Some(terminal) = mux.active_terminal() {
                             // Clear screen and scrollback, move cursor home.
@@ -496,26 +585,39 @@ impl InputHandler {
                     "c" => {
                         if let Some(terminal) = mux.active_terminal() {
                             if let Some(text) = terminal.selection_text() {
-                                if let Ok(mut cb) = arboard::Clipboard::new() { let _ = cb.set_text(text); }
+                                if let Ok(mut cb) = arboard::Clipboard::new() {
+                                    let _ = cb.set_text(text);
+                                }
                             }
                         }
                         return;
                     }
                     "v" => {
                         if let Some(terminal) = mux.active_terminal() {
-                            if let Ok(text) = arboard::Clipboard::new().and_then(|mut cb| cb.get_text()) {
+                            if let Ok(text) =
+                                arboard::Clipboard::new().and_then(|mut cb| cb.get_text())
+                            {
                                 if terminal.bracketed_paste_mode() {
                                     let mut data = b"\x1b[200~".to_vec();
                                     data.extend_from_slice(text.as_bytes());
                                     data.extend_from_slice(b"\x1b[201~");
                                     terminal.write_input(&data);
-                                } else { terminal.write_input(text.as_bytes()); }
+                                } else {
+                                    terminal.write_input(text.as_bytes());
+                                }
                             }
                         }
                         return;
                     }
                     // Cmd+1-9: switch tab by index (standard macOS pattern).
-                    _ => { if let Ok(n) = s.parse::<usize>() { if (1..=9).contains(&n) { mux.tabs.switch_to_index(n-1); return; } } }
+                    _ => {
+                        if let Ok(n) = s.parse::<usize>() {
+                            if (1..=9).contains(&n) {
+                                mux.tabs.switch_to_index(n - 1);
+                                return;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -540,16 +642,21 @@ impl InputHandler {
             return false;
         }
         // Extract the last word (non-space sequence) from the echo buffer.
-        let word: &str = self.input_echo
+        let word: &str = self
+            .input_echo
             .trim_end()
             .rsplit(|c: char| c.is_whitespace())
             .next()
             .unwrap_or("");
-        if word.is_empty() { return false; }
+        if word.is_empty() {
+            return false;
+        }
 
-        if let Some(snippet) = config.snippets.iter().find(|s| {
-            s.trigger.as_deref() == Some(word)
-        }) {
+        if let Some(snippet) = config
+            .snippets
+            .iter()
+            .find(|s| s.trigger.as_deref() == Some(word))
+        {
             if let Some(terminal) = mux.active_terminal() {
                 // Erase the trigger word with backspaces.
                 let backspaces = vec![0x7fu8; word.len()];
@@ -566,10 +673,20 @@ impl InputHandler {
         false
     }
 
-    pub fn send_key_to_active_terminal(&mut self, event: &KeyEvent, mux: &Mux, option_as_meta: bool) {
-        let mode = mux.active_terminal().map(|t| *t.term.lock().mode()).unwrap_or(TermMode::empty());
+    pub fn send_key_to_active_terminal(
+        &mut self,
+        event: &KeyEvent,
+        mux: &Mux,
+        option_as_meta: bool,
+    ) {
+        let mode = mux
+            .active_terminal()
+            .map(|t| *t.term.lock().mode())
+            .unwrap_or(TermMode::empty());
 
-        if let Some(data) = key_map::translate_key(&event.logical_key, self.modifiers, mode, option_as_meta) {
+        if let Some(data) =
+            key_map::translate_key(&event.logical_key, self.modifiers, mode, option_as_meta)
+        {
             // Update the echo buffer for snippet trigger detection.
             match &event.logical_key {
                 Key::Named(NamedKey::Enter) | Key::Named(NamedKey::Escape) => {

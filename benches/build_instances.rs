@@ -1,5 +1,5 @@
-use criterion::{criterion_group, criterion_main, Criterion};
 use cosmic_text::{fontdb, FontSystem};
+use criterion::{criterion_group, criterion_main, Criterion};
 use petruterm::config::schema::FontConfig;
 use petruterm::font::TextShaper;
 use petruterm::renderer::atlas::GlyphAtlas;
@@ -53,7 +53,11 @@ fn make_shaper() -> (TextShaper, FontConfig) {
 
     'outer: for candidate in &fallback_families {
         for face in db.faces() {
-            if face.families.iter().any(|(name, _)| name.eq_ignore_ascii_case(candidate)) {
+            if face
+                .families
+                .iter()
+                .any(|(name, _)| name.eq_ignore_ascii_case(candidate))
+            {
                 chosen_family = face.families.first().map(|(n, _)| n.clone());
                 chosen_id = Some(face.id);
                 chosen_path = match &face.source {
@@ -81,7 +85,16 @@ fn make_shaper() -> (TextShaper, FontConfig) {
     };
 
     let font_system = FontSystem::new_with_locale_and_db("en-US".to_string(), db);
-    let shaper = TextShaper::new(None, font_system, family, font_id, font_path, 0, &font_config, None);
+    let shaper = TextShaper::new(
+        None,
+        font_system,
+        family,
+        font_id,
+        font_path,
+        0,
+        &font_config,
+        None,
+    );
     (shaper, font_config)
 }
 
@@ -130,7 +143,9 @@ fn build_row_vertices(
 
     // BG pre-pass: emit background-only vertices for cells with non-default bg.
     for (col, (_, bg)) in colors.iter().enumerate() {
-        if colors_approx_eq(*bg, DEFAULT_BG) { continue; }
+        if colors_approx_eq(*bg, DEFAULT_BG) {
+            continue;
+        }
         verts.push(CellVertex {
             grid_pos: [col as f32, 0.0],
             atlas_uv: [0.0; 4],
@@ -151,9 +166,13 @@ fn build_row_vertices(
         let fg = glyph.fg;
         let bg = glyph.bg;
 
-        if ch == ' ' && colors_approx_eq(bg, DEFAULT_BG) { continue; }
+        if ch == ' ' && colors_approx_eq(bg, DEFAULT_BG) {
+            continue;
+        }
 
-        let Ok(se) = shaper.rasterize_to_atlas(key, atlas, queue) else { continue };
+        let Ok(se) = shaper.rasterize_to_atlas(key, atlas, queue) else {
+            continue;
+        };
 
         let ox = se.bearing_x as f32;
         let oy = shaped.ascent - se.bearing_y as f32;
@@ -167,7 +186,11 @@ fn build_row_vertices(
             let [u0, v0, u1, v1] = se.uv;
             let fy0 = (y0 - oy) / gh;
             let fy1 = (y1 - oy) / gh;
-            ([u0, v0 + fy0 * (v1 - v0), u1, v0 + fy1 * (v1 - v0)], [ox, y0], [gw, y1 - y0])
+            (
+                [u0, v0 + fy0 * (v1 - v0), u1, v0 + fy1 * (v1 - v0)],
+                [ox, y0],
+                [gw, y1 - y0],
+            )
         } else {
             ([0.0f32; 4], [0.0f32; 2], [0.0f32; 2])
         };
@@ -224,7 +247,8 @@ fn bench_build_row_hit(c: &mut Criterion) {
     let (mut shaper, font_config) = make_shaper();
     let text = SAMPLE_ROWS[0];
     let colors = make_colors(text.chars().count());
-    let (hash, cached) = build_row_vertices(text, &colors, &font_config, &mut shaper, &mut atlas, &queue);
+    let (hash, cached) =
+        build_row_vertices(text, &colors, &font_config, &mut shaper, &mut atlas, &queue);
     let expected_hash = row_hash(text, &colors);
 
     let mut out: Vec<CellVertex> = Vec::new();
@@ -247,7 +271,9 @@ fn bench_build_frame_miss(c: &mut Criterion) {
     let mut atlas = GlyphAtlas::new(&device);
     let (mut shaper, font_config) = make_shaper();
 
-    let rows: Vec<&str> = (0..ROWS).map(|i| SAMPLE_ROWS[i % SAMPLE_ROWS.len()]).collect();
+    let rows: Vec<&str> = (0..ROWS)
+        .map(|i| SAMPLE_ROWS[i % SAMPLE_ROWS.len()])
+        .collect();
     let colors = make_colors(COLS);
 
     // Prime atlas and word cache.
@@ -260,7 +286,14 @@ fn bench_build_frame_miss(c: &mut Criterion) {
         b.iter(|| {
             out.clear();
             for (row_idx, &text) in rows.iter().enumerate() {
-                let (_, verts) = build_row_vertices(text, &colors, &font_config, &mut shaper, &mut atlas, &queue);
+                let (_, verts) = build_row_vertices(
+                    text,
+                    &colors,
+                    &font_config,
+                    &mut shaper,
+                    &mut atlas,
+                    &queue,
+                );
                 apply_row_offset(&verts, 0.0, row_idx as f32, &mut out);
             }
             out.len()
@@ -275,13 +308,17 @@ fn bench_build_frame_hit(c: &mut Criterion) {
     let mut atlas = GlyphAtlas::new(&device);
     let (mut shaper, font_config) = make_shaper();
 
-    let rows: Vec<&str> = (0..ROWS).map(|i| SAMPLE_ROWS[i % SAMPLE_ROWS.len()]).collect();
+    let rows: Vec<&str> = (0..ROWS)
+        .map(|i| SAMPLE_ROWS[i % SAMPLE_ROWS.len()])
+        .collect();
     let colors = make_colors(COLS);
 
     // Pre-build row cache.
     let row_cache: Vec<(u64, Vec<CellVertex>)> = rows
         .iter()
-        .map(|&text| build_row_vertices(text, &colors, &font_config, &mut shaper, &mut atlas, &queue))
+        .map(|&text| {
+            build_row_vertices(text, &colors, &font_config, &mut shaper, &mut atlas, &queue)
+        })
         .collect();
     let row_hashes: Vec<u64> = rows.iter().map(|&text| row_hash(text, &colors)).collect();
 
@@ -289,7 +326,9 @@ fn bench_build_frame_hit(c: &mut Criterion) {
     c.bench_function("build_frame_hit", |b| {
         b.iter(|| {
             out.clear();
-            for (row_idx, ((hash, cached), expected)) in row_cache.iter().zip(&row_hashes).enumerate() {
+            for (row_idx, ((hash, cached), expected)) in
+                row_cache.iter().zip(&row_hashes).enumerate()
+            {
                 if hash == expected {
                     apply_row_offset(cached, 0.0, row_idx as f32, &mut out);
                 }

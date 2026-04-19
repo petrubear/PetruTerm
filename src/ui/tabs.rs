@@ -30,7 +30,11 @@ impl TabManager {
         let id = self.next_id;
         self.next_id += 1;
         let pane_tree_id = id; // 1:1 mapping for now
-        self.tabs.push(Tab { id, title: title.into(), pane_tree_id });
+        self.tabs.push(Tab {
+            id,
+            title: title.into(),
+            pane_tree_id,
+        });
         self.active = self.tabs.len() - 1;
         id
     }

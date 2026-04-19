@@ -55,11 +55,31 @@ impl ContextMenu {
             col: 0,
             row: 0,
             items: vec![
-                ContextMenuItem { label: "Copy".into(),         keybind: Some("Cmd+C".into()), action: ContextAction::Copy       },
-                ContextMenuItem { label: "Paste".into(),        keybind: Some("Cmd+V".into()), action: ContextAction::Paste      },
-                ContextMenuItem { label: "Clear".into(),        keybind: None,                 action: ContextAction::Clear      },
-                ContextMenuItem { label: String::new(),         keybind: None,                 action: ContextAction::Separator  },
-                ContextMenuItem { label: "Ask AI".into(),       keybind: None,                 action: ContextAction::SendToChat },
+                ContextMenuItem {
+                    label: "Copy".into(),
+                    keybind: Some("Cmd+C".into()),
+                    action: ContextAction::Copy,
+                },
+                ContextMenuItem {
+                    label: "Paste".into(),
+                    keybind: Some("Cmd+V".into()),
+                    action: ContextAction::Paste,
+                },
+                ContextMenuItem {
+                    label: "Clear".into(),
+                    keybind: None,
+                    action: ContextAction::Clear,
+                },
+                ContextMenuItem {
+                    label: String::new(),
+                    keybind: None,
+                    action: ContextAction::Separator,
+                },
+                ContextMenuItem {
+                    label: "Ask AI".into(),
+                    keybind: None,
+                    action: ContextAction::SendToChat,
+                },
             ],
             hovered: None,
         }
@@ -110,7 +130,12 @@ impl ContextMenu {
         } else {
             let chars: Vec<char> = last_command.chars().collect();
             if chars.len() > max_label {
-                format!("{}…", chars[..max_label.saturating_sub(1)].iter().collect::<String>())
+                format!(
+                    "{}…",
+                    chars[..max_label.saturating_sub(1)]
+                        .iter()
+                        .collect::<String>()
+                )
             } else {
                 last_command.to_string()
             }
@@ -122,13 +147,21 @@ impl ContextMenu {
                 keybind: None,
                 action: ContextAction::Label,
             },
-            ContextMenuItem { label: String::new(), keybind: None, action: ContextAction::Separator },
+            ContextMenuItem {
+                label: String::new(),
+                keybind: None,
+                action: ContextAction::Separator,
+            },
             ContextMenuItem {
                 label: cmd_display,
                 keybind: None,
                 action: ContextAction::Label,
             },
-            ContextMenuItem { label: String::new(), keybind: None, action: ContextAction::Separator },
+            ContextMenuItem {
+                label: String::new(),
+                keybind: None,
+                action: ContextAction::Separator,
+            },
             ContextMenuItem {
                 label: "Copy command".to_string(),
                 keybind: None,
@@ -153,12 +186,22 @@ impl ContextMenu {
     /// Given a terminal cell (col, row), return the action for that item if it's inside the menu.
     /// Separator rows are skipped (return None).
     pub fn hit_test(&self, col: usize, row: usize) -> Option<ContextAction> {
-        if !self.visible { return None; }
-        if col < self.col || col >= self.col + CONTEXT_MENU_WIDTH { return None; }
-        if row < self.row || row >= self.row + self.items.len() { return None; }
+        if !self.visible {
+            return None;
+        }
+        if col < self.col || col >= self.col + CONTEXT_MENU_WIDTH {
+            return None;
+        }
+        if row < self.row || row >= self.row + self.items.len() {
+            return None;
+        }
         let idx = row - self.row;
         self.items.get(idx).and_then(|item| {
-            if item.is_non_interactive() { None } else { Some(item.action.clone()) }
+            if item.is_non_interactive() {
+                None
+            } else {
+                Some(item.action.clone())
+            }
         })
     }
 
@@ -174,7 +217,12 @@ impl ContextMenu {
             && row < self.row + self.items.len()
         {
             let idx = row - self.row;
-            if self.items.get(idx).map(|i| i.is_non_interactive()).unwrap_or(false) {
+            if self
+                .items
+                .get(idx)
+                .map(|i| i.is_non_interactive())
+                .unwrap_or(false)
+            {
                 None
             } else {
                 Some(idx)

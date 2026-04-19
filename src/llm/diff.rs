@@ -45,14 +45,23 @@ fn lcs_diff(old: &[&str], new: &[&str]) -> Vec<DiffLine> {
     let (mut i, mut j) = (m, n);
     while i > 0 || j > 0 {
         if i > 0 && j > 0 && old[i - 1] == new[j - 1] {
-            lines.push(DiffLine { kind: DiffKind::Context, text: old[i - 1].to_string() });
+            lines.push(DiffLine {
+                kind: DiffKind::Context,
+                text: old[i - 1].to_string(),
+            });
             i -= 1;
             j -= 1;
         } else if j > 0 && (i == 0 || dp[i][j - 1] >= dp[i - 1][j]) {
-            lines.push(DiffLine { kind: DiffKind::Added, text: new[j - 1].to_string() });
+            lines.push(DiffLine {
+                kind: DiffKind::Added,
+                text: new[j - 1].to_string(),
+            });
             j -= 1;
         } else {
-            lines.push(DiffLine { kind: DiffKind::Removed, text: old[i - 1].to_string() });
+            lines.push(DiffLine {
+                kind: DiffKind::Removed,
+                text: old[i - 1].to_string(),
+            });
             i -= 1;
         }
     }
@@ -83,7 +92,10 @@ pub fn compress_diff(lines: &[DiffLine], ctx: usize) -> Vec<DiffLine> {
     for (i, line) in lines.iter().enumerate() {
         if near[i] {
             if skipping {
-                result.push(DiffLine { kind: DiffKind::Context, text: "⋯".to_string() });
+                result.push(DiffLine {
+                    kind: DiffKind::Context,
+                    text: "⋯".to_string(),
+                });
                 skipping = false;
             }
             result.push(line.clone());

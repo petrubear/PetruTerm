@@ -53,7 +53,12 @@ fn should_use_lcd(cache_key: CacheKey, primary_font_id: fontdb::ID, ch: char) ->
 /// than a direct glyph-per-codepoint lookup, so we can skip it entirely.
 #[inline]
 fn has_ligature_chars(text: &str) -> bool {
-    text.bytes().any(|b| matches!(b, b'=' | b'<' | b'>' | b'-' | b'|' | b'+' | b'*' | b'/' | b'~' | b'!' | b':' | b'.'))
+    text.bytes().any(|b| {
+        matches!(
+            b,
+            b'=' | b'<' | b'>' | b'-' | b'|' | b'+' | b'*' | b'/' | b'~' | b'!' | b':' | b'.'
+        )
+    })
 }
 
 /// Build an AttrsList where PUA codepoints get an explicit span forcing the
@@ -118,14 +123,22 @@ impl FreeTypeCmapLookup {
         };
 
         let mut face: ft::FT_Face = std::ptr::null_mut();
-        let err = unsafe { ft::FT_New_Face(library, c_path.as_ptr(), face_index as ft::FT_Long, &mut face) };
+        let err = unsafe {
+            ft::FT_New_Face(
+                library,
+                c_path.as_ptr(),
+                face_index as ft::FT_Long,
+                &mut face,
+            )
+        };
         if err != 0 || face.is_null() {
             unsafe { ft::FT_Done_FreeType(library) };
             log::warn!("PUA lookup: FT_New_Face failed ({err})");
             return None;
         }
 
-        let err = unsafe { ft::FT_Set_Char_Size(face, 0, (font_size * 64.0) as ft::FT_F26Dot6, 72, 72) };
+        let err =
+            unsafe { ft::FT_Set_Char_Size(face, 0, (font_size * 64.0) as ft::FT_F26Dot6, 72, 72) };
         if err != 0 {
             unsafe {
                 ft::FT_Done_Face(face);
@@ -169,7 +182,9 @@ impl FreeTypeCmapLookup {
                 continue;
             }
 
-            let err = unsafe { ft::FT_Load_Glyph(self.face, glyph_idx, ft::FT_LOAD_DEFAULT as ft::FT_Int32) };
+            let err = unsafe {
+                ft::FT_Load_Glyph(self.face, glyph_idx, ft::FT_LOAD_DEFAULT as ft::FT_Int32)
+            };
             if err != 0 {
                 continue;
             }
@@ -306,7 +321,9 @@ impl TextShaper {
                         Some(r)
                     }
                     Err(e) => {
-                        log::warn!("Failed to initialize FreeType LCD rasterizer: {e}. LCD AA disabled.");
+                        log::warn!(
+                            "Failed to initialize FreeType LCD rasterizer: {e}. LCD AA disabled."
+                        );
                         None
                     }
                 }
@@ -437,7 +454,9 @@ impl TextShaper {
     /// Called lazily on first use so the constructor stays fast.
     fn init_ascii_glyph_cache(&mut self) {
         self.ascii_glyph_cache_ready = true;
-        let Some(ft) = self.ft_cmap.as_ref() else { return };
+        let Some(ft) = self.ft_cmap.as_ref() else {
+            return;
+        };
         for cp in 0x20u32..=0x7Eu32 {
             let ch = char::from(cp as u8);
             if let Some(id) = ft.get_glyph_index(ch) {
@@ -513,7 +532,11 @@ impl TextShaper {
             });
         }
 
-        Some(ShapedRun { glyphs, ascent, line_height })
+        Some(ShapedRun {
+            glyphs,
+            ascent,
+            line_height,
+        })
     }
 
     /// Compute a cheap hash for a word (or short text run) for `word_cache`.
@@ -592,7 +615,8 @@ impl TextShaper {
 
         // Check if all tokens are cached before doing any mutation.
         let all_cached = tokens.iter().all(|(_, word)| {
-            self.word_cache.contains(&Self::word_hash(word, font_size_bits))
+            self.word_cache
+                .contains(&Self::word_hash(word, font_size_bits))
         });
 
         let mut all_glyphs: Vec<ShapedGlyph> = Vec::with_capacity(text.len());
@@ -623,7 +647,11 @@ impl TextShaper {
                     });
                 }
             }
-            return Some(ShapedRun { glyphs: all_glyphs, ascent, line_height: cell_height });
+            return Some(ShapedRun {
+                glyphs: all_glyphs,
+                ascent,
+                line_height: cell_height,
+            });
         }
 
         // Mixed path: shape uncached tokens, use cache for the rest.
@@ -655,7 +683,8 @@ impl TextShaper {
             } else {
                 // Shape this word individually through HarfBuzz.
                 // Use uniform dummy colors for caching (colors don't affect glyph geometry).
-                let dummy_colors: Vec<([f32; 4], [f32; 4])> = vec![([1.0; 4], [0.0, 0.0, 0.0, 1.0]); word.len()];
+                let dummy_colors: Vec<([f32; 4], [f32; 4])> =
+                    vec![([1.0; 4], [0.0, 0.0, 0.0, 1.0]); word.len()];
                 let word_run = self.shape_word_harfbuzz(word, &dummy_colors, font_config);
                 ascent = word_run.ascent;
 
@@ -687,7 +716,11 @@ impl TextShaper {
             self.word_cache_insert(&word, font_size_bits, run);
         }
 
-        Some(ShapedRun { glyphs: all_glyphs, ascent, line_height: cell_height })
+        Some(ShapedRun {
+            glyphs: all_glyphs,
+            ascent,
+            line_height: cell_height,
+        })
     }
 
     /// Shape a single word (no spaces) through HarfBuzz. Used by `try_word_cached_shape`.
@@ -753,27 +786,35 @@ impl TextShaper {
                 let span = (byte_to_col[end] - col).max(1);
                 let ch = text[start..end].chars().next().unwrap_or(' ');
 
-                log::debug!("Shaping char '{}' (U+{:04X}), font_id: {:?}, glyph_id: {}", ch, ch as u32, glyph.font_id, glyph.glyph_id);
+                log::debug!(
+                    "Shaping char '{}' (U+{:04X}), font_id: {:?}, glyph_id: {}",
+                    ch,
+                    ch as u32,
+                    glyph.font_id,
+                    glyph.glyph_id
+                );
 
                 let (fg, bg) = colors
                     .get(col)
                     .copied()
                     .unwrap_or(([1.0; 4], [0.0, 0.0, 0.0, 1.0]));
 
-                // Use FreeType to resolve glyph IDs for Nerd Font symbols. 
-                // Many Nerd Font patchers don't set the OS/2 Unicode Range bits, causing 
-                // cosmic-text to return glyph_id=0 or fall back to system fonts (like Noto) 
+                // Use FreeType to resolve glyph IDs for Nerd Font symbols.
+                // Many Nerd Font patchers don't set the OS/2 Unicode Range bits, causing
+                // cosmic-text to return glyph_id=0 or fall back to system fonts (like Noto)
                 // that don't have the icon.
                 //
                 // We override the glyph if:
                 // 1. cosmic-text returned glyph_id=0 (not found)
-                // 2. The character is a Nerd Font symbol AND cosmic-text routed it to 
+                // 2. The character is a Nerd Font symbol AND cosmic-text routed it to
                 //    a DIFFERENT font (fallback).
                 let should_override = glyph.glyph_id == 0
                     || (is_pua(ch) && !self.primary_face_ids.contains(&glyph.font_id));
 
                 let cache_key = if should_override {
-                    if let Some(real_id) = self.ft_cmap.as_ref().and_then(|ft| ft.get_glyph_index(ch)) {
+                    if let Some(real_id) =
+                        self.ft_cmap.as_ref().and_then(|ft| ft.get_glyph_index(ch))
+                    {
                         log::debug!("Overriding glyph {} -> ID {}", ch, real_id);
                         let (key, _, _) = CacheKey::new(
                             self.primary_font_id,
@@ -807,7 +848,11 @@ impl TextShaper {
             }
         }
 
-        ShapedRun { glyphs, ascent, line_height }
+        ShapedRun {
+            glyphs,
+            ascent,
+            line_height,
+        }
     }
 
     pub fn rasterize_to_atlas(
@@ -827,16 +872,22 @@ impl TextShaper {
             .swash_cache
             .get_image_uncached(&mut self.font_system, cache_key)
             .ok_or_else(|| {
-                crate::renderer::atlas::AtlasError::Other(
-                    "Swash failed to rasterize glyph".into(),
-                )
+                crate::renderer::atlas::AtlasError::Other("Swash failed to rasterize glyph".into())
             })?;
 
         let width = image.placement.width;
         let height = image.placement.height;
 
         if width == 0 || height == 0 {
-            return Ok(AtlasEntry { uv: [0.0; 4], width: 0, height: 0, bearing_x: 0, bearing_y: 0, is_color: false, last_used: atlas.epoch });
+            return Ok(AtlasEntry {
+                uv: [0.0; 4],
+                width: 0,
+                height: 0,
+                bearing_x: 0,
+                bearing_y: 0,
+                is_color: false,
+                last_used: atlas.epoch,
+            });
         }
 
         let is_color = matches!(image.content, cosmic_text::SwashContent::Color);
@@ -850,7 +901,16 @@ impl TextShaper {
             }
         };
 
-        atlas.upload(queue, cache_key, &rgba, width, height, image.placement.left, image.placement.top, is_color)
+        atlas.upload(
+            queue,
+            cache_key,
+            &rgba,
+            width,
+            height,
+            image.placement.left,
+            image.placement.top,
+            is_color,
+        )
     }
 
     /// Clear the LCD rasterizer's local glyph cache.
@@ -946,8 +1006,8 @@ mod tests {
         assert!(!is_pua('€')); // U+20AC — currency symbol
         assert!(!is_pua('\u{D7FF}')); // Highest non-surrogate BMP char below PUA
         assert!(!is_pua('ñ')); // U+00F1 — Latin extended, outside all ranges
-        // Note: arrows 0x2190–0x2199 ARE in the override list (Nerd Font patches);
-        // U+2192 → IS flagged intentionally.
+                               // Note: arrows 0x2190–0x2199 ARE in the override list (Nerd Font patches);
+                               // U+2192 → IS flagged intentionally.
         assert!(is_pua('→')); // U+2192 — in the patched arrows range
     }
 
@@ -957,10 +1017,10 @@ mod tests {
         let default_attrs = Attrs::new();
         let text = "A \u{e0a0} B";
         let _list = build_attr_list(text, &default_attrs, family);
-        
+
         // "A " is 2 bytes, "\u{e0a0}" is 3 bytes, " B" is 2 bytes
         // Total bytes: 7
-        
+
         // We can't easily inspect the spans in AttrsList without shaping,
         // but we can at least verify it doesn't panic and the logic runs.
         assert_eq!(text.len(), 7);

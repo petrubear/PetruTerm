@@ -41,14 +41,14 @@ impl FontLocator {
         let source = font_kit::source::SystemSource::new();
 
         let handle = source
-            .select_best_match(
-                &[FamilyName::Title(family.to_owned())],
-                &Properties::new(),
-            )
+            .select_best_match(&[FamilyName::Title(family.to_owned())], &Properties::new())
             .ok()?;
 
         match handle {
-            font_kit::handle::Handle::Path { path, font_index } => Some(FontPath { path, index: font_index }),
+            font_kit::handle::Handle::Path { path, font_index } => Some(FontPath {
+                path,
+                index: font_index,
+            }),
             font_kit::handle::Handle::Memory { .. } => None,
         }
     }
@@ -57,7 +57,8 @@ impl FontLocator {
         let home = dirs::home_dir().unwrap_or_default();
         // Split family into words and lowercase for matching.
         // "MonoLisa Nerd Font" → ["monolisa", "nerd", "font"]
-        let family_words: Vec<String> = family.split_whitespace()
+        let family_words: Vec<String> = family
+            .split_whitespace()
             .map(|w| w.to_lowercase())
             .collect();
 
@@ -109,7 +110,10 @@ impl FontLocator {
         }
 
         candidates.sort_by_key(|(s, _)| *s);
-        candidates.into_iter().next().map(|(_, p)| FontPath { path: p, index: 0 })
+        candidates
+            .into_iter()
+            .next()
+            .map(|(_, p)| FontPath { path: p, index: 0 })
     }
 }
 

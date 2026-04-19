@@ -1,7 +1,7 @@
 # Session State
 
-**Last Updated:** 2026-04-18 (sesión tarde)
-**Session Focus:** Bug fixes prioritarios — KKP, tab bleed, CI clippy, .app env vars
+**Last Updated:** 2026-04-18 (sesión noche)
+**Session Focus:** Bug fixes — tab en blanco al cambiar tabs, LLM error message, Keychain macOS, keybind AI panel
 
 ## Branch: `master`
 
@@ -21,6 +21,12 @@
 
 ---
 
+## Commits sesión 2026-04-18 (noche)
+
+| Commit | Descripción |
+|--------|-------------|
+| (pendiente) | fix: tab blank on switch, LLM keychain, AI panel focus keybind |
+
 ## Commits sesión 2026-04-18 (tarde)
 
 | Commit | Descripción |
@@ -31,39 +37,41 @@
 
 ## Bugs resueltos esta sesión
 
-### 1. Shift+Enter en apps con KKP (Claude Code CLI, etc.)
-- **Root cause:** `key_map.rs` enviaba `\r` para Enter sin importar Shift. Apps modernas
-  usan Kitty Keyboard Protocol (KKP): `\x1b[13;2u` para Shift+Enter. El terminal nunca
-  procesaba las solicitudes de activación KKP.
+### 1. Tab en blanco al cambiar de tab (hasta presionar una tecla)
+- **Root cause:** `cell_data_scratch.clear()` al cambiar terminal_id, pero
+  `collect_grid_cells_for` usaba damage parcial (sin cambios) del nuevo terminal →
+  damage-skip saltaba todas las filas → buffer queda con strings vacias → pantalla en blanco.
 - **Fix:**
-  - `src/term/mod.rs:97`: `kitty_keyboard: true` en `TermConfig`
-  - `src/app/input/key_map.rs:109`: cuando `TermMode::DISAMBIGUATE_ESC_CODES` activo y
-    Shift presionado, enviar `\x1b[13;2u`; de lo contrario `\r`
+  - `src/app/mux.rs`: `collect_grid_cells_for` recibe `force_full: bool`
+  - `src/app/mod.rs` (`build_all_pane_instances`): pasa `force_full = terminal_changed`
+  - Cuando `force_full=true`, `can_skip=false` → todas las filas se leen del grid
 
-### 2. TUI app (codeburn, etc.) aparece sobre todos los tabs
-- **Root cause:** `cell_data_scratch` se reutiliza entre frames. El damage-skip de
-  `collect_grid_cells_for` retiene filas "no dañadas" del frame anterior. Al cambiar de
-  tab, el nuevo terminal heredaba datos del anterior en el scratch.
+### 2. Error LLM "LLM not configured" no informativo
+- **Root cause:** El mensaje no indicaba por que fallo (API key faltante, provider incorrecto, etc.)
 - **Fix:**
-  - `src/app/renderer.rs:53`: `scratch_terminal_id: Option<usize>` en `RenderContext`
-  - `src/app/mod.rs` (`build_all_pane_instances`): `cell_data_scratch.clear()` cuando
-    `terminal_id` cambia
+  - `src/app/ui.rs`: `llm_init_error: Option<String>` en `UiManager`; captura el error real de `build_provider`
+  - Muestra el error real al usuario en lugar de mensaje generico
 
-### 3. CI clippy fallando (manual_checked_ops)
-- **Root cause:** if/else manual para guardia división-por-cero en `renderer.rs:1634`.
-- **Fix:** `.checked_div().unwrap_or(0)`
+### 3. API key de OpenRouter desde Apple Keychain
+- **Fix:** `src/llm/openrouter.rs`: funcion `keychain_api_key()` — resolucion en orden:
+  1. `config.api_key` (Lua)
+  2. `OPENROUTER_API_KEY` env var
+  3. macOS Keychain via `security find-generic-password -s PetruTerm -a OPENROUTER_API_KEY -w`
+  - Para almacenar: `security add-generic-password -s PetruTerm -a OPENROUTER_API_KEY -w <key>`
 
-### 4. Variables de entorno no disponibles en .app bundle
-- **Root cause:** macOS no pasa por login shell al lanzar `.app` desde Finder/Dock.
-  `~/.zshrc` nunca se carga — `OPENROUTER_API_KEY` invisible.
-- **Fix:** `src/main.rs`: `inherit_login_shell_env()` antes de cualquier thread.
-  Spawn `$SHELL -l -c 'env -0'`, parsea null-terminated pairs, `set_var` solo vars ausentes.
+### 4. Leader+A (Shift+A) para focus AI panel no funcionaba
+- **Root cause:** Presionar Shift despues del leader es fragil en macOS (timing, logical_key inconsistente).
+- **Fix:** Rediseno del flujo de focus:
+  - `leader+a` (minuscula, sin Shift) → `FocusAiPanel`: alterna focus terminal↔chat, abre si cerrado
+  - `Escape` en panel → **quita focus sin cerrar** (antes cerraba el panel)
+  - `/q` en input del panel → cierra el panel
+  - `config/default/keybinds.lua`: `ToggleAiPanel` removido; solo `FocusAiPanel` con `a`
 
 ---
 
 ## Roadmap priorizado
 
-### Phase 4 — Plugins (DESBLOQUEADA, próximo trabajo)
+### Phase 4 — Plugins (DESBLOQUEADA, proximo trabajo)
 - lazy.nvim-style plugin loader en Lua
 - `src/plugins/` — plugin loader + Lua API (doc en `src/plugins/api.rs`)
 - Ver `.context/specs/build_phases.md` para deliverables y exit criteria
@@ -81,6 +89,9 @@
 ---
 
 ## Sesiones anteriores (resumen)
+
+### 2026-04-18 (tarde) — Bug fixes prioritarios
+- KKP Shift+Enter, tab bleed, CI clippy, .app env vars
 
 ### 2026-04-18 (mañana) — Tier 3 + Tier 0
 - TD-MEM-19, cursor overlay fast path, damage tracking, latency HUD, CI setup, TD-OP-02

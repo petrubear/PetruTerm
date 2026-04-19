@@ -1,25 +1,37 @@
-use anyhow::Result;
 use crate::config::Config;
-use crate::term::{Terminal, PtyEvent};
-use crate::ui::{PaneInfo, PaneSeparator, PaneManager, TabManager, Rect};
+use crate::term::{PtyEvent, Terminal};
 use crate::ui::search_bar::SearchMatch;
-use winit::event_loop::EventLoopProxy;
-use alacritty_terminal::vte::ansi::{Color as AnsiColor, Rgb};
-use alacritty_terminal::index::{Column, Line, Point};
+use crate::ui::{PaneInfo, PaneManager, PaneSeparator, Rect, TabManager};
 use alacritty_terminal::grid::Dimensions;
-use alacritty_terminal::term::cell::Flags;
+use alacritty_terminal::index::{Column, Line, Point};
 use alacritty_terminal::selection::SelectionRange;
+use alacritty_terminal::term::cell::Flags;
+use alacritty_terminal::vte::ansi::{Color as AnsiColor, Rgb};
+use anyhow::Result;
+use winit::event_loop::EventLoopProxy;
 
 /// Highlight colors injected into cell data for search matches.
-const SEARCH_MATCH_FG: AnsiColor = AnsiColor::Spec(Rgb { r: 40, g: 42, b: 54 });    // Dracula bg (dark)
-const SEARCH_MATCH_BG: AnsiColor = AnsiColor::Spec(Rgb { r: 241, g: 250, b: 140 }); // Dracula yellow
-const SEARCH_CURRENT_BG: AnsiColor = AnsiColor::Spec(Rgb { r: 255, g: 184, b: 108 }); // Dracula orange
+const SEARCH_MATCH_FG: AnsiColor = AnsiColor::Spec(Rgb {
+    r: 40,
+    g: 42,
+    b: 54,
+}); // Dracula bg (dark)
+const SEARCH_MATCH_BG: AnsiColor = AnsiColor::Spec(Rgb {
+    r: 241,
+    g: 250,
+    b: 140,
+}); // Dracula yellow
+const SEARCH_CURRENT_BG: AnsiColor = AnsiColor::Spec(Rgb {
+    r: 255,
+    g: 184,
+    b: 108,
+}); // Dracula orange
 
 /// Manages multiple terminal instances, tabs, and panes (Multiplexer).
 pub struct Mux {
     pub tabs: TabManager,
-    pub panes: Vec<PaneManager>,           // one PaneManager per tab
-    pub terminals: Vec<Option<Terminal>>,  // indexed by terminal_id
+    pub panes: Vec<PaneManager>,          // one PaneManager per tab
+    pub terminals: Vec<Option<Terminal>>, // indexed by terminal_id
     pub next_terminal_id: usize,
     /// Terminal IDs closed by cmd_close_tab / cmd_close_pane (TD-MEM-08).
     /// App drains this after each input cycle to clean up per-terminal state.
@@ -43,7 +55,10 @@ impl Mux {
 
     pub fn active_pane_count(&self) -> usize {
         let idx = self.active_tab_index();
-        self.panes.get(idx).map(|p| p.root.leaf_ids().len()).unwrap_or(0)
+        self.panes
+            .get(idx)
+            .map(|p| p.root.leaf_ids().len())
+            .unwrap_or(0)
     }
 
     pub fn focused_terminal_id(&self) -> usize {
@@ -87,7 +102,15 @@ impl Mux {
         wakeup_proxy: EventLoopProxy<()>,
         working_directory: Option<std::path::PathBuf>,
     ) -> Result<usize> {
-        let terminal = Terminal::new(config, cols, rows, cell_w, cell_h, wakeup_proxy, working_directory)?;
+        let terminal = Terminal::new(
+            config,
+            cols,
+            rows,
+            cell_w,
+            cell_h,
+            wakeup_proxy,
+            working_directory,
+        )?;
         let id = self.next_terminal_id;
         self.next_terminal_id += 1;
 
@@ -110,7 +133,8 @@ impl Mux {
         wakeup_proxy: EventLoopProxy<()>,
     ) -> Result<()> {
         let tab_id = self.tabs.new_tab("zsh");
-        let terminal_id = self.open_terminal(config, cols, rows, cell_w, cell_h, wakeup_proxy, None)?;
+        let terminal_id =
+            self.open_terminal(config, cols, rows, cell_w, cell_h, wakeup_proxy, None)?;
         self.panes.push(PaneManager::new(viewport, terminal_id));
         log::info!("Opened initial tab {tab_id}, terminal {terminal_id}");
         Ok(())
@@ -124,25 +148,46 @@ impl Mux {
         let mut data_ids: Vec<usize> = Vec::new();
         let mut exited: Vec<usize> = Vec::new();
         for (id, terminal_slot) in self.terminals.iter_mut().enumerate() {
-            let Some(terminal) = terminal_slot else { continue };
+            let Some(terminal) = terminal_slot else {
+                continue;
+            };
             loop {
                 use crossbeam_channel::TryRecvError;
                 match terminal.pty.rx.try_recv() {
                     Ok(event) => match event {
                         PtyEvent::DataReady => {
-                            if !data_ids.contains(&id) { data_ids.push(id); }
+                            if !data_ids.contains(&id) {
+                                data_ids.push(id);
+                            }
                         }
-                        PtyEvent::TitleChanged(t) => { log::debug!("PTY title: {t}"); }
-                        PtyEvent::Exit => { log::info!("PTY shell exited (terminal {id})."); exited.push(id); }
+                        PtyEvent::TitleChanged(t) => {
+                            log::debug!("PTY title: {t}");
+                        }
+                        PtyEvent::Exit => {
+                            log::info!("PTY shell exited (terminal {id}).");
+                            exited.push(id);
+                        }
                         PtyEvent::Bell => {}
-                        PtyEvent::ClipboardStore(text) => { if let Ok(mut cb) = arboard::Clipboard::new() { let _ = cb.set_text(text); } }
+                        PtyEvent::ClipboardStore(text) => {
+                            if let Ok(mut cb) = arboard::Clipboard::new() {
+                                let _ = cb.set_text(text);
+                            }
+                        }
                         PtyEvent::ClipboardLoad(fmt) => {
-                            let text = arboard::Clipboard::new().ok().and_then(|mut cb| cb.get_text().ok()).unwrap_or_default();
+                            let text = arboard::Clipboard::new()
+                                .ok()
+                                .and_then(|mut cb| cb.get_text().ok())
+                                .unwrap_or_default();
                             terminal.write_input(fmt(&text).as_bytes());
                         }
-                        PtyEvent::PtyWrite(text) => { terminal.write_input(text.as_bytes()); }
+                        PtyEvent::PtyWrite(text) => {
+                            terminal.write_input(text.as_bytes());
+                        }
                     },
-                    Err(TryRecvError::Disconnected) => { log::warn!("PTY channel disconnected."); break; }
+                    Err(TryRecvError::Disconnected) => {
+                        log::warn!("PTY channel disconnected.");
+                        break;
+                    }
                     Err(TryRecvError::Empty) => break,
                 }
             }
@@ -155,7 +200,10 @@ impl Mux {
     /// Returns `true` if no tabs remain (caller should exit the app).
     pub fn close_terminal(&mut self, terminal_id: usize) -> bool {
         // Find the tab by searching leaf IDs (not focused_terminal, which may differ).
-        let tab_idx = self.panes.iter().position(|p| p.root.leaf_ids().contains(&terminal_id));
+        let tab_idx = self
+            .panes
+            .iter()
+            .position(|p| p.root.leaf_ids().contains(&terminal_id));
         if let Some(tab_idx) = tab_idx {
             let has_other_panes = self.panes[tab_idx].root.leaf_ids().len() > 1;
             if has_other_panes {
@@ -169,14 +217,18 @@ impl Mux {
                 }
                 self.panes.remove(tab_idx);
             }
-            if let Some(slot) = self.terminals.get_mut(terminal_id) { *slot = None; }
+            if let Some(slot) = self.terminals.get_mut(terminal_id) {
+                *slot = None;
+            }
         }
         self.tabs.is_empty()
     }
 
     #[allow(dead_code)]
     pub fn collect_grid_cells(&self) -> Vec<(String, Vec<(AnsiColor, AnsiColor)>)> {
-        let Some(terminal) = self.active_terminal() else { return vec![]; };
+        let Some(terminal) = self.active_terminal() else {
+            return vec![];
+        };
 
         terminal.with_term(|term| {
             let rows = term.screen_lines();
@@ -193,8 +245,16 @@ impl Mux {
                 for col in 0..cols {
                     let cell = &term.grid()[grid_line][Column(col)];
                     text.push(if cell.c == '\0' { ' ' } else { cell.c });
-                    let (fg, bg) = if cell.flags.contains(Flags::INVERSE) { (cell.bg, cell.fg) } else { (cell.fg, cell.bg) };
-                    let (fg, bg) = if cell_in_selection(grid_line, Column(col), &sel_range) { (bg, fg) } else { (fg, bg) };
+                    let (fg, bg) = if cell.flags.contains(Flags::INVERSE) {
+                        (cell.bg, cell.fg)
+                    } else {
+                        (cell.fg, cell.bg)
+                    };
+                    let (fg, bg) = if cell_in_selection(grid_line, Column(col), &sel_range) {
+                        (bg, fg)
+                    } else {
+                        (fg, bg)
+                    };
                     colors.push((fg, bg));
                 }
                 result.push((text, colors));
@@ -204,7 +264,9 @@ impl Mux {
     }
 
     pub fn last_terminal_lines(&self, n: usize) -> String {
-        let Some(terminal) = self.active_terminal() else { return String::new(); };
+        let Some(terminal) = self.active_terminal() else {
+            return String::new();
+        };
 
         terminal.with_term(|term| {
             let rows = term.screen_lines();
@@ -214,7 +276,8 @@ impl Mux {
             for row in start..rows {
                 let mut text = String::new();
                 for col in 0..cols {
-                    let cell = &term.grid()[alacritty_terminal::index::Line(row as i32)][alacritty_terminal::index::Column(col)];
+                    let cell = &term.grid()[alacritty_terminal::index::Line(row as i32)]
+                        [alacritty_terminal::index::Column(col)];
                     text.push(if cell.c == '\0' { ' ' } else { cell.c });
                 }
                 lines.push(text.trim_end().to_string());
@@ -224,8 +287,26 @@ impl Mux {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn cmd_new_tab(&mut self, config: &Config, viewport: Rect, cols: u16, rows: u16, cell_w: u16, cell_h: u16, wakeup_proxy: EventLoopProxy<()>, working_directory: Option<std::path::PathBuf>) {
-        match self.open_terminal(config, cols, rows, cell_w, cell_h, wakeup_proxy, working_directory) {
+    pub fn cmd_new_tab(
+        &mut self,
+        config: &Config,
+        viewport: Rect,
+        cols: u16,
+        rows: u16,
+        cell_w: u16,
+        cell_h: u16,
+        wakeup_proxy: EventLoopProxy<()>,
+        working_directory: Option<std::path::PathBuf>,
+    ) {
+        match self.open_terminal(
+            config,
+            cols,
+            rows,
+            cell_w,
+            cell_h,
+            wakeup_proxy,
+            working_directory,
+        ) {
             Ok(terminal_id) => {
                 self.tabs.new_tab("zsh");
                 self.panes.push(PaneManager::new(viewport, terminal_id));
@@ -242,7 +323,9 @@ impl Mux {
         }
         if active < self.panes.len() {
             for tid in self.panes[active].root.leaf_ids() {
-                if let Some(slot) = self.terminals.get_mut(tid) { *slot = None; }
+                if let Some(slot) = self.terminals.get_mut(tid) {
+                    *slot = None;
+                }
                 self.closed_ids.push(tid);
             }
             self.panes.remove(active);
@@ -251,12 +334,32 @@ impl Mux {
 
     /// TD-018: Create the terminal first; only mutate the pane tree on success.
     #[allow(clippy::too_many_arguments)]
-    pub fn cmd_split(&mut self, config: &Config, dir: crate::ui::SplitDir, cols: u16, rows: u16, cell_w: u16, cell_h: u16, wakeup_proxy: EventLoopProxy<()>, working_directory: Option<std::path::PathBuf>) {
-        match Terminal::new(config, cols, rows, cell_w, cell_h, wakeup_proxy, working_directory) {
+    pub fn cmd_split(
+        &mut self,
+        config: &Config,
+        dir: crate::ui::SplitDir,
+        cols: u16,
+        rows: u16,
+        cell_w: u16,
+        cell_h: u16,
+        wakeup_proxy: EventLoopProxy<()>,
+        working_directory: Option<std::path::PathBuf>,
+    ) {
+        match Terminal::new(
+            config,
+            cols,
+            rows,
+            cell_w,
+            cell_h,
+            wakeup_proxy,
+            working_directory,
+        ) {
             Ok(terminal) => {
                 let new_id = self.next_terminal_id;
                 self.next_terminal_id += 1;
-                if self.terminals.len() <= new_id { self.terminals.resize_with(new_id + 1, || None); }
+                if self.terminals.len() <= new_id {
+                    self.terminals.resize_with(new_id + 1, || None);
+                }
                 self.terminals[new_id] = Some(terminal);
                 let active = self.tabs.active_index();
                 if let Some(pane_mgr) = self.panes.get_mut(active) {
@@ -271,7 +374,9 @@ impl Mux {
         let active = self.tabs.active_index();
         if let Some(pane_mgr) = self.panes.get_mut(active) {
             if let Some(closed_id) = pane_mgr.close_focused() {
-                if let Some(slot) = self.terminals.get_mut(closed_id) { *slot = None; }
+                if let Some(slot) = self.terminals.get_mut(closed_id) {
+                    *slot = None;
+                }
                 self.closed_ids.push(closed_id);
             }
         }
@@ -286,7 +391,7 @@ impl Mux {
 
     /// Resize the focused pane by moving its nearest ancestor separator `delta` in `dir`.
     pub fn cmd_adjust_pane_ratio(&mut self, dir: crate::ui::panes::FocusDir, delta: f32) {
-        let active  = self.tabs.active_index();
+        let active = self.tabs.active_index();
         let focused = self.focused_terminal_id();
         if let Some(pane_mgr) = self.panes.get_mut(active) {
             pane_mgr.adjust_ratio(focused, dir, delta);
@@ -304,13 +409,7 @@ impl Mux {
 
     /// Resize all panes and terminals. The active tab's panes are resized to their
     /// individual rect-derived dimensions; inactive tabs keep their last layout.
-    pub fn resize_all(
-        &mut self,
-        viewport: Rect,
-        scrollback: usize,
-        cell_w: u16,
-        cell_h: u16,
-    ) {
+    pub fn resize_all(&mut self, viewport: Rect, scrollback: usize, cell_w: u16, cell_h: u16) {
         // Relayout every pane tree to the new viewport.
         for pane_mgr in &mut self.panes {
             pane_mgr.resize(viewport);
@@ -321,7 +420,13 @@ impl Mux {
             let infos = pane_mgr.pane_infos(viewport, cell_w as f32, cell_h as f32);
             for info in infos {
                 if let Some(Some(t)) = self.terminals.get_mut(info.terminal_id) {
-                    t.resize(info.cols as u16, info.rows as u16, scrollback, cell_w, cell_h);
+                    t.resize(
+                        info.cols as u16,
+                        info.rows as u16,
+                        scrollback,
+                        cell_w,
+                        cell_h,
+                    );
                 }
             }
         }
@@ -331,15 +436,22 @@ impl Mux {
     /// Return layout info for each leaf pane in the active tab.
     pub fn active_pane_infos(&self, viewport: Rect, cell_w: f32, cell_h: f32) -> Vec<PaneInfo> {
         let tab_idx = self.active_tab_index();
-        self.panes.get(tab_idx)
+        self.panes
+            .get(tab_idx)
             .map(|p| p.pane_infos(viewport, cell_w, cell_h))
             .unwrap_or_default()
     }
 
     /// Return separator lines between panes in the active tab.
-    pub fn active_pane_separators(&self, viewport: Rect, cell_w: f32, cell_h: f32) -> Vec<PaneSeparator> {
+    pub fn active_pane_separators(
+        &self,
+        viewport: Rect,
+        cell_w: f32,
+        cell_h: f32,
+    ) -> Vec<PaneSeparator> {
         let tab_idx = self.active_tab_index();
-        self.panes.get(tab_idx)
+        self.panes
+            .get(tab_idx)
             .map(|p| p.pane_separators(viewport, cell_w, cell_h))
             .unwrap_or_default()
     }
@@ -355,6 +467,7 @@ impl Mux {
         terminal_id: usize,
         buf: &mut Vec<(String, Vec<(AnsiColor, AnsiColor)>)>,
         search: Option<(&[SearchMatch], usize)>,
+        force_full: bool,
     ) {
         let Some(Some(terminal)) = self.terminals.get(terminal_id) else {
             buf.clear();
@@ -368,9 +481,11 @@ impl Mux {
                 let mut idx: rustc_hash::FxHashMap<i32, Vec<(usize, usize, bool)>> =
                     rustc_hash::FxHashMap::default();
                 for (i, m) in matches.iter().enumerate() {
-                    idx.entry(m.grid_line)
-                        .or_default()
-                        .push((m.col, m.col + m.len, i == current_idx));
+                    idx.entry(m.grid_line).or_default().push((
+                        m.col,
+                        m.col + m.len,
+                        i == current_idx,
+                    ));
                 }
                 idx
             } else {
@@ -387,7 +502,7 @@ impl Mux {
         // and skip undamaged rows — their stale data in `buf` will produce the same hash
         // as last frame, giving a row-cache hit in build_instances without grid reads.
         // REC-PERF-03: integrates alacritty_terminal's TermDamage API.
-        let can_skip = sel_range.is_none() && search.is_none();
+        let can_skip = !force_full && sel_range.is_none() && search.is_none();
         let damage_set: Option<rustc_hash::FxHashSet<usize>> = {
             use alacritty_terminal::term::TermDamage;
             match term.damage() {
@@ -400,7 +515,9 @@ impl Mux {
 
         // Resize to exact row count, keeping existing allocations.
         if buf.len() < rows {
-            buf.resize_with(rows, || (String::with_capacity(cols), Vec::with_capacity(cols)));
+            buf.resize_with(rows, || {
+                (String::with_capacity(cols), Vec::with_capacity(cols))
+            });
         } else {
             buf.truncate(rows);
         }
@@ -419,10 +536,18 @@ impl Mux {
             for col in 0..cols {
                 let cell = &term.grid()[grid_line][Column(col)];
                 text.push(if cell.c == '\0' { ' ' } else { cell.c });
-                let (fg, bg) = if cell.flags.contains(Flags::INVERSE) { (cell.bg, cell.fg) } else { (cell.fg, cell.bg) };
-                let (fg, bg) = if cell_in_selection(grid_line, Column(col), &sel_range) { (bg, fg) } else { (fg, bg) };
-                let (fg, bg) = search_highlight_at(grid_line.0, col, &search_idx)
-                    .unwrap_or((fg, bg));
+                let (fg, bg) = if cell.flags.contains(Flags::INVERSE) {
+                    (cell.bg, cell.fg)
+                } else {
+                    (cell.fg, cell.bg)
+                };
+                let (fg, bg) = if cell_in_selection(grid_line, Column(col), &sel_range) {
+                    (bg, fg)
+                } else {
+                    (fg, bg)
+                };
+                let (fg, bg) =
+                    search_highlight_at(grid_line.0, col, &search_idx).unwrap_or((fg, bg));
                 colors.push((fg, bg));
             }
         }
@@ -433,33 +558,51 @@ impl Mux {
     /// Only valid when `new_query.starts_with(prev_query)` — caller is responsible for this check.
     pub fn filter_matches(&self, prev: &[SearchMatch], new_query: &str) -> Vec<SearchMatch> {
         use alacritty_terminal::index::{Column, Line};
-        if new_query.is_empty() || prev.is_empty() { return Vec::new(); }
+        if new_query.is_empty() || prev.is_empty() {
+            return Vec::new();
+        }
         let q_lower = new_query.to_lowercase();
         let q_chars: Vec<char> = q_lower.chars().collect();
         let q_len = q_chars.len();
-        let Some(terminal) = self.active_terminal() else { return Vec::new() };
+        let Some(terminal) = self.active_terminal() else {
+            return Vec::new();
+        };
         terminal.with_term(|term| {
             let cols = term.columns();
-            prev.iter().filter_map(|m| {
-                if m.col + q_len > cols { return None; }
-                let line = Line(m.grid_line);
-                for (i, &qc) in q_chars.iter().enumerate() {
-                    let c = term.grid()[line][Column(m.col + i)].c;
-                    let c = if c == '\0' { ' ' } else { c };
-                    if c.to_lowercase().next().unwrap_or(c) != qc { return None; }
-                }
-                Some(SearchMatch { grid_line: m.grid_line, col: m.col, len: q_len })
-            }).collect()
+            prev.iter()
+                .filter_map(|m| {
+                    if m.col + q_len > cols {
+                        return None;
+                    }
+                    let line = Line(m.grid_line);
+                    for (i, &qc) in q_chars.iter().enumerate() {
+                        let c = term.grid()[line][Column(m.col + i)].c;
+                        let c = if c == '\0' { ' ' } else { c };
+                        if c.to_lowercase().next().unwrap_or(c) != qc {
+                            return None;
+                        }
+                    }
+                    Some(SearchMatch {
+                        grid_line: m.grid_line,
+                        col: m.col,
+                        len: q_len,
+                    })
+                })
+                .collect()
         })
     }
 
     /// Search all visible rows and scrollback history for `query` (case-insensitive).
     /// Returns matches sorted from oldest history to current screen.
     pub fn search_active_terminal(&self, query: &str) -> Vec<SearchMatch> {
-        if query.is_empty() { return Vec::new(); }
+        if query.is_empty() {
+            return Vec::new();
+        }
         let query_lower = query.to_lowercase();
         let query_len = query.chars().count();
-        let Some(terminal) = self.active_terminal() else { return Vec::new() };
+        let Some(terminal) = self.active_terminal() else {
+            return Vec::new();
+        };
 
         terminal.with_term(|term| {
             let screen_rows = term.screen_lines() as i32;
@@ -484,7 +627,11 @@ impl Mux {
                 // Each index is a terminal column — no byte-offset ambiguity.
                 for col in 0..row_chars.len().saturating_sub(query_chars.len() - 1) {
                     if row_chars[col..col + query_chars.len()] == query_chars[..] {
-                        matches.push(SearchMatch { grid_line: grid_row, col, len: query_len });
+                        matches.push(SearchMatch {
+                            grid_line: grid_row,
+                            col,
+                            len: query_len,
+                        });
                     }
                 }
             }
@@ -501,8 +648,15 @@ impl Mux {
 
 fn cell_in_selection(line: Line, col: Column, sel_range: &Option<SelectionRange>) -> bool {
     let Some(range) = sel_range else { return false };
-    if range.is_block { line >= range.start.line && line <= range.end.line && col >= range.start.column && col <= range.end.column }
-    else { let pt = Point::new(line, col); pt >= range.start && pt <= range.end }
+    if range.is_block {
+        line >= range.start.line
+            && line <= range.end.line
+            && col >= range.start.column
+            && col <= range.end.column
+    } else {
+        let pt = Point::new(line, col);
+        pt >= range.start && pt <= range.end
+    }
 }
 
 /// Return overridden (fg, bg) colors if (grid_line, col) falls inside any search match.
@@ -514,7 +668,11 @@ fn search_highlight_at(
 ) -> Option<(AnsiColor, AnsiColor)> {
     for &(start, end, is_current) in idx.get(&grid_line)? {
         if col >= start && col < end {
-            let bg = if is_current { SEARCH_CURRENT_BG } else { SEARCH_MATCH_BG };
+            let bg = if is_current {
+                SEARCH_CURRENT_BG
+            } else {
+                SEARCH_MATCH_BG
+            };
             return Some((SEARCH_MATCH_FG, bg));
         }
     }

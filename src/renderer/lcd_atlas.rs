@@ -106,7 +106,8 @@ impl LcdGlyphAtlas {
     pub fn evict_cold(&mut self, max_age: u64) -> usize {
         let current = self.epoch;
         let before = self.cache.len();
-        self.cache.retain(|_, e| current.saturating_sub(e.last_used) <= max_age);
+        self.cache
+            .retain(|_, e| current.saturating_sub(e.last_used) <= max_age);
         before - self.cache.len()
     }
 
@@ -175,7 +176,13 @@ impl LcdGlyphAtlas {
             bearing_x,
             bearing_y,
         };
-        self.cache.insert(key, LcdCacheEntry { entry, last_used: self.epoch });
+        self.cache.insert(
+            key,
+            LcdCacheEntry {
+                entry,
+                last_used: self.epoch,
+            },
+        );
         Ok(entry)
     }
 
@@ -207,6 +214,8 @@ impl LcdGlyphAtlas {
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-        self.view = self.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        self.view = self
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
     }
 }

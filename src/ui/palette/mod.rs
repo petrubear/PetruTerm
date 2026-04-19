@@ -5,8 +5,8 @@ pub use actions::{Action, PaletteAction};
 use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
 
-use crate::config::Config;
 use self::actions::built_in_actions;
+use crate::config::Config;
 
 /// Command palette state machine.
 pub struct CommandPalette {
@@ -44,7 +44,11 @@ impl CommandPalette {
     /// Rebuild the action list with fresh keybinds from `config` (call after hot-reload).
     pub fn rebuild_keybinds(&mut self, config: &Config) {
         self.all_actions = built_in_actions(config);
-        if self.visible { self.filter(); } else { self.results = self.all_actions.clone(); }
+        if self.visible {
+            self.filter();
+        } else {
+            self.results = self.all_actions.clone();
+        }
     }
 
     /// Open the palette (reset state).
@@ -108,7 +112,8 @@ impl CommandPalette {
 
     /// Replace snippet actions with those from the current config (call after load/hot-reload).
     pub fn rebuild_snippets(&mut self, snippets: &[crate::config::schema::SnippetConfig]) {
-        self.all_actions.retain(|a| !matches!(a.action, Action::ExpandSnippet(_)));
+        self.all_actions
+            .retain(|a| !matches!(a.action, Action::ExpandSnippet(_)));
         for s in snippets {
             let label = format!("Snippet: {}", s.name);
             self.all_actions.push(PaletteAction {
@@ -117,7 +122,8 @@ impl CommandPalette {
                 keybind: s.trigger.as_deref().map(|t| format!("Tab: {t}")),
             });
         }
-        self.all_actions.sort_unstable_by(|a, b| a.name.cmp(&b.name));
+        self.all_actions
+            .sort_unstable_by(|a, b| a.name.cmp(&b.name));
         if !self.visible {
             self.results = self.all_actions.clone();
         } else {

@@ -143,12 +143,16 @@ impl GlyphAtlas {
     pub fn evict_cold(&mut self, max_age: u64) -> usize {
         let current = self.epoch;
         let before = self.cache.len();
-        self.cache.retain(|_, entry| {
-            current.saturating_sub(entry.last_used) <= max_age
-        });
+        self.cache
+            .retain(|_, entry| current.saturating_sub(entry.last_used) <= max_age);
         let evicted = before - self.cache.len();
         if evicted > 0 {
-            log::debug!("Atlas: evicted {} cold glyphs (epoch {}, max_age {})", evicted, current, max_age);
+            log::debug!(
+                "Atlas: evicted {} cold glyphs (epoch {}, max_age {})",
+                evicted,
+                current,
+                max_age
+            );
         }
         evicted
     }
@@ -198,7 +202,11 @@ impl GlyphAtlas {
                 bytes_per_row: Some(width * 4),
                 rows_per_image: Some(height),
             },
-            wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
         );
 
         self.cursor_x += w;
@@ -212,7 +220,15 @@ impl GlyphAtlas {
             (y + height) as f32 / self.height as f32,
         ];
 
-        let entry = AtlasEntry { uv, width, height, bearing_x, bearing_y, is_color, last_used: self.epoch };
+        let entry = AtlasEntry {
+            uv,
+            width,
+            height,
+            bearing_x,
+            bearing_y,
+            is_color,
+            last_used: self.epoch,
+        };
         self.cache.insert(key, entry);
         Ok(entry)
     }
@@ -220,7 +236,9 @@ impl GlyphAtlas {
     /// Returns the atlas fill percentage (0.0–100.0).
     pub fn current_fill_percent(&self) -> f32 {
         let total = (self.width * self.height) as u64;
-        if total == 0 { return 0.0; }
+        if total == 0 {
+            return 0.0;
+        }
         (self.used_pixels as f32 / total as f32) * 100.0
     }
 
@@ -252,7 +270,9 @@ impl GlyphAtlas {
         self.used_pixels = 0;
         self.cache.clear();
         self.texture = Self::create_texture(device);
-        self.view = self.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        self.view = self
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
     }
 }
 
@@ -264,8 +284,12 @@ mod tests {
     /// Build a minimal AtlasEntry for test injection (no GPU involved).
     fn dummy_entry(epoch: u64) -> AtlasEntry {
         AtlasEntry {
-            uv: [0.0; 4], width: 10, height: 10,
-            bearing_x: 0, bearing_y: 0, is_color: false,
+            uv: [0.0; 4],
+            width: 10,
+            height: 10,
+            bearing_x: 0,
+            bearing_y: 0,
+            is_color: false,
             last_used: epoch,
         }
     }
@@ -323,8 +347,14 @@ mod tests {
         assert!(cache.contains_key(&dummy_key(1)));
         assert!(cache.contains_key(&dummy_key(2)));
         assert!(cache.contains_key(&dummy_key(3)));
-        assert!(!cache.contains_key(&dummy_key(4)), "Cold entry must be evicted");
-        assert!(!cache.contains_key(&dummy_key(5)), "Cold entry must be evicted");
+        assert!(
+            !cache.contains_key(&dummy_key(4)),
+            "Cold entry must be evicted"
+        );
+        assert!(
+            !cache.contains_key(&dummy_key(5)),
+            "Cold entry must be evicted"
+        );
         let _ = epoch; // suppress unused warning
     }
 

@@ -1,5 +1,5 @@
-use criterion::{criterion_group, criterion_main, Criterion};
 use cosmic_text::{fontdb, FontSystem};
+use criterion::{criterion_group, criterion_main, Criterion};
 use petruterm::config::schema::FontConfig;
 use petruterm::font::TextShaper;
 

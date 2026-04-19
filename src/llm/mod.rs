@@ -25,21 +25,33 @@ pub struct ChatMessage {
 
 impl ChatMessage {
     pub fn system(content: impl Into<String>) -> Self {
-        Self { role: ChatRole::System, content: content.into() }
+        Self {
+            role: ChatRole::System,
+            content: content.into(),
+        }
     }
 
     pub fn user(content: impl Into<String>) -> Self {
-        Self { role: ChatRole::User, content: content.into() }
+        Self {
+            role: ChatRole::User,
+            content: content.into(),
+        }
     }
 
     pub fn assistant(content: impl Into<String>) -> Self {
-        Self { role: ChatRole::Assistant, content: content.into() }
+        Self {
+            role: ChatRole::Assistant,
+            content: content.into(),
+        }
     }
 
     /// Create a tool-result message (response to an LLM tool call).
     #[allow(dead_code)]
     pub fn tool_result(tool_call_id: impl Into<String>, content: impl Into<String>) -> Self {
-        Self { role: ChatRole::Tool(tool_call_id.into()), content: content.into() }
+        Self {
+            role: ChatRole::Tool(tool_call_id.into()),
+            content: content.into(),
+        }
     }
 
     /// Serialize to the JSON format expected by OpenAI-compatible APIs.
@@ -72,10 +84,10 @@ pub enum ChatRole {
 impl ChatRole {
     pub fn as_str(&self) -> &str {
         match self {
-            ChatRole::System    => "system",
-            ChatRole::User      => "user",
+            ChatRole::System => "system",
+            ChatRole::User => "user",
             ChatRole::Assistant => "assistant",
-            ChatRole::Tool(_)   => "tool",
+            ChatRole::Tool(_) => "tool",
         }
     }
 }
@@ -107,9 +119,17 @@ pub trait LlmProvider: Send + Sync {
 /// Returns an `Arc` so the provider can be cloned cheaply into tokio tasks.
 pub fn build_provider(config: &LlmConfig) -> Result<Arc<dyn LlmProvider>> {
     match config.provider.as_str() {
-        "openrouter" => Ok(Arc::new(openrouter::OpenRouterProvider::from_config(config)?)),
-        "ollama"     => Ok(Arc::new(openai_compat::OpenAICompatProvider::ollama(config))),
-        "lmstudio"   => Ok(Arc::new(openai_compat::OpenAICompatProvider::lmstudio(config))),
-        other => anyhow::bail!("Unknown LLM provider: '{other}'. Valid options: openrouter, ollama, lmstudio"),
+        "openrouter" => Ok(Arc::new(openrouter::OpenRouterProvider::from_config(
+            config,
+        )?)),
+        "ollama" => Ok(Arc::new(openai_compat::OpenAICompatProvider::ollama(
+            config,
+        ))),
+        "lmstudio" => Ok(Arc::new(openai_compat::OpenAICompatProvider::lmstudio(
+            config,
+        ))),
+        other => anyhow::bail!(
+            "Unknown LLM provider: '{other}'. Valid options: openrouter, ollama, lmstudio"
+        ),
     }
 }

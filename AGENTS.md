@@ -96,7 +96,7 @@ PetruTerm/
 
 ## Current Focus
 
-**Phase 1 — Core Terminal (MVP).** See `.context/specs/build_phases.md` for deliverables checklist and exit criteria.
+**Phase 4 — Plugin Ecosystem.** See `.context/specs/build_phases.md` for deliverables checklist and exit criteria.
 
 ## Important Notes
 
@@ -106,6 +106,42 @@ PetruTerm/
 - LLM features are entirely optional and can be disabled via `config.llm.enabled = false`
 - Default theme: Dracula Pro. Default font: Monolisa Nerd Font (fallback: JetBrains Mono)
 - macOS only for Phase 1; cross-platform considered for Phase 2+
+- LLM API key resolution order: (1) `llm.api_key` in Lua config, (2) `OPENROUTER_API_KEY` env var,
+  (3) macOS Keychain: `security add-generic-password -s PetruTerm -a OPENROUTER_API_KEY -w <key>`
+
+## Keybinds
+
+Leader key: `Ctrl+F` (timeout 1000ms)
+
+| Keybind | Action |
+|---------|--------|
+| `Cmd+C / Cmd+V` | Copy / paste |
+| `Cmd+Q` | Quit |
+| `Cmd+K` | Clear screen + scrollback |
+| `Cmd+F` | Open/close text search |
+| `Cmd+1-9` | Switch to tab N |
+| `Leader c` | New tab |
+| `Leader &` | Close tab |
+| `Leader n/b` | Next/prev tab |
+| `Leader ,` | Rename tab |
+| `Leader %` | Split horizontal |
+| `Leader "` | Split vertical |
+| `Leader x` | Close pane |
+| `Leader h/j/k/l` | Focus pane (vim-style) |
+| `Leader Option+arrows` | Resize pane |
+| `Leader a` | Open AI panel / toggle focus terminal↔chat |
+| `Escape` (in panel) | Return to terminal without closing panel |
+| `/q` (in panel input) | Close the panel |
+| `Leader e` | Explain last output |
+| `Leader f` | Fix last error |
+| `Leader z` | Undo last write |
+| `Leader o` | Command palette |
+| `Ctrl+Space` | Inline AI block |
+| Right-click | Context menu |
+
+## Agent Instructions
+
+- Before editing any file, read it first. Before modifying a function, grep for all callers. Research before you edit.
 
 ## Git Commit Standard
 

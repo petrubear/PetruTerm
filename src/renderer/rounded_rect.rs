@@ -205,7 +205,11 @@ impl RoundedRectPipeline {
             }],
         });
 
-        Self { pipeline, uniform_buffer, uniform_bind_group }
+        Self {
+            pipeline,
+            uniform_buffer,
+            uniform_bind_group,
+        }
     }
 
     /// Write the viewport size into the uniform buffer. Call on init and on resize.

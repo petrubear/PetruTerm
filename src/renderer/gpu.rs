@@ -74,12 +74,12 @@ impl GpuRenderer {
             use wgpu::rwh::{HasDisplayHandle, HasWindowHandle};
             instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
                 raw_display_handle: Some(
-                    window.display_handle().context("No display handle")?.as_raw()
+                    window
+                        .display_handle()
+                        .context("No display handle")?
+                        .as_raw(),
                 ),
-                raw_window_handle: window
-                    .window_handle()
-                    .context("No window handle")?
-                    .as_raw(),
+                raw_window_handle: window.window_handle().context("No window handle")?.as_raw(),
             })?
         };
 
@@ -297,9 +297,11 @@ impl GpuRenderer {
 
         // Update viewport_size in uniforms (partial write at offset 8)
         let vp = [width as f32, height as f32];
-        self.queue.write_buffer(&self.uniform_buffer, 8, bytemuck::cast_slice(&vp));
+        self.queue
+            .write_buffer(&self.uniform_buffer, 8, bytemuck::cast_slice(&vp));
 
-        self.rect_pipeline.update_viewport(&self.queue, width, height);
+        self.rect_pipeline
+            .update_viewport(&self.queue, width, height);
 
         log::debug!("Renderer resized to {width}x{height}");
     }
@@ -307,7 +309,8 @@ impl GpuRenderer {
     /// Call after font measurement so the shader uses real cell metrics.
     pub fn set_cell_size(&mut self, w: f32, h: f32) {
         let cell = [w, h];
-        self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&cell));
+        self.queue
+            .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&cell));
     }
 
     /// Update the padding (origin offset) uniform. The x/y values are in physical pixels.
@@ -315,14 +318,17 @@ impl GpuRenderer {
     pub fn set_padding(&mut self, x: f32, y: f32) {
         let pad = [x, y];
         // CellUniforms layout: cell_size(8) + viewport_size(8) + padding(8) + _pad(8)
-        self.queue.write_buffer(&self.uniform_buffer, 16, bytemuck::cast_slice(&pad));
+        self.queue
+            .write_buffer(&self.uniform_buffer, 16, bytemuck::cast_slice(&pad));
     }
 
     /// Upload cell instances for this frame. Supports partial updates via offset.
     pub fn upload_instances(&mut self, instances: &[CellVertex], offset: usize) {
         let count = instances.len();
         if offset + count > MAX_INSTANCES {
-            log::warn!("upload_instances overflow: offset={offset} count={count} max={MAX_INSTANCES}");
+            log::warn!(
+                "upload_instances overflow: offset={offset} count={count} max={MAX_INSTANCES}"
+            );
         }
         if count > 0 && offset + count <= MAX_INSTANCES {
             self.queue.write_buffer(
@@ -362,7 +368,9 @@ impl GpuRenderer {
                 return Ok(());
             }
             CurrentSurfaceTexture::Validation => {
-                return Err(anyhow::anyhow!("wgpu validation error during surface acquire"));
+                return Err(anyhow::anyhow!(
+                    "wgpu validation error during surface acquire"
+                ));
             }
         };
 
@@ -370,9 +378,11 @@ impl GpuRenderer {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("frame encoder"),
-        });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("frame encoder"),
+            });
 
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -480,7 +490,10 @@ impl GpuRenderer {
     pub fn upload_rect_instances(&mut self, instances: &[RoundedRectInstance]) {
         let count = instances.len().min(MAX_RECT_INSTANCES);
         if instances.len() > MAX_RECT_INSTANCES {
-            log::warn!("upload_rect_instances overflow: count={} max={MAX_RECT_INSTANCES}", instances.len());
+            log::warn!(
+                "upload_rect_instances overflow: count={} max={MAX_RECT_INSTANCES}",
+                instances.len()
+            );
         }
         if count > 0 {
             self.queue.write_buffer(
@@ -496,7 +509,10 @@ impl GpuRenderer {
     pub fn upload_lcd_instances(&mut self, instances: &[CellVertex]) {
         let count = instances.len().min(MAX_INSTANCES);
         if instances.len() > MAX_INSTANCES {
-            log::warn!("upload_lcd_instances overflow: count={} max={MAX_INSTANCES}", instances.len());
+            log::warn!(
+                "upload_lcd_instances overflow: count={} max={MAX_INSTANCES}",
+                instances.len()
+            );
         }
         if count > 0 {
             self.queue.write_buffer(
@@ -589,37 +605,39 @@ impl GpuRenderer {
     /// Call this immediately after any atlas clear, before the next render pass.
     pub fn rebuild_atlas_bind_groups(&mut self) {
         self.atlas_bind_group = make_atlas_bind_group(&self.device, &self.pipeline, &self.atlas);
-        self.bg_aware_atlas_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("atlas bg (bg-aware)"),
-            layout: &self.bg_aware_pipeline.atlas_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(self.atlas.texture_view()),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(self.atlas.sampler()),
-                },
-            ],
-        });
+        self.bg_aware_atlas_bind_group =
+            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("atlas bg (bg-aware)"),
+                layout: &self.bg_aware_pipeline.atlas_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(self.atlas.texture_view()),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(self.atlas.sampler()),
+                    },
+                ],
+            });
         if self.lcd_ready {
             if let (Some(pipeline), Some(atlas_rc)) = (&self.lcd_pipeline, &self.lcd_atlas) {
                 let atlas = atlas_rc.borrow();
-                self.lcd_atlas_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("LCD atlas bg"),
-                    layout: &pipeline.lcd_atlas_bind_group_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::TextureView(atlas.texture_view()),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::Sampler(atlas.sampler()),
-                        },
-                    ],
-                });
+                self.lcd_atlas_bind_group =
+                    self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("LCD atlas bg"),
+                        layout: &pipeline.lcd_atlas_bind_group_layout,
+                        entries: &[
+                            wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: wgpu::BindingResource::TextureView(atlas.texture_view()),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 1,
+                                resource: wgpu::BindingResource::Sampler(atlas.sampler()),
+                            },
+                        ],
+                    });
             }
         }
     }

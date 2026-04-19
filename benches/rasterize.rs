@@ -1,5 +1,5 @@
-use criterion::{criterion_group, criterion_main, Criterion};
 use cosmic_text::{fontdb, FontSystem, SwashCache, SwashContent};
+use criterion::{criterion_group, criterion_main, Criterion};
 use petruterm::config::schema::FontConfig;
 use petruterm::font::TextShaper;
 
@@ -14,7 +14,11 @@ fn make_shaper() -> (TextShaper, FontConfig) {
 
     'outer: for candidate in &fallback_families {
         for face in db.faces() {
-            if face.families.iter().any(|(name, _)| name.eq_ignore_ascii_case(candidate)) {
+            if face
+                .families
+                .iter()
+                .any(|(name, _)| name.eq_ignore_ascii_case(candidate))
+            {
                 chosen_family = face.families.first().map(|(n, _)| n.clone());
                 chosen_id = Some(face.id);
                 chosen_path = match &face.source {
@@ -42,7 +46,16 @@ fn make_shaper() -> (TextShaper, FontConfig) {
     };
 
     let font_system = FontSystem::new_with_locale_and_db("en-US".to_string(), db);
-    let shaper = TextShaper::new(None, font_system, family, font_id, font_path, 0, &font_config, None);
+    let shaper = TextShaper::new(
+        None,
+        font_system,
+        family,
+        font_id,
+        font_path,
+        0,
+        &font_config,
+        None,
+    );
     (shaper, font_config)
 }
 
@@ -93,7 +106,9 @@ fn bench_rasterize_line_ascii(c: &mut Criterion) {
 
     c.bench_function("rasterize_line_ascii", |b| {
         b.iter(|| {
-            keys.iter().map(|&k| rasterize_one(&mut shaper.swash_cache, &mut shaper.font_system, k)).sum::<usize>()
+            keys.iter()
+                .map(|&k| rasterize_one(&mut shaper.swash_cache, &mut shaper.font_system, k))
+                .sum::<usize>()
         });
     });
 }
@@ -108,7 +123,9 @@ fn bench_rasterize_line_ligatures(c: &mut Criterion) {
 
     c.bench_function("rasterize_line_ligatures", |b| {
         b.iter(|| {
-            keys.iter().map(|&k| rasterize_one(&mut shaper.swash_cache, &mut shaper.font_system, k)).sum::<usize>()
+            keys.iter()
+                .map(|&k| rasterize_one(&mut shaper.swash_cache, &mut shaper.font_system, k))
+                .sum::<usize>()
         });
     });
 }
@@ -123,7 +140,9 @@ fn bench_rasterize_line_unicode(c: &mut Criterion) {
 
     c.bench_function("rasterize_line_unicode", |b| {
         b.iter(|| {
-            keys.iter().map(|&k| rasterize_one(&mut shaper.swash_cache, &mut shaper.font_system, k)).sum::<usize>()
+            keys.iter()
+                .map(|&k| rasterize_one(&mut shaper.swash_cache, &mut shaper.font_system, k))
+                .sum::<usize>()
         });
     });
 }
