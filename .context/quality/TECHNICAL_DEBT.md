@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-04-18 (planning)
-**Open Items:** 30
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 12 | **P3:** 18
+**Last Updated:** 2026-04-19
+**Open Items:** 22
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 12 | **P3:** 10
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -148,53 +148,19 @@ _TD-PERF-22, 31, 32, 33, 34, 37 — RESUELTOS 2026-04-17. Ver archivo._
 
 ---
 
-### TD-MEM-16: `ascii_glyph_cache` es un array fijo de 128 `u32` — documentar
-- **Archivo:** `src/font/shaper.rs:TextShaper`
-- **Descripción:** No es un problema de memoria. Documentar el límite explícitamente por si se añaden rangos futuros (Latin Extended, Cyrillic).
-- **Fix:** Comentario `// Fixed-size: 512 bytes. Extend to HashMap if non-ASCII fast paths are needed.`
-- **Severidad:** P3 — documentación, no un bug.
+_TD-MEM-16, 17, 18 — RESUELTOS 2026-04-19. Ver archivo._
 
 ---
 
-### TD-MEM-17: `streaming_buf` no se limpia al cerrar el panel durante streaming
-- **Archivo:** `src/llm/chat_panel.rs:close()`
-- **Descripción:** `close()` pone `state = Hidden` pero no limpia `streaming_buf`. Al reabrir el panel, puede mostrar contenido stale.
-- **Fix:** `self.streaming_buf.clear();` en `close()`.
-- **Severidad:** P3 — confusión UX menor.
+_TD-MEM-22 — RESUELTO 2026-04-19. `bounded(256)` para `ai_tx`/`ai_rx`; `bounded(64)` para `block_tx`/`block_rx`. Ver archivo._
 
 ---
 
-### TD-MEM-18: `separator_cache` y `thin_separator_cache` no se liberan al cerrar el panel
-- **Archivo:** `src/llm/chat_panel.rs:ChatPanel`
-- **Descripción:** Strings proporcionales al ancho del panel (~50 chars), permanecen si el panel no se reabre. ~100 bytes. Negligible.
-- **Fix:** `clear()` en `close()`. Impacto mínimo.
-- **Severidad:** P3 — negligible.
+_TD-MEM-24 — RESUELTO 2026-04-19. `undo_stack: VecDeque`; `pop_front()` en evicción; `push_back()` en push; `pop_back()` en undo. Ver archivo._
 
 ---
 
-### TD-MEM-22: Canales AI `ai_tx`/`ai_rx` y `block_tx`/`block_rx` son unbounded
-- **Archivo:** `src/app/ui.rs:UiManager::new()` — líneas 96, 97, 109
-- **Descripción:** En condiciones normales, el main thread drena los tokens en cada frame (~16 ms). Con modelos a 100 tokens/s, se acumulan como máximo 1-2 tokens por frame. El riesgo práctico es mínimo. El patrón es arquitectónicamente incorrecto pero no causa problemas observables.
-- **Fix:** `crossbeam_channel::bounded(256)` para `ai_tx`/`ai_rx`; `bounded(64)` para `block_tx`/`block_rx`. Manejar `SendError` (canal lleno) descartando el token.
-- **Severidad:** P3 — downgraded desde P2; bounded por la tasa de tokens y el frame rate.
-
----
-
-### TD-MEM-24: `undo_stack` usa `Vec::remove(0)` — O(n) shift en cada evicción
-- **Archivo:** `src/app/ui.rs:216` — `self.undo_stack.remove(0)`
-- **Origen:** kiro
-- **Descripción:** Con `MAX_UNDO = 10`, el O(10) shift es imperceptible. El patrón es incorrecto: una cola FIFO debe usar `VecDeque` con `pop_front()` O(1).
-- **Fix:** `undo_stack: VecDeque<(PathBuf, String)>`. `remove(0)` → `pop_front()`. `push` → `push_back()`. `pop()` en `cmd_undo_last_write` → `pop_back()`.
-- **Severidad:** P3 — downgraded desde P2; zero impacto práctico con MAX_UNDO=10.
-
----
-
-### TD-MEM-25: Canal `git_tx`/`git_rx` en `UiManager` es unbounded
-- **Archivo:** `src/app/ui.rs:UiManager::new()`
-- **Origen:** kiro
-- **Descripción:** Con el in-flight guard (`git_branch_in_flight`), solo hay a lo sumo un resultado pendiente. El canal unbounded es funcionalmente equivalente a `bounded(1)` en condiciones normales.
-- **Fix:** `crossbeam_channel::bounded(1)`. Si el canal está lleno, descartar el resultado nuevo (ya hay uno más reciente).
-- **Severidad:** P3 — corrección de patrón; impacto mínimo en condiciones normales.
+_TD-MEM-25 — RESUELTO 2026-04-19. `bounded(1)` en `git_tx`/`git_rx`; send ya ignora error con `let _ =`. Ver archivo._
 
 ---
 
@@ -206,19 +172,11 @@ _TD-PERF-22, 31, 32, 33, 34, 37 — RESUELTOS 2026-04-17. Ver archivo._
 
 ---
 
-### TD-PERF-18: Tokio runtime con pool de threads por defecto (num_cpus)
-- **Archivo:** `src/app/ui.rs:93-96`
-- **Descripción:** El pool crea `num_cpus::get()` workers (típicamente 8-16 en M4). Las tasks de PetruTerm son todas I/O-bound (requests HTTP al LLM, git branch, lecturas de archivo). Un pool grande = context switches innecesarios + ~2 MB de stack por worker.
-- **Fix:** `Builder::new_multi_thread().worker_threads(2).enable_all().build()`.
-- **Severidad:** P3 — downgraded desde P2; overhead constante pero marginal en Apple Silicon.
+_TD-PERF-18 — RESUELTO 2026-04-19. `worker_threads(2)` en tokio builder. Ver archivo._
 
 ---
 
-### TD-PERF-23: Leader key timeout con `Instant::elapsed()` por keystroke
-- **Archivo:** `src/app/input/mod.rs:159-163`
-- **Descripción:** Cada keystroke evalúa `if t.elapsed() > timeout_ms` — `elapsed()` llama a `SystemTime::now()` (syscall en macOS).
-- **Fix:** `leader_deadline: Instant` almacenado al activar el leader; comparar `Instant::now() >= leader_deadline` solo cuando se necesite.
-- **Severidad:** P3 — overhead durante typing rápido con leader activo.
+_TD-PERF-23 — RESUELTO 2026-04-19. `leader_timer` → `leader_deadline: Option<Instant>`; set `Instant::now() + Duration::from_millis(timeout_ms)` on activate; check `Instant::now() >= deadline`. Ver archivo._
 
 ---
 
@@ -262,11 +220,7 @@ _TD-PERF-22, 31, 32, 33, 34, 37 — RESUELTOS 2026-04-17. Ver archivo._
 
 ---
 
-### TD-PERF-35: `" ".repeat(gap)` aloca un `String` en cada rebuild del status bar
-- **Archivo:** `src/app/renderer.rs:1184`
-- **Descripción:** `self.push_shaped_row(&" ".repeat(gap), ...)` — el status bar tiene cache, por lo que esta alocación solo ocurre en rebuilds (cambio de CWD, branch, exit code, resize). En condiciones normales es raro.
-- **Fix:** Campo `gap_buf: String` en `RenderContext` reutilizable (`clear()` + `extend(repeat(' ').take(gap))`).
-- **Severidad:** P3 — downgraded desde P2; detrás de cache; alocación infrecuente.
+_TD-PERF-35 — RESUELTO 2026-04-19. `gap_buf: String` en `RenderContext`; `mem::take` + `extend(repeat(' ').take(gap))` + restore. Ver archivo._
 
 ---
 

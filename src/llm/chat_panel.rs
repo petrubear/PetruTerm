@@ -223,6 +223,9 @@ impl ChatPanel {
 
     pub fn close(&mut self) {
         self.state = PanelState::Hidden;
+        self.streaming_buf.clear();
+        self.separator_cache.clear();
+        self.thin_separator_cache.clear();
         self.dirty = true;
     }
 

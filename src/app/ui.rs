@@ -8,7 +8,7 @@ use crate::llm::tools::{execute_tool, AgentStepResult, AgentTool};
 use crate::llm::LlmProvider;
 use crate::ui::{CommandPalette, ContextMenu, Rect, SearchBar, SplitDir};
 use crossbeam_channel::{Receiver, Sender};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
@@ -86,7 +86,7 @@ pub struct UiManager {
     /// Oneshot sender to complete a pending confirmation. Consumed on y/n.
     pending_confirm_tx: Option<tokio::sync::oneshot::Sender<bool>>,
     /// Undo stack: (path, original_content) pairs, newest first.
-    pub undo_stack: Vec<(PathBuf, String)>,
+    pub undo_stack: VecDeque<(PathBuf, String)>,
     /// A confirmed run_command to forward to the active PTY. Consumed by app.rs.
     pub pending_pty_run: Option<String>,
 
@@ -127,9 +127,10 @@ pub struct UiManager {
 
 impl UiManager {
     pub fn new(config: &Config) -> Self {
-        let (ai_tx, ai_rx) = crossbeam_channel::unbounded();
-        let (block_tx, block_rx) = crossbeam_channel::unbounded();
+        let (ai_tx, ai_rx) = crossbeam_channel::bounded(256);
+        let (block_tx, block_rx) = crossbeam_channel::bounded(64);
         let tokio_rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
             .enable_all()
             .build()
             .expect("Failed to build tokio runtime");
@@ -143,7 +144,7 @@ impl UiManager {
             (None, None)
         };
 
-        let (git_tx_init, git_rx_init) = crossbeam_channel::unbounded::<String>();
+        let (git_tx_init, git_rx_init) = crossbeam_channel::bounded::<String>(1);
 
         let panel_width_cols = config.llm.ui.width_cols;
         let mut initial_panel = ChatPanel::new();
@@ -171,7 +172,7 @@ impl UiManager {
             ai_tx,
             ai_rx,
             pending_confirm_tx: None,
-            undo_stack: Vec::new(),
+            undo_stack: VecDeque::new(),
             pending_pty_run: None,
             git_branch_cache: None,
             git_branch_fetched_at: None,
@@ -277,9 +278,9 @@ impl UiManager {
                 AiEvent::UndoState { path, content } => {
                     const MAX_UNDO: usize = 10;
                     if self.undo_stack.len() >= MAX_UNDO {
-                        self.undo_stack.remove(0); // FIFO: drop oldest (TD-037)
+                        self.undo_stack.pop_front();
                     }
-                    self.undo_stack.push((path, content));
+                    self.undo_stack.push_back((path, content));
                 }
             }
         }
@@ -438,7 +439,7 @@ impl UiManager {
 
     /// Undo the last file write by restoring the saved original content.
     pub fn cmd_undo_last_write(&mut self) {
-        if let Some((path, content)) = self.undo_stack.pop() {
+        if let Some((path, content)) = self.undo_stack.pop_back() {
             match std::fs::write(&path, &content) {
                 Ok(_) => {
                     let msg = format!("↩ Restored {}", path.display());

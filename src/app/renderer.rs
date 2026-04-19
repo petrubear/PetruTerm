@@ -76,6 +76,8 @@ pub struct RenderContext {
     /// General-purpose format scratch for callers of `push_shaped_row` (TD-PERF-13).
     /// Kept separate from `scratch_str` (used inside push_shaped_row) to avoid borrow conflicts.
     pub fmt_buf: String,
+    /// Reusable gap-fill buffer for the status bar spacer (TD-PERF-35).
+    gap_buf: String,
     /// Reusable line buffer for `build_chat_panel_instances` — avoids Vec realloc per rebuild.
     /// Strings inside are reused across frames when capacity permits (TD-PERF-13).
     pub scratch_lines: Vec<(String, [f32; 4])>,
@@ -173,6 +175,7 @@ impl RenderContext {
             streaming_stable_end: 0,
             streaming_cache_key: None,
             fmt_buf: String::new(),
+            gap_buf: String::new(),
             scratch_lines: Vec::new(),
             frame_counter: 0,
             rect_instances: Vec::new(),
@@ -1546,7 +1549,11 @@ impl RenderContext {
         // Fill gap between left and right with bar_bg.
         if right_start > col {
             let gap = right_start - col;
-            self.push_shaped_row(&" ".repeat(gap), bar_bg, bar_bg, row, col, gap, font);
+            let mut buf = std::mem::take(&mut self.gap_buf);
+            buf.clear();
+            buf.extend(std::iter::repeat(' ').take(gap));
+            self.push_shaped_row(&buf, bar_bg, bar_bg, row, col, gap, font);
+            self.gap_buf = buf;
         }
 
         let mut rcol = right_start;

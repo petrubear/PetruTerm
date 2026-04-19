@@ -278,6 +278,7 @@ pub struct TextShaper {
     word_cache: LruCache<(u64, u32), ShapedRun>,
     /// Direct cmap glyph-ID cache for the ASCII fast path.
     /// Maps ASCII codepoint → glyph_id (0 = not in font / fast-path unavailable).
+    /// Fixed-size: 512 bytes. Extend to HashMap if non-ASCII fast paths are needed.
     ascii_glyph_cache: [u32; 128],
     /// Whether the ASCII fast path has been initialized.
     ascii_glyph_cache_ready: bool,

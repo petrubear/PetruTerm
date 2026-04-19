@@ -23,7 +23,7 @@ pub struct SeparatorDragState {
 pub struct InputHandler {
     pub modifiers: Modifiers,
     pub leader_active: bool,
-    pub leader_timer: Option<Instant>,
+    pub leader_deadline: Option<Instant>,
     pub leader_timeout_ms: u64,
     /// Maps leader-key characters (e.g. "a", "%") → Action, built from `config.keys`.
     pub leader_map: HashMap<String, Action>,
@@ -76,7 +76,7 @@ impl InputHandler {
         Self {
             modifiers: Modifiers::default(),
             leader_active: false,
-            leader_timer: None,
+            leader_deadline: None,
             leader_timeout_ms: config.leader.timeout_ms,
             leader_map,
             mouse_pos: (0.0, 0.0),
@@ -188,10 +188,10 @@ impl InputHandler {
         }
 
         if self.leader_active {
-            if let Some(t) = self.leader_timer {
-                if t.elapsed().as_millis() > self.leader_timeout_ms as u128 {
+            if let Some(deadline) = self.leader_deadline {
+                if Instant::now() >= deadline {
                     self.leader_active = false;
-                    self.leader_timer = None;
+                    self.leader_deadline = None;
                 }
             }
         }
@@ -256,7 +256,7 @@ impl InputHandler {
             if let Key::Character(s) = &event.logical_key {
                 if s.as_str() == config.leader.key.as_str() {
                     self.leader_active = true;
-                    self.leader_timer = Some(Instant::now());
+                    self.leader_deadline = Some(Instant::now() + std::time::Duration::from_millis(self.leader_timeout_ms));
                     return;
                 }
             }
@@ -281,7 +281,7 @@ impl InputHandler {
                 return;
             }
             self.leader_active = false;
-            self.leader_timer = None;
+            self.leader_deadline = None;
 
             // <leader> + Option/Alt + ←→↑↓ → resize pane (TD-042).
             // On macOS, Option+Arrow may arrive as Key::Character (OS word-nav transform),
