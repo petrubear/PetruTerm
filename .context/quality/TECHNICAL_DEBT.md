@@ -168,11 +168,7 @@ _TD-PERF-23 — RESUELTO 2026-04-19. `leader_timer` → `leader_deadline: Option
 
 ---
 
-### TD-PERF-24: Separator hit-test rehace geometría en cada `CursorMoved`
-- **Archivo:** `src/app/mod.rs:244-268` (`separator_at_pixel`)
-- **Descripción:** Cada movimiento del mouse reconstruye `mux.active_pane_separators()` para el hit-test. La geometría ya fue calculada en el frame anterior.
-- **Fix:** Cachear `pane_separators_snapshot: Vec<PaneSeparator>` del último render; invalidar solo en resize/split/close.
-- **Severidad:** P3 — overhead por movimiento de mouse.
+_TD-PERF-24 — RESUELTO 2026-04-19. `separator_snapshot: Vec<PaneSeparator>` en App; actualizado en el render path; `separator_at_pixel` usa el snapshot en lugar de recomputar. Ver archivo._
 
 ---
 

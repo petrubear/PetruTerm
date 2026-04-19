@@ -52,6 +52,10 @@ pub struct App {
     /// skips full cell rebuild and uploads only the cursor vertex (cursor overlay).
     cursor_blink_dirty: bool,
 
+    /// Cached pane separator geometry from the last render frame (TD-PERF-24).
+    /// Avoids recomputing separator layout on every CursorMoved event.
+    separator_snapshot: Vec<crate::ui::PaneSeparator>,
+
     /// Cached CWD of the active shell (TD-PERF-02).
     /// Refreshed via proc_pidinfo only when PTY data arrives or terminal focus changes,
     /// instead of every frame.
@@ -96,6 +100,7 @@ impl App {
             cached_cwd: None,
             config_reload_at: None,
             terminal_shell_ctxs: std::collections::HashMap::new(),
+            separator_snapshot: Vec::new(),
         }
     }
 
@@ -370,8 +375,7 @@ impl App {
         let viewport = self.viewport_rect();
         let (cell_w, cell_h) = self.cell_dims();
         let (cw, ch) = (cell_w as f32, cell_h as f32);
-        let seps = self.mux.active_pane_separators(viewport, cw, ch);
-        for sep in &seps {
+        for sep in &self.separator_snapshot {
             if sep.vertical {
                 let sep_x = viewport.x + sep.col as f32 * cw;
                 let row_top = viewport.y + sep.row as f32 * ch;
@@ -598,7 +602,7 @@ impl ApplicationHandler<()> for App {
                 let pane_infos = self
                     .mux
                     .active_pane_infos(viewport, cell_w as f32, cell_h as f32);
-                let pane_seps =
+                self.separator_snapshot =
                     self.mux
                         .active_pane_separators(viewport, cell_w as f32, cell_h as f32);
 
@@ -752,7 +756,7 @@ impl ApplicationHandler<()> for App {
 
                     // Pane separator lines (one RoundedRectInstance per separator).
                     let sep_pad_x = self.config.window.padding.left as f32;
-                    rc.build_pane_separators(&pane_seps, sep_pad_x, sb_pad_y);
+                    rc.build_pane_separators(&self.separator_snapshot, sep_pad_x, sb_pad_y);
 
                     // ── Tab bar (2+ tabs, or while a rename prompt is active) ───────────
                     let renaming = self.ui.is_renaming_tab();
