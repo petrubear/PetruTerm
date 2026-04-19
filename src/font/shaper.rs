@@ -790,13 +790,15 @@ impl TextShaper {
                 let span = (byte_to_col[end] - col).max(1);
                 let ch = text[start..end].chars().next().unwrap_or(' ');
 
-                log::debug!(
-                    "Shaping char '{}' (U+{:04X}), font_id: {:?}, glyph_id: {}",
-                    ch,
-                    ch as u32,
-                    glyph.font_id,
-                    glyph.glyph_id
-                );
+                if log::log_enabled!(log::Level::Debug) {
+                    log::debug!(
+                        "Shaping char '{}' (U+{:04X}), font_id: {:?}, glyph_id: {}",
+                        ch,
+                        ch as u32,
+                        glyph.font_id,
+                        glyph.glyph_id
+                    );
+                }
 
                 let (fg, bg) = colors
                     .get(col)
@@ -819,7 +821,7 @@ impl TextShaper {
                     if let Some(real_id) =
                         self.ft_cmap.as_ref().and_then(|ft| ft.get_glyph_index(ch))
                     {
-                        log::debug!("Overriding glyph {} -> ID {}", ch, real_id);
+                        if log::log_enabled!(log::Level::Debug) { log::debug!("Overriding glyph {} -> ID {}", ch, real_id); }
                         let (key, _, _) = CacheKey::new(
                             self.primary_font_id,
                             real_id as u16,
@@ -830,7 +832,7 @@ impl TextShaper {
                         );
                         key
                     } else {
-                        log::debug!("No override for {} (not in cmap)", ch);
+                        if log::log_enabled!(log::Level::Debug) { log::debug!("No override for {} (not in cmap)", ch); }
                         // Truly not in the font — use original key (will render .notdef or blank).
                         glyph_to_cache_key(glyph, font_config.size)
                     }

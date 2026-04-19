@@ -180,11 +180,7 @@ _TD-PERF-26 — RESUELTO 2026-04-19. `bounded(256)`; `try_send` + `log::debug!(p
 
 ---
 
-### TD-PERF-28: Log macros con formato evaluado antes del level filter
-- **Archivo:** Varios (`src/app/mod.rs:389,294,325` etc.)
-- **Descripción:** `log::debug!(...)` evalúa el formato antes del filtro de nivel. En release con `RUST_LOG=info`, los args se leen pero no hay formato pesado. Solo relevante donde el argumento sea costoso de computar (iteradores, strings grandes).
-- **Fix:** Caso por caso: `if log::log_enabled!(log::Level::Debug) { log::debug!(...) }` donde el argumento sea caro.
-- **Severidad:** P3 — auditoría caso por caso; impacto bajo en release con RUST_LOG=info.
+_TD-PERF-28 — RESUELTO 2026-04-19. Las 3 llamadas en el hot path de shaping (shaper.rs líneas 793, 822, 833) guardadas con `log::log_enabled!(Debug)`. Resto son escalares baratos o cold paths — no requieren guard._
 
 ---
 
