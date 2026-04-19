@@ -66,7 +66,7 @@ regex = "1"
 fuzzy-matcher = "0.3"
 
 # LRU cache for word_cache in font shaper (TD-MEM-05)
-lru = "0.12"
+lru = "0.17"
 
 # Fast non-cryptographic hash for internal cache keys (TD-PERF-34)
 rustc-hash = "2"
