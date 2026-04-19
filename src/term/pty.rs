@@ -51,9 +51,11 @@ impl EventListener for PtyEventProxy {
             Event::ClipboardLoad(_, fmt) => PtyEvent::ClipboardLoad(fmt),
             _ => return,
         };
-        if self.tx.send(pty_event).is_ok() {
-            let _ = self.wakeup.send_event(());
+        match self.tx.try_send(pty_event) {
+            Ok(_) => {}
+            Err(_) => log::debug!("pty_backpressure_hit: channel full, event dropped"),
         }
+        let _ = self.wakeup.send_event(());
     }
 }
 
@@ -133,7 +135,7 @@ impl Pty {
         direct_notifier: Arc<OnceLock<Notifier>>,
         working_directory: Option<std::path::PathBuf>,
     ) -> Result<Self> {
-        let (tx, rx) = crossbeam_channel::unbounded::<PtyEvent>();
+        let (tx, rx) = crossbeam_channel::bounded::<PtyEvent>(256);
         let proxy = PtyEventProxy {
             tx,
             wakeup,

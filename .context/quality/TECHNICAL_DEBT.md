@@ -176,11 +176,7 @@ _TD-PERF-25 — RESUELTO 2026-04-19. Palette abre inmediato con placeholder; `st
 
 ---
 
-### TD-PERF-26: PTY channel unbounded sin backpressure
-- **Archivo:** `src/term/pty.rs:119`
-- **Descripción:** El canal entre el reader thread del PTY y el main loop es `unbounded`. Si el main loop no drena por un frame pesado, el productor acumula sin límite. Correcto pero sin señal de backpressure.
-- **Fix:** `bounded(256)` con `send_timeout`. Si se llena, loguear `pty_backpressure_hit` y forzar drain.
-- **Severidad:** P3 — útil para detectar issues en producción; impacto bajo en condiciones normales.
+_TD-PERF-26 — RESUELTO 2026-04-19. `bounded(256)`; `try_send` + `log::debug!(pty_backpressure_hit)` cuando lleno; wakeup siempre enviado para que el main thread drene. Ver archivo._
 
 ---
 
