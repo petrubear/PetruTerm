@@ -113,6 +113,9 @@ pub struct Pty {
     pub notifier: Notifier,
     /// Receive events from the PTY reader thread.
     pub rx: crossbeam_channel::Receiver<PtyEvent>,
+    /// Sender side of the PTY event channel — used to inject synthetic events
+    /// (e.g. ClipboardLoad response as PtyWrite) from background threads.
+    pub tx: crossbeam_channel::Sender<PtyEvent>,
     /// Handle to the PTY reader thread for clean shutdown.
     thread_handle: Option<Box<dyn PtyJoinHandle>>,
     /// PID of the shell child process (captured before the EventLoop takes ownership).
@@ -136,6 +139,7 @@ impl Pty {
         working_directory: Option<std::path::PathBuf>,
     ) -> Result<Self> {
         let (tx, rx) = crossbeam_channel::bounded::<PtyEvent>(256);
+        let tx_clone = tx.clone();
         let proxy = PtyEventProxy {
             tx,
             wakeup,
@@ -187,6 +191,7 @@ impl Pty {
         Ok(Self {
             notifier,
             rx,
+            tx: tx_clone,
             thread_handle: Some(Box::new(thread_handle)),
             child_pid,
         })

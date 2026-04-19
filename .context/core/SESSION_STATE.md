@@ -25,7 +25,7 @@
 Resolver deuda técnica antes de implementar nuevas features. Ver `build_phases.md` Sprint Cierre.
 
 **P2 prioritarios:**
-- TD-MEM-23: `api_msgs.clone()` por round del agent loop → cambiar a `&[Value]`
+- ~~TD-MEM-23~~ RESUELTO (ya era `&[Value]` en el código actual)
 - TD-MEM-13: Limitar `ReadFile` a 50k chars + max 5 rounds en agent loop
 - TD-PERF-04: `scan_files()` sincrónico en file picker → `spawn_blocking`
 - TD-PERF-15: Clipboard bloquea event loop → `spawn_blocking` en copy/paste grande

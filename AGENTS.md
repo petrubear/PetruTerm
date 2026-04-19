@@ -113,35 +113,36 @@ PetruTerm/
 
 Leader key: `Ctrl+F` (timeout 1000ms)
 
-| Keybind | Action |
-|---------|--------|
-| `Cmd+C / Cmd+V` | Copy / paste |
-| `Cmd+Q` | Quit |
-| `Cmd+K` | Clear screen + scrollback |
-| `Cmd+F` | Open/close text search |
-| `Cmd+1-9` | Switch to tab N |
-| `Leader c` | New tab |
-| `Leader &` | Close tab |
-| `Leader n/b` | Next/prev tab |
-| `Leader ,` | Rename tab |
-| `Leader %` | Split horizontal |
-| `Leader "` | Split vertical |
-| `Leader x` | Close pane |
-| `Leader h/j/k/l` | Focus pane (vim-style) |
-| `Leader Option+arrows` | Resize pane |
-| `Leader a` | Open AI panel / toggle focus terminal↔chat |
-| `Escape` (in panel) | Return to terminal without closing panel |
-| `/q` (in panel input) | Close the panel |
-| `Leader e` | Explain last output |
-| `Leader f` | Fix last error |
-| `Leader z` | Undo last write |
-| `Leader o` | Command palette |
-| `Ctrl+Space` | Inline AI block |
-| Right-click | Context menu |
+| Keybind                | Action                                     |
+| ---------------------- | ------------------------------------------ |
+| `Cmd+C / Cmd+V`        | Copy / paste                               |
+| `Cmd+Q`                | Quit                                       |
+| `Cmd+K`                | Clear screen + scrollback                  |
+| `Cmd+F`                | Open/close text search                     |
+| `Cmd+1-9`              | Switch to tab N                            |
+| `Leader c`             | New tab                                    |
+| `Leader &`             | Close tab                                  |
+| `Leader n/b`           | Next/prev tab                              |
+| `Leader ,`             | Rename tab                                 |
+| `Leader %`             | Split horizontal                           |
+| `Leader "`             | Split vertical                             |
+| `Leader x`             | Close pane                                 |
+| `Leader h/j/k/l`       | Focus pane (vim-style)                     |
+| `Leader Option+arrows` | Resize pane                                |
+| `Leader a`             | Open AI panel / toggle focus terminal↔chat |
+| `Escape` (in panel)    | Return to terminal without closing panel   |
+| `/q` (in panel input)  | Close the panel                            |
+| `Leader e`             | Explain last output                        |
+| `Leader f`             | Fix last error                             |
+| `Leader z`             | Undo last write                            |
+| `Leader o`             | Command palette                            |
+| `Ctrl+Space`           | Inline AI block                            |
+| Right-click            | Context menu                               |
 
 ## Agent Instructions
 
 - Before editing any file, read it first. Before modifying a function, grep for all callers. Research before you edit.
+- Use subagents for tasks that bloat the context like exploring files or running tests/benchs so the context of the main agent doesnt fill up with intermediate responses.
 
 ## Git Commit Standard
 

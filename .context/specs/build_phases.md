@@ -10,11 +10,11 @@
 ### Tareas pendientes (próxima sesión)
 
 **P2 prioritarios:**
-- [ ] TD-MEM-23: `agent_step(&[Value])` — eliminar `api_msgs.clone()` por round (`src/app/ui.rs`)
-- [ ] TD-MEM-13: Limitar `ReadFile` a 50k chars + max 5 rounds en agent loop (`src/llm/tools.rs`)
-- [ ] TD-PERF-04: `scan_files()` → `spawn_blocking` en file picker (`src/llm/chat_panel.rs`)
-- [ ] TD-PERF-15: Clipboard copy/paste → `spawn_blocking` (`src/app/mod.rs`, `src/app/input/mod.rs`)
-- [ ] TD-PERF-21: Palette fuzzy matcher incremental — filtrar `last_results` si query extiende anterior (`src/ui/palette/mod.rs`)
+- [x] TD-MEM-23: `agent_step(&[Value])` — ya resuelto en código (`ui.rs:690` pasa `&api_msgs`)
+- [x] TD-MEM-13: ya resuelto — `MAX_CHARS=50_000` en `tools.rs:175`, `MAX_TOOL_ROUNDS=5` en `ui.rs:687`
+- [x] TD-PERF-04: ya resuelto — `open_file_picker_async` usa `std::thread::spawn` + `crossbeam_channel`
+- [x] TD-PERF-15: Clipboard async — Cmd+C/V ya era async; `ClipboardStore/Load` (OSC 52) migrados a `thread::spawn` en `mux.rs`; `Pty.tx` expuesto para reinyectar `PtyWrite`
+- [x] TD-PERF-21: ya resuelto — `last_filter_query` + path incremental en `filter()` (`palette/mod.rs:157-185`)
 
 **P3 triviales:**
 - [ ] TD-MEM-17: `streaming_buf.clear()` en `ChatPanel::close()`

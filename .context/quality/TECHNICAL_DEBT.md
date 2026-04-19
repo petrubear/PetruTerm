@@ -37,11 +37,7 @@ _TD-MEM-10, 11, 12 — RESUELTOS 2026-04-17. Ver archivo._
 
 ---
 
-### TD-MEM-13: `api_messages` en el agent loop crece con cada round de tool calls
-- **Archivo:** `src/llm/tools.rs`
-- **Descripción:** El agent loop acumula `api_messages: Vec<Value>` con cada round (hasta 10 rounds). Con archivos grandes adjuntos y 10 rounds, el Vec puede acumular varios MB de JSON transitorio.
-- **Fix:** (a) Limitar el tamaño de resultados de `ReadFile` a 50 000 chars con truncación explícita. (b) Limitar rounds a 5.
-- **Severidad:** P2 — proporcional al uso del AI agent con archivos grandes.
+_TD-MEM-13 — RESUELTO 2026-04-19. `MAX_CHARS=50_000` en `tools.rs:175`; `MAX_TOOL_ROUNDS=5` en `ui.rs:687`._
 
 ---
 
@@ -53,20 +49,11 @@ _TD-MEM-20, 21 — RESUELTOS 2026-04-17. Ver archivo._
 
 ---
 
-### TD-MEM-23: `api_msgs` clona el historial completo en cada round del agent loop
-- **Archivo:** `src/app/ui.rs:submit_ai_query()` — `provider.agent_step(api_msgs.clone(), &tool_specs).await`
-- **Origen:** kiro
-- **Descripción:** El agent loop llama a `agent_step(api_msgs.clone(), ...)` en cada round (hasta 10). `api_msgs` incluye el mensaje de sistema (con todos los archivos adjuntos, hasta 1 MB) más el historial de conversación. Con 10 rounds y archivos adjuntos grandes, son hasta 100 MB de alocaciones transitorias por query.
-- **Fix:** Cambiar la firma de `agent_step` para aceptar `&[Value]` en lugar de `Vec<Value>`. El provider construye el body JSON directamente desde la referencia.
-- **Severidad:** P2 — hasta 100 MB de alocaciones transitorias por query con archivos grandes.
+_TD-MEM-23 — RESUELTO 2026-04-19. `agent_step` ya toma `&[Value]`; llamada en `ui.rs:690` pasa `&api_msgs`. Sin clone por round._
 
 ---
 
-### TD-PERF-04: `scan_files()` síncrono en el hilo principal al abrir el file picker
-- **Archivo:** `src/llm/chat_panel.rs` → `open_file_picker()` / `scan_files()`
-- **Descripción:** Al abrir el file picker (`Tab`), `scan_files(cwd, depth=3)` bloquea el render. En un monorepo grande puede tomar decenas de ms.
-- **Fix:** `tokio::task::spawn_blocking`; spinner mientras carga; enviar resultado por canal.
-- **Severidad:** P2 — stutter al abrir el picker en repos grandes.
+_TD-PERF-04 — RESUELTO 2026-04-19. `open_file_picker_async` usa `std::thread::spawn` + `crossbeam_channel::bounded(1)`; `poll_file_scan` drena sin bloquear._
 
 ---
 
@@ -86,11 +73,7 @@ _TD-MEM-20, 21 — RESUELTOS 2026-04-17. Ver archivo._
 
 ---
 
-### TD-PERF-15: Clipboard (`arboard`) bloquea el event loop en copy/paste
-- **Archivo:** `src/app/mod.rs:703,709`, `src/app/input/mod.rs:481,488`, `src/app/mux.rs:134,136`
-- **Descripción:** `arboard::Clipboard::new()` + `.get_text()` / `.set_text()` hacen IPC síncrona al pasteboard de macOS. Para pastes grandes (>1 MB) el event loop se congela durante cientos de ms.
-- **Fix:** `tokio::task::spawn_blocking` para operaciones de clipboard. Para paste: spawn task → resultado por canal → escribir al PTY con bracketed-paste. Para copy: fire-and-forget.
-- **Severidad:** P2 — jank visible en pastes grandes.
+_TD-PERF-15 — RESUELTO 2026-04-19. Cmd+C/V ya eran async (thread::spawn). ClipboardStore/Load (OSC 52) en `mux.rs` migrados a thread::spawn; ClipboardLoad reinyecta resultado como PtyWrite via `Pty.tx` (nuevo campo `pub tx: Sender<PtyEvent>` en `pty.rs`)._
 
 ---
 
@@ -118,11 +101,7 @@ _TD-PERF-20 — RESUELTO 2026-04-17. Ver archivo._
 
 ---
 
-### TD-PERF-21: Palette fuzzy matcher re-filtra la lista completa en cada tecla
-- **Archivo:** `src/ui/palette/mod.rs:77-79,137-152`
-- **Descripción:** Cada keystroke ejecuta `SkimMatcherV2::fuzzy_match()` sobre todos los actions, hace sort y reemplaza el resultado. Sin filtrado incremental ni caché.
-- **Fix:** Cachear `last_query` + `last_results`. Si el query nuevo empieza con el viejo (append de char), filtrar `last_results` en lugar del set completo. O(prev_results) en lugar de O(all_actions).
-- **Severidad:** P2 — se nota con 500+ actions (plugins en Phase 4).
+_TD-PERF-21 — RESUELTO 2026-04-19. `last_filter_query` + path incremental en `filter()` (`palette/mod.rs:157-185`). O(prev_results) cuando query extiende el anterior._
 
 ---
 

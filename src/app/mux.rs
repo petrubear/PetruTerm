@@ -169,16 +169,20 @@ impl Mux {
                         }
                         PtyEvent::Bell => {}
                         PtyEvent::ClipboardStore(text) => {
-                            if let Ok(mut cb) = arboard::Clipboard::new() {
-                                let _ = cb.set_text(text);
-                            }
+                            std::thread::spawn(move || {
+                                let _ = arboard::Clipboard::new()
+                                    .and_then(|mut cb| cb.set_text(text));
+                            });
                         }
                         PtyEvent::ClipboardLoad(fmt) => {
-                            let text = arboard::Clipboard::new()
-                                .ok()
-                                .and_then(|mut cb| cb.get_text().ok())
-                                .unwrap_or_default();
-                            terminal.write_input(fmt(&text).as_bytes());
+                            let tx = terminal.pty.tx.clone();
+                            std::thread::spawn(move || {
+                                let text = arboard::Clipboard::new()
+                                    .ok()
+                                    .and_then(|mut cb| cb.get_text().ok())
+                                    .unwrap_or_default();
+                                let _ = tx.send(PtyEvent::PtyWrite(fmt(&text)));
+                            });
                         }
                         PtyEvent::PtyWrite(text) => {
                             terminal.write_input(text.as_bytes());
