@@ -478,15 +478,18 @@ impl InputHandler {
                 }
                 Key::Named(NamedKey::Backspace) => ui.panel_mut().backspace(),
                 Key::Named(NamedKey::Space) => ui.panel_mut().type_char(' '),
-                Key::Character(s) if ctrl && s.as_str() == "s" => {
+                Key::Character(s)
+                    if ctrl
+                        && s.as_str() == "s"
+                        && ui.panel().is_idle()
+                        && !ui.panel().input.trim().is_empty() =>
+                {
                     // Ctrl+S: submit query (alternative to Enter).
-                    if ui.panel().is_idle() && !ui.panel().input.trim().is_empty() {
-                        let cwd = mux
-                            .active_cwd()
-                            .or_else(|| std::env::current_dir().ok())
-                            .unwrap_or_default();
-                        ui.submit_ai_query(wakeup_proxy, cwd);
-                    }
+                    let cwd = mux
+                        .active_cwd()
+                        .or_else(|| std::env::current_dir().ok())
+                        .unwrap_or_default();
+                    ui.submit_ai_query(wakeup_proxy, cwd);
                 }
                 Key::Character(s) => {
                     for ch in s.chars() {
@@ -683,15 +686,13 @@ impl InputHandler {
                 Key::Named(NamedKey::Backspace) => {
                     self.input_echo.pop();
                 }
-                Key::Character(s) => {
-                    // Only track printable chars; reset on Ctrl sequences (data != s.as_bytes()).
-                    if data == s.as_bytes() {
-                        self.input_echo.push_str(s);
-                        // Cap buffer to avoid unbounded growth.
-                        if self.input_echo.len() > 256 {
-                            let keep = self.input_echo.len() - 256;
-                            self.input_echo.drain(..keep);
-                        }
+                // Only track printable chars; reset on Ctrl sequences (data != s.as_bytes()).
+                Key::Character(s) if data == s.as_bytes() => {
+                    self.input_echo.push_str(s);
+                    // Cap buffer to avoid unbounded growth.
+                    if self.input_echo.len() > 256 {
+                        let keep = self.input_echo.len() - 256;
+                        self.input_echo.drain(..keep);
                     }
                 }
                 _ => {}

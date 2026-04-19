@@ -1074,55 +1074,53 @@ impl ApplicationHandler<()> for App {
             }
             WindowEvent::KeyboardInput {
                 event,
-                is_synthetic,
+                is_synthetic: false,
                 ..
             } => {
-                if !is_synthetic {
-                    let panel_was_visible = self.ui.is_panel_visible();
-                    let tab_count_before = self.mux.tabs.tab_count();
-                    let tab_idx_before = self.mux.active_tab_index();
-                    let pane_count_before = self.mux.active_pane_count();
-                    self.ui.set_active_terminal(self.mux.focused_terminal_id());
-                    self.input.handle_key_input(
-                        &event,
-                        event_loop,
-                        &mut self.config,
-                        &mut self.mux,
-                        &mut self.ui,
-                        &mut self.render_ctx,
-                        self.window.as_deref(),
-                        self.wakeup_proxy.clone(),
-                    );
-                    // Clean up per-terminal state for any panes/tabs closed by input (TD-MEM-08).
-                    for tid in self.mux.closed_ids.drain(..) {
-                        self.terminal_shell_ctxs.remove(&tid);
-                        self.ui.remove_terminal_state(tid);
-                        if let Some(rc) = &mut self.render_ctx {
-                            rc.row_caches.remove(&tid);
-                        }
+                let panel_was_visible = self.ui.is_panel_visible();
+                let tab_count_before = self.mux.tabs.tab_count();
+                let tab_idx_before = self.mux.active_tab_index();
+                let pane_count_before = self.mux.active_pane_count();
+                self.ui.set_active_terminal(self.mux.focused_terminal_id());
+                self.input.handle_key_input(
+                    &event,
+                    event_loop,
+                    &mut self.config,
+                    &mut self.mux,
+                    &mut self.ui,
+                    &mut self.render_ctx,
+                    self.window.as_deref(),
+                    self.wakeup_proxy.clone(),
+                );
+                // Clean up per-terminal state for any panes/tabs closed by input (TD-MEM-08).
+                for tid in self.mux.closed_ids.drain(..) {
+                    self.terminal_shell_ctxs.remove(&tid);
+                    self.ui.remove_terminal_state(tid);
+                    if let Some(rc) = &mut self.render_ctx {
+                        rc.row_caches.remove(&tid);
                     }
-                    if self.ui.is_panel_visible() != panel_was_visible {
-                        self.resize_terminals_for_panel();
-                    }
-                    if self.mux.tabs.tab_count() != tab_count_before {
-                        self.apply_tab_bar_padding();
-                        self.resize_terminals_for_panel();
-                    } else if self.mux.active_tab_index() != tab_idx_before {
-                        // Tab switched — resize the newly active tab's panes.
-                        self.resize_terminals_for_panel();
-                        // Different tab = different shell process = potentially different CWD.
-                        self.refresh_status_cache();
-                    } else if self.mux.active_pane_count() != pane_count_before {
-                        // Pane split or close — resize all panes in current tab.
-                        self.resize_terminals_for_panel();
-                    } else if self.input.pane_ratio_adjusted {
-                        // <leader>+Option+Arrow pane resize — resize with new ratio.
-                        self.input.pane_ratio_adjusted = false;
-                        self.resize_terminals_for_panel();
-                    }
-                    if let Some(w) = &self.window {
-                        w.request_redraw();
-                    }
+                }
+                if self.ui.is_panel_visible() != panel_was_visible {
+                    self.resize_terminals_for_panel();
+                }
+                if self.mux.tabs.tab_count() != tab_count_before {
+                    self.apply_tab_bar_padding();
+                    self.resize_terminals_for_panel();
+                } else if self.mux.active_tab_index() != tab_idx_before {
+                    // Tab switched — resize the newly active tab's panes.
+                    self.resize_terminals_for_panel();
+                    // Different tab = different shell process = potentially different CWD.
+                    self.refresh_status_cache();
+                } else if self.mux.active_pane_count() != pane_count_before {
+                    // Pane split or close — resize all panes in current tab.
+                    self.resize_terminals_for_panel();
+                } else if self.input.pane_ratio_adjusted {
+                    // <leader>+Option+Arrow pane resize — resize with new ratio.
+                    self.input.pane_ratio_adjusted = false;
+                    self.resize_terminals_for_panel();
+                }
+                if let Some(w) = &self.window {
+                    w.request_redraw();
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
@@ -1417,21 +1415,19 @@ impl ApplicationHandler<()> for App {
                             self.input.send_mouse_report(0, col, row, false, &self.mux);
                         }
                     }
-                    (MouseButton::Right, ElementState::Pressed) => {
-                        // In mouse-reporting mode, pass right-click to the terminal app.
-                        // Otherwise, open the context menu.
-                        if !in_panel {
-                            let (any_mouse, _, _) = self
-                                .mux
-                                .active_terminal()
-                                .map(|t| t.mouse_mode_flags())
-                                .unwrap_or((false, false, false));
-                            if any_mouse {
-                                self.input.send_mouse_report(2, col, row, true, &self.mux);
-                            } else {
-                                let (term_cols, term_rows) = self.mux.active_terminal_size();
-                                self.ui.context_menu.open(col, row, term_cols, term_rows);
-                            }
+                    // In mouse-reporting mode, pass right-click to the terminal app.
+                    // Otherwise, open the context menu.
+                    (MouseButton::Right, ElementState::Pressed) if !in_panel => {
+                        let (any_mouse, _, _) = self
+                            .mux
+                            .active_terminal()
+                            .map(|t| t.mouse_mode_flags())
+                            .unwrap_or((false, false, false));
+                        if any_mouse {
+                            self.input.send_mouse_report(2, col, row, true, &self.mux);
+                        } else {
+                            let (term_cols, term_rows) = self.mux.active_terminal_size();
+                            self.ui.context_menu.open(col, row, term_cols, term_rows);
                         }
                     }
                     (MouseButton::Right, ElementState::Released) => {

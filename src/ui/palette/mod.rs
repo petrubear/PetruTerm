@@ -169,7 +169,7 @@ impl CommandPalette {
                 .enumerate()
                 .filter_map(|(i, a)| matcher.fuzzy_match(&a.name, &query).map(|s| (s, i)))
                 .collect();
-            scored.sort_by(|a, b| b.0.cmp(&a.0));
+            scored.sort_by_key(|b| std::cmp::Reverse(b.0));
             let new_results: Vec<PaletteAction> =
                 scored.iter().map(|&(_, i)| self.results[i].clone()).collect();
             self.results = new_results;
@@ -179,7 +179,7 @@ impl CommandPalette {
                 .iter()
                 .filter_map(|a| matcher.fuzzy_match(&a.name, &query).map(|s| (s, a)))
                 .collect();
-            scored.sort_by(|a, b| b.0.cmp(&a.0));
+            scored.sort_by_key(|b| std::cmp::Reverse(b.0));
             self.results = scored.into_iter().map(|(_, a)| a.clone()).collect();
         }
         self.last_filter_query = query;

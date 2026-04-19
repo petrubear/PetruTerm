@@ -1551,7 +1551,7 @@ impl RenderContext {
             let gap = right_start - col;
             let mut buf = std::mem::take(&mut self.gap_buf);
             buf.clear();
-            buf.extend(std::iter::repeat(' ').take(gap));
+            buf.extend(std::iter::repeat_n(' ', gap));
             self.push_shaped_row(&buf, bar_bg, bar_bg, row, col, gap, font);
             self.gap_buf = buf;
         }
