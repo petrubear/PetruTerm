@@ -455,7 +455,8 @@ impl ApplicationHandler<()> for App {
         self.flush_pending_pty_run();
         self.flush_pending_paste();
         let scan_ready = self.ui.poll_file_scan();
-        if ai_needs_redraw || scan_ready {
+        let branch_ready = self.ui.poll_branch_scan();
+        if ai_needs_redraw || scan_ready || branch_ready {
             if let Some(w) = &self.window {
                 w.request_redraw();
             }
@@ -560,6 +561,7 @@ impl ApplicationHandler<()> for App {
                 self.flush_pending_pty_run();
                 self.flush_pending_paste();
                 self.ui.poll_file_scan();
+                self.ui.poll_branch_scan();
 
                 // ── Fast blink path ─────────────────────────────────────────────────────
                 // When only cursor blink changed (no PTY data, no AI events, no panel

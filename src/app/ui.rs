@@ -123,6 +123,12 @@ pub struct UiManager {
     // ── Async clipboard paste (TD-PERF-15) ───────────────────────────────────
     /// Receives clipboard text from the background paste thread.
     pending_paste_rx: Option<crossbeam_channel::Receiver<String>>,
+
+    // ── Async branch scan (TD-PERF-25) ───────────────────────────────────────
+    /// Receives branch list from the background branch scan thread.
+    branch_scan_rx: Option<crossbeam_channel::Receiver<Vec<String>>>,
+    /// CWD used for the in-flight branch scan (to build palette items on arrival).
+    branch_scan_cwd: Option<std::path::PathBuf>,
 }
 
 impl UiManager {
@@ -186,6 +192,8 @@ impl UiManager {
             search_bar: SearchBar::default(),
             file_scan_rx: None,
             pending_paste_rx: None,
+            branch_scan_rx: None,
+            branch_scan_cwd: None,
         }
     }
 
@@ -391,34 +399,65 @@ impl UiManager {
     }
 
     /// Open the command palette in branch-picker mode.
-    /// Lists local git branches synchronously (fast) and pre-populates the palette.
+    /// The palette opens immediately with a placeholder; branches populate async (TD-PERF-25).
     pub fn open_branch_picker(&mut self, cwd: &std::path::Path) {
         use crate::ui::palette::{Action, PaletteAction};
-        let branches = self.tokio_rt.block_on(list_git_branches(cwd));
-        if branches.is_empty() {
-            return;
-        }
-        let current = self
-            .git_branch_cache
-            .as_deref()
-            .unwrap_or("")
-            .trim_end_matches('*');
-        let items: Vec<PaletteAction> = branches
-            .into_iter()
-            .map(|b| {
-                let label = if b == current {
-                    format!("  {b}  ✓")
-                } else {
-                    format!("  {b}")
-                };
-                PaletteAction {
-                    name: label,
-                    action: Action::GitCheckout(b),
-                    keybind: None,
+        let placeholder = vec![PaletteAction {
+            name: "  Loading branches…".to_string(),
+            action: Action::Noop,
+            keybind: None,
+        }];
+        self.palette.open_with_items(placeholder);
+        let (tx, rx) = crossbeam_channel::bounded(1);
+        self.branch_scan_rx = Some(rx);
+        self.branch_scan_cwd = Some(cwd.to_path_buf());
+        let cwd_owned = cwd.to_path_buf();
+        std::thread::spawn(move || {
+            let branches = list_git_branches_sync(&cwd_owned);
+            let _ = tx.send(branches);
+        });
+    }
+
+    /// Drain branch scan results and repopulate the palette. Returns true if updated.
+    pub fn poll_branch_scan(&mut self) -> bool {
+        let Some(rx) = &self.branch_scan_rx else {
+            return false;
+        };
+        match rx.try_recv() {
+            Ok(branches) => {
+                self.branch_scan_rx = None;
+                if branches.is_empty() {
+                    self.palette.close();
+                    self.branch_scan_cwd = None;
+                    return true;
                 }
-            })
-            .collect();
-        self.palette.open_with_items(items);
+                use crate::ui::palette::{Action, PaletteAction};
+                let current = self
+                    .git_branch_cache
+                    .as_deref()
+                    .unwrap_or("")
+                    .trim_end_matches('*');
+                let items: Vec<PaletteAction> = branches
+                    .into_iter()
+                    .map(|b| {
+                        let label = if b == current {
+                            format!("  {b}  ✓")
+                        } else {
+                            format!("  {b}")
+                        };
+                        PaletteAction {
+                            name: label,
+                            action: Action::GitCheckout(b),
+                            keybind: None,
+                        }
+                    })
+                    .collect();
+                self.palette.open_with_items(items);
+                self.branch_scan_cwd = None;
+                true
+            }
+            Err(_) => false,
+        }
     }
 
     /// Run `git checkout <branch>` in `cwd` and invalidate the branch cache.
@@ -1176,6 +1215,7 @@ impl UiManager {
                     Err(e) => log::error!("Failed to load theme '{name}': {e}"),
                 }
             }
+            Action::Noop => {}
         }
     }
 }
@@ -1216,11 +1256,10 @@ async fn fetch_git_branch(cwd: &std::path::Path) -> String {
     }
 }
 
-/// Async helper: list local git branches for `cwd`.
+/// Sync helper: list local git branches for `cwd` (runs in a background thread).
 /// Returns branch names sorted alphabetically, empty vec if not a git repo.
-async fn list_git_branches(cwd: &std::path::Path) -> Vec<String> {
-    use tokio::process::Command;
-    let out = Command::new("git")
+fn list_git_branches_sync(cwd: &std::path::Path) -> Vec<String> {
+    let out = std::process::Command::new("git")
         .args([
             "-C",
             &cwd.to_string_lossy(),
@@ -1228,7 +1267,6 @@ async fn list_git_branches(cwd: &std::path::Path) -> Vec<String> {
             "--format=%(refname:short)",
         ])
         .output()
-        .await
         .ok()
         .filter(|o| o.status.success())
         .and_then(|o| String::from_utf8(o.stdout).ok())

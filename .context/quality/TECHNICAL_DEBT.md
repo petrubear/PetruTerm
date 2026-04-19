@@ -172,11 +172,7 @@ _TD-PERF-24 — RESUELTO 2026-04-19. `separator_snapshot: Vec<PaneSeparator>` en
 
 ---
 
-### TD-PERF-25: Branch picker blocking con `block_on(list_git_branches)`
-- **Archivo:** `src/app/ui.rs:319`
-- **Descripción:** Al abrir el branch picker, `block_on(list_git_branches(cwd))` ejecuta `git branch --list` síncronamente. En repos con >1 000 branches puede tomar 100-1 000 ms.
-- **Fix:** Abrir el picker inmediatamente con spinner; spawn tokio task; rellenar cuando el resultado llegue.
-- **Severidad:** P3 — raro en repos normales; bloqueante en repos con muchas branches.
+_TD-PERF-25 — RESUELTO 2026-04-19. Palette abre inmediato con placeholder; `std::thread::spawn` corre `list_git_branches_sync`; `poll_branch_scan` rellena items al llegar. `Action::Noop` añadido para el placeholder. Ver archivo._
 
 ---
 

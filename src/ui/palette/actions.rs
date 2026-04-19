@@ -14,6 +14,8 @@ pub struct PaletteAction {
 /// All built-in actions for Phase 1.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
+    // Placeholder — palette item that does nothing when selected.
+    Noop,
     // Config
     OpenConfigFile,
     ReloadConfig,
