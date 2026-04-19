@@ -91,6 +91,9 @@ fn build_attr_list<'a>(text: &str, default_attrs: &'a Attrs<'a>, family: &'a str
 /// check. When cosmic-text gives us glyph_id=0 for a PUA char, we use this to
 /// get the real glyph_id and construct the correct CacheKey so swash can
 /// rasterize the actual icon.
+// One FT_Library + FT_Face per TextShaper. Drop impl releases both. In practice there is a
+// single global TextShaper, so the cost is two pointers. If multiple shapers are ever needed,
+// wrap in Arc<Mutex<FreeTypeCmapLookup>> and share across instances.
 struct FreeTypeCmapLookup {
     library: freetype::freetype::FT_Library,
     face: freetype::freetype::FT_Face,

@@ -136,11 +136,7 @@ _TD-MEM-14 — RESUELTO 2026-04-19. `sync_channel(1)` + `try_send`; eventos extr
 
 ---
 
-### TD-MEM-15: `FreeTypeCmapLookup` mantiene `FT_Library` + `FT_Face` por `TextShaper`
-- **Archivo:** `src/font/shaper.rs:FreeTypeCmapLookup`
-- **Descripción:** Cada `TextShaper` crea una instancia de FreeType. `Drop` los libera correctamente. En la práctica hay un solo `TextShaper` global; impacto mínimo.
-- **Fix:** Si en el futuro se crean múltiples shapers, compartir via `Arc<Mutex<...>>`.
-- **Severidad:** P3 — impacto mínimo con arquitectura actual.
+_TD-MEM-15 — RESUELTO 2026-04-19. Comentario en `FreeTypeCmapLookup` documenta el patrón y la guía de Arc<Mutex> para futura expansión. Sin cambio funcional. Ver archivo._
 
 ---
 
