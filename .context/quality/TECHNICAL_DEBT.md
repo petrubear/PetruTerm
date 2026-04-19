@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-04-19
-**Open Items:** 22
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 12 | **P3:** 10
+**Open Items:** 12
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 12 | **P3:** 0
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -196,15 +196,7 @@ _TD-MAINT-01 — RESUELTO 2026-04-19. `cargo-audit` instalado y ejecutado en CI 
 
 ---
 
-### TD-PERF-30: Sin infraestructura de profiling ni benchmarks de regresión
-- **Archivo:** No existe `benches/` ni crate de tracing.
-- **Descripción:** El objetivo "terminal más rápido" no es verificable sin métricas. No hay benchmarks `criterion`, no hay integración con `tracy`/`puffin`, no hay counters expuestos (frame time, atlas fill%, instance count, input-to-pixel latency).
-- **Fix:**
-  1. `benches/shaping.rs`, `benches/rendering.rs`, `benches/search.rs` con `criterion`. CI falla si regresión >5%.
-  2. Feature flag `profiling` con `tracing` + `tracing-tracy`.
-  3. HUD debug con `F12`: frame time, shape cache hit%, atlas fill%, instance count, RSS.
-  4. Latency probe: key-press → first pixel changed, reportar p50/p95/p99.
-- **Severidad:** P3 — sin métricas, cualquier "fix de performance" puede ser regresión disfrazada.
+_TD-PERF-30 — RESUELTO (ya implementado). `benches/` existe con shaping/search/build_instances/rasterize. CI regression gate con critcmp >5%. Feature flag `profiling` con tracing-tracy. HUD F12 con frame times + latency p50/p95/p99. Ver ci.yml y benches/._
 
 ---
 
