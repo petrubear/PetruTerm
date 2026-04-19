@@ -156,11 +156,7 @@ _TD-MEM-25 — RESUELTO 2026-04-19. `bounded(1)` en `git_tx`/`git_rx`; send ya i
 
 ---
 
-### TD-PERF-03: Upload completo del instance buffer a GPU cada frame
-- **Archivo:** `src/app/mod.rs:612` → `src/renderer/gpu.rs:312`
-- **Descripción:** En Apple Silicon (M2/M4) con unified memory, `write_buffer` es un memcpy en memoria compartida. ~800 KB a 60 fps = ~48 MB/s frente a 100+ GB/s de bandwidth — 0.05% del bus. **No es cuello de botella real en Apple Silicon.** Relevante solo en Phase 2+ con GPUs discretas.
-- **Fix futuro:** Dirty-rect tracking por fila para reducir volumen de upload. Dejar para Phase 2+ (cross-platform).
-- **Severidad:** P3 — downgraded desde P1; no es un bottleneck medible en el target hardware actual.
+_TD-PERF-03 — DIFERIDO a Phase 2+. En Apple Silicon `write_buffer` es memcpy en unified memory (~48 MB/s vs 100+ GB/s bus); no medible. Dirty-rect tracking aplica solo con GPUs discretas (cross-platform)._
 
 ---
 
