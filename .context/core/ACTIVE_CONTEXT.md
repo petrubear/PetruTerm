@@ -1,131 +1,66 @@
 # Active Context
 
-**Current Focus:** Phase 3.5 — Tier 3 (idle zero-cost) + Tier 0 desbloqueados
-**Last Active:** 2026-04-17
+**Current Focus:** Phase 4 — Plugin system (Lua, lazy.nvim-style)
+**Last Active:** 2026-04-18
 
 ## Estado actual del proyecto
 
-**Phase 1–3 COMPLETE. Phase 3.5: Tier 1 + Tier 2 + Tier 4 COMPLETOS.**
-**Pendiente: Tier 0 (latency probe, CI gating), Tier 3 (idle), Tier 5 (arquitectura).**
+**Phase 1–3 COMPLETE. Phase 3.5 COMPLETE. Phase 4 (plugins) desbloqueada.**
+**Build limpio: check + test + clippy + fmt PASS. CI verde.**
 
-## Roadmap activo (próximo trabajo)
+## Próximo trabajo — Phase 4
 
-**Tier 0 desbloqueados** — latency probe p50/p95/p99 end-to-end, CI gating
-criterion. Benches de `build_instances` y `rasterize_to_atlas` siguen bloqueados.
+Implementar el sistema de plugins lazy.nvim-style en Lua:
 
-**Tier 3** — idle zero-cost: TD-MEM-19 (pausar timers sin foco), cursor overlay
-independiente, damage tracking con `Term::damage()`.
+1. `src/plugins/mod.rs` — PluginLoader: escanea `~/.config/petruterm/plugins/*.lua`,
+   carga bajo demanda, gestiona ciclo de vida
+2. `src/plugins/api.rs` — Lua API pública expuesta a plugins (toda función documentada aquí)
+3. Integrar con el Lua VM existente (`mlua`) y config system
 
-Tier 5 (arquitectura pesada) en `SESSION_STATE.md`.
+Ver `.context/specs/build_phases.md` Phase 4 para deliverables y exit criteria.
 
----
+## Bugs resueltos en sesión 2026-04-18 (tarde) — commit a5d691e
 
-## P1 resueltos esta sesión (2026-04-16)
+### KKP — Shift+Enter en apps modernas (Claude Code CLI, etc.)
+- `src/term/mod.rs:97`: `kitty_keyboard: true`
+- `src/app/input/key_map.rs:109`: Shift+Enter → `\x1b[13;2u` cuando DISAMBIGUATE_ESC_CODES
 
-### TD-RENDER-01 (real fix): Franjas horizontales bg en filas con texto
-- **Archivos:** `src/app/renderer.rs:239` (`build_instances` pre-pase bg-only)
-- **Root cause real:** `try_word_cached_shape` (`src/font/shaper.rs:573`) hace
-  `text.split(' ')` y nunca emite glyphs para espacios. `try_ascii_fast_path` sí los
-  emite, pero cualquier línea con `= < > - | + * / ~ ! : .` cae en el word-cached
-  path. Celdas-espacio con `bg ≠ default_bg` (widgets nvim, status/command line,
-  selección, search highlight) quedaban sin vértice → clear color del GPU → franjas.
-- **Fix:** pre-pase en `build_instances` que emite un vértice bg-only por cada
-  celda con `!colors_approx_eq(bg, default_bg)`, antes del bucle de glyphs. El
-  shader-level discard introducido antes (`if uv ≈ [0,0] { discard; }`) era
-  defensivo y NO solucionaba esto — los vértices simplemente no se emitían.
+### Tab bleed — TUI app visible en todos los tabs
+- `src/app/renderer.rs:53`: `scratch_terminal_id: Option<usize>` en `RenderContext`
+- `src/app/mod.rs` (`build_all_pane_instances`): `cell_data_scratch.clear()` cuando terminal_id cambia
 
-### TD-RENDER-03 (nuevo): Celda blanca persistente en posición del mouse
-- **Archivos:** `src/app/input/mod.rs:32-37`, `src/app/mod.rs:991-1025`
-- **Root cause:** `start_selection` en LMB press crea `Selection::new` con
-  start==end (1 celda). `Selection::to_range()` retorna `Some(range)` no vacío; el
-  renderer invierte fg/bg → bg blanco. Sin drag, nunca se limpiaba.
-- **Fix:** flag `mouse_dragged: bool` en `InputHandler`; activado en `CursorMoved`
-  cuando `update_selection` corre, reset en press. En `Released` sin drag llama
-  `terminal.clear_selection()`. Skip si `mouse_mode_flags().0` (app maneja mouse).
+### .app bundle env vars — OPENROUTER_API_KEY invisible en Finder
+- `src/main.rs`: `inherit_login_shell_env()` spawn `$SHELL -l -c 'env -0'` antes de threads
 
----
+### CI clippy — manual_checked_ops
+- `src/app/renderer.rs`: `.checked_div().unwrap_or(0)`
 
-## Phase 3.5 — Sprint PERF completo
+## Invariantes arquitectónicos clave (no romper)
 
-### Memory leaks — todos los P1 resueltos
+**Shaper drops space cells (TD-RENDER-01):**
+Pre-pass bg-only en `build_instances` OBLIGATORIO. Sin él, celdas-espacio con bg != default_bg
+no generan vértices → GPU clear color → franjas horizontales.
 
-| ID | Fix | Estado |
-|----|-----|--------|
-| TD-MEM-01 | GlyphAtlas `cursor_fill_ratio()` + preemptive clear | RESUELTO |
-| TD-MEM-02 | LcdGlyphAtlas epoch/evict + `clear_lcd_rasterizer_cache()` | RESUELTO |
-| TD-MEM-03 | `GpuRenderer::rebuild_atlas_bind_groups()` tras atlas.clear() | RESUELTO |
-| TD-MEM-04 | SwashCache — **falso positivo**, usa `get_image_uncached` | ARCHIVADO |
-| TD-MEM-05 | `word_cache` HashMap → `lru::LruCache(1024)` | RESUELTO |
-| TD-MEM-06 | `byte_to_col_buf` shrink condicional | RESUELTO |
-| TD-MEM-07 | `ChatPanel.messages` cap 200 + drain `wrapped_cache` | RESUELTO |
-| TD-MEM-08 | `Mux.closed_ids` drain → limpieza de `terminal_shell_ctxs` | RESUELTO |
+**damage-skip scratch buffer:**
+`cell_data_scratch` es per-terminal. Siempre limpiar cuando cambia `terminal_id`
+(`build_all_pane_instances` en `src/app/mod.rs`). Si se quita, TUI app vuelve a sangrar.
 
-### Performance — sprint resueltos
+**alacritty_terminal grid scrollback:**
+`grid()[Line(row)]` NO cuenta `display_offset`. Usar `Line(row as i32 - display_offset)`.
 
-| ID | Fix | Estado |
-|----|-----|--------|
-| TD-PERF-06 | Skip `rasterize_to_atlas` cuando LCD atlas tiene hit | RESUELTO |
-| TD-PERF-07 | `clear_all_row_caches()` solo en branch `clear()` | RESUELTO |
-| TD-PERF-08 | `PresentMode::Mailbox` + `desired_maximum_frame_latency=1` | RESUELTO |
-| TD-PERF-09 | mtime guard en `terminal_shell_ctxs` | RESUELTO |
-| TD-PERF-10 | Split panel render: content cache + input rows vivos | RESUELTO ⚠ |
-| TD-PERF-11 | Búsqueda incremental: `filter_matches()` extiende query | RESUELTO |
-| TD-PERF-12 | Scratch buffers en `push_shaped_row` | RESUELTO |
-| TD-PERF-13 | `scratch_lines` reuse + `frame_counter` spinner O(1) | RESUELTO |
+**alacritty_terminal exit event:** `Event::ChildExit(i32)`, NO `Event::Exit`.
 
-> ⚠ TD-PERF-10 introdujo regresiones TD-RENDER-01/02.
+**PTY env vars obligatorias:** `TERM=xterm-256color`, `COLORTERM=truecolor`, `TERM_PROGRAM=PetruTerm`.
 
-### P1 cerrados
+**SwashCache:** usar `get_image_uncached()`, NO `get_image()`.
 
-| ID | Descripción | Estado |
-|----|-------------|--------|
-| TD-RENDER-02 | Flickering spinner panel | RESUELTO |
-| TD-RENDER-01 | Franjas bg filas con texto (shaper drops spaces) | RESUELTO |
-| TD-RENDER-03 | Celda blanca persistente tras click sin drag | RESUELTO |
-| TD-PERF-36 | Overflow silencioso en instance buffers | RESUELTO |
+**macOS trackpad:** `MouseScrollDelta::PixelDelta(pos).y` es LOGICAL POINTS.
+Divisor: `cell_height / scale_factor`.
 
-### Tier 4 — Quick wins P2 (batch en un PR, <20 LoC c/u)
+**JetBrains Mono ligatures:** bearing_x puede ser NEGATIVO — no clampar a 0.
 
-| ID | Archivo | Fix |
-|----|---------|-----|
-| TD-PERF-32 | `src/app/renderer.rs:191` | Mover `colors_scratch` a `RenderContext` |
-| TD-PERF-33 | `src/llm/chat_panel.rs` | `filtered_picker_items` → `Vec<&PathBuf>` |
-| TD-PERF-20 | `src/app/renderer.rs:662,663,754` | `char_indices().nth(N)` zero-alloc |
-| TD-MEM-10  | `src/llm/chat_panel.rs` | `file_picker_items.clear()` en `close_file_picker` |
-| TD-MEM-11  | `src/llm/chat_panel.rs` | `matcher: SkimMatcherV2` campo en `ChatPanel` |
-| TD-PERF-16 | `src/app/mod.rs:454,554` | Cachear inputs previos de tab/status key, `==` directo |
-| TD-PERF-17 | `src/config/watcher.rs` | Debounce 300 ms para hot-reload |
-
----
-
-## Patrones arquitectónicos clave
-
-**LcdGlyphAtlas + FreeTypeLcdRasterizer dualidad de cache:**
-- `LcdGlyphAtlas.cache` — cache principal con epoch tracking
-- `FreeTypeLcdRasterizer.cache` — cache LOCAL del rasterizador (Mutex interno)
-- Al llamar `lcd_atlas.clear()`, el cache LOCAL también debe limpiarse via `clear_lcd_rasterizer_cache()`
-
-**Atlas eviction física vs lógica:**
-- `evict_cold()` es LÓGICA — elimina del HashMap pero el cursor no retrocede; UVs de entradas supervivientes siguen válidas
-- Para reclamar espacio físico, la única opción es `clear()` (nueva textura)
-- Detección: `cursor_fill_ratio() > 0.75` después de evicción → preemptive `clear()`
-
-**`Mux.closed_ids` patrón:**
-- `cmd_close_tab/pane()` pushean IDs a `Mux.closed_ids`
-- App drena `closed_ids` tras `handle_key_input` y en `close_exited_terminals`
-- Permite limpiar estado externo sin pasar `App` a `Mux`
-
-**`RenderContext` scratch fields (TD-PERF-12/13):**
-- `scratch_chars/str/colors`: usados por `push_shaped_row` via `mem::take`
-- `scratch_lines: Vec<(String,[f32;4])>`: reutilizado por `build_chat_panel_instances`; strings sobreescritas in-place con `push_str`
-- `frame_counter: u64`: incrementado en `RedrawRequested`; spinners = `(frame_counter/4)%8`
-- `fmt_buf: String`: scratch de una sola línea para callers de `push_shaped_row`
-
-**Panel content vs input rows (TD-PERF-10):**
-- Content section (`build_chat_panel_instances`): solo reconstruye cuando `ChatPanel::dirty`
-- Input rows (`build_chat_panel_input_rows`): reconstruidas cada frame (cursor blink, hint text)
-- Blink solo toca input rows, no invalida cache de mensajes
-- ⚠ Ruta de regresión: si coordenadas del content cache no incluyen `scroll_offset`, los bloques renderizan en posición incorrecta
+**alacritty_terminal 1-cell selection:** limpiar con `clear_selection()` en click sin drag.
+Ver `mouse_dragged` flag en `InputHandler`.
 
 ## Keybinds actuales
 
@@ -134,7 +69,7 @@ Tier 5 (arquitectura pesada) en `SESSION_STATE.md`.
 | `Cmd+C / Cmd+V` | Copy / paste |
 | `Cmd+Q` | Quit |
 | `Cmd+K` | Clear screen + scrollback |
-| `Cmd+F` | Abrir/cerrar búsqueda de texto |
+| `Cmd+F` | Abrir/cerrar busqueda |
 | `Cmd+1-9` | Cambiar a tab N |
 | `^B c` | New tab |
 | `^B &` | Close tab |
@@ -146,7 +81,7 @@ Tier 5 (arquitectura pesada) en `SESSION_STATE.md`.
 | `^B h/j/k/l` | Focus pane (vim-style) |
 | `^B Option+←→↑↓` | Resize pane |
 | `^B a` | Abrir / cerrar AI panel |
-| `^B A` | Mover focus terminal ↔ chat |
+| `^B A` | Mover focus terminal <-> chat |
 | `^B e` | Explain last output |
 | `^B f` | Fix last error |
 | `^B z` | Undo last write |
