@@ -184,11 +184,7 @@ _TD-PERF-28 — RESUELTO 2026-04-19. Las 3 llamadas en el hot path de shaping (s
 
 ---
 
-### TD-PERF-29: Allocator global por defecto (`std::alloc::System`)
-- **Archivo:** `src/main.rs`
-- **Descripción:** Alacritty y otros terminales de alto rendimiento usan `jemalloc` o `mimalloc` para mejor comportamiento bajo multi-thread y menor fragmentación.
-- **Fix:** Evaluar `mimalloc` como `#[global_allocator]`. Benchmark con `criterion` en `shape_line` + `build_instances` antes/después. Alacritty reporta ~5-15% en sus hot paths.
-- **Severidad:** P3 — evaluar con profiling real; no implementar sin benchmarks previos.
+_TD-PERF-29 — DIFERIDO a TD-PERF-30 (benchmarks). `mimalloc` requiere criterion baseline previo para validar ganancia real. Implementar después de TD-PERF-30._
 
 ---
 
@@ -196,10 +192,7 @@ _TD-PERF-35 — RESUELTO 2026-04-19. `gap_buf: String` en `RenderContext`; `mem:
 
 ---
 
-### TD-MAINT-01: `cargo-audit` no instalado — sin escaneo de CVEs
-- **Descripción:** ~40 deps directas, cientos transitivas. Sin escaneo de RustSec no hay alerta de CVEs conocidos.
-- **Fix:** `cargo install cargo-audit`; `cargo audit` en CI. Considerar `cargo-deny` para políticas de licencias + advisories.
-- **Severidad:** P3 — mantenimiento; bajo riesgo en desarrollo activo, mayor en producción.
+_TD-MAINT-01 — RESUELTO 2026-04-19. `cargo-audit` instalado y ejecutado en CI (`.github/workflows/ci.yml` job `check`). Ver archivo._
 
 ---
 

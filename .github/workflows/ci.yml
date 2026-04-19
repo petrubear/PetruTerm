@@ -44,6 +44,12 @@ jobs:
       - name: cargo fmt
         run: cargo fmt --check
 
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --quiet
+
+      - name: cargo audit
+        run: cargo audit
+
   bench-regression:
     name: bench regression gate
     runs-on: macos-latest
