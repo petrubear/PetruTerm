@@ -776,19 +776,27 @@ impl ApplicationHandler<()> for App {
                                 0
                             };
                         let rename_input = self.ui.tab_rename_input.as_deref();
-                        // Key: active tab index + total columns + tab titles + rename input.
-                        let tab_key = {
-                            let idx_bytes = self.mux.tabs.active_index().to_le_bytes();
-                            let col_bytes = tab_total_cols.to_le_bytes();
-                            let rename_bytes = rename_input.unwrap_or("").as_bytes();
-                            let mut parts: Vec<&[u8]> = vec![&idx_bytes, &col_bytes, rename_bytes];
-                            for t in self.mux.tabs.tabs() {
-                                parts.push(t.title.as_bytes());
-                            }
-                            static_hash(&parts)
+                        let active_idx = self.mux.tabs.active_index();
+                        
+                        // Fast comparison: check copiable inputs before hashing (TD-PERF-16).
+                        let inputs_match = if let Some((cached_idx, cached_cols)) = rc.tab_bar_inputs {
+                            cached_idx == active_idx
+                                && cached_cols == tab_total_cols
+                                && rc.tab_bar_rename_input.as_deref() == rename_input
+                        } else {
+                            false
                         };
-                        if rc.tab_bar_key == tab_key && !rc.tab_bar_instances_cache.is_empty() {
-                            // Tabs unchanged — append cached instances (TD-PERF-09).
+                        
+                        let titles_match = {
+                            let current_titles: Vec<String> =
+                                self.mux.tabs.tabs().iter().map(|t| t.title.clone()).collect();
+                            rc.tab_bar_titles == current_titles
+                        };
+                        
+                        let tab_key_changed = !inputs_match || !titles_match;
+                        
+                        if !tab_key_changed && !rc.tab_bar_instances_cache.is_empty() {
+                            // Tabs unchanged — append cached instances (TD-PERF-09/16).
                             rc.instances.extend_from_slice(&rc.tab_bar_instances_cache);
                             rc.rect_instances.extend_from_slice(&rc.tab_bar_rects_cache);
                         } else {
@@ -796,7 +804,7 @@ impl ApplicationHandler<()> for App {
                             let rect_start = rc.rect_instances.len();
                             rc.build_tab_bar_instances(
                                 self.mux.tabs.tabs(),
-                                self.mux.tabs.active_index(),
+                                active_idx,
                                 &scaled_font,
                                 tab_total_cols,
                                 self.config.window.padding.left as f32,
@@ -810,7 +818,11 @@ impl ApplicationHandler<()> for App {
                             rc.tab_bar_rects_cache.clear();
                             rc.tab_bar_rects_cache
                                 .extend_from_slice(&rc.rect_instances[rect_start..]);
-                            rc.tab_bar_key = tab_key;
+                            
+                            // Cache the inputs for next frame comparison (TD-PERF-16).
+                            rc.tab_bar_inputs = Some((active_idx, tab_total_cols));
+                            rc.tab_bar_titles = self.mux.tabs.tabs().iter().map(|t| t.title.clone()).collect();
+                            rc.tab_bar_rename_input = rename_input.map(|s| s.to_string());
                         }
                     }
 

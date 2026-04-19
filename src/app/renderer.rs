@@ -111,14 +111,16 @@ pub struct RenderContext {
     /// Bytes written to GPU buffers in the current frame (instances + LCD + rects).
     pub last_gpu_upload_bytes: usize,
 
-    // ── Static-geometry caches (TD-PERF-08/09/10) ────────────────────────────
+    // ── Static-geometry caches (TD-PERF-08/09/10/16) ────────────────────────────
     // Scroll bar: ~50 CellVertex per frame, no HarfBuzz. Keyed by scroll state.
     pub scroll_bar_state: Option<(usize, usize, usize, usize)>,
     pub scroll_bar_cache: Vec<CellVertex>,
-    // Tab bar: HarfBuzz per tab name. Keyed by hash of tab titles + layout inputs.
-    pub tab_bar_key: u64,
+    // Tab bar: HarfBuzz per tab name. Cached inputs checked directly (no hash) (TD-PERF-16).
     pub tab_bar_instances_cache: Vec<CellVertex>,
     pub tab_bar_rects_cache: Vec<RoundedRectInstance>,
+    pub tab_bar_inputs: Option<(usize, usize)>, // (active_index, total_cols)
+    pub tab_bar_titles: Vec<String>,
+    pub tab_bar_rename_input: Option<String>,
     // Status bar: HarfBuzz per segment. Keyed by hash of all segment inputs.
     pub status_bar_key: u64,
     pub status_bar_instances_cache: Vec<CellVertex>,
@@ -192,9 +194,11 @@ impl RenderContext {
             last_gpu_upload_bytes: 0,
             scroll_bar_state: None,
             scroll_bar_cache: Vec::new(),
-            tab_bar_key: 0,
             tab_bar_instances_cache: Vec::new(),
             tab_bar_rects_cache: Vec::new(),
+            tab_bar_inputs: None,
+            tab_bar_titles: Vec::new(),
+            tab_bar_rename_input: None,
             status_bar_key: 0,
             status_bar_instances_cache: Vec::new(),
             status_bar_rect_cache: Vec::new(),
