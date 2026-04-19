@@ -132,11 +132,7 @@ _TD-PERF-22, 31, 32, 33, 34, 37 — RESUELTOS 2026-04-17. Ver archivo._
 
 ## P3 — Prioridad baja / Backlog
 
-### TD-MEM-14: `ConfigWatcher` usa `mpsc::channel()` unbounded
-- **Archivo:** `src/config/watcher.rs:ConfigWatcher::new()`
-- **Descripción:** El watcher usa un canal unbounded. En `git checkout` con muchos archivos `.lua`, pueden acumularse cientos de eventos antes de que `poll()` los drene. `poll()` solo retorna el último, por lo que los intermedios son descartados — el canal actúa como buffer innecesario.
-- **Fix:** `mpsc::sync_channel(1)` con `try_send`. Si ya hay un evento pendiente, descartar el nuevo.
-- **Severidad:** P3 — menor en uso normal; downgraded desde P2.
+_TD-MEM-14 — RESUELTO 2026-04-19. `sync_channel(1)` + `try_send`; eventos extras descartados silenciosamente. Ver archivo._
 
 ---
 

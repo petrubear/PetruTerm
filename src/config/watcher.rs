@@ -12,7 +12,7 @@ pub struct ConfigWatcher {
 
 impl ConfigWatcher {
     pub fn new(config_dir: &Path) -> Result<Self> {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = mpsc::sync_channel(1);
 
         let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
             if let Ok(event) = res {
@@ -22,7 +22,7 @@ impl ConfigWatcher {
                 ) {
                     for path in event.paths {
                         if path.extension().is_some_and(|e| e == "lua") {
-                            let _ = tx.send(path);
+                            let _ = tx.try_send(path);
                         }
                     }
                 }
