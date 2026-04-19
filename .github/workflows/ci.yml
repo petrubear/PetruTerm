@@ -77,7 +77,7 @@ jobs:
         run: cargo install critcmp --quiet
 
       - name: Run benchmarks on PR branch
-        run: cargo bench --bench search --bench shaping -- --save-baseline pr
+        run: cargo bench --bench search --bench shaping --bench rasterize --bench build_instances -- --save-baseline pr
 
       - name: Checkout master baseline
         run: |
@@ -117,14 +117,15 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-bench-
 
       - name: Run benchmarks and save baseline
-        run: cargo bench --bench search --bench shaping -- --save-baseline master
+        run: cargo bench --bench search --bench shaping --bench rasterize --bench build_instances -- --save-baseline master
 
       - name: Copy baseline to tracked directory
         run: |
           mkdir -p .criterion-baselines
           cp -r target/criterion/master/. .criterion-baselines/ 2>/dev/null || true
-          cp -r target/criterion/search/. .criterion-baselines/search/ 2>/dev/null || true
-          cp -r target/criterion/shaping/. .criterion-baselines/shaping/ 2>/dev/null || true
+          for bench in search shaping rasterize build_instances; do
+            cp -r target/criterion/${bench}/. .criterion-baselines/${bench}/ 2>/dev/null || true
+          done
 
       - name: Commit updated baseline
         run: |

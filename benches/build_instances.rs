@@ -1,7 +1,7 @@
 use cosmic_text::{fontdb, FontSystem};
 use criterion::{criterion_group, criterion_main, Criterion};
 use petruterm::config::schema::FontConfig;
-use petruterm::font::TextShaper;
+use petruterm::font::{TextShaper, TextShaperConfig};
 use petruterm::renderer::atlas::GlyphAtlas;
 use petruterm::renderer::cell::{CellVertex, FLAG_COLOR_GLYPH};
 use rustc_hash::FxHasher;
@@ -88,12 +88,14 @@ fn make_shaper() -> (TextShaper, FontConfig) {
     let shaper = TextShaper::new(
         None,
         font_system,
-        family,
-        font_id,
-        font_path,
-        0,
-        &font_config,
-        None,
+        TextShaperConfig {
+            actual_family: family,
+            font_id,
+            font_path,
+            face_index: 0,
+            font_config: &font_config,
+            lcd_atlas: None,
+        },
     );
     (shaper, font_config)
 }
