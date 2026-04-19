@@ -1,85 +1,77 @@
 # Session State
 
-**Last Updated:** 2026-04-18 (sesión planning)
-**Session Focus:** Roadmap review + planning — sprint cierre Phase 3.5, luego Fases A–D (menu, titlebar, workspaces, MCP/Skills)
+**Last Updated:** 2026-04-19
+**Session Focus:** Sprint cierre Phase 3.5 COMPLETO — bugs CI + status bar flicker fix
 
 ## Branch: `master`
 
 ## Estado actual
 
-**Phase 1–3 COMPLETE. Phase 3.5: sub-phases A–H completas (archivadas). Sprint cierre pendiente.**
+**Phase 1–3 COMPLETE. Phase 3.5 COMPLETE (sprint cierre incluido).**
 **Build limpio: check + test + clippy + fmt PASS. CI verde.**
 
 ## Commits recientes relevantes
 
 | Commit | Descripción |
 |--------|-------------|
-| `b2da6ac` | fix: tab blank on switch, LLM keychain, AI panel focus keybind |
-| `a5d691e` | fix: Shift+Enter KKP, tab bleed, clippy, .app env vars |
+| (fmt)  | chore: cargo fmt |
+| (fix)  | fix: status bar flickers/disappears on mouse click |
+| (ci)   | chore: fix clippy warnings breaking CI |
+| (bench)| chore: fix bench compilation + add rasterize/build_instances to CI gating |
+| (perf) | [TD-PERF-15] perf: async OSC 52 clipboard in poll_pty_events |
 
 ---
 
-## Roadmap acordado (sesión 2026-04-18 planning)
+## Sprint cierre Phase 3.5 — CERRADO 2026-04-19
 
-### Sprint cierre Phase 3.5 (PRÓXIMO)
-Resolver deuda técnica antes de implementar nuevas features. Ver `build_phases.md` Sprint Cierre.
+Todos los ítems P2/P3 revisados. La mayoría ya estaba implementado en código.
+Único código nuevo: TD-PERF-15 (Pty.tx + async OSC 52).
 
-**P2 prioritarios:**
-- ~~TD-MEM-23~~ RESUELTO (ya era `&[Value]` en el código actual)
-- TD-MEM-13: Limitar `ReadFile` a 50k chars + max 5 rounds en agent loop
-- TD-PERF-04: `scan_files()` sincrónico en file picker → `spawn_blocking`
-- TD-PERF-15: Clipboard bloquea event loop → `spawn_blocking` en copy/paste grande
-- TD-PERF-21: Palette fuzzy sin caché incremental → filtrado incremental
+**Deuda cerrada esta sesión:**
+- TD-MEM-23, TD-MEM-13, TD-PERF-04, TD-PERF-21 — ya implementados
+- TD-MEM-17, TD-MEM-24, TD-PERF-18, TD-PERF-23 — ya implementados
+- TD-PERF-15 — resuelto con código nuevo
+- Benches build_instances + rasterize — compilaban con firma vieja; migrados a TextShaperConfig
+- CI bench gating — añadidos los 2 nuevos benches al workflow
 
-**P3 triviales (de paso):**
-- ~~TD-MEM-17~~ RESUELTO (ya implementado)
-- ~~TD-MEM-24~~ RESUELTO (ya implementado)
-- ~~TD-PERF-18~~ RESUELTO (ya implementado)
-- ~~TD-PERF-23~~ RESUELTO (ya implementado)
-
-**Benchmarks:**
-- Desbloquear `build_instances` bench (extraer CPU path a fn pura)
-- Desbloquear `rasterize_to_atlas` bench (variant swash-only sin wgpu)
-- CI gating: regresión >5% falla build
-
-**Descartado de Phase 3.5:**
-- Sub-E (rayon/rtrb), Sub-G (atlas split/ring buffer), Sub-H (PGO) → backlog Phase 2
-- CVDisplayLink / CAMetalLayer → skip
-- "Zero allocs con dhat" y comparativa vs Alacritty → diferir
+**Bugs adicionales resueltos:**
+- CI clippy: 8 warnings (collapsible_match x4, manual_repeat_n, unnecessary_sort_by x3)
+- CI fmt: 4 archivos con formato incorrecto
+- Rust version mismatch: local era Homebrew 1.94.1, migrado a rustup 1.95.0
+- Status bar flicker/desaparece al hacer click: blink fast path usaba
+  `cell_count = content_end + 1` cortando el draw antes del status bar.
+  Fix: `last_overlay_start` en RenderContext; blink path usa `last_instance_count`
+  + vertex transparente (bg.a=0) para cursor off.
 
 ---
 
-### Fase A — Fundación (versionado + i18n)
+## Próximo: Fase A — Fundación (versionado + i18n)
+
 - Bump `Cargo.toml` a `0.1.0`, crear `CHANGELOG.md`
 - Crate i18n (`rust-i18n`), detección locale macOS, archivos `en.toml` + `es.toml`
 - Scope: menu labels, mensajes de error LLM, panel AI, status bar labels
 
 ### Fase B — Menu Bar nativo macOS
 - Crate `muda`, inicializar antes del event loop
-- Menus: File, Edit, AI Chat, Window, Help (ver `build_phases.md` Fase B)
-- "About" muestra `env!("CARGO_PKG_VERSION")`
-- Labels via i18n
+- Menus: File, Edit, AI Chat, Window, Help
 
 ### Fase C — Titlebar custom + Workspaces
-- Titlebar via `objc2` NSWindow híbrido (traffic lights nativos conservados)
+- Titlebar via `objc2` NSWindow híbrido
 - Modelo `Workspace { id, name, tabs }` en Mux
-- Sidebar izquierda (drawer) con lista de workspaces, nav j/k
-- Leader keybinds: `W n/&/,/j/k`
+- Sidebar izquierda (drawer)
 
 ### Fase D — AI Chat MCP + Skills
-- MCP config: `~/.config/petruterm/mcp/mcp.json` + `.petruterm/mcp.json` (proyecto)
-- MCP client: JSON-RPC stdio, tools/list + tools/call
-- Skills: `~/.config/petruterm/skills/*/SKILL.md` (formato agentskills.io) + `.petruterm/skills/`
-- Activación bajo demanda; skills inyectados al system prompt
+- MCP config + client JSON-RPC stdio
+- Skills agentskills.io format
 
 ### Fase 4 — Plugin Ecosystem (después de A–D)
-- lazy.nvim-style plugin loader en Lua
-- `src/plugins/` — plugin loader + Lua API
-- Ver `build_phases.md` Phase 4 para deliverables
 
 ---
 
 ## Sesiones anteriores (resumen)
+
+### 2026-04-19 — Sprint cierre Phase 3.5
+- Deuda P2/P3 cerrada, benches desbloqueados, CI verde, status bar flicker fix
 
 ### 2026-04-18 (tarde) — Bug fixes prioritarios
 - KKP Shift+Enter, tab bleed, CI clippy, .app env vars
