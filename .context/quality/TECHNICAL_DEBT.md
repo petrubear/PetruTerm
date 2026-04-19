@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-04-19
-**Open Items:** 12
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 12 | **P3:** 0
+**Open Items:** 11
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 11 | **P3:** 0
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -77,11 +77,7 @@ _TD-PERF-15 — RESUELTO 2026-04-19. Cmd+C/V ya eran async (thread::spawn). Clip
 
 ---
 
-### TD-PERF-16: Hash keys de tab bar y status bar se recalculan por frame aunque el resultado esté cacheado
-- **Archivo:** `src/app/mod.rs:454-461` (tab_key), `mod.rs:554-568` (sb_key)
-- **Descripción:** La cache almacena el resultado final pero la key se recomputa cada frame: `Vec<&[u8]>` + hash de títulos completos. ~20-50 alocaciones por frame solo para el compare.
-- **Fix:** Cachear los inputs previos (tupla de valores copiables) y hacer `==` directo antes de llegar al hash. Si bit-idénticos al frame anterior, saltar el hash.
-- **Severidad:** P2 — micro pero sistemático en cada frame.
+_TD-PERF-16 — RESUELTO 2026-04-19. Tab bar ahora cachea inputs copiables (`active_index`, `total_cols`, `titles`, `rename_input`) y compara directamente sin hash. Eliminadas 20-50 alocaciones Vec por frame. Status bar sigue con hash (menos frecuente). Commit `67a340a`._
 
 ---
 
