@@ -5,7 +5,7 @@
 ---
 
 ## Phase 3.5: Performance Sprint ⚡
-**Status: In progress — Sub-phases A/B/C/D/F complete**
+**Status: Mayoría completa — Sprint cierre pendiente (P2/P3 tech debt + bench CI)**
 
 | KPI | Target |
 |-----|--------|
@@ -47,8 +47,8 @@
 - [x] GPU upload bytes counter en HUD
 - [x] `poll_git_branch` → timer 1 Hz independiente (TD-PERF-19)
 - [x] In-flight guard en git branch fetch
-- [ ] Cursor como overlay independiente (blink sin invalidar grid cache)
-- [ ] Damage tracking con `Term::damage()`
+- [x] Cursor como overlay independiente — `build_cursor_instance`, fast path en RedrawRequested (2026-04-18)
+- [x] Damage tracking con `Term::damage()` / `reset_damage()` en `collect_grid_cells_for` (2026-04-18)
 
 ---
 
@@ -117,22 +117,129 @@
 
 ---
 
-### Exit Criteria (Phase 3.5 global)
+### Sprint cierre Phase 3.5 (PRÓXIMO — antes de Fases A–D)
 
-- [ ] Input-to-pixel latency: **p50 < 4 ms, p99 < 8 ms**
-- [ ] Steady-state frame time: **< 1 ms**
-- [ ] Zero allocations en idle (verificado con `dhat`)
-- [ ] Cache-miss storm: **< 16 ms**
-- [ ] Startup: **< 80 ms**
-- [ ] Criterion benchmarks con CI gating
-- [ ] Debug HUD (F12) operativo ✅
-- [ ] `PROFILING.md` ✅
-- [ ] Comparativa vs Alacritty/kitty/wezterm en `.context/quality/BENCHMARKS.md`
+**P2 prioritarios:**
+- [ ] TD-MEM-23: `agent_step(&[Value])` — elimina `api_msgs.clone()` por round
+- [ ] TD-MEM-13: Limitar `ReadFile` a 50k chars + max 5 rounds en agent loop
+- [ ] TD-PERF-04: `scan_files()` → `spawn_blocking` en file picker
+- [ ] TD-PERF-15: Clipboard copy/paste → `spawn_blocking`
+- [ ] TD-PERF-21: Palette fuzzy matcher incremental (filtrar `last_results` si query extiende el anterior)
+
+**P3 triviales:**
+- [ ] TD-MEM-17: `streaming_buf.clear()` en `ChatPanel::close()`
+- [ ] TD-MEM-24: `VecDeque` para `undo_stack` (`pop_front`/`push_back`)
+- [ ] TD-PERF-18: Tokio pool → `.worker_threads(2)`
+- [ ] TD-PERF-23: `leader_deadline: Instant` (evitar `elapsed()` syscall por keystroke)
+
+**Benchmarks:**
+- [ ] Desbloquear `build_instances` bench: extraer CPU path a función pura sin `winit`
+- [ ] Desbloquear `rasterize_to_atlas` bench: variant swash-only sin `wgpu::Queue`
+- [ ] CI gating: `critcmp`, falla si regresión >5% en `shape_line` / `build_instances` / `search`
+
+**Descartado de Phase 3.5 (→ backlog Phase 2/futuro):**
+- Sub-E: rayon per-pane, `rtrb` lock-free PTY ring buffer
+- Sub-G: atlas split, persistent ring buffer, unificar bg+glyph pass
+- Sub-H: PGO (requiere workloads reales de fases futuras)
+- CVDisplayLink / CAMetalLayer: experimental, incierto
+- "Zero allocs con dhat" y comparativa vs Alacritty: diferir
+
+### Exit Criteria (Phase 3.5 — revisados)
+
+- [x] Debug HUD (F12) operativo
+- [x] `PROFILING.md` documentado
+- [x] Damage tracking con alacritty_terminal
+- [x] Cursor overlay fast path
+- [x] Idle zero-cost (ControlFlow::Wait + focus guard)
+- [ ] Sprint cierre: P2/P3 tech debt + bench CI gating
+- _Diferidos: latency measurement formal, comparativa, dhat_
+
+---
+
+---
+
+## Fase A: Fundación — Versionado + i18n
+**Status: Not started**
+
+- [ ] Bump `Cargo.toml` a `0.1.0`; crear `CHANGELOG.md` con historial resumido desde Phase 1
+- [ ] Crate `rust-i18n`; detección de locale del sistema (macOS `NSLocale`)
+- [ ] `locales/en.toml` + `locales/es.toml` con todos los strings de UI
+- [ ] Scope inicial: menu labels, mensajes error LLM, panel AI, status bar labels
+
+---
+
+## Fase B: Menu Bar nativo macOS
+**Status: Not started**
+
+- [ ] Agregar crate `muda`; inicializar `MenuBar` en `main.rs` antes del event loop
+- [ ] **File**: New Tab, New Pane (H/V), Close Tab, Close Pane, Quit
+- [ ] **Edit**: Copy, Paste, Clear Scrollback, Find
+- [ ] **AI Chat**: Toggle Panel, Send to AI, Explain Last Output, Fix Last Error, Clear Chat
+- [ ] **Window**: New Workspace, Next/Prev Workspace, Next/Prev Tab, Minimize, Zoom
+- [ ] **Help**: About PetruTerm (version via `env!("CARGO_PKG_VERSION")`), Open Config Folder
+- [ ] Wiring de acciones vía `MenuEvent` a handlers existentes
+- [ ] Labels via sistema i18n (Fase A)
+
+---
+
+## Fase C: Titlebar Custom + Workspaces
+**Status: Not started**
+
+### C-1: Titlebar custom (NSWindow híbrido)
+- [ ] Via `objc2`: `setTitlebarAppearsTransparent(true)`, `setTitleVisibility(.hidden)`, `setStyleMask` — conservar traffic lights nativos
+- [ ] Expandir área render wgpu para cubrir zona título
+- [ ] Drag region via `NSWindow.setIsMovableByWindowBackground`
+- [ ] Botón toggle sidebar en titlebar (izquierda, junto a traffic lights)
+
+### C-2: Modelo Workspace en Mux
+- [ ] Agregar `Workspace { id: usize, name: String, tabs: Vec<TabId> }` a `src/app/mux.rs`
+- [ ] `Mux` pasa de `tabs: Vec<Tab>` a `workspaces: Vec<Workspace>` + `active_workspace_id`
+- [ ] Operaciones tab/pane operan dentro del workspace activo (sin romper API existente)
+- [ ] Workspace create / rename / close
+- [ ] Leader keybinds: `W n` (nuevo), `W &` (cerrar), `W ,` (renombrar), `W j/k` (navegar)
+
+### C-3: Sidebar de Workspaces
+- [ ] Panel lateral izquierdo tipo drawer (slide-in/out animado)
+- [ ] Toggle via botón titlebar
+- [ ] Lista workspaces con indicador del activo (dot de color)
+- [ ] Navegación: `j/k` mover, `Enter` activar, `c` crear, `&` cerrar, `r` renombrar inline, `Esc` cerrar sidebar
+
+---
+
+## Fase D: AI Chat — MCP + Skills
+**Status: Not started**
+
+### D-1: MCP config loader
+- [ ] Leer `~/.config/petruterm/mcp/mcp.json` (formato estándar: `{ "mcpServers": { ... } }`)
+- [ ] Merge con `.petruterm/mcp.json` en directorio de trabajo actual (proyecto tiene prioridad)
+
+### D-2: MCP client (stdio transport)
+- [ ] Spawn proceso por server, JSON-RPC 2.0 sobre stdin/stdout
+- [ ] Implementar: `initialize`, `tools/list`, `tools/call`, `resources/list`, `resources/read`
+- [ ] Lifecycle: spawn al abrir AI panel, kill al cerrar sesión/cambiar workspace
+- [ ] Cada `ChatPanel` conecta al conjunto de MCP servers activos para su `cwd`
+
+### D-3: MCP tool integration en chat
+- [ ] LLM engine recibe tool list de MCP servers activos
+- [ ] Rutear tool calls al server correcto
+- [ ] Mostrar tool calls en panel AI (collapsible)
+
+### D-4: Skills loader (formato agentskills.io)
+- [ ] Escanear `~/.config/petruterm/skills/*/SKILL.md` al inicio
+- [ ] Parsear frontmatter YAML: `name`, `description` (body cargado solo al activar)
+- [ ] Escanear `.petruterm/skills/*/SKILL.md` en directorio actual
+- [ ] Activación: por `/skill-name` en input o por relevancia de descripción vs query
+- [ ] Inyectar body del skill activo al system prompt
+
+### D-5: Project-level config
+- [ ] `.petruterm/mcp.json` — MCP servers del proyecto
+- [ ] `.petruterm/skills/` — Skills del proyecto
+- [ ] Merge con global: proyecto tiene prioridad en conflictos de nombre
 
 ---
 
 ## Phase 4: Plugin Ecosystem
-**Status: Not started — bloqueado hasta Phase 3.5 exit criteria**
+**Status: Not started — después de Fases A–D**
 
 - [ ] Plugin loader: auto-scan `~/.config/petruterm/plugins/*.lua`
 - [ ] lazy.nvim-style plugin spec

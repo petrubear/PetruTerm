@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-04-18
-**Open Items:** 31
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 13 | **P3:** 18
+**Last Updated:** 2026-04-18 (planning)
+**Open Items:** 30
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 12 | **P3:** 18
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -45,11 +45,7 @@ _TD-MEM-10, 11, 12 — RESUELTOS 2026-04-17. Ver archivo._
 
 ---
 
-### TD-MEM-19: Cursor blink, reloj y git polling corren sin foco de ventana
-- **Archivo:** `src/app/mod.rs` (cursor blink timer), `src/app/ui.rs` (status bar clock, `poll_git_branch`)
-- **Descripción:** Los tres timers corren continuamente independientemente del foco. ~60 000 redraws evitables en 8 h con la ventana en background. Presionan el `SwashCache` (TD-MEM-04) con misses de glifos del reloj y status bar.
-- **Fix:** Escuchar `WindowEvent::Focused(bool)`. Cuando `window_focused = false`: no procesar blink, no redrawn por reloj, no spawnear `poll_git_branch`. Cambiar `ControlFlow` a `Wait` cuando sin foco y sin PTY activo.
-- **Severidad:** P2 — elimina decenas de miles de redraws evitables; reduce presión sobre SwashCache en idle.
+_TD-MEM-19 — RESUELTO 2026-04-18. `window_focused: bool` en App; blink + git poll suspendidos en focus loss; ControlFlow::Wait. Ver archive._
 
 ---
 

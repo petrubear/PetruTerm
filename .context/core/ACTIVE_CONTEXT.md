@@ -1,23 +1,35 @@
 # Active Context
 
-**Current Focus:** Phase 4 — Plugin system (Lua, lazy.nvim-style)
+**Current Focus:** Sprint cierre Phase 3.5 — deuda técnica P2/P3 antes de nuevas features
 **Last Active:** 2026-04-18
 
 ## Estado actual del proyecto
 
-**Phase 1–3 COMPLETE. Phase 3.5 COMPLETE. Phase 4 (plugins) desbloqueada.**
+**Phase 1–3 COMPLETE. Phase 3.5: mayoría completa (ver `build_phases.md` para estado real).**
 **Build limpio: check + test + clippy + fmt PASS. CI verde.**
 
-## Proximo trabajo — Phase 4
+## Roadmap acordado (en orden)
 
-Implementar el sistema de plugins lazy.nvim-style en Lua:
+1. **Sprint cierre 3.5** — P2/P3 tech debt + bench CI (ver SESSION_STATE.md)
+2. **Fase A** — Versionado semántico + infraestructura i18n (en/es)
+3. **Fase B** — Menu bar nativo macOS (crate `muda`)
+4. **Fase C** — Titlebar custom (NSWindow híbrido) + Workspaces (Workspace > Tab > Pane)
+5. **Fase D** — AI Chat MCP + Skills (agentskills.io format)
+6. **Fase 4** — Plugin ecosystem (Lua, lazy.nvim-style)
 
-1. `src/plugins/mod.rs` — PluginLoader: escanea `~/.config/petruterm/plugins/*.lua`,
-   carga bajo demanda, gestiona ciclo de vida
-2. `src/plugins/api.rs` — Lua API publica expuesta a plugins (toda funcion documentada aqui)
-3. Integrar con el Lua VM existente (`mlua`) y config system
+## Próximo trabajo — Sprint cierre Phase 3.5
 
-Ver `.context/specs/build_phases.md` Phase 4 para deliverables y exit criteria.
+### Archivos clave
+
+| Archivo | Tarea |
+|---------|-------|
+| `src/llm/tools.rs` | TD-MEM-13: limitar ReadFile 50k chars, max 5 rounds |
+| `src/app/ui.rs` | TD-MEM-23: `agent_step(&[Value])` en vez de clone; TD-PERF-18: tokio pool 2 workers; TD-MEM-24: VecDeque undo_stack; TD-PERF-23: leader_deadline |
+| `src/llm/chat_panel.rs` | TD-PERF-04: scan_files spawn_blocking; TD-MEM-17: streaming_buf.clear() en close() |
+| `src/app/mod.rs` | TD-PERF-15: clipboard spawn_blocking |
+| `src/ui/palette/mod.rs` | TD-PERF-21: fuzzy matcher incremental |
+| `benches/` | Desbloquear build_instances + rasterize_to_atlas |
+| `.github/workflows/ci.yml` | CI gating criterion regresión >5% |
 
 ## Bugs resueltos en sesion 2026-04-18 (noche)
 
