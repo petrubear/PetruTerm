@@ -170,8 +170,10 @@ impl CommandPalette {
                 .filter_map(|(i, a)| matcher.fuzzy_match(&a.name, &query).map(|s| (s, i)))
                 .collect();
             scored.sort_by_key(|b| std::cmp::Reverse(b.0));
-            let new_results: Vec<PaletteAction> =
-                scored.iter().map(|&(_, i)| self.results[i].clone()).collect();
+            let new_results: Vec<PaletteAction> = scored
+                .iter()
+                .map(|&(_, i)| self.results[i].clone())
+                .collect();
             self.results = new_results;
         } else {
             let matcher = &self.matcher;

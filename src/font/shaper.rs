@@ -821,7 +821,9 @@ impl TextShaper {
                     if let Some(real_id) =
                         self.ft_cmap.as_ref().and_then(|ft| ft.get_glyph_index(ch))
                     {
-                        if log::log_enabled!(log::Level::Debug) { log::debug!("Overriding glyph {} -> ID {}", ch, real_id); }
+                        if log::log_enabled!(log::Level::Debug) {
+                            log::debug!("Overriding glyph {} -> ID {}", ch, real_id);
+                        }
                         let (key, _, _) = CacheKey::new(
                             self.primary_font_id,
                             real_id as u16,
@@ -832,7 +834,9 @@ impl TextShaper {
                         );
                         key
                     } else {
-                        if log::log_enabled!(log::Level::Debug) { log::debug!("No override for {} (not in cmap)", ch); }
+                        if log::log_enabled!(log::Level::Debug) {
+                            log::debug!("No override for {} (not in cmap)", ch);
+                        }
                         // Truly not in the font — use original key (will render .notdef or blank).
                         glyph_to_cache_key(glyph, font_config.size)
                     }

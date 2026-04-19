@@ -256,7 +256,9 @@ impl InputHandler {
             if let Key::Character(s) = &event.logical_key {
                 if s.as_str() == config.leader.key.as_str() {
                     self.leader_active = true;
-                    self.leader_deadline = Some(Instant::now() + std::time::Duration::from_millis(self.leader_timeout_ms));
+                    self.leader_deadline = Some(
+                        Instant::now() + std::time::Duration::from_millis(self.leader_timeout_ms),
+                    );
                     return;
                 }
             }

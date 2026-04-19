@@ -170,8 +170,8 @@ impl Mux {
                         PtyEvent::Bell => {}
                         PtyEvent::ClipboardStore(text) => {
                             std::thread::spawn(move || {
-                                let _ = arboard::Clipboard::new()
-                                    .and_then(|mut cb| cb.set_text(text));
+                                let _ =
+                                    arboard::Clipboard::new().and_then(|mut cb| cb.set_text(text));
                             });
                         }
                         PtyEvent::ClipboardLoad(fmt) => {
