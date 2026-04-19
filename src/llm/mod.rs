@@ -110,7 +110,7 @@ pub trait LlmProvider: Send + Sync {
     /// Returns either the assistant's text response or tool calls to execute.
     async fn agent_step(
         &self,
-        api_messages: Vec<Value>,
+        api_messages: &[Value],
         tool_specs: &[Value],
     ) -> Result<AgentStepResult>;
 }

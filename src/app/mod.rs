@@ -210,6 +210,22 @@ impl App {
         }
     }
 
+    /// Write clipboard text from an async paste request to the active terminal (TD-PERF-15).
+    fn flush_pending_paste(&mut self) {
+        if let Some(text) = self.ui.poll_pending_paste() {
+            if let Some(terminal) = self.mux.active_terminal() {
+                if terminal.bracketed_paste_mode() {
+                    let mut data = b"\x1b[200~".to_vec();
+                    data.extend_from_slice(text.as_bytes());
+                    data.extend_from_slice(b"\x1b[201~");
+                    terminal.write_input(&data);
+                } else {
+                    terminal.write_input(text.as_bytes());
+                }
+            }
+        }
+    }
+
     fn cell_dims(&self) -> (u16, u16) {
         self.render_ctx
             .as_ref()
@@ -433,7 +449,9 @@ impl ApplicationHandler<()> for App {
         // AI events are low-frequency; render immediately.
         let ai_needs_redraw = self.ui.poll_ai_events() || self.ui.poll_ai_block_events();
         self.flush_pending_pty_run();
-        if ai_needs_redraw {
+        self.flush_pending_paste();
+        let scan_ready = self.ui.poll_file_scan();
+        if ai_needs_redraw || scan_ready {
             if let Some(w) = &self.window {
                 w.request_redraw();
             }
@@ -536,6 +554,8 @@ impl ApplicationHandler<()> for App {
                 let had_ai = self.ui.poll_ai_events();
                 let had_ai_block = self.ui.poll_ai_block_events();
                 self.flush_pending_pty_run();
+                self.flush_pending_paste();
+                self.ui.poll_file_scan();
 
                 // ── Fast blink path ─────────────────────────────────────────────────────
                 // When only cursor blink changed (no PTY data, no AI events, no panel
@@ -1156,27 +1176,15 @@ impl ApplicationHandler<()> for App {
                                     ContextAction::Copy => {
                                         if let Some(terminal) = self.mux.active_terminal() {
                                             if let Some(text) = terminal.selection_text() {
-                                                if let Ok(mut cb) = arboard::Clipboard::new() {
-                                                    let _ = cb.set_text(text);
-                                                }
+                                                std::thread::spawn(move || {
+                                                    let _ = arboard::Clipboard::new()
+                                                        .and_then(|mut cb| cb.set_text(text));
+                                                });
                                             }
                                         }
                                     }
                                     ContextAction::Paste => {
-                                        if let Some(terminal) = self.mux.active_terminal() {
-                                            if let Ok(text) = arboard::Clipboard::new()
-                                                .and_then(|mut cb| cb.get_text())
-                                            {
-                                                if terminal.bracketed_paste_mode() {
-                                                    let mut data = b"\x1b[200~".to_vec();
-                                                    data.extend_from_slice(text.as_bytes());
-                                                    data.extend_from_slice(b"\x1b[201~");
-                                                    terminal.write_input(&data);
-                                                } else {
-                                                    terminal.write_input(text.as_bytes());
-                                                }
-                                            }
-                                        }
+                                        self.ui.request_paste_async(self.wakeup_proxy.clone());
                                     }
                                     ContextAction::Clear => {
                                         if let Some(terminal) = self.mux.active_terminal() {
@@ -1205,8 +1213,10 @@ impl ApplicationHandler<()> for App {
                                             self.active_shell_ctx().map(|c| c.last_command.clone())
                                         {
                                             if !cmd.is_empty() {
-                                                let _ = arboard::Clipboard::new()
-                                                    .and_then(|mut cb| cb.set_text(cmd));
+                                                std::thread::spawn(move || {
+                                                    let _ = arboard::Clipboard::new()
+                                                        .and_then(|mut cb| cb.set_text(cmd));
+                                                });
                                             }
                                         }
                                     }
@@ -1539,12 +1549,14 @@ impl ApplicationHandler<()> for App {
         }
 
         let had_ai = self.ui.poll_ai_events() || self.ui.poll_ai_block_events();
-        if had_ai {
+        let scan_ready = self.ui.poll_file_scan();
+        if had_ai || scan_ready {
             if let Some(w) = &self.window {
                 w.request_redraw();
             }
         }
         self.flush_pending_pty_run();
+        self.flush_pending_paste();
 
         // ── Independent git branch poll (TD-PERF-19) ────────────────────────
         // Runs at most once per second, regardless of PTY/render activity.

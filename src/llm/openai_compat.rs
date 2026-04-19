@@ -77,8 +77,8 @@ struct ApiMessage<'a> {
 #[derive(Serialize)]
 struct AgentRequest<'a> {
     model: &'a str,
-    messages: Vec<Value>,
-    tools: Vec<Value>,
+    messages: &'a [Value],
+    tools: &'a [Value],
     tool_choice: &'a str,
     stream: bool,
 }
@@ -184,7 +184,7 @@ impl LlmProvider for OpenAICompatProvider {
 
     async fn agent_step(
         &self,
-        api_messages: Vec<Value>,
+        api_messages: &[Value],
         tool_specs: &[Value],
     ) -> Result<AgentStepResult> {
         let url = format!("{}/chat/completions", self.base_url);
@@ -197,7 +197,7 @@ impl LlmProvider for OpenAICompatProvider {
             .json(&AgentRequest {
                 model: &self.model,
                 messages: api_messages,
-                tools: tool_specs.to_vec(),
+                tools: tool_specs,
                 tool_choice: "auto",
                 stream: false,
             })

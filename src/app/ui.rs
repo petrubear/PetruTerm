@@ -115,6 +115,14 @@ pub struct UiManager {
 
     // ── Text search (Cmd+F) ───────────────────────────────────────────────────
     pub search_bar: SearchBar,
+
+    // ── Async file scan (TD-PERF-04) ─────────────────────────────────────────
+    /// Receives scan results from the background file-picker scan thread.
+    file_scan_rx: Option<crossbeam_channel::Receiver<Vec<std::path::PathBuf>>>,
+
+    // ── Async clipboard paste (TD-PERF-15) ───────────────────────────────────
+    /// Receives clipboard text from the background paste thread.
+    pending_paste_rx: Option<crossbeam_channel::Receiver<String>>,
 }
 
 impl UiManager {
@@ -175,6 +183,8 @@ impl UiManager {
             streaming_handle: None,
             tab_rename_input: None,
             search_bar: SearchBar::default(),
+            file_scan_rx: None,
+            pending_paste_rx: None,
         }
     }
 
@@ -444,6 +454,72 @@ impl UiManager {
         }
     }
 
+    // ── Async file scan (TD-PERF-04) ─────────────────────────────────────────
+
+    /// Open the file picker and kick off a background scan of `cwd`.
+    /// The picker shows immediately (empty list while scanning).
+    pub fn open_file_picker_async(&mut self, cwd: std::path::PathBuf) {
+        let panel = self.panel_mut();
+        panel.file_picker_query.clear();
+        panel.file_picker_cursor = 0;
+        panel.file_picker_open = true;
+        panel.file_picker_items.clear();
+        panel.dirty = true;
+
+        let (tx, rx) = crossbeam_channel::bounded(1);
+        self.file_scan_rx = Some(rx);
+        std::thread::spawn(move || {
+            let mut items = crate::llm::chat_panel::scan_files(&cwd, 3);
+            items.sort();
+            let _ = tx.send(items);
+        });
+    }
+
+    /// Drain scan results into the active panel. Returns true if items arrived.
+    pub fn poll_file_scan(&mut self) -> bool {
+        let Some(rx) = &self.file_scan_rx else {
+            return false;
+        };
+        match rx.try_recv() {
+            Ok(items) => {
+                let panel = self.panel_mut();
+                panel.file_picker_items = items;
+                panel.dirty = true;
+                self.file_scan_rx = None;
+                true
+            }
+            Err(_) => false,
+        }
+    }
+
+    // ── Async clipboard paste (TD-PERF-15) ───────────────────────────────────
+
+    /// Start a background clipboard read. Result is retrieved via `poll_pending_paste`.
+    pub fn request_paste_async(&mut self, wakeup: winit::event_loop::EventLoopProxy<()>) {
+        let (tx, rx) = crossbeam_channel::bounded(1);
+        self.pending_paste_rx = Some(rx);
+        std::thread::spawn(move || {
+            let text = arboard::Clipboard::new()
+                .ok()
+                .and_then(|mut cb| cb.get_text().ok())
+                .unwrap_or_default();
+            let _ = tx.send(text);
+            let _ = wakeup.send_event(());
+        });
+    }
+
+    /// Returns clipboard text if a pending paste has completed.
+    pub fn poll_pending_paste(&mut self) -> Option<String> {
+        let rx = self.pending_paste_rx.as_ref()?;
+        match rx.try_recv() {
+            Ok(text) => {
+                self.pending_paste_rx = None;
+                Some(text)
+            }
+            Err(_) => None,
+        }
+    }
+
     // ── Tab rename prompt ─────────────────────────────────────────────────────
 
     /// Start the inline rename prompt, pre-filling with the current tab title.
@@ -568,10 +644,10 @@ impl UiManager {
         self.streaming_handle = Some(self.tokio_rt.spawn(async move {
             use futures_util::StreamExt;
 
-            const MAX_TOOL_ROUNDS: usize = 10;
+            const MAX_TOOL_ROUNDS: usize = 5;
 
             for _round in 0..MAX_TOOL_ROUNDS {
-                match provider.agent_step(api_msgs.clone(), &tool_specs).await {
+                match provider.agent_step(&api_msgs, &tool_specs).await {
                     Err(e) => {
                         let _ = tx.send((panel_id, AiEvent::Error(e.to_string())));
                         let _ = wakeup_proxy.send_event(());

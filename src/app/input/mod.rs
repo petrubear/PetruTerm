@@ -473,7 +473,7 @@ impl InputHandler {
                         .active_cwd()
                         .or_else(|| std::env::current_dir().ok())
                         .unwrap_or_default();
-                    ui.panel_mut().open_file_picker(&cwd);
+                    ui.open_file_picker_async(cwd);
                     ui.file_picker_focused = true;
                 }
                 Key::Named(NamedKey::Backspace) => ui.panel_mut().backspace(),
@@ -585,28 +585,16 @@ impl InputHandler {
                     "c" => {
                         if let Some(terminal) = mux.active_terminal() {
                             if let Some(text) = terminal.selection_text() {
-                                if let Ok(mut cb) = arboard::Clipboard::new() {
-                                    let _ = cb.set_text(text);
-                                }
+                                std::thread::spawn(move || {
+                                    let _ = arboard::Clipboard::new()
+                                        .and_then(|mut cb| cb.set_text(text));
+                                });
                             }
                         }
                         return;
                     }
                     "v" => {
-                        if let Some(terminal) = mux.active_terminal() {
-                            if let Ok(text) =
-                                arboard::Clipboard::new().and_then(|mut cb| cb.get_text())
-                            {
-                                if terminal.bracketed_paste_mode() {
-                                    let mut data = b"\x1b[200~".to_vec();
-                                    data.extend_from_slice(text.as_bytes());
-                                    data.extend_from_slice(b"\x1b[201~");
-                                    terminal.write_input(&data);
-                                } else {
-                                    terminal.write_input(text.as_bytes());
-                                }
-                            }
-                        }
+                        ui.request_paste_async(wakeup_proxy.clone());
                         return;
                     }
                     // Cmd+1-9: switch tab by index (standard macOS pattern).

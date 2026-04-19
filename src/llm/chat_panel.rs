@@ -437,16 +437,6 @@ impl ChatPanel {
 
     // ── File picker ───────────────────────────────────────────────────────────
 
-    /// Open the file picker, scanning `cwd` for pickable files.
-    pub fn open_file_picker(&mut self, cwd: &Path) {
-        self.file_picker_items = scan_files(cwd, 3);
-        self.file_picker_items.sort();
-        self.file_picker_query.clear();
-        self.file_picker_cursor = 0;
-        self.file_picker_open = true;
-        self.dirty = true;
-    }
-
     pub fn close_file_picker(&mut self) {
         self.file_picker_items.clear();
         self.file_picker_items.shrink_to_fit();

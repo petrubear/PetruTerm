@@ -24,6 +24,8 @@ pub struct CommandPalette {
     /// Whether the palette is visible.
     pub visible: bool,
     matcher: SkimMatcherV2,
+    /// Query used for the last filter pass — enables incremental filtering (TD-PERF-21).
+    last_filter_query: String,
 }
 
 impl CommandPalette {
@@ -38,6 +40,7 @@ impl CommandPalette {
             selected: 0,
             visible: false,
             matcher: SkimMatcherV2::default(),
+            last_filter_query: String::new(),
         }
     }
 
@@ -55,6 +58,7 @@ impl CommandPalette {
     pub fn open(&mut self) {
         self.custom_items = None;
         self.query.clear();
+        self.last_filter_query.clear();
         self.results = self.all_actions.clone();
         self.selected = 0;
         self.visible = true;
@@ -65,6 +69,7 @@ impl CommandPalette {
     pub fn open_with_items(&mut self, items: Vec<PaletteAction>) {
         self.custom_items = Some(items.clone());
         self.query.clear();
+        self.last_filter_query.clear();
         self.results = items;
         self.selected = 0;
         self.visible = true;
@@ -74,6 +79,7 @@ impl CommandPalette {
     pub fn close(&mut self) {
         self.visible = false;
         self.query.clear();
+        self.last_filter_query.clear();
         self.custom_items = None;
     }
 
@@ -144,16 +150,39 @@ impl CommandPalette {
         let source = self.custom_items.as_ref().unwrap_or(&self.all_actions);
         if self.query.is_empty() {
             self.results = source.clone();
+            self.last_filter_query.clear();
+            self.selected = 0;
+            return;
+        }
+        // Incremental: if the query extends the previous one, filter from the current
+        // (already-reduced) results instead of the full source (TD-PERF-21).
+        let query = self.query.clone();
+        let incremental = !self.last_filter_query.is_empty()
+            && query.starts_with(&self.last_filter_query)
+            && self.results.len() < source.len();
+
+        if incremental {
+            let matcher = &self.matcher;
+            let mut scored: Vec<(i64, usize)> = self
+                .results
+                .iter()
+                .enumerate()
+                .filter_map(|(i, a)| matcher.fuzzy_match(&a.name, &query).map(|s| (s, i)))
+                .collect();
+            scored.sort_by(|a, b| b.0.cmp(&a.0));
+            let new_results: Vec<PaletteAction> =
+                scored.iter().map(|&(_, i)| self.results[i].clone()).collect();
+            self.results = new_results;
         } else {
-            let query = &self.query;
             let matcher = &self.matcher;
             let mut scored: Vec<(i64, &PaletteAction)> = source
                 .iter()
-                .filter_map(|a| matcher.fuzzy_match(&a.name, query).map(|s| (s, a)))
+                .filter_map(|a| matcher.fuzzy_match(&a.name, &query).map(|s| (s, a)))
                 .collect();
             scored.sort_by(|a, b| b.0.cmp(&a.0));
             self.results = scored.into_iter().map(|(_, a)| a.clone()).collect();
         }
+        self.last_filter_query = query;
         self.selected = 0;
     }
 }
