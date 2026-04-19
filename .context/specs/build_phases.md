@@ -17,10 +17,10 @@
 - [x] TD-PERF-21: ya resuelto — `last_filter_query` + path incremental en `filter()` (`palette/mod.rs:157-185`)
 
 **P3 triviales:**
-- [ ] TD-MEM-17: `streaming_buf.clear()` en `ChatPanel::close()`
-- [ ] TD-MEM-24: `VecDeque` para `undo_stack` (`pop_front`/`push_back`)
-- [ ] TD-PERF-18: Tokio pool → `.worker_threads(2)` (`src/app/ui.rs`)
-- [ ] TD-PERF-23: `leader_deadline: Instant` en lugar de `elapsed()` por keystroke
+- [x] TD-MEM-17: ya resuelto — `streaming_buf.clear()` en `chat_panel.rs:226,275`
+- [x] TD-MEM-24: ya resuelto — `undo_stack: VecDeque` con `pop_front`/`push_back` en `ui.rs`
+- [x] TD-PERF-18: ya resuelto — `.worker_threads(2)` en `ui.rs:139`
+- [x] TD-PERF-23: ya resuelto — `leader_deadline: Option<Instant>` en `ui.rs`
 
 **Benchmarks y CI:**
 - [ ] Desbloquear `build_instances` bench: extraer CPU path a función pura sin `winit`

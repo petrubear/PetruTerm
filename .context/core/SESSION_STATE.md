@@ -32,10 +32,10 @@ Resolver deuda técnica antes de implementar nuevas features. Ver `build_phases.
 - TD-PERF-21: Palette fuzzy sin caché incremental → filtrado incremental
 
 **P3 triviales (de paso):**
-- TD-MEM-17: `streaming_buf.clear()` en `close()`
-- TD-MEM-24: `VecDeque` para `undo_stack`
-- TD-PERF-18: Tokio pool → `worker_threads(2)`
-- TD-PERF-23: `leader_deadline: Instant` en lugar de `elapsed()` por keystroke
+- ~~TD-MEM-17~~ RESUELTO (ya implementado)
+- ~~TD-MEM-24~~ RESUELTO (ya implementado)
+- ~~TD-PERF-18~~ RESUELTO (ya implementado)
+- ~~TD-PERF-23~~ RESUELTO (ya implementado)
 
 **Benchmarks:**
 - Desbloquear `build_instances` bench (extraer CPU path a fn pura)
