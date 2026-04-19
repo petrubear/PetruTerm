@@ -100,6 +100,8 @@ pub struct UiManager {
     pub git_branch_last_poll: std::time::Instant,
     /// True while an async git fetch is in flight — prevents duplicate spawns (TD-PERF-19).
     git_branch_in_flight: bool,
+    /// Time when the current in-flight git fetch was spawned, for timeout detection (TD-PERF-19).
+    git_branch_spawn_time: Option<std::time::Instant>,
     /// Channel to receive async git branch results.
     git_tx: crossbeam_channel::Sender<String>,
     pub git_rx: crossbeam_channel::Receiver<String>,
@@ -184,6 +186,7 @@ impl UiManager {
             git_branch_fetched_at: None,
             git_branch_last_poll: std::time::Instant::now(),
             git_branch_in_flight: false,
+            git_branch_spawn_time: None,
             git_tx: git_tx_init,
             git_rx: git_rx_init,
             git_branch_cwd: None,
@@ -349,7 +352,22 @@ impl UiManager {
             self.git_branch_cache = Some(branch);
             self.git_branch_fetched_at = Some(std::time::Instant::now());
             self.git_branch_in_flight = false;
+            self.git_branch_spawn_time = None;
             updated = true;
+        }
+
+        // TD-PERF-19: Timeout recovery — if fetch is stuck in-flight for >30s, reset flag
+        // without clearing the cache (keep stale result visible).
+        if self.git_branch_in_flight {
+            if let Some(spawn_time) = self.git_branch_spawn_time {
+                if spawn_time.elapsed() > std::time::Duration::from_secs(30) {
+                    log::warn!(
+                        "Git branch fetch stuck for >30s, resetting in-flight flag (cache remains stale)"
+                    );
+                    self.git_branch_in_flight = false;
+                    self.git_branch_spawn_time = None;
+                }
+            }
         }
 
         // Decide whether to spawn a fresh fetch.
@@ -363,6 +381,7 @@ impl UiManager {
             if let Some(cwd_path) = cwd {
                 self.git_branch_cwd = Some(cwd_path.to_path_buf());
                 self.git_branch_in_flight = true;
+                self.git_branch_spawn_time = Some(std::time::Instant::now());
                 let tx = self.git_tx.clone();
                 let cwd_owned = cwd_path.to_path_buf();
                 self.tokio_rt.spawn(async move {
