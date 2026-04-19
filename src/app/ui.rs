@@ -349,6 +349,7 @@ impl UiManager {
         // Drain any result that arrived from a previous spawn.
         let mut updated = false;
         while let Ok(branch) = self.git_rx.try_recv() {
+            log::debug!("Git branch fetch completed: '{}'", branch);
             self.git_branch_cache = Some(branch);
             self.git_branch_fetched_at = Some(std::time::Instant::now());
             self.git_branch_in_flight = false;
@@ -384,6 +385,7 @@ impl UiManager {
                 self.git_branch_spawn_time = Some(std::time::Instant::now());
                 let tx = self.git_tx.clone();
                 let cwd_owned = cwd_path.to_path_buf();
+                log::debug!("Spawning git branch fetch for CWD: {:?}", cwd_owned);
                 self.tokio_rt.spawn(async move {
                     let branch = fetch_git_branch(&cwd_owned).await;
                     let _ = tx.send(branch);
