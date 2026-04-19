@@ -70,3 +70,7 @@ temp/
 # AI folders
 .claude
 dist/
+
+# RTK
+.github/hooks/rtk-rewrite.json
+.github/copilot-instructions.md
