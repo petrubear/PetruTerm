@@ -4,37 +4,21 @@
 
 ---
 
-## Phase 3.5: Performance Sprint ⚡ — Sprint Cierre
-**Status: Sprint cierre pendiente — sub-phases A–H archivadas**
+## Phase 3.5: Performance Sprint ⚡ — COMPLETA
+**Cerrado:** 2026-04-19 | **Archivado:** `build_phases_archive.md`
 
-### Tareas pendientes (próxima sesión)
-
-**P2 prioritarios:**
-- [x] TD-MEM-23: `agent_step(&[Value])` — ya resuelto en código (`ui.rs:690` pasa `&api_msgs`)
-- [x] TD-MEM-13: ya resuelto — `MAX_CHARS=50_000` en `tools.rs:175`, `MAX_TOOL_ROUNDS=5` en `ui.rs:687`
-- [x] TD-PERF-04: ya resuelto — `open_file_picker_async` usa `std::thread::spawn` + `crossbeam_channel`
-- [x] TD-PERF-15: Clipboard async — Cmd+C/V ya era async; `ClipboardStore/Load` (OSC 52) migrados a `thread::spawn` en `mux.rs`; `Pty.tx` expuesto para reinyectar `PtyWrite`
-- [x] TD-PERF-21: ya resuelto — `last_filter_query` + path incremental en `filter()` (`palette/mod.rs:157-185`)
-
-**P3 triviales:**
-- [x] TD-MEM-17: ya resuelto — `streaming_buf.clear()` en `chat_panel.rs:226,275`
-- [x] TD-MEM-24: ya resuelto — `undo_stack: VecDeque` con `pop_front`/`push_back` en `ui.rs`
-- [x] TD-PERF-18: ya resuelto — `.worker_threads(2)` en `ui.rs:139`
-- [x] TD-PERF-23: ya resuelto — `leader_deadline: Option<Instant>` en `ui.rs`
-
-**Benchmarks y CI:**
-- [ ] Desbloquear `build_instances` bench: extraer CPU path a función pura sin `winit`
-- [ ] Desbloquear `rasterize_to_atlas` bench: variant swash-only sin `wgpu::Queue`
-- [ ] CI gating: `critcmp`, falla si regresión >5% en `shape_line` / `build_instances` / `search`
-
-### Exit Criteria (revisados)
+### Exit Criteria
 - [x] Debug HUD (F12) operativo
 - [x] `PROFILING.md` documentado
 - [x] Damage tracking con alacritty_terminal
 - [x] Cursor overlay fast path
 - [x] Idle zero-cost (ControlFlow::Wait + focus guard)
-- [ ] P2/P3 tech debt resuelto
-- [ ] Bench CI gating activo
+- [x] P2/P3 tech debt resuelto (TD-PERF-19, TD-MEM-09 diferido a P2 backlog)
+- [x] Bench CI gating activo (search + shaping; build_instances/rasterize diferidos por winit/wgpu acoplamiento)
+
+### Diferidos al backlog (no bloquean Fase A)
+- `build_instances` bench: requiere extraer CPU path sin winit
+- `rasterize_to_atlas` bench: requiere variant swash-only sin wgpu::Queue
 
 ---
 

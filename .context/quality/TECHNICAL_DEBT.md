@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-04-19
-**Open Items:** 12
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 12 | **P3:** 0
+**Open Items:** 11
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 11 | **P3:** 0
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -95,11 +95,7 @@ _TD-PERF-17 — RESUELTO 2026-04-17. Ver archivo._
 
 ---
 
-### TD-PERF-19: `poll_git_branch` sin guard de tarea en curso
-- **Archivo:** `src/app/ui.rs:265-293`
-- **Descripción:** Si `git branch --show-current` tarda >5 s (NFS, repo enorme), el siguiente frame cumplirá el TTL y disparará otro spawn, encadenando tasks tokio redundantes.
-- **Fix:** `git_branch_in_flight: bool` activado al spawn, desactivado al recibir resultado. Solo spawnear si `!in_flight && (cwd_changed || ttl_expired)`.
-- **Severidad:** P2 — raro pero acumula tasks en casos patológicos.
+_TD-PERF-19 — RESUELTO 2026-04-19. `git_branch_in_flight: bool` en `ui.rs`; guard activo al spawn, desactivado al recibir resultado. Timeout 30 s de recuperación. Ver commits `9fd235a`, `a8867a7`, `d1daa80`._
 
 ---
 
