@@ -1784,29 +1784,33 @@ impl RenderContext {
         let slack = screen_rows.saturating_sub(thumb_rows);
         let scroll_frac = (display_offset as f32 / history_size as f32).clamp(0.0, 1.0);
         let thumb_start = ((1.0 - scroll_frac) * slack as f32).round() as usize;
-        let thumb_end = thumb_start + thumb_rows;
 
         let col = (term_cols - 1) as f32;
-        let glyph_offset = [cell_w - SCROLLBAR_PX, 0.0];
-        let glyph_size = [SCROLLBAR_PX, cell_h];
+        let x_off = [cell_w - SCROLLBAR_PX, 0.0];
 
-        for row in 0..screen_rows {
-            let color = if row >= thumb_start && row < thumb_end {
-                THUMB_COLOR
-            } else {
-                TRACK_COLOR
-            };
-            self.instances.push(CellVertex {
-                grid_pos: [col, row as f32],
-                atlas_uv: [0.0; 4],
-                fg: [0.0; 4],
-                bg: color,
-                glyph_offset,
-                glyph_size,
-                flags: FLAG_CURSOR,
-                _pad: 0,
-            });
-        }
+        // Track — 1 rect covering the full scroll bar column height.
+        self.instances.push(CellVertex {
+            grid_pos: [col, 0.0],
+            atlas_uv: [0.0; 4],
+            fg: [0.0; 4],
+            bg: TRACK_COLOR,
+            glyph_offset: x_off,
+            glyph_size: [SCROLLBAR_PX, screen_rows as f32 * cell_h],
+            flags: FLAG_CURSOR,
+            _pad: 0,
+        });
+
+        // Thumb — 1 rect drawn on top of track (painter's order → overwrites track pixels).
+        self.instances.push(CellVertex {
+            grid_pos: [col, thumb_start as f32],
+            atlas_uv: [0.0; 4],
+            fg: [0.0; 4],
+            bg: THUMB_COLOR,
+            glyph_offset: x_off,
+            glyph_size: [SCROLLBAR_PX, thumb_rows as f32 * cell_h],
+            flags: FLAG_CURSOR,
+            _pad: 0,
+        });
     }
 }
 

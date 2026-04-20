@@ -4,7 +4,9 @@ local module = {}
 
 function module.apply_to_config(config)
   -- Number of lines kept in terminal scrollback history.
-  config.scrollback_lines  = 10000
+  -- Each terminal uses ~200 B/line; 5 000 lines ≈ 1 MB per pane.
+  -- With 20 panes open that is ~20 MB. Raise carefully: 50 000 = ~200 MB total.
+  config.scrollback_lines  = 5000
 
   -- Show a scroll position indicator on the right edge of the terminal.
   config.enable_scroll_bar = true

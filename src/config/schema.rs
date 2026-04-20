@@ -71,7 +71,7 @@ impl Default for Config {
             font: FontConfig::default(),
             window: WindowConfig::default(),
             colors: ColorScheme::dracula_pro(),
-            scrollback_lines: 10_000,
+            scrollback_lines: 5_000,
             enable_scroll_bar: true,
             max_fps: 60,
             leader: LeaderConfig::default(),

@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-04-19
-**Open Items:** 11
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 11 | **P3:** 0
+**Open Items:** 3
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 3 | **P3:** 0
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -35,11 +35,7 @@ _Ninguno abierto. Todos los P1 cerrados 2026-04-16 (TD-RENDER-01/02/03, TD-PERF-
 
 ---
 
-### TD-MEM-09: Scrollback por pane sin límite efectivo en sesiones largas con muchos tabs
-- **Archivo:** `src/term/mod.rs:Terminal::new()` — `scrolling_history: config.scrollback_lines`
-- **Descripción:** Con el default de 10 000 líneas y ~200 bytes/línea, cada terminal ocupa ~2 MB de scrollback. Con 10 tabs × 2 panes = 20 terminales, son ~40 MB. Con `scrollback_lines = 50 000` (valor sugerido en el README), son 200 MB.
-- **Fix:** (a) Reducir el default a 5 000. (b) Documentar el impacto en `perf.lua`. (c) Límite global de scrollback total (ej. 100 MB) distribuido entre terminales activos.
-- **Severidad:** P2 — no es un leak sino un diseño con alto consumo base. Configurable.
+_TD-MEM-09 — RESUELTO 2026-04-19. Default reducido de 10 000 a 5 000 líneas (`schema.rs:74`, `perf.lua`). Comentario en perf.lua documenta impacto (~1 MB/pane, ~20 MB con 20 panes). Límite global diferido al backlog (requiere coordinación entre terminales)._
 
 ---
 
@@ -75,11 +71,7 @@ _TD-PERF-04 — RESUELTO 2026-04-19. `open_file_picker_async` usa `std::thread::
 
 ---
 
-### TD-PERF-14: Scroll bar construido como N `CellVertex` (uno por fila)
-- **Archivo:** `src/app/renderer.rs:1219-1230`
-- **Descripción:** El scroll bar emite `screen_rows` instancias `CellVertex` — hasta 60 por scroll bar. Son semánticamente 2 rectángulos (track + thumb) que podrían ser 2 `RoundedRectInstance`.
-- **Fix:** Migrar `build_scroll_bar_instances` a `rect_instances` (2 rects). Elimina 60 `CellVertex` del glyph pipeline.
-- **Severidad:** P2 — mitigado por cache existente; simplifica el pipeline.
+_TD-PERF-14 — RESUELTO 2026-04-19. `build_scroll_bar_instances` reemplazado: loop de N `CellVertex` → 2 `CellVertex` (track + thumb). El shader `vs_bg` con `FLAG_CURSOR` usa `glyph_size` en píxeles para el rect completo; thumb se dibuja encima del track en orden painter's. Eliminadas hasta 60 instancias por frame._
 
 ---
 
