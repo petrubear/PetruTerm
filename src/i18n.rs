@@ -14,11 +14,17 @@ fn detect_locale() -> String {
     for var in ["LANG", "LC_ALL", "LC_MESSAGES"] {
         if let Ok(val) = std::env::var(var) {
             // LANG is typically "en_US.UTF-8" — extract the 2-letter language code.
-            let code = val.split(['_', '.']).next().unwrap_or("").to_ascii_lowercase();
-            if !code.is_empty() && code != "c" && code != "posix" {
-                if rust_i18n::available_locales!().contains(&code.as_str()) {
-                    return code;
-                }
+            let code = val
+                .split(['_', '.'])
+                .next()
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            if !code.is_empty()
+                && code != "c"
+                && code != "posix"
+                && rust_i18n::available_locales!().contains(&code.as_str())
+            {
+                return code;
             }
         }
     }
