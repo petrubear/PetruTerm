@@ -45,6 +45,16 @@ cargo build --release
 
 This creates `PetruTerm.app` in the project root, ready to drag to `/Applications`.
 
+### Download a release
+
+Grab the latest zip from the [Releases](https://github.com/petrubear/PetruTerm/releases) page, unzip, and move `PetruTerm.app` to `/Applications`.
+
+Because the binary is ad-hoc signed (no Apple Developer certificate), macOS Gatekeeper will block it on first launch. Run this once after copying the app:
+
+```bash
+xattr -d com.apple.quarantine /Applications/PetruTerm.app
+```
+
 ---
 
 ## Configuration
