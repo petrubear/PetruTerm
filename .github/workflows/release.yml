@@ -40,7 +40,7 @@ jobs:
         run: |
           # Pull out the section starting at the first ## header.
           awk '/^## /{found=1} found{print} /^## / && found>1{exit}' CHANGELOG.md \
-            | head -n -1 > release_notes.md
+            | sed '$d' > release_notes.md
           cat release_notes.md
 
       - name: Create GitHub Release
