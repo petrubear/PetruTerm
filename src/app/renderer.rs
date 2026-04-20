@@ -852,7 +852,8 @@ impl RenderContext {
                     "ai.selected_files",
                     count = file_count,
                     suffix = if file_count == 1 { "" } else { "s" }
-                ).to_string();
+                )
+                .to_string();
                 self.push_shaped_row(&fhdr, FILE_FG, panel_bg, 1, co, panel_cols, font);
                 // File list
                 for (i, path) in panel.attached_files.iter().take(MAX_FILE_ROWS).enumerate() {
@@ -985,7 +986,10 @@ impl RenderContext {
             if matches!(panel.state, PanelState::Loading) {
                 let mut buf = std::mem::take(&mut self.fmt_buf);
                 buf.clear();
-                let _ = std::fmt::write(&mut buf, format_args!("│   {}  {}", spin, t!("ai.thinking")));
+                let _ = std::fmt::write(
+                    &mut buf,
+                    format_args!("│   {}  {}", spin, t!("ai.thinking")),
+                );
                 push_line!("", buf.as_str(), STREAM_FG);
                 self.fmt_buf = buf;
             }

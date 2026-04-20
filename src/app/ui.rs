@@ -1,6 +1,5 @@
 use crate::app::mux::Mux;
 use crate::app::renderer::RenderContext;
-use rust_i18n::t;
 use crate::config::{self, Config};
 use crate::llm::ai_block::AiBlock;
 use crate::llm::chat_panel::{AiEvent, ChatPanel, ConfirmDisplay};
@@ -9,6 +8,7 @@ use crate::llm::tools::{execute_tool, AgentStepResult, AgentTool};
 use crate::llm::LlmProvider;
 use crate::ui::{CommandPalette, ContextMenu, Rect, SearchBar, SplitDir};
 use crossbeam_channel::{Receiver, Sender};
+use rust_i18n::t;
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -767,9 +767,7 @@ impl UiManager {
                                                         },
                                                     ));
                                                     match std::fs::write(&abs, &new_content) {
-                                                        Ok(_) => {
-                                                            t!("ai.file_written").to_string()
-                                                        }
+                                                        Ok(_) => t!("ai.file_written").to_string(),
                                                         Err(e) => {
                                                             format!("Error writing file: {e}")
                                                         }

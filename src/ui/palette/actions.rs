@@ -109,31 +109,131 @@ pub fn built_in_actions(config: &Config) -> Vec<PaletteAction> {
     let kb = |action: &str| -> Option<String> { keybind_map.get(action).cloned() };
 
     let mut actions = vec![
-        PaletteAction { name: t!("palette.open_config").to_string(),      action: Action::OpenConfigFile,                                    keybind: None },
-        PaletteAction { name: t!("palette.reload_config").to_string(),    action: Action::ReloadConfig,                                      keybind: None },
-        PaletteAction { name: t!("palette.new_tab").to_string(),          action: Action::NewTab,                                            keybind: kb("NewTab") },
-        PaletteAction { name: t!("palette.close_tab").to_string(),        action: Action::CloseTab,                                          keybind: kb("CloseTab") },
-        PaletteAction { name: t!("palette.next_tab").to_string(),         action: Action::NextTab,                                           keybind: kb("NextTab") },
-        PaletteAction { name: t!("palette.prev_tab").to_string(),         action: Action::PrevTab,                                           keybind: kb("PrevTab") },
-        PaletteAction { name: t!("palette.split_h").to_string(),          action: Action::SplitHorizontal,                                   keybind: kb("SplitHorizontal") },
-        PaletteAction { name: t!("palette.split_v").to_string(),          action: Action::SplitVertical,                                     keybind: kb("SplitVertical") },
-        PaletteAction { name: t!("palette.close_pane").to_string(),       action: Action::ClosePane,                                         keybind: kb("ClosePane") },
-        PaletteAction { name: t!("palette.focus_left").to_string(),       action: Action::FocusPane(crate::ui::panes::FocusDir::Left),       keybind: kb("FocusPaneLeft") },
-        PaletteAction { name: t!("palette.focus_right").to_string(),      action: Action::FocusPane(crate::ui::panes::FocusDir::Right),      keybind: kb("FocusPaneRight") },
-        PaletteAction { name: t!("palette.focus_up").to_string(),         action: Action::FocusPane(crate::ui::panes::FocusDir::Up),         keybind: kb("FocusPaneUp") },
-        PaletteAction { name: t!("palette.focus_down").to_string(),       action: Action::FocusPane(crate::ui::panes::FocusDir::Down),       keybind: kb("FocusPaneDown") },
-        PaletteAction { name: t!("palette.command_palette").to_string(),  action: Action::CommandPalette,                                    keybind: kb("CommandPalette") },
-        PaletteAction { name: t!("palette.toggle_fullscreen").to_string(),action: Action::ToggleFullscreen,                                  keybind: None },
-        PaletteAction { name: t!("palette.quit").to_string(),             action: Action::Quit,                                              keybind: Some("Cmd+Q".into()) },
-        PaletteAction { name: t!("palette.toggle_ai").to_string(),        action: Action::ToggleAiPanel,                                     keybind: kb("ToggleAiPanel") },
-        PaletteAction { name: t!("palette.enable_ai").to_string(),        action: Action::EnableAiFeatures,                                  keybind: None },
-        PaletteAction { name: t!("palette.disable_ai").to_string(),       action: Action::DisableAiFeatures,                                 keybind: None },
-        PaletteAction { name: t!("palette.explain").to_string(),          action: Action::ExplainLastOutput,                                 keybind: kb("ExplainLastOutput") },
-        PaletteAction { name: t!("palette.fix_error").to_string(),        action: Action::FixLastError,                                      keybind: kb("FixLastError") },
-        PaletteAction { name: t!("palette.undo_write").to_string(),       action: Action::UndoLastWrite,                                     keybind: kb("UndoLastWrite") },
-        PaletteAction { name: t!("palette.toggle_status").to_string(),    action: Action::ToggleStatusBar,                                   keybind: None },
-        PaletteAction { name: t!("palette.rename_tab").to_string(),       action: Action::RenameTab,                                         keybind: kb("RenameTab") },
-        PaletteAction { name: t!("palette.switch_theme").to_string(),     action: Action::OpenThemePicker,                                   keybind: None },
+        PaletteAction {
+            name: t!("palette.open_config").to_string(),
+            action: Action::OpenConfigFile,
+            keybind: None,
+        },
+        PaletteAction {
+            name: t!("palette.reload_config").to_string(),
+            action: Action::ReloadConfig,
+            keybind: None,
+        },
+        PaletteAction {
+            name: t!("palette.new_tab").to_string(),
+            action: Action::NewTab,
+            keybind: kb("NewTab"),
+        },
+        PaletteAction {
+            name: t!("palette.close_tab").to_string(),
+            action: Action::CloseTab,
+            keybind: kb("CloseTab"),
+        },
+        PaletteAction {
+            name: t!("palette.next_tab").to_string(),
+            action: Action::NextTab,
+            keybind: kb("NextTab"),
+        },
+        PaletteAction {
+            name: t!("palette.prev_tab").to_string(),
+            action: Action::PrevTab,
+            keybind: kb("PrevTab"),
+        },
+        PaletteAction {
+            name: t!("palette.split_h").to_string(),
+            action: Action::SplitHorizontal,
+            keybind: kb("SplitHorizontal"),
+        },
+        PaletteAction {
+            name: t!("palette.split_v").to_string(),
+            action: Action::SplitVertical,
+            keybind: kb("SplitVertical"),
+        },
+        PaletteAction {
+            name: t!("palette.close_pane").to_string(),
+            action: Action::ClosePane,
+            keybind: kb("ClosePane"),
+        },
+        PaletteAction {
+            name: t!("palette.focus_left").to_string(),
+            action: Action::FocusPane(crate::ui::panes::FocusDir::Left),
+            keybind: kb("FocusPaneLeft"),
+        },
+        PaletteAction {
+            name: t!("palette.focus_right").to_string(),
+            action: Action::FocusPane(crate::ui::panes::FocusDir::Right),
+            keybind: kb("FocusPaneRight"),
+        },
+        PaletteAction {
+            name: t!("palette.focus_up").to_string(),
+            action: Action::FocusPane(crate::ui::panes::FocusDir::Up),
+            keybind: kb("FocusPaneUp"),
+        },
+        PaletteAction {
+            name: t!("palette.focus_down").to_string(),
+            action: Action::FocusPane(crate::ui::panes::FocusDir::Down),
+            keybind: kb("FocusPaneDown"),
+        },
+        PaletteAction {
+            name: t!("palette.command_palette").to_string(),
+            action: Action::CommandPalette,
+            keybind: kb("CommandPalette"),
+        },
+        PaletteAction {
+            name: t!("palette.toggle_fullscreen").to_string(),
+            action: Action::ToggleFullscreen,
+            keybind: None,
+        },
+        PaletteAction {
+            name: t!("palette.quit").to_string(),
+            action: Action::Quit,
+            keybind: Some("Cmd+Q".into()),
+        },
+        PaletteAction {
+            name: t!("palette.toggle_ai").to_string(),
+            action: Action::ToggleAiPanel,
+            keybind: kb("ToggleAiPanel"),
+        },
+        PaletteAction {
+            name: t!("palette.enable_ai").to_string(),
+            action: Action::EnableAiFeatures,
+            keybind: None,
+        },
+        PaletteAction {
+            name: t!("palette.disable_ai").to_string(),
+            action: Action::DisableAiFeatures,
+            keybind: None,
+        },
+        PaletteAction {
+            name: t!("palette.explain").to_string(),
+            action: Action::ExplainLastOutput,
+            keybind: kb("ExplainLastOutput"),
+        },
+        PaletteAction {
+            name: t!("palette.fix_error").to_string(),
+            action: Action::FixLastError,
+            keybind: kb("FixLastError"),
+        },
+        PaletteAction {
+            name: t!("palette.undo_write").to_string(),
+            action: Action::UndoLastWrite,
+            keybind: kb("UndoLastWrite"),
+        },
+        PaletteAction {
+            name: t!("palette.toggle_status").to_string(),
+            action: Action::ToggleStatusBar,
+            keybind: None,
+        },
+        PaletteAction {
+            name: t!("palette.rename_tab").to_string(),
+            action: Action::RenameTab,
+            keybind: kb("RenameTab"),
+        },
+        PaletteAction {
+            name: t!("palette.switch_theme").to_string(),
+            action: Action::OpenThemePicker,
+            keybind: None,
+        },
     ];
     actions.sort_unstable_by(|a, b| a.name.cmp(&b.name));
     actions
