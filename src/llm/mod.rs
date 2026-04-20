@@ -161,7 +161,11 @@ pub(crate) fn parse_sse_chunk(chunk: &str) -> Result<Option<String>> {
             }
         }
     }
-    Ok(if tokens.is_empty() { None } else { Some(tokens) })
+    Ok(if tokens.is_empty() {
+        None
+    } else {
+        Some(tokens)
+    })
 }
 
 /// Parse a non-streaming agent response (OpenAI-compatible).
@@ -189,7 +193,11 @@ pub(crate) fn parse_agent_response(resp: Value) -> Result<AgentStepResult> {
                 let func = c.get("function")?;
                 let name = func.get("name")?.as_str()?.to_string();
                 let arguments = func.get("arguments")?.as_str().unwrap_or("{}").to_string();
-                Some(ToolCall { id, name, arguments })
+                Some(ToolCall {
+                    id,
+                    name,
+                    arguments,
+                })
             })
             .collect();
 

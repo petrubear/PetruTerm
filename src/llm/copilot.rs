@@ -59,8 +59,10 @@ fn keychain_load() -> Option<SecretString> {
     let out = std::process::Command::new("security")
         .args([
             "find-generic-password",
-            "-s", "PetruTerm",
-            "-a", "GITHUB_COPILOT_OAUTH_TOKEN",
+            "-s",
+            "PetruTerm",
+            "-a",
+            "GITHUB_COPILOT_OAUTH_TOKEN",
             "-w",
         ])
         .output()
@@ -80,22 +82,29 @@ fn keychain_save(token: &str) {
     let _ = std::process::Command::new("security")
         .args([
             "delete-generic-password",
-            "-s", "PetruTerm",
-            "-a", "GITHUB_COPILOT_OAUTH_TOKEN",
+            "-s",
+            "PetruTerm",
+            "-a",
+            "GITHUB_COPILOT_OAUTH_TOKEN",
         ])
         .output();
     let _ = std::process::Command::new("security")
         .args([
             "add-generic-password",
-            "-s", "PetruTerm",
-            "-a", "GITHUB_COPILOT_OAUTH_TOKEN",
-            "-w", token,
+            "-s",
+            "PetruTerm",
+            "-a",
+            "GITHUB_COPILOT_OAUTH_TOKEN",
+            "-w",
+            token,
         ])
         .output();
 }
 
 #[cfg(not(target_os = "macos"))]
-fn keychain_load() -> Option<SecretString> { None }
+fn keychain_load() -> Option<SecretString> {
+    None
+}
 #[cfg(not(target_os = "macos"))]
 fn keychain_save(_token: &str) {}
 
@@ -112,10 +121,7 @@ fn run_device_flow() -> Result<SecretString> {
     let dev: DeviceCodeResponse = client
         .post(DEVICE_CODE_URL)
         .header("Accept", "application/json")
-        .form(&[
-            ("client_id", COPILOT_CLIENT_ID),
-            ("scope", "read:user"),
-        ])
+        .form(&[("client_id", COPILOT_CLIENT_ID), ("scope", "read:user")])
         .send()
         .context("Failed to reach GitHub device code endpoint")?
         .json()
