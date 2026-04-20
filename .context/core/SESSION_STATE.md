@@ -1,15 +1,15 @@
 # Session State
 
 **Last Updated:** 2026-04-19
-**Session Focus:** Deuda tecnica cerrada — iniciando Fase A (Fundacion)
+**Session Focus:** Fase A COMPLETA — release v0.1.0 publicado
 
 ## Branch: `master`
 
 ## Estado actual
 
-**Phase 1–3 COMPLETE. Phase 3.5 COMPLETE.**
+**Phase 1–3 + 3.5 COMPLETE. Fase A COMPLETE. Tag v0.1.0 publicado.**
 **Build limpio: check + test + clippy + fmt PASS. CI verde.**
-**Siguiente: Fase A — Fundacion (versionado + i18n)**
+**Siguiente: Fase B — Menu Bar nativo macOS (crate muda)**
 
 ## Commits recientes relevantes
 

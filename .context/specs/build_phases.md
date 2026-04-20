@@ -23,12 +23,15 @@
 ---
 
 ## Fase A: Fundación — Versionado + i18n
-**Status: Not started**
+**Status: COMPLETA — 2026-04-19**
 
-- [ ] Bump `Cargo.toml` a `0.1.0`; crear `CHANGELOG.md` con historial resumido
-- [ ] Crate `rust-i18n`; detección de locale del sistema (macOS `NSLocale`)
-- [ ] `locales/en.toml` + `locales/es.toml`
-- [ ] Scope: menu labels, mensajes error LLM, panel AI, status bar labels
+- [x] `Cargo.toml` ya en `0.1.0`; `CHANGELOG.md` creado
+- [x] `rust-i18n` 3.1; detección via `LANG`/`LC_ALL`/`LC_MESSAGES`
+- [x] `locales/en.toml` + `locales/es.toml` (35 strings)
+- [x] Status bar, errores LLM, panel AI, paleta de comandos
+- [x] Release workflow (`release.yml`) — tag `v*` → build → bundle → GitHub Release
+- [x] README: nota `xattr` para Gatekeeper
+- [x] Tag `v0.1.0` publicado
 
 ---
 
