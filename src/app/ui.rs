@@ -1,5 +1,6 @@
 use crate::app::mux::Mux;
 use crate::app::renderer::RenderContext;
+use rust_i18n::t;
 use crate::config::{self, Config};
 use crate::llm::ai_block::AiBlock;
 use crate::llm::chat_panel::{AiEvent, ChatPanel, ConfirmDisplay};
@@ -21,35 +22,33 @@ fn classify_llm_error(e: &str) -> String {
         || e_lower.contains("unauthorized")
         || e_lower.contains("invalid api key")
     {
-        "API key invalid or missing. Check llm.api_key in ~/.config/petruterm/llm.lua".to_string()
+        t!("ai.error.api_key").to_string()
     } else if e_lower.contains("429")
         || e_lower.contains("rate limit")
         || e_lower.contains("too many requests")
     {
-        "Rate limit reached. Wait a moment and try again, or switch to a different model."
-            .to_string()
+        t!("ai.error.rate_limit").to_string()
     } else if e_lower.contains("connection")
         || e_lower.contains("connect")
         || e_lower.contains("network")
         || e_lower.contains("dns")
     {
-        "Cannot reach LLM provider. Check your internet connection or provider URL in llm.lua"
-            .to_string()
+        t!("ai.error.connection").to_string()
     } else if e_lower.contains("404")
         || e_lower.contains("model not found")
         || e_lower.contains("no such model")
     {
-        "Model not found. Check llm.model in ~/.config/petruterm/llm.lua".to_string()
+        t!("ai.error.model_not_found").to_string()
     } else if e_lower.contains("500")
         || e_lower.contains("502")
         || e_lower.contains("503")
         || e_lower.contains("server error")
     {
-        "LLM provider returned a server error. Try again in a moment.".to_string()
+        t!("ai.error.server_error").to_string()
     } else if e_lower.contains("context")
         && (e_lower.contains("length") || e_lower.contains("limit") || e_lower.contains("exceed"))
     {
-        "Context window exceeded. Detach some files or start a new conversation.".to_string()
+        t!("ai.error.context_exceeded").to_string()
     } else {
         e.to_string()
     }
@@ -424,7 +423,7 @@ impl UiManager {
     pub fn open_branch_picker(&mut self, cwd: &std::path::Path) {
         use crate::ui::palette::{Action, PaletteAction};
         let placeholder = vec![PaletteAction {
-            name: "  Loading branches…".to_string(),
+            name: t!("ai.loading_branches").to_string(),
             action: Action::Noop,
             keybind: None,
         }];
@@ -502,7 +501,7 @@ impl UiManager {
         if let Some((path, content)) = self.undo_stack.pop_back() {
             match std::fs::write(&path, &content) {
                 Ok(_) => {
-                    let msg = format!("↩ Restored {}", path.display());
+                    let msg = t!("ai.undo_restored", path = path.display().to_string()).to_string();
                     self.panel_mut()
                         .messages
                         .push(crate::llm::ChatMessage::assistant(msg));
@@ -737,7 +736,7 @@ impl UiManager {
                                 // ── Tools that need user confirmation ────────────────────
                                 if call.name == "write_file" {
                                     match call.content_arg() {
-                                        None => "Error: missing 'content' argument.".to_string(),
+                                        None => t!("ai.missing_content").to_string(),
                                         Some(new_content) => {
                                             let (confirm_tx, confirm_rx) =
                                                 tokio::sync::oneshot::channel::<bool>();
@@ -769,14 +768,14 @@ impl UiManager {
                                                     ));
                                                     match std::fs::write(&abs, &new_content) {
                                                         Ok(_) => {
-                                                            "File written successfully.".to_string()
+                                                            t!("ai.file_written").to_string()
                                                         }
                                                         Err(e) => {
                                                             format!("Error writing file: {e}")
                                                         }
                                                     }
                                                 }
-                                                _ => "Write rejected by user.".to_string(),
+                                                _ => t!("ai.write_rejected").to_string(),
                                             }
                                         }
                                     }
@@ -794,8 +793,8 @@ impl UiManager {
                                     ));
                                     let _ = wakeup_proxy.send_event(());
                                     match confirm_rx.await {
-                                        Ok(true) => "Command sent to terminal.".to_string(),
-                                        _ => "Command rejected by user.".to_string(),
+                                        Ok(true) => t!("ai.command_sent").to_string(),
+                                        _ => t!("ai.command_rejected").to_string(),
                                     }
                                 }
                             } else {

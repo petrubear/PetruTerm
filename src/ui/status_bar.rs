@@ -1,4 +1,5 @@
 use crate::config::schema::StatusBarStyle;
+use rust_i18n::t;
 use std::time::SystemTime;
 
 /// Which logical widget a status bar segment represents.
@@ -82,9 +83,9 @@ impl StatusBar {
 
         // Leader-mode indicator.
         let (leader_text, leader_bg) = if leader_resize_mode {
-            (" RESIZE ".to_string(), BG_LEADER_RESIZE)
+            (t!("status.resize").to_string(), BG_LEADER_RESIZE)
         } else if leader_active {
-            (" LEADER ".to_string(), BG_LEADER_ACTIVE)
+            (t!("status.leader").to_string(), BG_LEADER_ACTIVE)
         } else {
             (
                 format!(" ^{} ", leader_key.to_uppercase()),
@@ -127,7 +128,7 @@ impl StatusBar {
         if let Some(code) = last_exit_code {
             if code != 0 {
                 bar.right.push(StatusBarSegment {
-                    text: format!(" ✘ {code} "),
+                    text: t!("status.exit_code", code = code).to_string(),
                     fg: FG_DEFAULT,
                     bg: BG_ERROR,
                     kind: SegmentKind::ExitCode,

@@ -1,10 +1,13 @@
 mod app;
 mod config;
 mod font;
+mod i18n;
 mod llm;
 mod renderer;
 mod term;
 mod ui;
+
+rust_i18n::i18n!("locales");
 
 use mimalloc::MiMalloc;
 #[global_allocator]
@@ -55,6 +58,9 @@ fn main() -> Result<()> {
 
     // Initialize logging. RUST_LOG env var controls level; default to "info".
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
+    // Detect system locale and set rust-i18n accordingly.
+    i18n::init();
 
     // When built with --features profiling, connect tracing spans to Tracy.
     // Run Tracy before launching PetruTerm; spans stream live over localhost.

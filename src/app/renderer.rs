@@ -1,4 +1,5 @@
 use anyhow::Result;
+use rust_i18n::t;
 use std::collections::HashMap;
 use std::sync::Arc;
 use winit::window::Window;
@@ -696,7 +697,7 @@ impl RenderContext {
         };
 
         // ── Row 0: panel header ───────────────────────────────────────────────
-        let title = " Petrubot ";
+        let title = t!("ai.bot_name");
         let left = "│───";
         let dashes = panel_cols.saturating_sub(left.chars().count() + title.chars().count());
         {
@@ -811,13 +812,13 @@ impl RenderContext {
                     ]
                     .iter()
                     .any(|p| cmd.contains(p));
-                    let (title, title_fg) = if is_risky {
-                        ("│ \u{26a0} Run command (destructive):", WARN_FG)
+                    let (run_title, title_fg) = if is_risky {
+                        (t!("ai.run_command_destructive"), WARN_FG)
                     } else {
-                        ("│ Run command:", BORDER_FG)
+                        (t!("ai.run_command"), BORDER_FG)
                     };
                     // Row 1: title
-                    self.push_shaped_row(title, title_fg, panel_bg, 1, co, panel_cols, font);
+                    self.push_shaped_row(&run_title, title_fg, panel_bg, 1, co, panel_cols, font);
                     // Row 2: command
                     let max_cmd = panel_cols.saturating_sub(5);
                     let cmd_trunc = cmd
@@ -844,11 +845,11 @@ impl RenderContext {
             // File section (rows 1..1+file_section_rows)
             if file_section_rows > 0 {
                 // Header: "│ Selected (N files)"
-                let fhdr = format!(
-                    "│ Selected ({} file{})",
-                    file_count,
-                    if file_count == 1 { "" } else { "s" }
-                );
+                let fhdr = t!(
+                    "ai.selected_files",
+                    count = file_count,
+                    suffix = if file_count == 1 { "" } else { "s" }
+                ).to_string();
                 self.push_shaped_row(&fhdr, FILE_FG, panel_bg, 1, co, panel_cols, font);
                 // File list
                 for (i, path) in panel.attached_files.iter().take(MAX_FILE_ROWS).enumerate() {
@@ -981,7 +982,7 @@ impl RenderContext {
             if matches!(panel.state, PanelState::Loading) {
                 let mut buf = std::mem::take(&mut self.fmt_buf);
                 buf.clear();
-                let _ = std::fmt::write(&mut buf, format_args!("│   {}  Thinking\u{2026}", spin));
+                let _ = std::fmt::write(&mut buf, format_args!("│   {}  {}", spin, t!("ai.thinking")));
                 push_line!("", buf.as_str(), STREAM_FG);
                 self.fmt_buf = buf;
             }

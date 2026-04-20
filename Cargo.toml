@@ -94,6 +94,9 @@ crossbeam-channel = "0.5"
 # System clipboard (copy/paste + OSC 52)
 arboard = "3"
 
+# Internationalisation
+rust-i18n = "3"
+
 # Logging
 log = "0.4"
 env_logger = "0.11"
