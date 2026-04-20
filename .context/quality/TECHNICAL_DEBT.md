@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-04-19
-**Open Items:** 3
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 3 | **P3:** 0
+**Open Items:** 2
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 2 | **P3:** 0
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -29,7 +29,7 @@ _Ninguno abierto. Todos los P1 cerrados 2026-04-16 (TD-RENDER-01/02/03, TD-PERF-
 - **Archivo:** `src/app/renderer.rs` — `build_cursor_instance`; `src/app/input/mod.rs`
 - **Descripción:** Causa raíz: `fs_lcd` blendea `in.bg` explícitamente (`mix(bg, fg, coverage)`), pero los vértices de glifos LCD guardan el `bg` original de la celda. Cuando el cursor BG pass pinta `cursor_bg` sobre esa celda, el LCD blend lo ignora y mezcla contra el `bg` incorrecto → franja oscura en bordes anti-aliased del glifo.
 - **PARCIALMENTE RESUELTO 2026-04-19:** Cursor LCD: `build_cursor_instance` parchea `lcd_instances` en `cursor_gp` con `cursor_bg` antes del upload. Selección-no-limpia-al-tipear: `clear_selection()` llamado tras `write_input` en `input/mod.rs`. 
-- **Resto abierto:** Glifos LCD bajo selección de mouse con colores personalizados (no inversión simple), y glifos no-LCD cuyos píxeles desbordan el bounding box de la celda (bearings negativos / ascendentes).
+- **Resto abierto (DIFERIDO a Phase 2):** Glifos LCD bajo selección de mouse con colores personalizados (no inversión simple), y glifos no-LCD cuyos píxeles desbordan el bounding box de la celda (bearings negativos / ascendentes). Requiere clipping por bounding box real del glifo o expansión de quads bg a vecinos.
 - **Evidencia:** `Documents/ScreenShots/Screenshot 2026-04-19 at 17.25.40.png`, `17.28.34.png`.
 - **Severidad:** P2 — artefacto visual notable en uso normal (selección + vi).
 
@@ -67,7 +67,7 @@ _TD-PERF-04 — RESUELTO 2026-04-19. `open_file_picker_async` usa `std::thread::
 - **Archivo:** `src/renderer/atlas.rs:GlyphAtlas::new()`
 - **Descripción:** Textura RGBA 4096×4096 = 64 MB de VRAM al arranque. Menos crítico en Apple Silicon (unified memory); importante para Phase 2+ con GPUs discretas.
 - **Fix:** Empezar con 1024×1024 = 4 MB y crecer dinámicamente. Requiere recrear textura + re-subir glifos calientes.
-- **Severidad:** P2 — bajo impacto hoy, bloqueante para cross-platform (Phase 2).
+- **Severidad:** P2 — **DIFERIDO a Phase 2** (cross-platform). Sin impacto medible en Apple Silicon unified memory.
 
 ---
 
