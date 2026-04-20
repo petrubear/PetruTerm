@@ -487,14 +487,17 @@ impl RenderContext {
 
         // fs_lcd blends in.bg explicitly (unlike fs_main which uses premultiplied
         // alpha over the framebuffer). LCD glyph vertices store the cell's original
-        // bg, which is correct for normal rendering but wrong when the cursor BG pass
-        // paints cursor_bg over that cell. Patch matching lcd_instances so the LCD
-        // blend uses cursor_bg instead of the stale cell bg.
-        let cursor_bg = config.colors.cursor_bg;
-        let cursor_gp = v.grid_pos;
-        for lcd_v in &mut self.lcd_instances {
-            if lcd_v.grid_pos == cursor_gp {
-                lcd_v.bg = cursor_bg;
+        // bg, which is correct for normal rendering but wrong when a BLOCK cursor BG
+        // pass paints cursor_bg over the full cell. Only patch for block shapes — beam
+        // and underline cursors cover a small fraction of the cell, so the glyph bg
+        // should remain the cell's original bg (most of the glyph sits on default_bg).
+        if matches!(info.shape, CursorShape::Block | CursorShape::HollowBlock) {
+            let cursor_bg = config.colors.cursor_bg;
+            let cursor_gp = v.grid_pos;
+            for lcd_v in &mut self.lcd_instances {
+                if lcd_v.grid_pos == cursor_gp {
+                    lcd_v.bg = cursor_bg;
+                }
             }
         }
     }
