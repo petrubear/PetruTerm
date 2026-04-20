@@ -96,6 +96,8 @@ jobs:
   bench-baseline:
     name: update bench baseline
     runs-on: macos-latest
+    permissions:
+      contents: write
     # Only runs on master pushes to update the stored baseline.
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     steps:
@@ -127,12 +129,10 @@ jobs:
             cp -r target/criterion/${bench}/. .criterion-baselines/${bench}/ 2>/dev/null || true
           done
 
-       - name: Commit updated baseline
-         run: |
-           git config user.name "github-actions[bot]"
-           git config user.email "github-actions[bot]@users.noreply.github.com"
-           git add .criterion-baselines/
-           git diff --staged --quiet || git commit -m "chore: update bench baseline [skip ci]"
-           git push https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref }}
-         env:
-           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Commit updated baseline
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .criterion-baselines/
+          git diff --staged --quiet || git commit -m "chore: update bench baseline [skip ci]"
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:master
