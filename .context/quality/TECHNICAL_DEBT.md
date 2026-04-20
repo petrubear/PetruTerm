@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-04-19
-**Open Items:** 11
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 11 | **P3:** 0
+**Open Items:** 12
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 12 | **P3:** 0
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -24,6 +24,16 @@ _Ninguno abierto. Todos los P1 cerrados 2026-04-16 (TD-RENDER-01/02/03, TD-PERF-
 ---
 
 ## P2 — Prioridad media
+
+### TD-RENDER-04: Fondo incorrecto en glifos bajo selección de mouse o cursor de bloque (vi)
+- **Archivo:** `src/app/renderer.rs` — `build_cursor_instance`; `src/app/input/mod.rs`
+- **Descripción:** Causa raíz: `fs_lcd` blendea `in.bg` explícitamente (`mix(bg, fg, coverage)`), pero los vértices de glifos LCD guardan el `bg` original de la celda. Cuando el cursor BG pass pinta `cursor_bg` sobre esa celda, el LCD blend lo ignora y mezcla contra el `bg` incorrecto → franja oscura en bordes anti-aliased del glifo.
+- **PARCIALMENTE RESUELTO 2026-04-19:** Cursor LCD: `build_cursor_instance` parchea `lcd_instances` en `cursor_gp` con `cursor_bg` antes del upload. Selección-no-limpia-al-tipear: `clear_selection()` llamado tras `write_input` en `input/mod.rs`. 
+- **Resto abierto:** Glifos LCD bajo selección de mouse con colores personalizados (no inversión simple), y glifos no-LCD cuyos píxeles desbordan el bounding box de la celda (bearings negativos / ascendentes).
+- **Evidencia:** `Documents/ScreenShots/Screenshot 2026-04-19 at 17.25.40.png`, `17.28.34.png`.
+- **Severidad:** P2 — artefacto visual notable en uso normal (selección + vi).
+
+---
 
 ### TD-MEM-09: Scrollback por pane sin límite efectivo en sesiones largas con muchos tabs
 - **Archivo:** `src/term/mod.rs:Terminal::new()` — `scrolling_history: config.scrollback_lines`

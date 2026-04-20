@@ -704,6 +704,7 @@ impl InputHandler {
                 terminal.scroll_to_bottom();
                 self.last_key_instant = Some(std::time::Instant::now());
                 terminal.write_input(&data);
+                terminal.clear_selection();
             }
         }
     }
