@@ -3,12 +3,12 @@ use async_trait::async_trait;
 use futures_util::StreamExt;
 use reqwest::Client;
 use secrecy::{ExposeSecret, SecretString};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
 use std::time::Duration;
 
-use super::tools::{AgentStepResult, ToolCall};
-use super::{ChatMessage, LlmProvider, TokenStream};
+use super::tools::AgentStepResult;
+use super::{parse_agent_response, parse_sse_chunk, ChatMessage, LlmProvider, TokenStream};
 use crate::config::schema::LlmConfig;
 
 const DEFAULT_BASE_URL: &str = "https://openrouter.ai/api/v1";
@@ -117,21 +117,6 @@ struct AgentRequest<'a> {
     stream: bool,
 }
 
-#[derive(Deserialize)]
-struct ChatResponse {
-    choices: Vec<Choice>,
-}
-
-#[derive(Deserialize)]
-struct Choice {
-    delta: Option<Delta>,
-}
-
-#[derive(Deserialize)]
-struct Delta {
-    content: Option<String>,
-}
-
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 fn build_api_messages<'a>(messages: &'a [ChatMessage]) -> Vec<ApiMessage<'a>> {
@@ -143,46 +128,6 @@ fn build_api_messages<'a>(messages: &'a [ChatMessage]) -> Vec<ApiMessage<'a>> {
             content: &m.content,
         })
         .collect()
-}
-
-/// Parse one or more SSE `data:` lines from a raw chunk.
-/// Returns `Ok(Some(tokens))` if content was found, `Ok(None)` if the chunk
-/// was empty/metadata-only, or `Err` if the API returned an error payload.
-fn parse_sse_chunk(chunk: &str) -> anyhow::Result<Option<String>> {
-    let mut tokens = String::new();
-    for line in chunk.lines() {
-        let Some(data) = line.strip_prefix("data: ") else {
-            continue;
-        };
-        if data == "[DONE]" {
-            break;
-        }
-
-        // Attempt to parse as a generic JSON value first so we can detect
-        // API-level errors that OpenRouter embeds in the SSE stream.
-        let Ok(val) = serde_json::from_str::<serde_json::Value>(data) else {
-            continue;
-        };
-
-        if let Some(msg) = val.pointer("/error/message").and_then(|v| v.as_str()) {
-            anyhow::bail!("{msg}");
-        }
-
-        if let Ok(resp) = serde_json::from_value::<ChatResponse>(val) {
-            for choice in resp.choices {
-                if let Some(delta) = choice.delta {
-                    if let Some(content) = delta.content {
-                        tokens.push_str(&content);
-                    }
-                }
-            }
-        }
-    }
-    Ok(if tokens.is_empty() {
-        None
-    } else {
-        Some(tokens)
-    })
 }
 
 // ── LlmProvider impl ─────────────────────────────────────────────────────────
@@ -259,55 +204,5 @@ impl LlmProvider for OpenRouterProvider {
             .context("Failed to parse OpenRouter agent_step response")?;
 
         parse_agent_response(resp_json)
-    }
-}
-
-fn parse_agent_response(resp: Value) -> Result<AgentStepResult> {
-    let choice = resp["choices"]
-        .as_array()
-        .and_then(|a| a.first())
-        .context("Agent response had no choices")?;
-
-    let finish_reason = choice
-        .get("finish_reason")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-    let msg = &choice["message"];
-
-    if finish_reason == "tool_calls" || msg.get("tool_calls").is_some() {
-        let calls_json = msg["tool_calls"]
-            .as_array()
-            .context("Expected tool_calls array")?;
-
-        let calls: Vec<ToolCall> = calls_json
-            .iter()
-            .filter_map(|c| {
-                let id = c.get("id")?.as_str()?.to_string();
-                let func = c.get("function")?;
-                let name = func.get("name")?.as_str()?.to_string();
-                let arguments = func.get("arguments")?.as_str().unwrap_or("{}").to_string();
-                Some(ToolCall {
-                    id,
-                    name,
-                    arguments,
-                })
-            })
-            .collect();
-
-        if calls.is_empty() {
-            anyhow::bail!("tool_calls finish_reason but no parseable tool calls");
-        }
-
-        Ok(AgentStepResult::ToolCalls {
-            assistant_msg: msg.clone(),
-            calls,
-        })
-    } else {
-        let text = msg
-            .get("content")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        Ok(AgentStepResult::Text(text))
     }
 }

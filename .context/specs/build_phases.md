@@ -4,6 +4,17 @@
 
 ---
 
+## Fase 3.6: GitHub Copilot Provider — COMPLETA
+**Cerrado:** 2026-04-19
+
+- [x] `src/llm/copilot.rs`: `CopilotProvider` con JWT cache + auto-refresh
+- [x] Auth: `GITHUB_TOKEN` env → `gh auth token` CLI → Keychain (`GITHUB_COPILOT_OAUTH_TOKEN`)
+- [x] SSE helpers extraidos a `mod.rs` (`parse_sse_chunk`, `parse_agent_response`) — eliminada duplicacion entre openrouter/openai_compat
+- [x] `build_provider()` wired: `"copilot"` match arm
+- [x] `config/default/llm.lua` documentado con ejemplos de modelos y setup
+
+---
+
 ## Phase 3.5: Performance Sprint ⚡ — COMPLETA
 **Cerrado:** 2026-04-19 | **Archivado:** `build_phases_archive.md`
 

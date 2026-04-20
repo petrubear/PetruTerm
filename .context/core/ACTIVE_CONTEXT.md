@@ -1,32 +1,22 @@
 # Active Context
 
-**Current Focus:** Fase A — Versionado semántico + infraestructura i18n
+**Current Focus:** Fase B — Menu Bar nativo macOS
 **Last Active:** 2026-04-19
 
 ## Estado actual del proyecto
 
-**Phase 1–3 COMPLETE. Phase 3.5 COMPLETE (sprint cierre incluido 2026-04-19).**
-**Build limpio: check + test + clippy + fmt PASS. CI verde.**
+**Phase 1–3 COMPLETE. Phase 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE.**
+**v0.1.1 publicado. Build limpio: check + test + clippy + fmt PASS. CI verde.**
 
 ## Roadmap acordado (en orden)
 
 1. ~~**Sprint cierre 3.5**~~ COMPLETO
-2. **Fase A** — Versionado semántico + infraestructura i18n (en/es)
-3. **Fase B** — Menu bar nativo macOS (crate `muda`)
-4. **Fase C** — Titlebar custom (NSWindow híbrido) + Workspaces (Workspace > Tab > Pane)
-5. **Fase D** — AI Chat MCP + Skills (agentskills.io format)
-6. **Fase 4** — Plugin ecosystem (Lua, lazy.nvim-style)
-
-## Próximo trabajo — Fase A
-
-| Tarea | Archivo/Crate |
-|-------|---------------|
-| Bump versión a 0.1.0 | `Cargo.toml` |
-| Crear CHANGELOG.md | raíz del proyecto |
-| Añadir crate `rust-i18n` | `Cargo.toml` |
-| Detección locale macOS (`NSLocale`) | nuevo módulo `src/i18n/` |
-| Archivos `locales/en.toml` + `locales/es.toml` | nuevo dir `locales/` |
-| Scope: menu labels, errores LLM, panel AI, status bar | varios |
+2. ~~**Fase A**~~ COMPLETO — Versionado semántico + i18n (v0.1.0)
+3. ~~**Fase 3.6**~~ COMPLETO — GitHub Copilot provider (v0.1.1)
+4. **Fase B** — Menu bar nativo macOS (crate `muda`) ← SIGUIENTE
+5. **Fase C** — Titlebar custom (NSWindow híbrido) + Workspaces
+6. **Fase D** — AI Chat MCP + Skills (agentskills.io format)
+7. **Fase 4** — Plugin ecosystem (Lua, lazy.nvim-style)
 
 ## Invariantes arquitectonicos clave (no romper)
 
@@ -58,3 +48,8 @@ Divisor: `cell_height / scale_factor`.
 **JetBrains Mono ligatures:** bearing_x puede ser NEGATIVO — no clampar a 0.
 
 **alacritty_terminal 1-cell selection:** limpiar con `clear_selection()` en click sin drag.
+
+**Copilot OAuth:**
+El endpoint `/copilot_internal/v2/token` solo acepta tokens de OAuth apps registradas para Copilot.
+PAT classic y `gh auth token` dan 404. Requiere device flow con `client_id = Iv1.b507a08c87ecfe98`.
+Token almacenado en Keychain: `PetruTerm` / `GITHUB_COPILOT_OAUTH_TOKEN`.

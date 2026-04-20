@@ -1,6 +1,6 @@
 [package]
 name = "petruterm"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "A developer-first GPU-accelerated terminal emulator"
 license = "MIT"
@@ -48,7 +48,7 @@ mlua = { version = "0.11", features = ["lua54", "vendored"] }
 tokio = { version = "1", features = ["full"] }
 
 # HTTP client for LLM providers
-reqwest = { version = "0.12", features = ["json", "stream"] }
+reqwest = { version = "0.12", features = ["json", "stream", "blocking"] }
 
 # Async trait support (object-safe async fn in traits)
 async-trait = "0.1"

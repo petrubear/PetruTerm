@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.1] — 2026-04-19
+
+### Features
+- GitHub Copilot provider (`provider = "copilot"`) with device-flow OAuth and automatic Keychain storage
+- Chat panel header shows active provider and model (`copilot:gpt-4o-mini`)
+- Shared SSE/agent-response parsing extracted to `llm/mod.rs` (removes duplication across providers)
+
+### Supported Copilot models
+`gpt-4o`, `gpt-4o-mini`, `claude-3.5-sonnet`, `claude-3.7-sonnet`, `o3-mini`, `o1-mini`
+
+---
+
 ## [0.1.0] — 2026-04-19
 
 First tagged release. Phases 1–3 + 3.5 complete.

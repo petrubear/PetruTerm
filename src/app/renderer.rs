@@ -700,7 +700,9 @@ impl RenderContext {
         };
 
         // ── Row 0: panel header ───────────────────────────────────────────────
-        let title = t!("ai.bot_name");
+        let provider = &config.llm.provider;
+        let model = &config.llm.model;
+        let title = format!(" {provider}:{model} ");
         let left = "│───";
         let dashes = panel_cols.saturating_sub(left.chars().count() + title.chars().count());
         {

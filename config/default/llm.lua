@@ -7,10 +7,16 @@ function module.apply_to_config(config)
   config.llm = {
     enabled  = false,    -- Set to true to enable AI features
 
-    provider = "openrouter",                               -- "openrouter" | "ollama" | "lmstudio"
+    provider = "openrouter",                               -- "openrouter" | "ollama" | "lmstudio" | "copilot"
     model    = "meta-llama/llama-3.1-8b-instruct:free",   -- Free model for testing
     api_key  = os.getenv("OPENROUTER_API_KEY"),            -- Or paste key directly (not recommended)
     base_url = nil,                                        -- nil = use provider default
+
+    -- GitHub Copilot (requires active Copilot subscription):
+    -- provider = "copilot",
+    -- model    = "gpt-4o",  -- also: gpt-4o-mini, claude-3.5-sonnet, o1-mini
+    -- api_key is auto-resolved: GITHUB_TOKEN env var → `gh auth token` → Keychain.
+    -- Easiest setup: gh auth login, then export GITHUB_TOKEN=$(gh auth token) in ~/.zshrc
 
     -- Local provider examples (no api_key needed):
     -- provider = "ollama",   model = "llama3.2"   -- base_url defaults to http://localhost:11434/v1

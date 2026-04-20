@@ -1,13 +1,13 @@
 # Session State
 
 **Last Updated:** 2026-04-19
-**Session Focus:** Fase A COMPLETA — release v0.1.0 publicado
+**Session Focus:** Fase 3.6 COMPLETA — GitHub Copilot provider. Tag v0.1.1 publicado.
 
 ## Branch: `master`
 
 ## Estado actual
 
-**Phase 1–3 + 3.5 COMPLETE. Fase A COMPLETE. Tag v0.1.0 publicado.**
+**Phase 1–3 + 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Tag v0.1.1 publicado.**
 **Build limpio: check + test + clippy + fmt PASS. CI verde.**
 **Siguiente: Fase B — Menu Bar nativo macOS (crate muda)**
 
@@ -15,61 +15,41 @@
 
 | Commit | Descripción |
 |--------|-------------|
-| (fmt)  | chore: cargo fmt |
-| (fix)  | fix: status bar flickers/disappears on mouse click |
-| (ci)   | chore: fix clippy warnings breaking CI |
-| (bench)| chore: fix bench compilation + add rasterize/build_instances to CI gating |
-| (perf) | [TD-PERF-15] perf: async OSC 52 clipboard in poll_pty_events |
+| (feat) | feat(llm): Add GitHub Copilot provider with device-flow OAuth |
+| (chore)| chore: Update context — Fase 3.6 complete, v0.1.1 released |
 
 ---
 
-## Sprint cierre Phase 3.5 — CERRADO 2026-04-19
+## Fase 3.6 — GitHub Copilot Provider — CERRADA 2026-04-19
 
-Todos los ítems P2/P3 revisados. La mayoría ya estaba implementado en código.
-Único código nuevo: TD-PERF-15 (Pty.tx + async OSC 52).
+**Implementado:**
+- `src/llm/copilot.rs`: device-flow OAuth con `client_id = Iv1.b507a08c87ecfe98`
+- Token almacenado en macOS Keychain (`PetruTerm` / `GITHUB_COPILOT_OAUTH_TOKEN`)
+- Copilot JWT auto-refresh cada ~30 min
+- Fallback de modelo: si el modelo configurado tiene `/` o `:` (OpenRouter/Ollama), usa `gpt-4o`
+- Header del chat panel muestra `provider:model` activo
+- SSE helpers extraidos a `mod.rs` — eliminada duplicacion entre openrouter/openai_compat
+- README: sección "Storing API keys securely (macOS Keychain)" con comandos para ambos providers
 
-**Deuda cerrada esta sesión:**
-- TD-MEM-23, TD-MEM-13, TD-PERF-04, TD-PERF-21 — ya implementados
-- TD-MEM-17, TD-MEM-24, TD-PERF-18, TD-PERF-23 — ya implementados
-- TD-PERF-15 — resuelto con código nuevo
-- Benches build_instances + rasterize — compilaban con firma vieja; migrados a TextShaperConfig
-- CI bench gating — añadidos los 2 nuevos benches al workflow
-
-**Bugs adicionales resueltos:**
-- CI clippy: 8 warnings (collapsible_match x4, manual_repeat_n, unnecessary_sort_by x3)
-- CI fmt: 4 archivos con formato incorrecto
-- Rust version mismatch: local era Homebrew 1.94.1, migrado a rustup 1.95.0
-- Status bar flicker/desaparece al hacer click: blink fast path usaba
-  `cell_count = content_end + 1` cortando el draw antes del status bar.
-  Fix: `last_overlay_start` en RenderContext; blink path usa `last_instance_count`
-  + vertex transparente (bg.a=0) para cursor off.
+**Key non-obvious finding:**
+- El endpoint `/copilot_internal/v2/token` solo acepta tokens de OAuth apps registradas para Copilot.
+  Ni `gh auth token` ni PAT classic sirven — requiere device flow con `client_id = Iv1.b507a08c87ecfe98`.
 
 ---
 
-## Próximo: Fase A — Fundación (versionado + i18n)
+## Próximo: Fase B — Menu Bar nativo macOS
 
-- Bump `Cargo.toml` a `0.1.0`, crear `CHANGELOG.md`
-- Crate i18n (`rust-i18n`), detección locale macOS, archivos `en.toml` + `es.toml`
-- Scope: menu labels, mensajes de error LLM, panel AI, status bar labels
-
-### Fase B — Menu Bar nativo macOS
-- Crate `muda`, inicializar antes del event loop
+- Crate `muda`; inicializar `MenuBar` en `main.rs` antes del event loop
 - Menus: File, Edit, AI Chat, Window, Help
-
-### Fase C — Titlebar custom + Workspaces
-- Titlebar via `objc2` NSWindow híbrido
-- Modelo `Workspace { id, name, tabs }` en Mux
-- Sidebar izquierda (drawer)
-
-### Fase D — AI Chat MCP + Skills
-- MCP config + client JSON-RPC stdio
-- Skills agentskills.io format
-
-### Fase 4 — Plugin Ecosystem (después de A–D)
+- Labels via i18n
 
 ---
 
 ## Sesiones anteriores (resumen)
+
+### 2026-04-19 — Fase A + Fase 3.6
+- v0.1.0 publicado (Fase A: versionado + i18n)
+- Fase 3.6: GitHub Copilot provider
 
 ### 2026-04-19 — Sprint cierre Phase 3.5
 - Deuda P2/P3 cerrada, benches desbloqueados, CI verde, status bar flicker fix

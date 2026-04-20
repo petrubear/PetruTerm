@@ -1,20 +1,22 @@
 pub mod ai_block;
 pub mod chat_panel;
+pub mod copilot;
 pub mod diff;
 pub mod openai_compat;
 pub mod openrouter;
 pub mod shell_context;
 pub mod tools;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use async_trait::async_trait;
 use futures_util::Stream;
+use serde::Deserialize;
 use serde_json::Value;
 use std::pin::Pin;
 use std::sync::Arc;
 
 use crate::config::schema::LlmConfig;
-use tools::AgentStepResult;
+use tools::{AgentStepResult, ToolCall};
 
 /// A single message in a chat conversation.
 #[derive(Debug, Clone)]
@@ -115,6 +117,101 @@ pub trait LlmProvider: Send + Sync {
     ) -> Result<AgentStepResult>;
 }
 
+// ── Shared SSE / agent-response parsing ──────────────────────────────────────
+// Used by openrouter, openai_compat, and copilot — all speak the same wire format.
+
+#[derive(Deserialize)]
+pub(crate) struct SseResponse {
+    pub choices: Vec<SseChoice>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct SseChoice {
+    pub delta: Option<SseDelta>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct SseDelta {
+    pub content: Option<String>,
+}
+
+/// Parse one or more SSE `data:` lines from a raw chunk.
+pub(crate) fn parse_sse_chunk(chunk: &str) -> Result<Option<String>> {
+    let mut tokens = String::new();
+    for line in chunk.lines() {
+        let Some(data) = line.strip_prefix("data: ") else {
+            continue;
+        };
+        if data == "[DONE]" {
+            break;
+        }
+        let Ok(val) = serde_json::from_str::<Value>(data) else {
+            continue;
+        };
+        if let Some(msg) = val.pointer("/error/message").and_then(|v| v.as_str()) {
+            anyhow::bail!("{msg}");
+        }
+        if let Ok(resp) = serde_json::from_value::<SseResponse>(val) {
+            for choice in resp.choices {
+                if let Some(delta) = choice.delta {
+                    if let Some(content) = delta.content {
+                        tokens.push_str(&content);
+                    }
+                }
+            }
+        }
+    }
+    Ok(if tokens.is_empty() { None } else { Some(tokens) })
+}
+
+/// Parse a non-streaming agent response (OpenAI-compatible).
+pub(crate) fn parse_agent_response(resp: Value) -> Result<AgentStepResult> {
+    let choice = resp["choices"]
+        .as_array()
+        .and_then(|a| a.first())
+        .context("Agent response had no choices")?;
+
+    let finish_reason = choice
+        .get("finish_reason")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let msg = &choice["message"];
+
+    if finish_reason == "tool_calls" || msg.get("tool_calls").is_some() {
+        let calls_json = msg["tool_calls"]
+            .as_array()
+            .context("Expected tool_calls array")?;
+
+        let calls: Vec<ToolCall> = calls_json
+            .iter()
+            .filter_map(|c| {
+                let id = c.get("id")?.as_str()?.to_string();
+                let func = c.get("function")?;
+                let name = func.get("name")?.as_str()?.to_string();
+                let arguments = func.get("arguments")?.as_str().unwrap_or("{}").to_string();
+                Some(ToolCall { id, name, arguments })
+            })
+            .collect();
+
+        if calls.is_empty() {
+            anyhow::bail!("tool_calls finish_reason but no parseable tool calls");
+        }
+        Ok(AgentStepResult::ToolCalls {
+            assistant_msg: msg.clone(),
+            calls,
+        })
+    } else {
+        let text = msg
+            .get("content")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        Ok(AgentStepResult::Text(text))
+    }
+}
+
+// ── Provider factory ──────────────────────────────────────────────────────────
+
 /// Build the active [`LlmProvider`] from config.
 /// Returns an `Arc` so the provider can be cloned cheaply into tokio tasks.
 pub fn build_provider(config: &LlmConfig) -> Result<Arc<dyn LlmProvider>> {
@@ -128,8 +225,9 @@ pub fn build_provider(config: &LlmConfig) -> Result<Arc<dyn LlmProvider>> {
         "lmstudio" => Ok(Arc::new(openai_compat::OpenAICompatProvider::lmstudio(
             config,
         ))),
+        "copilot" => Ok(Arc::new(copilot::CopilotProvider::from_config(config)?)),
         other => anyhow::bail!(
-            "Unknown LLM provider: '{other}'. Valid options: openrouter, ollama, lmstudio"
+            "Unknown LLM provider: '{other}'. Valid options: openrouter, ollama, lmstudio, copilot"
         ),
     }
 }

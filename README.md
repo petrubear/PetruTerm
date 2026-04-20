@@ -19,7 +19,7 @@ A developer-first GPU-accelerated terminal emulator written in Rust. Built for s
 - **AI agent panel** — context-aware chat with file attachment, NL→command, explain output, fix errors, write files
 - **LLM tool use** — AI agent can read files, list directories, write files, and run commands (sandboxed to CWD, with confirmation)
 - **Inline AI block** — `Ctrl+Space` for quick NL→shell command without leaving the terminal
-- **Multiple LLM providers** — OpenRouter, Ollama, LM Studio; per-pane independent chat history
+- **Multiple LLM providers** — OpenRouter, Ollama, LM Studio, GitHub Copilot; per-pane independent chat history
 - **Right-click context menu** — Copy, Paste, Clear, and **Ask AI** (sends selection directly to chat panel)
 - **Command palette** — fuzzy-search for all actions (`Leader+o`)
 - **Snippets** — Tab-expandable text templates, configurable in Lua
@@ -321,19 +321,20 @@ config.llm = {
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `enabled` | bool | `false` | Master switch. Set to `true` to enable all AI features. |
-| `provider` | string | `"openrouter"` | LLM provider: `"openrouter"`, `"ollama"`, or `"lmstudio"`. |
+| `provider` | string | `"openrouter"` | LLM provider: `"openrouter"`, `"ollama"`, `"lmstudio"`, or `"copilot"`. |
 | `model` | string | `"meta-llama/llama-3.1-8b-instruct:free"` | Model identifier. Format depends on the provider. |
-| `api_key` | string\|nil | `nil` | API key. Use `os.getenv("VAR")` to avoid hardcoding secrets. Only required for `openrouter`. |
+| `api_key` | string\|nil | `nil` | API key. Use `os.getenv("VAR")` to avoid hardcoding secrets. See provider defaults below. |
 | `base_url` | string\|nil | `nil` | Override the provider's base URL. `nil` uses the default. |
 | `context_lines` | number | `50` | Lines of terminal output included as context in AI requests. |
 
 #### Provider defaults
 
-| Provider | Default `base_url` | Requires `api_key` |
-|----------|-------------------|---------------------|
-| `openrouter` | `https://openrouter.ai/api/v1` | Yes |
-| `ollama` | `http://localhost:11434/v1` | No |
-| `lmstudio` | `http://localhost:1234/v1` | No |
+| Provider | Default `base_url` | Auth |
+|----------|-------------------|------|
+| `openrouter` | `https://openrouter.ai/api/v1` | API key required |
+| `ollama` | `http://localhost:11434/v1` | None |
+| `lmstudio` | `http://localhost:1234/v1` | None |
+| `copilot` | `https://api.githubcopilot.com` | GitHub token (see below) |
 
 #### `features` table
 
@@ -354,6 +355,59 @@ model    = "llama3.2"
 -- LM Studio (no API key needed)
 provider = "lmstudio"
 model    = "lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"
+
+-- GitHub Copilot (requires active Copilot subscription)
+provider = "copilot"
+model    = "gpt-4o"   -- also: gpt-4o-mini, claude-3.5-sonnet, o1-mini
+```
+
+---
+
+### Storing API keys securely (macOS Keychain)
+
+Avoid putting secrets in environment variables or config files. PetruTerm reads keys directly from the macOS Keychain.
+
+#### OpenRouter
+
+1. Get your API key from [openrouter.ai/keys](https://openrouter.ai/keys).
+2. Store it:
+
+```bash
+security add-generic-password \
+  -s PetruTerm \
+  -a OPENROUTER_API_KEY \
+  -w "<your-openrouter-key>"
+```
+
+3. In `llm.lua`, omit `api_key` (or set it to `nil`). PetruTerm finds it automatically.
+
+#### GitHub Copilot
+
+The `copilot` provider needs a **GitHub Personal Access Token (classic)** — not a fine-grained token, and not a token from `gh auth token` (that token lacks the required Copilot API scope).
+
+1. Go to [github.com/settings/tokens](https://github.com/settings/tokens) → **Generate new token (classic)**.
+2. Give it any name (e.g. `PetruTerm Copilot`). No scopes need to be checked — the Copilot API only checks that your account has an active subscription.
+3. Copy the token and store it:
+
+```bash
+security add-generic-password \
+  -s PetruTerm \
+  -a GITHUB_COPILOT_OAUTH_TOKEN \
+  -w "<your-github-pat>"
+```
+
+4. In `llm.lua`, omit `api_key`. PetruTerm finds it automatically.
+
+To verify the token is stored:
+
+```bash
+security find-generic-password -s PetruTerm -a GITHUB_COPILOT_OAUTH_TOKEN -w
+```
+
+To update it later, delete the old entry first:
+
+```bash
+security delete-generic-password -s PetruTerm -a GITHUB_COPILOT_OAUTH_TOKEN
 ```
 
 ---
