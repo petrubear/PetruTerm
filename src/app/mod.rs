@@ -161,7 +161,7 @@ impl App {
 
     fn tab_bar_height_px(&self) -> f32 {
         if self.config.window.title_bar_style == TitleBarStyle::Custom {
-            TITLEBAR_HEIGHT * self.scale_factor()
+            TITLEBAR_HEIGHT
         } else if self.mux.tabs.tab_count() > 1 {
             self.cell_dims().1 as f32
         } else {
@@ -181,9 +181,8 @@ impl App {
     /// Call whenever tab count crosses the 1↔2 boundary, or on initial setup.
     fn apply_tab_bar_padding(&mut self) {
         if let Some(rc) = &mut self.render_ctx {
-            let sf = rc.scale_factor;
             let title_h = if self.config.window.title_bar_style == TitleBarStyle::Custom {
-                TITLEBAR_HEIGHT * sf
+                TITLEBAR_HEIGHT
             } else if self.mux.tabs.tab_count() > 1 {
                 rc.shaper.cell_height
             } else {
@@ -256,9 +255,6 @@ impl App {
             .unwrap_or((8, 16))
     }
 
-    fn scale_factor(&self) -> f32 {
-        self.render_ctx.as_ref().map(|rc| rc.scale_factor).unwrap_or(1.0)
-    }
 
     fn open_initial_tab(&mut self) -> Result<()> {
         let viewport = self.viewport_rect();
@@ -846,16 +842,15 @@ impl ApplicationHandler<()> for App {
                         } else {
                             let inst_start = rc.instances.len();
                             let rect_start = rc.rect_instances.len();
-                            let sf = rc.scale_factor;
                             let win_w = rc.renderer.size().0 as f32;
-                            let gpu_pad_y = (TITLEBAR_HEIGHT + self.config.window.padding.top as f32) * sf;
+                            let gpu_pad_y = TITLEBAR_HEIGHT + self.config.window.padding.top as f32;
                             rc.build_tab_bar_instances(
                                 self.mux.tabs.tabs(),
                                 active_idx,
                                 &scaled_font,
                                 tab_total_cols,
                                 win_w,
-                                self.config.window.padding.left as f32 * sf,
+                                self.config.window.padding.left as f32,
                                 gpu_pad_y,
                                 self.config.colors.background,
                                 rename_input,
