@@ -13,11 +13,13 @@ use crate::config::{self, Config};
 use crate::ui::{ContextAction, Rect};
 
 mod input;
+mod menu;
 mod mux;
 mod renderer;
 mod ui;
 
 pub use input::InputHandler;
+pub use menu::AppMenu;
 pub use mux::Mux;
 pub use renderer::RenderContext;
 pub use ui::UiManager;
@@ -32,6 +34,8 @@ pub struct App {
     mux: Mux,
     ui: UiManager,
     input: InputHandler,
+
+    menu: AppMenu,
 
     wakeup_proxy: EventLoopProxy<()>,
 
@@ -90,6 +94,7 @@ impl App {
             mux: Mux::new(),
             ui: UiManager::new(&config),
             input: InputHandler::new(&config),
+            menu: AppMenu::build(),
             wakeup_proxy,
             pending_pty_redraw: false,
             last_pty_activity: std::time::Instant::now(),
@@ -423,6 +428,27 @@ impl App {
 
 impl ApplicationHandler<()> for App {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, _event: ()) {
+        // Drain any pending native menu events and dispatch them as palette actions.
+        while let Ok(menu_event) = muda::MenuEvent::receiver().try_recv() {
+            if let Some(action) = self.menu.action_for(&menu_event) {
+                if action == crate::ui::palette::Action::Quit {
+                    event_loop.exit();
+                    return;
+                }
+                if let (Some(rc), Some(w)) = (self.render_ctx.as_mut(), self.window.as_deref()) {
+                    self.ui.handle_palette_action(
+                        action,
+                        &mut self.mux,
+                        rc,
+                        &mut self.config,
+                        Some(w),
+                        self.wakeup_proxy.clone(),
+                    );
+                    w.request_redraw();
+                }
+            }
+        }
+
         let (data_ids, exited) = self.mux.poll_pty_events();
         if self.close_exited_terminals(exited) {
             event_loop.exit();
@@ -507,6 +533,13 @@ impl ApplicationHandler<()> for App {
                 return;
             }
         };
+
+        // Register the native menu bar with the macOS application and window manager.
+        #[cfg(target_os = "macos")]
+        {
+            self.menu.menu_bar.init_for_nsapp();
+            self.menu.window_submenu.set_as_windows_menu_for_nsapp();
+        }
 
         self.window = Some(window);
         self.render_ctx = Some(render_ctx);

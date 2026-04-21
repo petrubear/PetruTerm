@@ -15,6 +15,8 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 use anyhow::Result;
 use winit::event_loop::{ControlFlow, EventLoop};
+#[cfg(target_os = "macos")]
+use winit::platform::macos::EventLoopBuilderExtMacOS as _;
 
 use app::App;
 
@@ -88,13 +90,28 @@ fn main() -> Result<()> {
         }
     };
 
+    // On macOS, disable the default application menu so muda can install its own.
+    #[cfg(target_os = "macos")]
+    let event_loop = EventLoop::<()>::with_user_event()
+        .with_default_menu(false)
+        .build()?;
+    #[cfg(not(target_os = "macos"))]
     let event_loop = EventLoop::new()?;
+
     // Poll mode: we drive redraws from PTY events and input, not OS events only.
     event_loop.set_control_flow(ControlFlow::Poll);
 
     // Proxy lets PTY background threads wake the winit event loop immediately
     // (e.g. on shell exit) without waiting for the next WaitUntil blink timer.
     let wakeup_proxy = event_loop.create_proxy();
+
+    // Wake the event loop whenever a native menu item is clicked.
+    {
+        let proxy = event_loop.create_proxy();
+        muda::MenuEvent::set_event_handler(Some(move |_event: muda::MenuEvent| {
+            let _ = proxy.send_event(());
+        }));
+    }
 
     let mut app = App::new(config, wakeup_proxy);
     event_loop.run_app(&mut app)?;

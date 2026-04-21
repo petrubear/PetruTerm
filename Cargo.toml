@@ -104,6 +104,9 @@ env_logger = "0.11"
 # Memory allocator (faster than system malloc on macOS — TD-PERF-14)
 mimalloc = { version = "0.1", default-features = false }
 
+# Native menu bar (macOS menu bar, Windows/Linux app menus)
+muda = "0.18"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.5"
 objc2-app-kit = { version = "0.2", features = ["NSWindow", "NSView", "NSApplication"] }
