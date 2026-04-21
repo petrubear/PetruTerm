@@ -47,27 +47,27 @@
 ---
 
 ## Fase B: Menu Bar nativo macOS
-**Status: Not started**
+**Status: COMPLETA — 2026-04-20**
 
-- [ ] Crate `muda`; inicializar `MenuBar` en `main.rs` antes del event loop
-- [ ] **File**: New Tab, New Pane (H/V), Close Tab, Close Pane, Quit
-- [ ] **Edit**: Copy, Paste, Clear Scrollback, Find
-- [ ] **AI Chat**: Toggle Panel, Send to AI, Explain Last Output, Fix Last Error, Clear Chat
-- [ ] **Window**: New Workspace, Next/Prev Workspace, Next/Prev Tab, Minimize, Zoom
-- [ ] **Help**: About PetruTerm (`env!("CARGO_PKG_VERSION")`), Open Config Folder
-- [ ] Wiring de acciones vía `MenuEvent`
-- [ ] Labels via i18n (Fase A)
+- [x] Crate `muda`; inicializar `MenuBar` en `main.rs` antes del event loop
+- [x] **File**: Settings (abre config folder), Reload Config
+- [x] **View**: Toggle Status Bar, Switch Theme, Toggle Fullscreen
+- [x] **AI**: Toggle Panel, Explain, Fix Error, Undo Write, Enable/Disable
+- [x] **Window**: macOS predefined + Tab submenu + Pane submenu
+- [x] Wiring de acciones vía `MenuEvent` (drain en `about_to_wait`)
 
 ---
 
 ## Fase C: Titlebar Custom + Workspaces
-**Status: Not started**
 
 ### C-1: Titlebar custom (NSWindow híbrido)
-- [ ] `objc2`: `setTitlebarAppearsTransparent(true)`, `setTitleVisibility(.hidden)` — traffic lights nativos conservados
-- [ ] Expandir área render wgpu para cubrir zona título
-- [ ] Drag region via `NSWindow.setIsMovableByWindowBackground`
-- [ ] Botón toggle sidebar en titlebar (junto a traffic lights)
+**Status: COMPLETA — 2026-04-21**
+
+- [x] `TITLEBAR_HEIGHT = 30.0` (logical pts); `tab_bar_visible()` always true en Custom mode
+- [x] Tab pills (SDF rounded rect) solo cuando tabs > 1; drag region sobre zona vacía
+- [x] Botones sidebar/layout en titlebar; hit-test unificado para clicks en zona y < TITLEBAR_HEIGHT * sf
+- [x] `scale_factor()` helper en App; `tab_bar_height_px()` devuelve physical para Custom
+- [x] `apply_tab_bar_padding()` usa `TITLEBAR_HEIGHT * sf` para GPU padding correcto en Retina
 
 ### C-2: Modelo Workspace en Mux
 - [ ] `Workspace { id: usize, name: String, tabs: Vec<TabId> }` en `src/app/mux.rs`

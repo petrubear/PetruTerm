@@ -1687,7 +1687,7 @@ impl RenderContext {
         const ACTIVE_FG: [f32; 4] = [0.97, 0.97, 0.95, 1.0];
         const INACTIVE_PILL: [f32; 4] = [0.27, 0.28, 0.35, 1.0];
         const INACTIVE_FG: [f32; 4] = [0.61, 0.64, 0.75, 1.0];
-        const BTN_COLOR: [f32; 4] = [0.22, 0.22, 0.28, 0.7];
+        const BTN_COLOR: [f32; 4] = [0.267, 0.278, 0.353, 1.0];
         let transparent = [0.0f32; 4];
 
         let cell_w = self.shaper.cell_width;
