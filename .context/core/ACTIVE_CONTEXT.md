@@ -1,6 +1,6 @@
 # Active Context
 
-**Current Focus:** Fase B — Menu Bar nativo macOS
+**Current Focus:** Fase C — Titlebar custom + Workspaces
 **Last Active:** 2026-04-20
 
 ## Estado actual del proyecto
@@ -14,7 +14,7 @@
 2. ~~**Fase A**~~ COMPLETO — Versionado semántico + i18n (v0.1.0)
 3. ~~**Fase 3.6**~~ COMPLETO — GitHub Copilot provider (v0.1.1)
 4. ~~**Copilot OAuth doc+validation**~~ COMPLETO — README actualizado (device-flow), osascript dialog + /usr/bin/open para .app bundle
-5. **Fase B** — Menu bar nativo macOS (crate `muda`)
+5. ~~**Fase B**~~ COMPLETO — Menu bar nativo macOS (crate `muda`)
 5. **Fase C** — Titlebar custom (NSWindow híbrido) + Workspaces
 6. **Fase D** — AI Chat MCP + Skills (agentskills.io format)
 7. **Fase 4** — Plugin ecosystem (Lua, lazy.nvim-style)

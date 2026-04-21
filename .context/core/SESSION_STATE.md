@@ -1,22 +1,45 @@
 # Session State
 
 **Last Updated:** 2026-04-20
-**Session Focus:** Copilot OAuth doc+validation fix. Siguiente: Fase B.
+**Session Focus:** Fase B COMPLETA — Menu Bar nativo macOS.
 
 ## Branch: `master`
 
 ## Estado actual
 
-**Phase 1–3 + 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Copilot OAuth fix COMPLETE.**
-**Build limpio: check PASS.**
-**Siguiente: Fase B — Menu Bar nativo macOS (crate muda)**
+**Phase 1–3 + 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Fase B COMPLETE.**
+**Build limpio: check + test + clippy + fmt PASS. CI verde.**
+**Siguiente: Fase C — Titlebar custom (NSWindow híbrido) + Workspaces**
 
 ## Commits recientes relevantes
 
 | Commit | Descripción |
 |--------|-------------|
-| (feat) | feat(llm): Add GitHub Copilot provider with device-flow OAuth |
-| (chore)| chore: Update context — Fase 3.6 complete, v0.1.1 released |
+| fix    | Fix menu events never firing — use muda static receiver |
+| fix    | Apply tab bar padding and terminal resize after menu actions |
+| fix    | Restructure menu bar — correct macOS conventions |
+| feat   | Add native macOS menu bar via muda |
+| fix    | Fix Copilot OAuth docs and .app bundle auth visibility |
+
+## Fase B — Menu Bar nativo macOS — CERRADA 2026-04-20
+
+**Implementado:**
+- `src/app/menu.rs`: `AppMenu` struct con muda. Menus: PetruTerm (app), File, View, AI, Window
+- File: Settings (abre `~/.config/petruterm/` en Finder), Reload Config
+- View: Toggle Status Bar, Switch Theme, Toggle Fullscreen
+- AI: Toggle Panel, Explain, Fix Error, Undo Write, Enable/Disable
+- Window: predefined macOS + Tab submenu (New/Close/Rename/Next/Prev) + Pane submenu (Split H/V, Close, Focus dirs)
+- Sin aceleradores — keybinds son leader-based y no se pueden registrar como menu shortcuts
+- `OpenConfigFolder` action agregada (abre carpeta config en Finder)
+
+**Key non-obvious finding:**
+- `muda::MenuEvent::set_event_handler` y `receiver()` son mutuamente exclusivos.
+  Con `set_event_handler` activo, `receiver()` siempre vacío. Solución: no usar handler, solo `receiver()`.
+- El drain de menu events debe hacerse en `about_to_wait()`, no en `user_event()`.
+- Después de dispatch de acción de menu, hay que replicar el bloque post-accion del handler
+  `KeyboardInput`: capturar `tab_count_before`/`pane_count_before` y llamar
+  `apply_tab_bar_padding()` + `resize_terminals_for_panel()` si cambian. Sin esto,
+  nuevos tabs/panes desde el menu se renderizan con viewport de altura cero.
 
 ---
 
