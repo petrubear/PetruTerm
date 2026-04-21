@@ -24,6 +24,8 @@ pub use mux::Mux;
 pub use renderer::RenderContext;
 pub use ui::UiManager;
 
+pub const TITLEBAR_HEIGHT: f32 = 30.0;
+
 /// Top-level application state. Delegates to specialized managers.
 pub struct App {
     config: Config,
@@ -65,6 +67,8 @@ pub struct App {
     /// instead of every frame.
     cached_cwd: Option<std::path::PathBuf>,
 
+    sidebar_visible: bool,
+
     /// Debounce timer for config hot-reload — actual reload deferred 300 ms after last event (TD-PERF-17).
     config_reload_at: Option<std::time::Instant>,
     /// Per-terminal shell context (exit code + last command), keyed by terminal_id.
@@ -103,6 +107,7 @@ impl App {
             window_focused: true,
             cursor_blink_dirty: false,
             cached_cwd: None,
+            sidebar_visible: false,
             config_reload_at: None,
             terminal_shell_ctxs: std::collections::HashMap::new(),
             separator_snapshot: Vec::new(),
@@ -147,11 +152,17 @@ impl App {
     }
 
     fn tab_bar_visible(&self) -> bool {
+        // The unified titlebar bar is always present in Custom mode for traffic lights clearance.
+        if self.config.window.title_bar_style == TitleBarStyle::Custom {
+            return true;
+        }
         self.mux.tabs.tab_count() > 1
     }
 
     fn tab_bar_height_px(&self) -> f32 {
-        if self.tab_bar_visible() {
+        if self.config.window.title_bar_style == TitleBarStyle::Custom {
+            TITLEBAR_HEIGHT
+        } else if self.mux.tabs.tab_count() > 1 {
             self.cell_dims().1 as f32
         } else {
             0.0
@@ -170,14 +181,15 @@ impl App {
     /// Call whenever tab count crosses the 1↔2 boundary, or on initial setup.
     fn apply_tab_bar_padding(&mut self) {
         if let Some(rc) = &mut self.render_ctx {
-            let tab_h = if self.mux.tabs.tab_count() > 1 {
+            let title_h = if self.config.window.title_bar_style == TitleBarStyle::Custom {
+                TITLEBAR_HEIGHT
+            } else if self.mux.tabs.tab_count() > 1 {
                 rc.shaper.cell_height
             } else {
                 0.0
             };
             let pad = &self.config.window.padding;
-            rc.renderer
-                .set_padding(pad.left as f32, pad.top as f32 + tab_h);
+            rc.renderer.set_padding(pad.left as f32, pad.top as f32 + title_h);
         }
     }
 
@@ -321,14 +333,22 @@ impl App {
     /// Given a pixel x coordinate, return which tab index is under the cursor in the tab bar.
     fn hit_test_tab_bar(&self, x_px: f64) -> Option<usize> {
         let (cell_w, _) = self.cell_dims();
-        let pad_left = self.config.window.padding.left as f64;
-        let click_col = ((x_px - pad_left) / cell_w as f64).floor() as usize;
+        let sf = self.render_ctx.as_ref().map(|rc| rc.scale_factor as f64).unwrap_or(1.0);
+        let tabs_start_x = if self.config.window.title_bar_style == TitleBarStyle::Custom {
+            132.0 * sf
+        } else {
+            self.config.window.padding.left as f64
+        };
+        if x_px < tabs_start_x {
+            return None; // click in the buttons zone, not a tab
+        }
+        let click_col = ((x_px - tabs_start_x) / cell_w as f64).floor() as usize;
         let mut col = 0usize;
         for (i, tab) in self.mux.tabs.tabs().iter().enumerate() {
-            col += 1; // gap
+            col += 1; // gap before pill
             col += format!(" {} ", i + 1).chars().count(); // badge
             let raw = format!(" {} ", tab.title);
-            col += raw.chars().take(14).count(); // title (capped at 14)
+            col += raw.chars().take(14).count();
             if click_col < col {
                 return Some(i);
             }
@@ -630,6 +650,7 @@ impl ApplicationHandler<()> for App {
                 let total_cols = (viewport.w / cell_w as f32).floor() as usize;
                 let total_rows = (viewport.h / cell_h as f32).floor() as usize;
                 // Capture status bar layout values before the mutable borrow of render_ctx.
+                let tab_bar_vis = self.tab_bar_visible();
                 let sb_pad_y = self.config.window.padding.top as f32 + self.tab_bar_height_px();
                 // Snapshot the active pane's shell context before the render_ctx borrow.
                 let sb_exit_code = self.active_shell_ctx().and_then(|c| {
@@ -778,9 +799,9 @@ impl ApplicationHandler<()> for App {
                     let sep_pad_x = self.config.window.padding.left as f32;
                     rc.build_pane_separators(&self.separator_snapshot, sep_pad_x, sb_pad_y);
 
-                    // ── Tab bar (2+ tabs, or while a rename prompt is active) ───────────
+                    // ── Tab bar / unified titlebar (always shown in Custom mode) ────────
                     let renaming = self.ui.is_renaming_tab();
-                    if self.mux.tabs.tab_count() > 1 || renaming {
+                    if tab_bar_vis || renaming {
                         let tab_total_cols = total_cols
                             + if self.ui.is_panel_visible() {
                                 self.ui.panel().width_cols as usize
@@ -820,13 +841,16 @@ impl ApplicationHandler<()> for App {
                         } else {
                             let inst_start = rc.instances.len();
                             let rect_start = rc.rect_instances.len();
+                            let win_w = rc.renderer.size().0 as f32;
+                            let gpu_pad_y = TITLEBAR_HEIGHT + self.config.window.padding.top as f32;
                             rc.build_tab_bar_instances(
                                 self.mux.tabs.tabs(),
                                 active_idx,
                                 &scaled_font,
                                 tab_total_cols,
+                                win_w,
                                 self.config.window.padding.left as f32,
-                                self.config.window.padding.top as f32,
+                                gpu_pad_y,
                                 self.config.colors.background,
                                 rename_input,
                             );
@@ -1282,6 +1306,46 @@ impl ApplicationHandler<()> for App {
                             }
                         }
 
+                        if self.config.window.title_bar_style == TitleBarStyle::Custom
+                            && self.input.mouse_pos.1
+                                < TITLEBAR_HEIGHT as f64
+                                    * self
+                                        .render_ctx
+                                        .as_ref()
+                                        .map(|rc| rc.scale_factor as f64)
+                                        .unwrap_or(1.0)
+                        {
+                            let sf = self
+                                .render_ctx
+                                .as_ref()
+                                .map(|rc| rc.scale_factor as f64)
+                                .unwrap_or(1.0);
+                            let x = self.input.mouse_pos.0;
+                            // Sidebar toggle button: logical [80..102] scaled to physical
+                            if x >= 80.0 * sf && x < 102.0 * sf {
+                                self.sidebar_visible = !self.sidebar_visible;
+                                if let Some(w) = &self.window {
+                                    w.request_redraw();
+                                }
+                                return;
+                            }
+                            // Tab click
+                            if let Some(idx) = self.hit_test_tab_bar(x) {
+                                self.mux.tabs.switch_to_index(idx);
+                                self.resize_terminals_for_panel();
+                                self.refresh_status_cache();
+                                if let Some(w) = &self.window {
+                                    w.request_redraw();
+                                }
+                                return;
+                            }
+                            // Default: drag window
+                            if let Some(w) = &self.window {
+                                let _ = w.drag_window();
+                            }
+                            return;
+                        }
+                        // Fallback for Native/None titlebar styles: old logic
                         if self.input.mouse_pos.1 < self.config.window.padding.top as f64 {
                             if let Some(w) = &self.window {
                                 let _ = w.drag_window();

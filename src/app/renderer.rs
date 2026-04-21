@@ -1641,8 +1641,7 @@ impl RenderContext {
         }
     }
 
-    /// Render the tab bar at grid row -1 (one cell row above the terminal).
-    /// Requires `set_padding` to have shifted padding.y up by one cell_height.
+    /// Render the unified titlebar: traffic lights reserve, control buttons, and tab pills.
     ///
     /// TD-013: Each tab is rendered as a rounded pill (via RoundedRectPipeline)
     ///         with text overlaid using transparent-bg cell instances.
@@ -1655,58 +1654,99 @@ impl RenderContext {
         active_idx: usize,
         font: &crate::config::schema::FontConfig,
         total_cols: usize,
+        win_w: f32,
         pad_left: f32,
-        pad_top: f32,
+        gpu_pad_y: f32,
         bar_bg: [f32; 4],
         // When `Some`, the active tab pill shows this input string with a cursor instead of its title.
         rename_input: Option<&str>,
     ) {
-        // bar_bg is applied via the renderer clear color (TD-014); no fill needed here.
         let _ = bar_bg;
 
-        if tabs.is_empty() || total_cols == 0 {
-            return;
-        }
+        // Unified titlebar layout constants (pixels, logical):
+        //   [0..76]   traffic lights reserve (native macOS buttons)
+        //   [80..102] sidebar toggle button
+        //   [106..128] layout/pane button
+        //   [132..win_w-100] tab pills
+        //   [win_w-100..win_w] right-side info reserve
+        // All pixel constants are in logical points; scale to physical pixels.
+        let sf = self.scale_factor;
+        let traffic_lights_reserve = 76.0 * sf;
+        let btn_w = 22.0 * sf;
+        let btn_y = 4.0 * sf;
+        let btn_h = 22.0 * sf;
+        let btn_gap = 4.0 * sf;
+        let sidebar_btn_x = traffic_lights_reserve + btn_gap;
+        let layout_btn_x = sidebar_btn_x + btn_w + btn_gap;
+        let tabs_start_x = layout_btn_x + btn_w + btn_gap;
+        let right_reserve = 100.0 * sf;
+        let titlebar_h = super::TITLEBAR_HEIGHT * sf;
 
-        // Dracula palette (pill colors)
-        const ACTIVE_PILL: [f32; 4] = [0.74, 0.58, 0.98, 1.0]; // Dracula purple #bd93f9
-        const ACTIVE_FG: [f32; 4] = [0.97, 0.97, 0.95, 1.0]; // near-white
-        const INACTIVE_PILL: [f32; 4] = [0.27, 0.28, 0.35, 1.0]; // Dracula current-line
-        const INACTIVE_FG: [f32; 4] = [0.61, 0.64, 0.75, 1.0]; // comment gray
+        // Dracula palette
+        const ACTIVE_PILL: [f32; 4] = [0.74, 0.58, 0.98, 1.0];
+        const ACTIVE_FG: [f32; 4] = [0.97, 0.97, 0.95, 1.0];
+        const INACTIVE_PILL: [f32; 4] = [0.27, 0.28, 0.35, 1.0];
+        const INACTIVE_FG: [f32; 4] = [0.61, 0.64, 0.75, 1.0];
+        const BTN_COLOR: [f32; 4] = [0.22, 0.22, 0.28, 0.7];
         let transparent = [0.0f32; 4];
 
         let cell_w = self.shaper.cell_width;
         let cell_h = self.shaper.cell_height;
-        let radius = (cell_h / 3.0).round();
-        let pill_y = pad_top + 2.0;
-        let pill_h = cell_h - 4.0;
+        let radius = (btn_h / 4.0).round();
 
-        let mut col = 0usize;
+        // Pill geometry (vertically centered in titlebar_h):
+        let pill_y = btn_y;
+        let pill_h = titlebar_h - 2.0 * btn_y;
+
+        // Text row: position text vertically centered in the pill.
+        let text_top_y = pill_y + (pill_h - cell_h).max(0.0) / 2.0;
+        let text_row_f = (text_top_y - gpu_pad_y) / cell_h;
+
+        // ── Left control buttons (rect only) ────────────────────────────
+        self.rect_instances.push(RoundedRectInstance {
+            rect: [sidebar_btn_x, btn_y, btn_w, btn_h],
+            color: BTN_COLOR,
+            radius,
+            _pad: [0.0; 3],
+        });
+        self.rect_instances.push(RoundedRectInstance {
+            rect: [layout_btn_x, btn_y, btn_w, btn_h],
+            color: BTN_COLOR,
+            radius,
+            _pad: [0.0; 3],
+        });
+
+        // ── Tab pills (only when 2+ tabs) ────────────────────────────────
+        if tabs.len() <= 1 || total_cols == 0 {
+            return;
+        }
+
+        let tabs_start_col = ((tabs_start_x - pad_left) / cell_w).ceil() as usize;
+        let tab_end_col = {
+            let avail_w = (win_w - right_reserve).max(tabs_start_x);
+            ((avail_w - pad_left) / cell_w) as usize
+        };
+        let max_cols = tab_end_col.min(total_cols);
+
+        let mut col = tabs_start_col;
 
         for (i, tab) in tabs.iter().enumerate() {
-            if col >= total_cols {
+            if col >= max_cols {
                 break;
             }
 
             let is_active = i == active_idx;
-            let pill_color = if is_active {
-                ACTIVE_PILL
-            } else {
-                INACTIVE_PILL
-            };
+            let pill_color = if is_active { ACTIVE_PILL } else { INACTIVE_PILL };
             let fg = if is_active { ACTIVE_FG } else { INACTIVE_FG };
 
-            // 1-cell gap — window bg (clear color) shows through
-            col += 1;
-            if col >= total_cols {
+            col += 1; // gap before pill
+            if col >= max_cols {
                 break;
             }
 
-            // Badge text " N "
             let badge = format!(" {} ", i + 1);
-            let badge_w = badge.chars().count().min(total_cols - col);
+            let badge_w = badge.chars().count().min(max_cols - col);
 
-            // Title text " name " (max 14 chars); rename prompt replaces title for the active tab.
             let raw = if is_active {
                 if let Some(input) = rename_input {
                     format!(" {}▌ ", input)
@@ -1716,16 +1756,15 @@ impl RenderContext {
             } else {
                 format!(" {} ", tab.title)
             };
-            let title: String = raw.chars().take(16).collect(); // +2 for rename cursor
+            let title: String = raw.chars().take(16).collect();
             let title_w = title
                 .chars()
                 .count()
-                .min(total_cols.saturating_sub(col + badge_w));
+                .min(max_cols.saturating_sub(col + badge_w));
 
             let pill_w = (badge_w + title_w) as f32 * cell_w;
             let pill_x = pad_left + col as f32 * cell_w;
 
-            // Emit rounded rect for the pill background
             if pill_w > 0.0 {
                 self.rect_instances.push(RoundedRectInstance {
                     rect: [pill_x, pill_y, pill_w, pill_h],
@@ -1735,32 +1774,29 @@ impl RenderContext {
                 });
             }
 
-            // Badge text with transparent bg
-            let badge_w_clamped = badge_w.min(total_cols - col);
+            let badge_w_clamped = badge_w.min(max_cols - col);
             if badge_w_clamped > 0 {
                 let start = self.instances.len();
                 self.push_shaped_row(&badge, fg, transparent, 0, col, badge_w_clamped, font);
                 for inst in &mut self.instances[start..] {
-                    inst.grid_pos[1] = -1.0;
+                    inst.grid_pos[1] = text_row_f;
                 }
             }
             col += badge_w_clamped;
-            if col >= total_cols {
+            if col >= max_cols {
                 break;
             }
 
-            // Title text with transparent bg
-            let title_w_clamped = title_w.min(total_cols - col);
+            let title_w_clamped = title_w.min(max_cols - col);
             if title_w_clamped > 0 {
                 let start = self.instances.len();
                 self.push_shaped_row(&title, fg, transparent, 0, col, title_w_clamped, font);
                 for inst in &mut self.instances[start..] {
-                    inst.grid_pos[1] = -1.0;
+                    inst.grid_pos[1] = text_row_f;
                 }
             }
             col += title_w_clamped;
         }
-        // No trailing fill needed — window bg (clear color = bar_bg from TD-014) shows through
     }
 
     /// Render a scroll bar on the right edge of the terminal (overlays rightmost ~6px of the

@@ -140,7 +140,7 @@ impl Default for WindowConfig {
             padding: Padding {
                 left: 20,
                 right: 20,
-                top: 30,
+                top: 5,   // titlebar (TITLEBAR_HEIGHT=30) handles traffic lights clearance
                 bottom: 10,
             },
             opacity: 1.0,
