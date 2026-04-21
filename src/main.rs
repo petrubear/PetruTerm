@@ -105,14 +105,6 @@ fn main() -> Result<()> {
     // (e.g. on shell exit) without waiting for the next WaitUntil blink timer.
     let wakeup_proxy = event_loop.create_proxy();
 
-    // Wake the event loop whenever a native menu item is clicked.
-    {
-        let proxy = event_loop.create_proxy();
-        muda::MenuEvent::set_event_handler(Some(move |_event: muda::MenuEvent| {
-            let _ = proxy.send_event(());
-        }));
-    }
-
     let mut app = App::new(config, wakeup_proxy);
     event_loop.run_app(&mut app)?;
 

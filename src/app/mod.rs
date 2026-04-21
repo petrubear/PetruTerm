@@ -428,27 +428,6 @@ impl App {
 
 impl ApplicationHandler<()> for App {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, _event: ()) {
-        // Drain any pending native menu events and dispatch them as palette actions.
-        while let Ok(menu_event) = muda::MenuEvent::receiver().try_recv() {
-            if let Some(action) = self.menu.action_for(&menu_event) {
-                if action == crate::ui::palette::Action::Quit {
-                    event_loop.exit();
-                    return;
-                }
-                if let (Some(rc), Some(w)) = (self.render_ctx.as_mut(), self.window.as_deref()) {
-                    self.ui.handle_palette_action(
-                        action,
-                        &mut self.mux,
-                        rc,
-                        &mut self.config,
-                        Some(w),
-                        self.wakeup_proxy.clone(),
-                    );
-                    w.request_redraw();
-                }
-            }
-        }
-
         let (data_ids, exited) = self.mux.poll_pty_events();
         if self.close_exited_terminals(exited) {
             event_loop.exit();
@@ -1586,6 +1565,29 @@ impl ApplicationHandler<()> for App {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        // Drain native menu events. muda uses an internal static channel when no
+        // custom set_event_handler is registered; about_to_wait runs after every
+        // OS event (including the FocusGained that firing a menu item triggers).
+        while let Ok(menu_event) = muda::MenuEvent::receiver().try_recv() {
+            if let Some(action) = self.menu.action_for(&menu_event) {
+                if action == crate::ui::palette::Action::Quit {
+                    event_loop.exit();
+                    return;
+                }
+                if let (Some(rc), Some(w)) = (self.render_ctx.as_mut(), self.window.as_deref()) {
+                    self.ui.handle_palette_action(
+                        action,
+                        &mut self.mux,
+                        rc,
+                        &mut self.config,
+                        Some(w),
+                        self.wakeup_proxy.clone(),
+                    );
+                    w.request_redraw();
+                }
+            }
+        }
+
         // Drain any PTY events that arrived since user_event last ran.
         // This catches batches that slipped in after user_event drained the channel,
         // and keeps last_pty_activity accurate for coalescing.
