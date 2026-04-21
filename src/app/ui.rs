@@ -1057,6 +1057,11 @@ impl UiManager {
                     .arg(config::config_path())
                     .spawn();
             }
+            Action::OpenConfigFolder => {
+                let _ = std::process::Command::new("open")
+                    .arg(config::config_dir())
+                    .spawn();
+            }
             Action::NewTab => {
                 let (cols, rows) = mux.active_terminal_size();
                 let (cell_w, cell_h) = (

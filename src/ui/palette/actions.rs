@@ -19,6 +19,7 @@ pub enum Action {
     Noop,
     // Config
     OpenConfigFile,
+    OpenConfigFolder,
     ReloadConfig,
     // Tabs
     NewTab,

@@ -1,7 +1,4 @@
-use muda::{
-    accelerator::{Accelerator, Code, Modifiers},
-    Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu,
-};
+use muda::{Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu};
 use rust_i18n::t;
 
 use crate::ui::palette::Action;
@@ -10,9 +7,8 @@ use crate::ui::panes::FocusDir;
 /// Builds and owns the native menu bar. Maps MenuItemId → Action.
 pub struct AppMenu {
     pub menu_bar: Menu,
-    /// The "Window" submenu — must be registered as the windows menu on macOS.
+    /// The "Window" submenu — registered as the macOS windows menu.
     pub window_submenu: Submenu,
-    /// Map from MenuId to Action for dispatch.
     items: Vec<(MenuId, Action)>,
 }
 
@@ -21,7 +17,7 @@ impl AppMenu {
         let menu_bar = Menu::new();
         let mut items: Vec<(MenuId, Action)> = Vec::new();
 
-        // ── macOS app menu (About, Services, Hide, Quit) ──────────────────────
+        // ── PetruTerm app menu (macOS) ────────────────────────────────────────
         #[cfg(target_os = "macos")]
         {
             let app_menu = Submenu::new("PetruTerm", true);
@@ -49,112 +45,32 @@ impl AppMenu {
             menu_bar.append(&app_menu).ok();
         }
 
-        // ── File ──────────────────────────────────────────────────────────────
+        // ── File: settings only ───────────────────────────────────────────────
         let file_menu = Submenu::new(t!("menu.file").as_ref(), true);
-        let new_tab = MenuItem::new(
-            t!("menu.new_tab").as_ref(),
-            true,
-            Some(Accelerator::new(Some(Modifiers::SUPER), Code::KeyT)),
-        );
-        let close_tab = MenuItem::new(
-            t!("menu.close_tab").as_ref(),
-            true,
-            Some(Accelerator::new(Some(Modifiers::SUPER), Code::KeyW)),
-        );
-        let rename_tab = MenuItem::new(t!("menu.rename_tab").as_ref(), true, None);
+        let settings = MenuItem::new(t!("menu.settings").as_ref(), true, None);
+        let reload_config = MenuItem::new(t!("menu.reload_config").as_ref(), true, None);
         file_menu
             .append_items(&[
-                &new_tab,
-                &close_tab,
-                &rename_tab,
+                &settings,
+                &reload_config,
                 &PredefinedMenuItem::separator(),
                 &PredefinedMenuItem::quit(None),
             ])
             .ok();
-        items.push((new_tab.id().clone(), Action::NewTab));
-        items.push((close_tab.id().clone(), Action::CloseTab));
-        items.push((rename_tab.id().clone(), Action::RenameTab));
+        items.push((settings.id().clone(), Action::OpenConfigFolder));
+        items.push((reload_config.id().clone(), Action::ReloadConfig));
 
         // ── View ──────────────────────────────────────────────────────────────
         let view_menu = Submenu::new(t!("menu.view").as_ref(), true);
         let toggle_status = MenuItem::new(t!("menu.toggle_status_bar").as_ref(), true, None);
-        let toggle_fullscreen = MenuItem::new(
-            t!("menu.toggle_fullscreen").as_ref(),
-            true,
-            Some(Accelerator::new(
-                Some(Modifiers::SUPER | Modifiers::CONTROL),
-                Code::KeyF,
-            )),
-        );
         let switch_theme = MenuItem::new(t!("menu.switch_theme").as_ref(), true, None);
-        let reload_config = MenuItem::new(t!("menu.reload_config").as_ref(), true, None);
-        let open_config = MenuItem::new(t!("menu.open_config").as_ref(), true, None);
+        let toggle_fullscreen = MenuItem::new(t!("menu.toggle_fullscreen").as_ref(), true, None);
         view_menu
-            .append_items(&[
-                &toggle_status,
-                &toggle_fullscreen,
-                &switch_theme,
-                &PredefinedMenuItem::separator(),
-                &reload_config,
-                &open_config,
-            ])
+            .append_items(&[&toggle_status, &switch_theme, &toggle_fullscreen])
             .ok();
         items.push((toggle_status.id().clone(), Action::ToggleStatusBar));
-        items.push((toggle_fullscreen.id().clone(), Action::ToggleFullscreen));
         items.push((switch_theme.id().clone(), Action::OpenThemePicker));
-        items.push((reload_config.id().clone(), Action::ReloadConfig));
-        items.push((open_config.id().clone(), Action::OpenConfigFile));
-
-        // ── Panes ─────────────────────────────────────────────────────────────
-        let panes_menu = Submenu::new(t!("menu.panes").as_ref(), true);
-        let split_h = MenuItem::new(t!("menu.split_horizontal").as_ref(), true, None);
-        let split_v = MenuItem::new(t!("menu.split_vertical").as_ref(), true, None);
-        let close_pane = MenuItem::new(t!("menu.close_pane").as_ref(), true, None);
-        let focus_left = MenuItem::new(t!("menu.focus_left").as_ref(), true, None);
-        let focus_right = MenuItem::new(t!("menu.focus_right").as_ref(), true, None);
-        let focus_up = MenuItem::new(t!("menu.focus_up").as_ref(), true, None);
-        let focus_down = MenuItem::new(t!("menu.focus_down").as_ref(), true, None);
-        panes_menu
-            .append_items(&[
-                &split_h,
-                &split_v,
-                &close_pane,
-                &PredefinedMenuItem::separator(),
-                &focus_left,
-                &focus_right,
-                &focus_up,
-                &focus_down,
-            ])
-            .ok();
-        items.push((split_h.id().clone(), Action::SplitHorizontal));
-        items.push((split_v.id().clone(), Action::SplitVertical));
-        items.push((close_pane.id().clone(), Action::ClosePane));
-        items.push((focus_left.id().clone(), Action::FocusPane(FocusDir::Left)));
-        items.push((focus_right.id().clone(), Action::FocusPane(FocusDir::Right)));
-        items.push((focus_up.id().clone(), Action::FocusPane(FocusDir::Up)));
-        items.push((focus_down.id().clone(), Action::FocusPane(FocusDir::Down)));
-
-        // ── Tabs ──────────────────────────────────────────────────────────────
-        let tabs_menu = Submenu::new(t!("menu.tabs").as_ref(), true);
-        let next_tab = MenuItem::new(
-            t!("menu.next_tab").as_ref(),
-            true,
-            Some(Accelerator::new(
-                Some(Modifiers::SUPER | Modifiers::SHIFT),
-                Code::BracketRight,
-            )),
-        );
-        let prev_tab = MenuItem::new(
-            t!("menu.prev_tab").as_ref(),
-            true,
-            Some(Accelerator::new(
-                Some(Modifiers::SUPER | Modifiers::SHIFT),
-                Code::BracketLeft,
-            )),
-        );
-        tabs_menu.append_items(&[&next_tab, &prev_tab]).ok();
-        items.push((next_tab.id().clone(), Action::NextTab));
-        items.push((prev_tab.id().clone(), Action::PrevTab));
+        items.push((toggle_fullscreen.id().clone(), Action::ToggleFullscreen));
 
         // ── AI ────────────────────────────────────────────────────────────────
         let ai_menu = Submenu::new(t!("menu.ai").as_ref(), true);
@@ -182,27 +98,76 @@ impl AppMenu {
         items.push((enable_ai.id().clone(), Action::EnableAiFeatures));
         items.push((disable_ai.id().clone(), Action::DisableAiFeatures));
 
-        // ── Window (macOS standard) ───────────────────────────────────────────
+        // ── Window: tab + pane management + macOS predefined ─────────────────
         let window_submenu = Submenu::new(t!("menu.window").as_ref(), true);
+
+        // Tabs submenu
+        let tabs_submenu = Submenu::new(t!("menu.tab").as_ref(), true);
+        let new_tab = MenuItem::new(t!("menu.new_tab").as_ref(), true, None);
+        let close_tab = MenuItem::new(t!("menu.close_tab").as_ref(), true, None);
+        let rename_tab = MenuItem::new(t!("menu.rename_tab").as_ref(), true, None);
+        let next_tab = MenuItem::new(t!("menu.next_tab").as_ref(), true, None);
+        let prev_tab = MenuItem::new(t!("menu.prev_tab").as_ref(), true, None);
+        tabs_submenu
+            .append_items(&[
+                &new_tab,
+                &close_tab,
+                &rename_tab,
+                &PredefinedMenuItem::separator(),
+                &next_tab,
+                &prev_tab,
+            ])
+            .ok();
+        items.push((new_tab.id().clone(), Action::NewTab));
+        items.push((close_tab.id().clone(), Action::CloseTab));
+        items.push((rename_tab.id().clone(), Action::RenameTab));
+        items.push((next_tab.id().clone(), Action::NextTab));
+        items.push((prev_tab.id().clone(), Action::PrevTab));
+
+        // Panes submenu
+        let panes_submenu = Submenu::new(t!("menu.pane").as_ref(), true);
+        let split_h = MenuItem::new(t!("menu.split_horizontal").as_ref(), true, None);
+        let split_v = MenuItem::new(t!("menu.split_vertical").as_ref(), true, None);
+        let close_pane = MenuItem::new(t!("menu.close_pane").as_ref(), true, None);
+        let focus_left = MenuItem::new(t!("menu.focus_left").as_ref(), true, None);
+        let focus_right = MenuItem::new(t!("menu.focus_right").as_ref(), true, None);
+        let focus_up = MenuItem::new(t!("menu.focus_up").as_ref(), true, None);
+        let focus_down = MenuItem::new(t!("menu.focus_down").as_ref(), true, None);
+        panes_submenu
+            .append_items(&[
+                &split_h,
+                &split_v,
+                &close_pane,
+                &PredefinedMenuItem::separator(),
+                &focus_left,
+                &focus_right,
+                &focus_up,
+                &focus_down,
+            ])
+            .ok();
+        items.push((split_h.id().clone(), Action::SplitHorizontal));
+        items.push((split_v.id().clone(), Action::SplitVertical));
+        items.push((close_pane.id().clone(), Action::ClosePane));
+        items.push((focus_left.id().clone(), Action::FocusPane(FocusDir::Left)));
+        items.push((focus_right.id().clone(), Action::FocusPane(FocusDir::Right)));
+        items.push((focus_up.id().clone(), Action::FocusPane(FocusDir::Up)));
+        items.push((focus_down.id().clone(), Action::FocusPane(FocusDir::Down)));
+
         window_submenu
             .append_items(&[
                 &PredefinedMenuItem::minimize(None),
                 &PredefinedMenuItem::maximize(None),
                 &PredefinedMenuItem::fullscreen(None),
                 &PredefinedMenuItem::separator(),
+                &tabs_submenu,
+                &panes_submenu,
+                &PredefinedMenuItem::separator(),
                 &PredefinedMenuItem::bring_all_to_front(None),
             ])
             .ok();
 
         menu_bar
-            .append_items(&[
-                &file_menu,
-                &view_menu,
-                &panes_menu,
-                &tabs_menu,
-                &ai_menu,
-                &window_submenu,
-            ])
+            .append_items(&[&file_menu, &view_menu, &ai_menu, &window_submenu])
             .ok();
 
         Self {
@@ -212,7 +177,6 @@ impl AppMenu {
         }
     }
 
-    /// Returns the Action mapped to the given menu event, if any.
     pub fn action_for(&self, event: &MenuEvent) -> Option<Action> {
         self.items
             .iter()
