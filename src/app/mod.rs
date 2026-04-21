@@ -1574,6 +1574,9 @@ impl ApplicationHandler<()> for App {
                     event_loop.exit();
                     return;
                 }
+                let tab_count_before = self.mux.tabs.tab_count();
+                let pane_count_before = self.mux.active_pane_count();
+                let panel_was_visible = self.ui.is_panel_visible();
                 if let (Some(rc), Some(w)) = (self.render_ctx.as_mut(), self.window.as_deref()) {
                     self.ui.handle_palette_action(
                         action,
@@ -1583,6 +1586,18 @@ impl ApplicationHandler<()> for App {
                         Some(w),
                         self.wakeup_proxy.clone(),
                     );
+                }
+                // Mirror the post-action resize logic from KeyboardInput handler.
+                if self.ui.is_panel_visible() != panel_was_visible {
+                    self.resize_terminals_for_panel();
+                }
+                if self.mux.tabs.tab_count() != tab_count_before {
+                    self.apply_tab_bar_padding();
+                    self.resize_terminals_for_panel();
+                } else if self.mux.active_pane_count() != pane_count_before {
+                    self.resize_terminals_for_panel();
+                }
+                if let Some(w) = &self.window {
                     w.request_redraw();
                 }
             }
