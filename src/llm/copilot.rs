@@ -135,6 +135,25 @@ fn run_device_flow() -> Result<SecretString> {
         dev.verification_uri, dev.user_code
     );
 
+    // Show a native macOS dialog with the activation code.
+    // This is visible even when launched as a .app bundle (no visible terminal/stderr).
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("/usr/bin/osascript")
+        .args([
+            "-e",
+            &format!(
+                "display dialog \"GitHub Copilot authorization required.\n\nEnter this code at github.com/login/device:\n\n{}\" \
+                 buttons {{\"Open Browser\"}} default button \"Open Browser\" with title \"PetruTerm\"",
+                dev.user_code
+            ),
+        ])
+        .spawn();
+
+    // Open the browser. Use absolute path — required when running as a .app bundle.
+    let _ = std::process::Command::new("/usr/bin/open")
+        .arg(&dev.verification_uri)
+        .spawn();
+
     // Step 2: poll until authorized or expired
     let poll_interval = Duration::from_secs(dev.interval.max(5));
     loop {

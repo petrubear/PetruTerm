@@ -383,31 +383,27 @@ security add-generic-password \
 
 #### GitHub Copilot
 
-The `copilot` provider needs a **GitHub Personal Access Token (classic)** — not a fine-grained token, and not a token from `gh auth token` (that token lacks the required Copilot API scope).
+The `copilot` provider uses **device-flow OAuth** — no token needs to be created or copied manually. You need an active GitHub Copilot subscription.
 
-1. Go to [github.com/settings/tokens](https://github.com/settings/tokens) → **Generate new token (classic)**.
-2. Give it any name (e.g. `PetruTerm Copilot`). No scopes need to be checked — the Copilot API only checks that your account has an active subscription.
-3. Copy the token and store it:
+1. In `llm.lua`, set `provider = "copilot"` and omit `api_key`.
+2. Open the AI panel (`Leader+a`). On first use, PetruTerm starts the authorization flow automatically:
+   - A browser window opens at `github.com/login/device`.
+   - The activation code is shown in the chat panel.
+   - Enter the code in the browser and click **Authorize**.
+3. PetruTerm saves the OAuth token to your Keychain automatically. No further action needed on subsequent launches.
 
-```bash
-security add-generic-password \
-  -s PetruTerm \
-  -a GITHUB_COPILOT_OAUTH_TOKEN \
-  -w "<your-github-pat>"
-```
-
-4. In `llm.lua`, omit `api_key`. PetruTerm finds it automatically.
-
-To verify the token is stored:
-
-```bash
-security find-generic-password -s PetruTerm -a GITHUB_COPILOT_OAUTH_TOKEN -w
-```
-
-To update it later, delete the old entry first:
+To revoke and re-authorize (e.g. after switching GitHub accounts):
 
 ```bash
 security delete-generic-password -s PetruTerm -a GITHUB_COPILOT_OAUTH_TOKEN
+```
+
+Then reopen the AI panel — the device flow runs again.
+
+To inspect the stored token:
+
+```bash
+security find-generic-password -s PetruTerm -a GITHUB_COPILOT_OAUTH_TOKEN -w
 ```
 
 ---

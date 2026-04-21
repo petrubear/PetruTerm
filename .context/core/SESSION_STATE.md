@@ -1,14 +1,14 @@
 # Session State
 
-**Last Updated:** 2026-04-19
-**Session Focus:** Fase 3.6 COMPLETA — GitHub Copilot provider. Tag v0.1.1 publicado.
+**Last Updated:** 2026-04-20
+**Session Focus:** Copilot OAuth doc+validation fix. Siguiente: Fase B.
 
 ## Branch: `master`
 
 ## Estado actual
 
-**Phase 1–3 + 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Tag v0.1.1 publicado.**
-**Build limpio: check + test + clippy + fmt PASS. CI verde.**
+**Phase 1–3 + 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Copilot OAuth fix COMPLETE.**
+**Build limpio: check PASS.**
 **Siguiente: Fase B — Menu Bar nativo macOS (crate muda)**
 
 ## Commits recientes relevantes
@@ -34,6 +34,36 @@
 **Key non-obvious finding:**
 - El endpoint `/copilot_internal/v2/token` solo acepta tokens de OAuth apps registradas para Copilot.
   Ni `gh auth token` ni PAT classic sirven — requiere device flow con `client_id = Iv1.b507a08c87ecfe98`.
+
+---
+
+## ⚠️ TAREA PRIORITARIA antes de Fase B — Copilot OAuth fix
+
+### Problema
+El README documenta el auth de Copilot como **PAT clásico**, pero la implementación real usa **device-flow OAuth** (`client_id = Iv1.b507a08c87ecfe98`). La documentación está desactualizada y engañosa.
+
+Además, el device-flow OAuth funciona correctamente al ejecutar con `cargo run`, pero **no se ha validado desde el `.app` bundle**. Cuando la app se lanza como bundle, el flujo de device auth (que abre el browser y espera que el usuario ingrese el código) puede fallar silenciosamente si hay restricciones de entorno (sandbox, env vars, permisos de Keychain, apertura de browser con `open`).
+
+### Tareas
+
+1. **Actualizar README** — reemplazar la sección "GitHub Copilot" (líneas ~384-411) para describir el device-flow:
+   - Al usar `provider = "copilot"` por primera vez, PetruTerm inicia el device-flow automáticamente.
+   - Imprime en consola (o muestra en el panel de chat) la URL y el código de activación.
+   - El token OAuth resultante se guarda en Keychain (`PetruTerm` / `GITHUB_COPILOT_OAUTH_TOKEN`).
+   - No se necesita crear ni copiar ningún token manualmente.
+   - Quitar toda mención a PAT clásico.
+
+2. **Validar device-flow desde el `.app` bundle**:
+   - Ejecutar `PetruTerm.app` (o bundle de `scripts/bundle.sh`), ir al panel de AI con `Leader+a`, seleccionar provider `copilot`.
+   - Verificar que el device-flow se dispara: la URL/código aparece en el panel o en los logs.
+   - Verificar que `open` abre el browser correctamente desde el contexto del bundle.
+   - Verificar que el token se guarda y se reutiliza en sesiones posteriores.
+   - Si el browser no abre, fallback: mostrar la URL copiable en el panel de chat.
+
+3. **Fix si el `.app` falla** — posibles causas conocidas:
+   - `std::process::Command::new("open")` puede necesitar ruta absoluta en bundles: `/usr/bin/open`.
+   - El Keychain prompt puede no mostrarse si la app no tiene foco; verificar `SecKeychainItemCopyContent` vs `security` CLI.
+   - La salida de consola (donde se imprime el código) no es visible desde `.app`; el código/URL debe aparecer en la UI (panel de chat o una ventana modal).
 
 ---
 
