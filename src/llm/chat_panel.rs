@@ -133,6 +133,11 @@ pub struct ChatPanel {
     /// Cached thin separator "│╌╌╌…" used after the file section.
     pub thin_separator_cache: String,
 
+    // ── Active skill ─────────────────────────────────────────────────────────
+    /// Name of the skill injected into the current query's system prompt, if any.
+    /// Cleared when the response completes or errors.
+    pub matched_skill: Option<String>,
+
     // ── File picker ───────────────────────────────────────────────────────────
     /// Whether the file picker overlay is open.
     pub file_picker_open: bool,
@@ -159,6 +164,7 @@ impl ChatPanel {
             attached_files: Vec::new(),
             attached_file_chars: Vec::new(),
             confirm_display: None,
+            matched_skill: None,
             file_picker_open: false,
             file_picker_query: String::new(),
             file_picker_items: Vec::new(),
@@ -307,6 +313,7 @@ impl ChatPanel {
             self.messages.push(ChatMessage::assistant(response));
         }
         self.streaming_buf.clear();
+        self.matched_skill = None;
         // Drop oldest messages if history exceeds the cap, keeping wrapped_cache in sync.
         if self.messages.len() > MAX_MESSAGES {
             let drop = self.messages.len() - MAX_MESSAGES;
@@ -321,6 +328,7 @@ impl ChatPanel {
 
     pub fn mark_error(&mut self, msg: String) {
         self.streaming_buf.clear();
+        self.matched_skill = None;
         self.state = PanelState::Error(msg);
         self.dirty = true;
     }

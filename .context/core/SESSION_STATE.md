@@ -1,66 +1,53 @@
 # Session State
 
 **Last Updated:** 2026-04-22
-**Session Focus:** Planificación e implementación Fase D-4 (Skills loader).
+**Session Focus:** Fase D-4 Skills loader — COMPLETA.
 
 ## Branch: `master`
 
 ## Estado actual
 
-**Phase 1–3 + 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Fase B COMPLETE. Fase C-1 COMPLETE. Fase C-2 COMPLETE. Fase C-3 COMPLETE. Fase C-3.5 COMPLETE.**
-**Siguiente: Fase D-4 (Skills loader — EN PLANIFICACIÓN, listo para implementar).**
+**Phase 1–3 + 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Fase B COMPLETE. Fase C-1 COMPLETE. Fase C-2 COMPLETE. Fase C-3 COMPLETE. Fase C-3.5 COMPLETE. Fase D-4 COMPLETE.**
+**Siguiente: Fase D-1/D-2/D-3 (MCP) o Fase D-5 (project-level config).**
 
 ---
 
 ## Esta sesión (2026-04-22)
 
-### cargo audit — RESUELTO
-- `rustls-webpki` 0.103.12 → 0.103.13 (RUSTSEC-2026-0104)
-- `rust-i18n` 3 → 4 (elimina serde_yml/libyml — RUSTSEC-2025-0067/68)
-- Fix API change en `src/i18n.rs`: `available_locales!()` ahora retorna `Vec<Cow>`
-- `.cargo/audit.toml` creado para ignorar GTK3 warnings de muda (Linux-only, no fix disponible)
+### D-4 Skills loader — COMPLETA
 
-### D-4 Skills — DISEÑO CERRADO, pendiente implementar
-Ver `.context/specs/build_phases.md` § D-4 para el diseño completo.
+Todos los todos implementados y commiteados:
 
-Decisiones clave:
-- Activación automática por relevancia (fuzzy match, NO `/skill-name` explícito)
-- Progressive disclosure: load name+desc al startup, body solo si hay match
-- Thin slash dispatcher incluido: `/skill [filtro]` lista skills disponibles
-- Sin nuevas dependencias (SkimMatcherV2 ya en codebase, frontmatter parseado manualmente)
+- `d4-skills-rs` — `src/llm/skills.rs` creado: `SkillMeta`, `SkillManager` con `load/reload_local/match_query/read_body/skills`. Frontmatter parseado manualmente, fuzzy via `SkimMatcherV2` (threshold 50), sin deps nuevas.
+- `d4-chat-panel` — `matched_skill: Option<String>` en `ChatPanel`, limpiado en `mark_done`/`mark_error`.
+- `d4-mod-rs` — `pub mod skills` registrado en `llm/mod.rs`.
+- `d4-slash` — thin dispatcher en `input/mod.rs`: Enter con `/` prefix → `ui.handle_slash_command`; `/q`/`/quit` migrados al dispatcher.
+- `d4-ui-rs` — `skill_manager: SkillManager` en `UiManager`; `submit_ai_query` inyecta skill body en system prompt y setea `matched_skill`; `handle_slash_command` implementado con `/q`, `/skill [filter]`, y fallback de error.
+- `d4-renderer` — Header AI panel muestra `⚡ skill-name` cuando skill está activo.
 
-Todos pendientes (en SQL session DB):
-- `d4-skills-rs` — crear src/llm/skills.rs ← EMPEZAR AQUÍ
-- `d4-chat-panel` — matched_skill en ChatPanel ← EMPEZAR AQUÍ (paralelo)
-- `d4-mod-rs` — pub mod skills (dep: d4-skills-rs)
-- `d4-slash` — thin dispatcher (dep: d4-skills-rs)
-- `d4-ui-rs` — integrar SkillManager (dep: d4-chat-panel, d4-mod-rs)
-- `d4-renderer` — indicador visual (dep: d4-chat-panel)
-- `d4-commit` — commit final (dep: todos)
+### Skill format
 
----
+```
+~/.config/petruterm/skills/<name>/SKILL.md   ← global
+.petruterm/skills/<name>/SKILL.md            ← project-local (prioridad sobre global)
+```
 
-### Lo que se hizo
+### Lo hecho esta sesión (D-4)
 
-1. **Botones de titlebar** (sidebar + AI panel, 2 total):
-   - `≡` sidebar workspaces en [80..102], `✦` AI panel en [106..128]
-   - Dimmed cuando panel cerrado, lit cuando abierto; tinta purple cuando activo
-   - Técnica: push_shaped_row col=0 row=0, override grid_pos a coords físicas
-
-2. **Header del AI panel restyled** para igualar estética del sidebar izquierdo.
-
-3. **Click handler** para botón AI (toggle open/close).
-
-**Bugfix (2026-04-22):** Eliminado tercer botón `⊞` (layout/pane) que se introdujo
-accidentalmente al agregar los iconos. Nunca tuvo handler. Tabs ahora empiezan en 132.
-
-### Archivos modificados
-- `src/app/renderer.rs`: buttons, iconos, header chat panel
-- `src/app/mod.rs`: hit_test_tab_bar, click handler, call site build_tab_bar_instances
+1. `src/llm/skills.rs` (nuevo)
+2. `src/llm/mod.rs` — pub mod skills
+3. `src/llm/chat_panel.rs` — matched_skill field
+4. `src/app/ui.rs` — SkillManager + handle_slash_command + skill injection
+5. `src/app/input/mod.rs` — slash dispatcher
+6. `src/app/renderer.rs` — ⚡ indicator en header
 
 ---
 
 ## Sesiones anteriores (resumen)
+
+### 2026-04-22 mañana — Fase C-3.5 + D-4 planificación
+- Botones sidebar + AI en titlebar; header AI panel restyled
+- Diseño D-4 cerrado
 
 ### 2026-04-21 — Fase C-1 bugs + C-2 + C-3
 - BTN_COLOR fix, padding.top fix

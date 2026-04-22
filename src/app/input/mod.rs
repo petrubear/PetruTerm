@@ -557,22 +557,16 @@ impl InputHandler {
                         ui.panel_mut().type_char('\n');
                     } else if ui.panel().is_idle() {
                         let input = ui.panel().input.trim().to_string();
-                        match input.as_str() {
-                            "/q" | "/quit" => {
-                                ui.panel_mut().close();
-                                ui.panel_focused = false;
-                                ui.file_picker_focused = false;
-                            }
-                            "" => {
-                                ui.chat_panel_run_command(mux);
-                            }
-                            _ => {
-                                let cwd = mux
-                                    .active_cwd()
-                                    .or_else(|| std::env::current_dir().ok())
-                                    .unwrap_or_default();
-                                ui.submit_ai_query(wakeup_proxy, cwd);
-                            }
+                        if input.is_empty() {
+                            ui.chat_panel_run_command(mux);
+                        } else if input.starts_with('/') {
+                            ui.handle_slash_command(&input);
+                        } else {
+                            let cwd = mux
+                                .active_cwd()
+                                .or_else(|| std::env::current_dir().ok())
+                                .unwrap_or_default();
+                            ui.submit_ai_query(wakeup_proxy, cwd);
                         }
                     }
                 }

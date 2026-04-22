@@ -4,6 +4,7 @@ use crate::config::{self, Config};
 use crate::llm::ai_block::AiBlock;
 use crate::llm::chat_panel::{AiEvent, ChatPanel, ConfirmDisplay};
 use crate::llm::shell_context::ShellContext;
+use crate::llm::skills::SkillManager;
 use crate::llm::tools::{execute_tool, AgentStepResult, AgentTool};
 use crate::llm::LlmProvider;
 use crate::ui::{CommandPalette, ContextMenu, Rect, SearchBar, SplitDir};
@@ -132,6 +133,9 @@ pub struct UiManager {
     branch_scan_rx: Option<crossbeam_channel::Receiver<Vec<String>>>,
     /// CWD used for the in-flight branch scan (to build palette items on arrival).
     branch_scan_cwd: Option<std::path::PathBuf>,
+
+    // ── Skills (D-4) ─────────────────────────────────────────────────────────
+    pub skill_manager: SkillManager,
 }
 
 impl UiManager {
@@ -163,6 +167,11 @@ impl UiManager {
 
         let mut palette = CommandPalette::new(config);
         palette.rebuild_snippets(&config.snippets);
+
+        let mut skill_manager = SkillManager::new();
+        if let Ok(cwd) = std::env::current_dir() {
+            skill_manager.load(&cwd);
+        }
 
         Self {
             palette,
@@ -199,6 +208,7 @@ impl UiManager {
             pending_paste_rx: None,
             branch_scan_rx: None,
             branch_scan_cwd: None,
+            skill_manager,
         }
     }
 
@@ -676,7 +686,7 @@ impl UiManager {
         // TD-019: capture the originating panel id before any await so tokens are
         // routed back to the correct panel even if the user switches tabs mid-stream.
         let panel_id = self.active_panel_id;
-        let Some(_user_content) = self.panel_mut().submit_input() else {
+        let Some(user_content) = self.panel_mut().submit_input() else {
             return;
         };
         let Some(provider) = self.llm_provider.clone() else {
@@ -694,6 +704,21 @@ impl UiManager {
              You also have tools to read files, list directories, write files, and run commands within the working directory. \
              Use those tools when the user asks about code or files in their project."
         );
+
+        // Skill injection (D-4): fuzzy-match user query against loaded skills.
+        let skill_match = {
+            if let Some(skill) = self.skill_manager.match_query(&user_content) {
+                let body = self.skill_manager.read_body(skill).ok();
+                body.map(|b| (skill.name.clone(), b))
+            } else {
+                None
+            }
+        };
+        if let Some((skill_name, skill_body)) = skill_match {
+            system_text.push_str(&format!("\n\n{skill_body}"));
+            self.panel_mut().matched_skill = Some(skill_name);
+        }
+
         if let Some(ctx) = ShellContext::load() {
             system_text.push_str(&format!(
                 "\n\nShell context:\n{}",
@@ -1061,6 +1086,66 @@ impl UiManager {
             (None, None)
         };
         self.panel_width_cols = config.llm.ui.width_cols;
+    }
+
+    // ── Slash command dispatcher (D-4) ───────────────────────────────────────
+
+    /// Handle a slash command entered in the AI panel input.
+    /// Returns true if the command was recognized, false if unknown.
+    /// The input field is cleared on entry regardless of outcome.
+    pub fn handle_slash_command(&mut self, input: &str) -> bool {
+        self.panel_mut().input.clear();
+        self.panel_mut().dirty = true;
+
+        let trimmed = input.trim_start_matches('/');
+        let (cmd, args) = trimmed
+            .split_once(' ')
+            .map_or((trimmed, ""), |(c, a)| (c, a.trim()));
+
+        match cmd {
+            "q" | "quit" => {
+                self.panel_mut().close();
+                self.panel_focused = false;
+                self.file_picker_focused = false;
+                true
+            }
+            "skill" | "skills" => {
+                let msg = {
+                    let skills = self.skill_manager.skills();
+                    if skills.is_empty() {
+                        "No skills loaded. Place SKILL.md files in ~/.config/petruterm/skills/<name>/".to_string()
+                    } else {
+                        let filtered: Vec<String> = skills
+                            .iter()
+                            .filter(|s| {
+                                args.is_empty()
+                                    || s.name.contains(args)
+                                    || s.description.contains(args)
+                            })
+                            .map(|s| format!("  {} — {}", s.name, s.description))
+                            .collect();
+                        if filtered.is_empty() {
+                            format!("No skills matching '{args}'")
+                        } else {
+                            format!("Skills:\n{}", filtered.join("\n"))
+                        }
+                    }
+                };
+                self.panel_mut()
+                    .messages
+                    .push(crate::llm::ChatMessage::assistant(msg));
+                self.panel_mut().dirty = true;
+                true
+            }
+            _ => {
+                let msg = format!("Unknown command: /{cmd}. Try /skill or /quit.");
+                self.panel_mut()
+                    .messages
+                    .push(crate::llm::ChatMessage::assistant(msg));
+                self.panel_mut().dirty = true;
+                false
+            }
+        }
     }
 
     // ── Palette action dispatch ───────────────────────────────────────────────
@@ -1433,6 +1518,7 @@ mod tests {
             pending_paste_rx: None,
             branch_scan_rx: None,
             branch_scan_cwd: None,
+            skill_manager: SkillManager::new(),
         };
 
         // Simulate an in-flight fetch by setting the flag and spawn time.
@@ -1501,6 +1587,7 @@ mod tests {
             pending_paste_rx: None,
             branch_scan_rx: None,
             branch_scan_cwd: None,
+            skill_manager: SkillManager::new(),
         };
 
         // Cache should still be "main" before the call.

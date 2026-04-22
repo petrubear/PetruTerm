@@ -710,7 +710,11 @@ impl RenderContext {
         {
             let provider = &config.llm.provider;
             let model = &config.llm.model;
-            let label = format!(" ✦ AI  {}:{} ", provider, model);
+            let label = if let Some(skill) = &panel.matched_skill {
+                format!(" ✦ AI  {}:{}  ⚡{} ", provider, model, skill)
+            } else {
+                format!(" ✦ AI  {}:{} ", provider, model)
+            };
             let label_chars = label.chars().count();
             let mut buf = std::mem::take(&mut self.fmt_buf);
             buf.clear();

@@ -117,7 +117,7 @@
 - [ ] Mostrar tool calls en panel AI (collapsible)
 
 ### D-4: Skills loader (formato agentskills.io)
-**Status: En planificación — listo para implementar**
+**Status: COMPLETA — 2026-04-22**
 
 #### Decisiones de diseño (2026-04-22)
 - **Activación automática por relevancia** (NO por `/skill-name` explícito — no es el estándar).
@@ -153,21 +153,13 @@ Body del prompt aquí...
 | `src/app/input/mod.rs` | Enter handler: si `input.starts_with('/')` → `ui.handle_slash_command(cmd, args)`; migrar `/q`/`/quit` al dispatcher |
 | `src/app/renderer.rs` | Header AI panel: si `matched_skill` es `Some(name)` → mostrar `⚡ name` junto a provider:model |
 
-#### Todos (en orden de ejecución)
-```
-d4-skills-rs ──┬──► d4-mod-rs ──► d4-ui-rs ──────┐
-               │                                    ├──► d4-commit
-               └──► d4-slash ──────────────────────┤
-d4-chat-panel ─┬──► d4-ui-rs                       │
-               └──► d4-renderer ───────────────────┘
-```
-- `d4-skills-rs` — crear `src/llm/skills.rs`
-- `d4-chat-panel` — `matched_skill` en `ChatPanel`
-- `d4-mod-rs` — registrar módulo (dep: d4-skills-rs)
-- `d4-slash` — thin dispatcher en input/mod.rs + handle_slash_command en ui.rs (dep: d4-skills-rs)
-- `d4-ui-rs` — integrar SkillManager + injection (dep: d4-chat-panel, d4-mod-rs)
-- `d4-renderer` — indicador visual (dep: d4-chat-panel)
-- `d4-commit` — commit + actualizar SESSION_STATE/build_phases (dep: todos los anteriores)
+#### Archivos modificados
+- `src/llm/skills.rs` *(nuevo)* — `SkillMeta`, `SkillManager`
+- `src/llm/mod.rs` — `pub mod skills`
+- `src/llm/chat_panel.rs` — `matched_skill: Option<String>`
+- `src/app/ui.rs` — `skill_manager`, `handle_slash_command`, skill injection en `submit_ai_query`
+- `src/app/input/mod.rs` — slash dispatcher en Enter handler
+- `src/app/renderer.rs` — `⚡ skill-name` en header AI panel
 
 ### D-5: Project-level config
 - [ ] `.petruterm/mcp.json` — MCP servers del proyecto
