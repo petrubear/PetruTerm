@@ -18,12 +18,13 @@
 
 Todos los todos implementados y commiteados:
 
-- `d4-skills-rs` — `src/llm/skills.rs` creado: `SkillMeta`, `SkillManager` con `load/reload_local/match_query/read_body/skills`. Frontmatter parseado manualmente, fuzzy via `SkimMatcherV2` (threshold 50), sin deps nuevas.
+- `d4-skills-rs` — `src/llm/skills.rs` creado: `SkillMeta`, `SkillManager` con `load/match_query/read_body/skills`. Frontmatter parseado manualmente, fuzzy via `SkimMatcherV2` (threshold 50), sin deps nuevas.
 - `d4-chat-panel` — `matched_skill: Option<String>` en `ChatPanel`, limpiado en `mark_done`/`mark_error`.
 - `d4-mod-rs` — `pub mod skills` registrado en `llm/mod.rs`.
 - `d4-slash` — thin dispatcher en `input/mod.rs`: Enter con `/` prefix → `ui.handle_slash_command`; `/q`/`/quit` migrados al dispatcher.
 - `d4-ui-rs` — `skill_manager: SkillManager` en `UiManager`; `submit_ai_query` inyecta skill body en system prompt y setea `matched_skill`; `handle_slash_command` implementado con `/q`, `/skill [filter]`, y fallback de error.
 - `d4-renderer` — Header AI panel muestra `⚡ skill-name` cuando skill está activo.
+- **clippy fixes** (eefc4ae): colapsar if anidado, `is_none_or`, eliminar `reload_local` sin consumidor.
 
 ### Skill format
 
