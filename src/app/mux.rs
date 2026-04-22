@@ -67,7 +67,10 @@ impl Mux {
             terminals: Vec::new(),
             next_terminal_id: 0,
             closed_ids: Vec::new(),
-            workspaces: vec![Workspace { id: 0, name: "main".to_string() }],
+            workspaces: vec![Workspace {
+                id: 0,
+                name: "main".to_string(),
+            }],
             active_workspace_id: 0,
             next_workspace_id: 1,
             inactive_workspaces: Vec::new(),
@@ -684,7 +687,7 @@ impl Mux {
         self.workspaces.push(Workspace { id, name });
         self.inactive_workspaces.push(WorkspaceData {
             id: self.active_workspace_id,
-            tabs: std::mem::replace(&mut self.tabs, TabManager::new()),
+            tabs: std::mem::take(&mut self.tabs),
             panes: std::mem::take(&mut self.panes),
         });
         self.active_workspace_id = id;
@@ -696,7 +699,11 @@ impl Mux {
         if self.workspaces.len() <= 1 {
             return;
         }
-        let all_tids: Vec<usize> = self.panes.iter().flat_map(|pm| pm.root.leaf_ids()).collect();
+        let all_tids: Vec<usize> = self
+            .panes
+            .iter()
+            .flat_map(|pm| pm.root.leaf_ids())
+            .collect();
         for tid in all_tids {
             if let Some(slot) = self.terminals.get_mut(tid) {
                 *slot = None;
@@ -707,7 +714,11 @@ impl Mux {
         self.workspaces.remove(pos);
         let target_pos = pos.min(self.workspaces.len() - 1);
         let target_id = self.workspaces[target_pos].id;
-        if let Some(idx) = self.inactive_workspaces.iter().position(|d| d.id == target_id) {
+        if let Some(idx) = self
+            .inactive_workspaces
+            .iter()
+            .position(|d| d.id == target_id)
+        {
             let data = self.inactive_workspaces.remove(idx);
             self.tabs = data.tabs;
             self.panes = data.panes;
@@ -716,7 +727,11 @@ impl Mux {
     }
 
     pub fn cmd_rename_workspace(&mut self, name: String) {
-        if let Some(w) = self.workspaces.iter_mut().find(|w| w.id == self.active_workspace_id) {
+        if let Some(w) = self
+            .workspaces
+            .iter_mut()
+            .find(|w| w.id == self.active_workspace_id)
+        {
             w.name = name;
         }
     }
@@ -727,7 +742,7 @@ impl Mux {
         }
         self.inactive_workspaces.push(WorkspaceData {
             id: self.active_workspace_id,
-            tabs: std::mem::replace(&mut self.tabs, TabManager::new()),
+            tabs: std::mem::take(&mut self.tabs),
             panes: std::mem::take(&mut self.panes),
         });
         if let Some(idx) = self.inactive_workspaces.iter().position(|d| d.id == id) {

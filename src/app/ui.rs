@@ -1138,15 +1138,30 @@ impl UiManager {
                 );
                 let name = format!("workspace {}", mux.workspaces.len() + 1);
                 mux.cmd_new_workspace(name);
-                let viewport = Rect { x: 0.0, y: 0.0, w: 800.0, h: 600.0 };
+                let viewport = Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 800.0,
+                    h: 600.0,
+                };
                 let cwd = std::env::current_dir().ok();
-                mux.cmd_new_tab(config, viewport, cols as u16, rows as u16, cell_w, cell_h, wakeup_proxy, cwd);
+                mux.cmd_new_tab(
+                    config,
+                    viewport,
+                    cols as u16,
+                    rows as u16,
+                    cell_w,
+                    cell_h,
+                    wakeup_proxy,
+                    cwd,
+                );
             }
             Action::CloseWorkspace => {
                 mux.cmd_close_workspace();
             }
             Action::RenameWorkspace => {
-                let current = mux.workspaces
+                let current = mux
+                    .workspaces
                     .iter()
                     .find(|w| w.id == mux.active_workspace_id)
                     .map(|w| w.name.clone())
