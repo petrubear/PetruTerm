@@ -117,14 +117,61 @@
 - [ ] Mostrar tool calls en panel AI (collapsible)
 
 ### D-4: Skills loader (formato agentskills.io)
-- [ ] Escanear `~/.config/petruterm/skills/*/SKILL.md` al inicio (+ `.petruterm/skills/` local)
-- [ ] Parsear frontmatter YAML: `name`, `description`; body cargado solo al activar
-- [ ] Activación: `/skill-name` en input, o por relevancia de descripción vs query
-- [ ] Inyectar body del skill activo al system prompt
+**Status: En planificación — listo para implementar**
+
+#### Decisiones de diseño (2026-04-22)
+- **Activación automática por relevancia** (NO por `/skill-name` explícito — no es el estándar).
+  El usuario escribe su query normalmente; el sistema hace fuzzy match contra descriptions.
+- **Progressive disclosure** fiel al estándar agentskills.io:
+  1. Discovery: cargar solo `name`+`description` al startup
+  2. Activation: si score fuzzy > 50 → leer body completo
+  3. Execution: inyectar body al system prompt
+- **Sin nuevas dependencias**: frontmatter parseado manualmente; fuzzy via `SkimMatcherV2` (ya en codebase)
+- **Thin slash dispatcher** incluido en D4: refactorizar `/q`/`/quit` hardcodeados en un dispatcher
+  extensible; añadir `/skill [filtro]` como primer comando real (lista skills disponibles)
+
+#### Formato de Skill
+```
+~/.config/petruterm/skills/<name>/SKILL.md   ← global
+.petruterm/skills/<name>/SKILL.md            ← project-local (prioridad sobre global)
+```
+```markdown
+---
+name: git-helper
+description: Git expert for branches, commits, conflicts and repository workflows
+---
+Body del prompt aquí...
+```
+
+#### Cambios por archivo
+| Archivo | Qué |
+|---|---|
+| `src/llm/skills.rs` *(nuevo)* | `SkillMeta{name,description,path}`, `SkillManager`: `load(cwd)`, `reload_local(cwd)`, `match_query→Option<&SkillMeta>` (SkimMatcherV2 threshold 50), `read_body→Result<String>` |
+| `src/llm/mod.rs` | `pub mod skills;` |
+| `src/llm/chat_panel.rs` | `pub matched_skill: Option<String>` en `ChatPanel`; limpiar en `Done`/`Error` |
+| `src/app/ui.rs` | `skill_manager: SkillManager` en `UiManager`; en `submit_ai_query()`: match→inject body en system_text, setear `matched_skill`; método `handle_slash_command(cmd, args)`; limpiar `matched_skill` en `AiEvent::Done/Error` |
+| `src/app/input/mod.rs` | Enter handler: si `input.starts_with('/')` → `ui.handle_slash_command(cmd, args)`; migrar `/q`/`/quit` al dispatcher |
+| `src/app/renderer.rs` | Header AI panel: si `matched_skill` es `Some(name)` → mostrar `⚡ name` junto a provider:model |
+
+#### Todos (en orden de ejecución)
+```
+d4-skills-rs ──┬──► d4-mod-rs ──► d4-ui-rs ──────┐
+               │                                    ├──► d4-commit
+               └──► d4-slash ──────────────────────┤
+d4-chat-panel ─┬──► d4-ui-rs                       │
+               └──► d4-renderer ───────────────────┘
+```
+- `d4-skills-rs` — crear `src/llm/skills.rs`
+- `d4-chat-panel` — `matched_skill` en `ChatPanel`
+- `d4-mod-rs` — registrar módulo (dep: d4-skills-rs)
+- `d4-slash` — thin dispatcher en input/mod.rs + handle_slash_command en ui.rs (dep: d4-skills-rs)
+- `d4-ui-rs` — integrar SkillManager + injection (dep: d4-chat-panel, d4-mod-rs)
+- `d4-renderer` — indicador visual (dep: d4-chat-panel)
+- `d4-commit` — commit + actualizar SESSION_STATE/build_phases (dep: todos los anteriores)
 
 ### D-5: Project-level config
 - [ ] `.petruterm/mcp.json` — MCP servers del proyecto
-- [ ] `.petruterm/skills/` — Skills del proyecto
+- [ ] `.petruterm/skills/` — Skills del proyecto (ya contemplado en D-4 como `reload_local`)
 - [ ] Merge con global: proyecto tiene prioridad en conflictos de nombre
 
 ---
