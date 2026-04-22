@@ -1,7 +1,7 @@
 # Session State
 
 **Last Updated:** 2026-04-21
-**Session Focus:** Fase C-1 bugs fixed. Siguiente: C-2 (Workspace model).
+**Session Focus:** Fase C-1 bugs resueltos. Siguiente: C-2 (Workspace model).
 
 ## Branch: `master`
 
@@ -14,48 +14,40 @@
 
 ## Fase C-1 — Unified titlebar — COMPLETA (bugs resueltos 2026-04-21)
 
-### Bugs resueltos en esta sesion
+### Bugs resueltos
 
-1. **BTN_COLOR invisible**: cambiado de `[0.22, 0.22, 0.28, 0.7]` a `[0.267, 0.278, 0.353, 1.0]`
-   (Dracula "Current Line" con full opacity — contrasta contra el background #282A36).
+1. **BTN_COLOR invisible** (`e3e70bb`): `[0.22,0.22,0.28,0.7]` → `[0.267,0.278,0.353,1.0]`
+   (Dracula Current Line, full opacity — era invisible contra el background #22212c).
 
-2. **TITLEBAR_HEIGHT usado como pixels fisicos en vez de logicos**: en displays Retina (2x),
-   `TITLEBAR_HEIGHT=30.0` (logico) se pasaba como 30px fisicos donde se necesitaban 60px fisicos.
-   - `tab_bar_height_px()`: ahora devuelve `TITLEBAR_HEIGHT * scale_factor()` en Custom mode
-   - `apply_tab_bar_padding()`: usa `TITLEBAR_HEIGHT * sf` para el offset fisico
-   - `build_tab_bar_instances` call: `gpu_pad_y` y `pad_left` ahora en pixels fisicos
-   - Nueva helper `scale_factor()` en App
-   - `scale_factor()` helper añadido en `src/app/mod.rs`
+2. **Espacio excesivo debajo de la titlebar**: el config del usuario tenía `padding.top = 60`
+   — valor de antes de que la titlebar custom manejara el clearance de traffic lights internamente.
+   Cambiado a `top = 5` en `~/.config/petruterm/ui.lua`.
+   El terminal ahora empieza en y = TITLEBAR_HEIGHT(30) + top(5) = 35px, sin el gap de 60px.
 
-### Lo que funciona (post-fixes)
+### Non-obvious: padding.top en modo Custom
 
-- Buttons sidebar/layout visibles en la titlebar
-- Pills de tabs posicionadas correctamente a la derecha de los traffic lights
-- Contenido terminal empieza despues del titlebar (no overlap) en Retina 2x
-- Status bar, menu nativo macOS, separadores de panes: sin regresion
+`TITLEBAR_HEIGHT = 30.0` en `src/app/mod.rs` maneja el clearance de traffic lights.
+`padding.top` es el gap ADICIONAL entre el borde inferior de la titlebar y la primera fila
+del terminal. Con Custom titlebar, `top = 5` es suficiente (no usar 60 como antes).
 
-### Non-obvious: unidades en la pipeline de render
+### Lo que funciona
 
-`TITLEBAR_HEIGHT = 30.0` es en **logical points** (no pixels fisicos).
-- Multiplicar por `scale_factor` antes de pasar a `set_padding()` o al rect pipeline (que opera en pixels fisicos).
-- `cell_width/height` del shaper son **pixels fisicos** (el shaper usa `font.size * scale_factor`).
-- `pad.top/left/bottom/right` del config son **logical points** — pequena imprecision pre-existente al no multiplicar por sf, pero <5px en la mayoria de configs.
+- Botones sidebar/layout visibles en titlebar (Dracula Current Line)
+- Pills de tabs posicionadas correctamente a la derecha de traffic lights
+- Rename de tabs funcional (pill crece con el texto, limitado a 16 chars)
+- Terminal empieza inmediatamente debajo de la titlebar (5px gap)
+- Status bar, menu nativo macOS, separadores: sin regresión
 
 ---
 
 ## Sesiones anteriores (resumen)
 
-### 2026-04-20 — Fase C-1 inicio + commit inicial
-- Unified titlebar implementado y committeado (59097cd).
-- Bugs identificados: BTN_COLOR invisible, TITLEBAR_HEIGHT no escalado en varios call sites.
-
-### 2026-04-20 — Fase B cerrada
-- `src/app/menu.rs`: AppMenu con muda. File/View/AI/Window menus.
-- Key: usar `receiver()` en `about_to_wait()`, no `set_event_handler`.
+### 2026-04-20 — Fase C-1 inicial + Fase B cerrada
+- Unified titlebar committeado (59097cd): traffic lights + buttons + tab pills
+- Fase B: AppMenu con muda, menus File/View/AI/Window
 
 ### 2026-04-19 — Fase A + Fase 3.6
-- v0.1.0 publicado (versionado + i18n)
-- GitHub Copilot provider
+- v0.1.0 publicado, GitHub Copilot provider
 
 ### 2026-04-19 — Sprint cierre Phase 3.5
 - Deuda P2/P3 cerrada, benches desbloqueados, CI verde

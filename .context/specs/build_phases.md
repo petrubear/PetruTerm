@@ -63,11 +63,11 @@
 ### C-1: Titlebar custom (NSWindow híbrido)
 **Status: COMPLETA — 2026-04-21**
 
-- [x] `TITLEBAR_HEIGHT = 30.0` (logical pts); `tab_bar_visible()` always true en Custom mode
+- [x] `TITLEBAR_HEIGHT = 30.0`; `tab_bar_visible()` always true en Custom mode
 - [x] Tab pills (SDF rounded rect) solo cuando tabs > 1; drag region sobre zona vacía
 - [x] Botones sidebar/layout en titlebar; hit-test unificado para clicks en zona y < TITLEBAR_HEIGHT * sf
-- [x] `scale_factor()` helper en App; `tab_bar_height_px()` devuelve physical para Custom
-- [x] `apply_tab_bar_padding()` usa `TITLEBAR_HEIGHT * sf` para GPU padding correcto en Retina
+- [x] BTN_COLOR: Dracula Current Line [0.267, 0.278, 0.353, 1.0] (era invisible)
+- [x] `padding.top = 5` en config de usuario (era 60, leftover de antes del custom titlebar)
 
 ### C-2: Modelo Workspace en Mux
 - [ ] `Workspace { id: usize, name: String, tabs: Vec<TabId> }` en `src/app/mux.rs`
