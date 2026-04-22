@@ -1,0 +1,16 @@
+# cargo audit configuration
+# GTK3 warnings (RUSTSEC-2024-04xx) come from muda 0.18 on Linux only.
+# PetruTerm targets macOS in Phase 1 — these crates are never compiled.
+# muda 0.18.0 is the latest release; no fix is available upstream.
+[advisories]
+ignore = [
+    "RUSTSEC-2024-0412", # gdk
+    "RUSTSEC-2024-0413", # atk
+    "RUSTSEC-2024-0415", # gtk
+    "RUSTSEC-2024-0416", # atk-sys
+    "RUSTSEC-2024-0418", # gdk-sys
+    "RUSTSEC-2024-0419", # gtk3-macros
+    "RUSTSEC-2024-0420", # gtk-sys
+    "RUSTSEC-2024-0370", # proc-macro-error (transitive via gtk3-macros)
+    "RUSTSEC-2024-0429", # glib unsound Iterator (transitive via muda → gtk)
+]
