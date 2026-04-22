@@ -160,8 +160,13 @@ impl App {
     }
 
     fn tab_bar_height_px(&self) -> f32 {
+        let sf = self
+            .render_ctx
+            .as_ref()
+            .map(|rc| rc.scale_factor)
+            .unwrap_or(1.0);
         if self.config.window.title_bar_style == TitleBarStyle::Custom {
-            TITLEBAR_HEIGHT
+            TITLEBAR_HEIGHT * sf
         } else if self.mux.tabs.tab_count() > 1 {
             self.cell_dims().1 as f32
         } else {
@@ -182,7 +187,7 @@ impl App {
     fn apply_tab_bar_padding(&mut self) {
         if let Some(rc) = &mut self.render_ctx {
             let title_h = if self.config.window.title_bar_style == TitleBarStyle::Custom {
-                TITLEBAR_HEIGHT
+                TITLEBAR_HEIGHT * rc.scale_factor
             } else if self.mux.tabs.tab_count() > 1 {
                 rc.shaper.cell_height
             } else {
@@ -847,7 +852,8 @@ impl ApplicationHandler<()> for App {
                             let inst_start = rc.instances.len();
                             let rect_start = rc.rect_instances.len();
                             let win_w = rc.renderer.size().0 as f32;
-                            let gpu_pad_y = TITLEBAR_HEIGHT + self.config.window.padding.top as f32;
+                            let gpu_pad_y = TITLEBAR_HEIGHT * rc.scale_factor
+                                + self.config.window.padding.top as f32;
                             rc.build_tab_bar_instances(
                                 self.mux.tabs.tabs(),
                                 active_idx,
