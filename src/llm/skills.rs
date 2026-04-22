@@ -38,21 +38,6 @@ impl SkillManager {
         self.scan_dir_overlay(&local);
     }
 
-    /// Reload only the project-local skills (called on CWD change).
-    pub fn reload_local(&mut self, cwd: &Path) {
-        // Remove all skills that came from a project-local path under the previous cwd,
-        // then re-scan the new cwd. Simplest: retain only global entries (home dir),
-        // then overlay the new local dir.
-        if let Some(home) = dirs::home_dir() {
-            let global_prefix = home.join(".config/petruterm/skills");
-            self.skills.retain(|s| s.path.starts_with(&global_prefix));
-        } else {
-            self.skills.clear();
-        }
-        let local = cwd.join(".petruterm/skills");
-        self.scan_dir_overlay(&local);
-    }
-
     /// Return the best-matching skill for `query`, or `None` if score < threshold.
     pub fn match_query(&self, query: &str) -> Option<&SkillMeta> {
         let mut best: Option<(i64, &SkillMeta)> = None;
@@ -61,10 +46,8 @@ impl SkillManager {
                 .matcher
                 .fuzzy_match(&skill.description, query)
                 .unwrap_or(0);
-            if score >= SKILL_SCORE_THRESHOLD {
-                if best.map_or(true, |(b, _)| score > b) {
-                    best = Some((score, skill));
-                }
+            if score >= SKILL_SCORE_THRESHOLD && best.is_none_or(|(b, _)| score > b) {
+                best = Some((score, skill));
             }
         }
         best.map(|(_, s)| s)
