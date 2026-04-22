@@ -375,7 +375,7 @@ impl App {
             .map(|rc| rc.scale_factor as f64)
             .unwrap_or(1.0);
         let tabs_start_x = if self.config.window.title_bar_style == TitleBarStyle::Custom {
-            132.0 * sf
+            158.0 * sf
         } else {
             self.config.window.padding.left as f64
         };
@@ -1051,6 +1051,8 @@ impl ApplicationHandler<()> for App {
                                 self.config.window.padding.left as f32 + sidebar_px_snapshot,
                                 gpu_pad_y,
                                 self.config.colors.background,
+                                self.sidebar_visible,
+                                self.ui.is_panel_visible(),
                                 rename_input,
                             );
                             rc.tab_bar_instances_cache.clear();
@@ -1646,6 +1648,25 @@ impl ApplicationHandler<()> for App {
                                 self.sidebar_kbd_active = false;
                                 self.clamp_sidebar_cursor();
                                 self.apply_tab_bar_padding();
+                                self.resize_terminals_for_panel();
+                                if let Some(w) = &self.window {
+                                    w.request_redraw();
+                                }
+                                return;
+                            }
+                            // AI panel toggle button: logical [106..128]
+                            if x >= 106.0 * sf && x < 128.0 * sf {
+                                let terminal_id = self.mux.focused_terminal_id();
+                                if self.ui.is_panel_visible() {
+                                    self.ui.panel_mut().close();
+                                } else {
+                                    let cwd = self
+                                        .mux
+                                        .active_cwd()
+                                        .or_else(|| std::env::current_dir().ok())
+                                        .unwrap_or_default();
+                                    self.ui.open_panel_with_context(terminal_id, cwd);
+                                }
                                 self.resize_terminals_for_panel();
                                 if let Some(w) = &self.window {
                                     w.request_redraw();

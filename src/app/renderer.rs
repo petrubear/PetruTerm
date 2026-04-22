@@ -663,7 +663,6 @@ impl RenderContext {
         use crate::llm::chat_panel::{word_wrap, ConfirmDisplay, PanelState, MAX_FILE_ROWS};
         use crate::llm::diff::DiffKind;
         use crate::llm::ChatRole;
-        use std::fmt::Write as _;
 
         let panel_cols = panel.width_cols as usize;
         if panel_cols == 0 || screen_rows < 6 {
@@ -677,7 +676,6 @@ impl RenderContext {
         let input_fg = config.llm.ui.input_fg;
 
         const BORDER_FG: [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // purple
-        const BORDER_DIM: [f32; 4] = [0.32, 0.28, 0.50, 1.0]; // dimmed purple
         const STREAM_FG: [f32; 4] = [0.95, 0.98, 0.55, 1.0]; // yellow
         const ERR_FG: [f32; 4] = [1.00, 0.33, 0.33, 1.0]; // red
         const SEP_FG: [f32; 4] = [0.27, 0.28, 0.36, 1.0]; // current-line
@@ -691,7 +689,6 @@ impl RenderContext {
         let spin = SPIN[(self.frame_counter / 4) as usize % 8];
 
         let co = term_cols; // grid column where panel begins
-        let border_fg = if panel_focused { BORDER_FG } else { BORDER_DIM };
 
         // ── Fixed bottom rows (always present) ───────────────────────────────
         // input_row1/2 and hints_row are rendered by build_chat_panel_input_rows (TD-PERF-10).
@@ -706,17 +703,35 @@ impl RenderContext {
             1 + file_count.min(MAX_FILE_ROWS)
         };
 
-        // ── Row 0: panel header ───────────────────────────────────────────────
-        let provider = &config.llm.provider;
-        let model = &config.llm.model;
-        let title = format!(" {provider}:{model} ");
-        let left = "│───";
-        let dashes = panel_cols.saturating_sub(left.chars().count() + title.chars().count());
+        // ── Row 0: panel header (sidebar-style) ──────────────────────────────
+        const HEADER_BG: [f32; 4] = [0.161, 0.161, 0.212, 1.0];
+        const HEADER_ACCENT: [f32; 4] = [0.74, 0.58, 0.98, 1.0];
+        const HEADER_DIM: [f32; 4] = [0.50, 0.47, 0.60, 1.0];
         {
+            let provider = &config.llm.provider;
+            let model = &config.llm.model;
+            let label = format!(" ✦ AI  {}:{} ", provider, model);
+            let label_chars = label.chars().count();
             let mut buf = std::mem::take(&mut self.fmt_buf);
             buf.clear();
-            let _ = write!(buf, "{}{}{}", left, title, "─".repeat(dashes));
-            self.push_shaped_row(&buf, border_fg, panel_bg, 0, co, panel_cols, font);
+            buf.push_str(&label);
+            let pad = panel_cols.saturating_sub(label_chars);
+            for _ in 0..pad {
+                buf.push(' ');
+            }
+            self.push_shaped_row(
+                &buf,
+                if panel_focused {
+                    HEADER_ACCENT
+                } else {
+                    HEADER_DIM
+                },
+                HEADER_BG,
+                0,
+                co,
+                panel_cols,
+                font,
+            );
             self.fmt_buf = buf;
         }
 
@@ -1823,6 +1838,8 @@ impl RenderContext {
         pad_left: f32,
         gpu_pad_y: f32,
         bar_bg: [f32; 4],
+        sidebar_visible: bool,
+        panel_visible: bool,
         // When `Some`, the active tab pill shows this input string with a cursor instead of its title.
         rename_input: Option<&str>,
     ) {
@@ -1831,7 +1848,7 @@ impl RenderContext {
         // Unified titlebar layout constants (pixels, logical):
         //   [0..76]   traffic lights reserve (native macOS buttons)
         //   [80..102] sidebar toggle button
-        //   [106..128] layout/pane button
+        //   [106..128] AI panel toggle button
         //   [132..win_w-100] tab pills
         //   [win_w-100..win_w] right-side info reserve
         // All pixel constants are in logical points; scale to physical pixels.
@@ -1842,8 +1859,8 @@ impl RenderContext {
         let btn_h = 22.0 * sf;
         let btn_gap = 4.0 * sf;
         let sidebar_btn_x = traffic_lights_reserve + btn_gap;
-        let layout_btn_x = sidebar_btn_x + btn_w + btn_gap;
-        let tabs_start_x = layout_btn_x + btn_w + btn_gap;
+        let ai_btn_x = sidebar_btn_x + btn_w + btn_gap;
+        let tabs_start_x = ai_btn_x + btn_w + btn_gap;
         let right_reserve = 100.0 * sf;
         let titlebar_h = super::TITLEBAR_HEIGHT * sf;
 
@@ -1867,19 +1884,53 @@ impl RenderContext {
         let text_top_y = pill_y + (pill_h - cell_h).max(0.0) / 2.0;
         let text_row_f = (text_top_y - gpu_pad_y) / cell_h;
 
-        // ── Left control buttons (rect only) ────────────────────────────
+        const BTN_ACTIVE: [f32; 4] = [0.36, 0.27, 0.60, 1.0]; // tinted purple when panel open
+
+        // ── Left control buttons ─────────────────────────────────────────
         self.rect_instances.push(RoundedRectInstance {
             rect: [sidebar_btn_x, btn_y, btn_w, btn_h],
-            color: BTN_COLOR,
+            color: if sidebar_visible {
+                BTN_ACTIVE
+            } else {
+                BTN_COLOR
+            },
             radius,
             _pad: [0.0; 3],
         });
         self.rect_instances.push(RoundedRectInstance {
-            rect: [layout_btn_x, btn_y, btn_w, btn_h],
-            color: BTN_COLOR,
+            rect: [ai_btn_x, btn_y, btn_w, btn_h],
+            color: if panel_visible { BTN_ACTIVE } else { BTN_COLOR },
             radius,
             _pad: [0.0; 3],
         });
+        // ── Button icons ─────────────────────────────────────────────────
+        let mk_icon_x =
+            |btn_x: f32| -> f32 { (btn_x + (btn_w - cell_w) / 2.0 - pad_left) / cell_w };
+        const ICON_DIM: [f32; 4] = [0.61, 0.64, 0.75, 1.0];
+        const ICON_LIT: [f32; 4] = [0.97, 0.97, 0.95, 1.0];
+        let sidebar_icon_col = mk_icon_x(sidebar_btn_x);
+        let ai_icon_col = mk_icon_x(ai_btn_x);
+
+        let push_btn_icon = |this: &mut Self, glyph: &str, grid_x: f32, fg: [f32; 4]| {
+            let start = this.instances.len();
+            this.push_shaped_row(glyph, fg, transparent, 0, 0, 1, font);
+            for inst in &mut this.instances[start..] {
+                inst.grid_pos[0] = grid_x;
+                inst.grid_pos[1] = text_row_f;
+            }
+        };
+        push_btn_icon(
+            self,
+            "≡",
+            sidebar_icon_col,
+            if sidebar_visible { ICON_LIT } else { ICON_DIM },
+        );
+        push_btn_icon(
+            self,
+            "✦",
+            ai_icon_col,
+            if panel_visible { ICON_LIT } else { ICON_DIM },
+        );
 
         // ── Tab pills (only when 2+ tabs) ────────────────────────────────
         if tabs.len() <= 1 || total_cols == 0 {

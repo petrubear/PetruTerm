@@ -70,15 +70,32 @@
 - [x] `padding.top = 5` en config de usuario (era 60, leftover de antes del custom titlebar)
 
 ### C-2: Modelo Workspace en Mux
-- [ ] `Workspace { id: usize, name: String, tabs: Vec<TabId> }` en `src/app/mux.rs`
-- [ ] `Mux`: `workspaces: Vec<Workspace>` + `active_workspace_id` (en lugar de `tabs: Vec<Tab>` directo)
-- [ ] Workspace create / rename / close
-- [ ] Leader keybinds: `W n` (nuevo), `W &` (cerrar), `W ,` (renombrar), `W j/k` (navegar)
+**Status: COMPLETA — 2026-04-21**
+
+- [x] `Workspace { id: usize, name: String }` en `src/app/mux.rs` (swap trick: tabs/panes como campos directos)
+- [x] `Mux`: `workspaces: Vec<Workspace>` + `active_workspace_id` + `inactive_workspaces`
+- [x] Workspace create / rename / close / switch / next / prev
+- [x] Leader keybinds: `W n` (nuevo), `W &` (cerrar), `W ,` (renombrar), `W j/k` (navegar)
+- [x] Workspace rename prompt (mismo flujo que tab rename)
+- [x] Palette entries con keybind hints
 
 ### C-3: Sidebar de Workspaces
-- [ ] Panel lateral izquierdo tipo drawer (slide-in/out)
-- [ ] Lista workspaces con dot indicador del activo
-- [ ] Navegación: `j/k` mover, `Enter` activar, `c` crear, `&` cerrar, `r` renombrar inline, `Esc` cerrar
+**Status: COMPLETA — 2026-04-21**
+
+- [x] Panel lateral izquierdo tipo drawer (slide-in/out)
+- [x] Lista workspaces con dot indicador del activo
+- [x] Navegación: `j/k` mover, `Enter` activar, `c` crear, `&` cerrar, `r` renombrar inline, `Esc` cerrar
+- [x] Subtítulo: `N tabs · M panes`; colores Dracula Pro
+
+### C-3.5: AI panel como right sidebar + iconos en titlebar
+**Status: COMPLETA — 2026-04-22**
+
+- [x] Tercer botón en titlebar para toggle del AI panel (logical [106..128])
+- [x] Layout button desplazado a [132..154]; tabs start en 158; hit_test_tab_bar actualizado
+- [x] Iconos en los 2 botones: `≡` workspaces, `✦` AI (⊞ layout eliminado — sin handler)
+- [x] Botones tintan purple cuando su panel está abierto; iconos lit/dim según estado
+- [x] Header del AI panel restyled con SIDEBAR_BG + accent, formato ` ✦ AI  provider:model`
+- [x] Click handler para el botón AI (toggle open/close)
 
 ---
 

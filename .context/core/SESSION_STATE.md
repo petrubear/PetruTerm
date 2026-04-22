@@ -1,46 +1,45 @@
 # Session State
 
-**Last Updated:** 2026-04-21
-**Session Focus:** Fase C-1 bugs resueltos. Siguiente: C-2 (Workspace model).
+**Last Updated:** 2026-04-22
+**Session Focus:** Bugfix — eliminado botón ⊞ fantasma de titlebar.
 
 ## Branch: `master`
 
 ## Estado actual
 
-**Phase 1–3 + 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Fase B COMPLETE. Fase C-1 COMPLETE.**
-**Siguiente: Fase C-2 (Workspace model en Mux) + C-3 (Workspace sidebar).**
+**Phase 1–3 + 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Fase B COMPLETE. Fase C-1 COMPLETE. Fase C-2 COMPLETE. Fase C-3 COMPLETE. Fase C-3.5 COMPLETE.**
+**Siguiente: Fase D-1 (MCP config loader).**
 
 ---
 
-## Fase C-1 — Unified titlebar — COMPLETA (bugs resueltos 2026-04-21)
+## Fase C-3.5 — AI panel right sidebar + iconos — COMPLETA (2026-04-22)
 
-### Bugs resueltos
+### Lo que se hizo
 
-1. **BTN_COLOR invisible** (`e3e70bb`): `[0.22,0.22,0.28,0.7]` → `[0.267,0.278,0.353,1.0]`
-   (Dracula Current Line, full opacity — era invisible contra el background #22212c).
+1. **Botones de titlebar** (sidebar + AI panel, 2 total):
+   - `≡` sidebar workspaces en [80..102], `✦` AI panel en [106..128]
+   - Dimmed cuando panel cerrado, lit cuando abierto; tinta purple cuando activo
+   - Técnica: push_shaped_row col=0 row=0, override grid_pos a coords físicas
 
-2. **Espacio excesivo debajo de la titlebar**: el config del usuario tenía `padding.top = 60`
-   — valor de antes de que la titlebar custom manejara el clearance de traffic lights internamente.
-   Cambiado a `top = 5` en `~/.config/petruterm/ui.lua`.
-   El terminal ahora empieza en y = TITLEBAR_HEIGHT(30) + top(5) = 35px, sin el gap de 60px.
+2. **Header del AI panel restyled** para igualar estética del sidebar izquierdo.
 
-### Non-obvious: padding.top en modo Custom
+3. **Click handler** para botón AI (toggle open/close).
 
-`TITLEBAR_HEIGHT = 30.0` en `src/app/mod.rs` maneja el clearance de traffic lights.
-`padding.top` es el gap ADICIONAL entre el borde inferior de la titlebar y la primera fila
-del terminal. Con Custom titlebar, `top = 5` es suficiente (no usar 60 como antes).
+**Bugfix (2026-04-22):** Eliminado tercer botón `⊞` (layout/pane) que se introdujo
+accidentalmente al agregar los iconos. Nunca tuvo handler. Tabs ahora empiezan en 132.
 
-### Lo que funciona
-
-- Botones sidebar/layout visibles en titlebar (Dracula Current Line)
-- Pills de tabs posicionadas correctamente a la derecha de traffic lights
-- Rename de tabs funcional (pill crece con el texto, limitado a 16 chars)
-- Terminal empieza inmediatamente debajo de la titlebar (5px gap)
-- Status bar, menu nativo macOS, separadores: sin regresión
+### Archivos modificados
+- `src/app/renderer.rs`: buttons, iconos, header chat panel
+- `src/app/mod.rs`: hit_test_tab_bar, click handler, call site build_tab_bar_instances
 
 ---
 
 ## Sesiones anteriores (resumen)
+
+### 2026-04-21 — Fase C-1 bugs + C-2 + C-3
+- BTN_COLOR fix, padding.top fix
+- Workspace model en Mux
+- Sidebar izquierdo drawer (workspaces)
 
 ### 2026-04-20 — Fase C-1 inicial + Fase B cerrada
 - Unified titlebar committeado (59097cd): traffic lights + buttons + tab pills
@@ -48,6 +47,3 @@ del terminal. Con Custom titlebar, `top = 5` es suficiente (no usar 60 como ante
 
 ### 2026-04-19 — Fase A + Fase 3.6
 - v0.1.0 publicado, GitHub Copilot provider
-
-### 2026-04-19 — Sprint cierre Phase 3.5
-- Deuda P2/P3 cerrada, benches desbloqueados, CI verde
