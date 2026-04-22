@@ -2,6 +2,19 @@ use crate::config::Config;
 use crate::term::{PtyEvent, Terminal};
 use crate::ui::search_bar::SearchMatch;
 use crate::ui::{PaneInfo, PaneManager, PaneSeparator, Rect, TabManager};
+
+/// A named workspace that groups a set of tabs and panes.
+pub struct Workspace {
+    pub id: usize,
+    pub name: String,
+}
+
+/// Archived tabs+panes for an inactive workspace (used during workspace switch).
+struct WorkspaceData {
+    id: usize,
+    tabs: TabManager,
+    panes: Vec<PaneManager>,
+}
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::index::{Column, Line, Point};
 use alacritty_terminal::selection::SelectionRange;
@@ -27,15 +40,23 @@ const SEARCH_CURRENT_BG: AnsiColor = AnsiColor::Spec(Rgb {
     b: 108,
 }); // Dracula orange
 
-/// Manages multiple terminal instances, tabs, and panes (Multiplexer).
+/// Manages multiple terminal instances, tabs, panes, and workspaces.
 pub struct Mux {
+    /// Active workspace's tab manager (direct field — all existing callers unchanged).
     pub tabs: TabManager,
-    pub panes: Vec<PaneManager>,          // one PaneManager per tab
+    /// Active workspace's pane managers — one per tab (direct field).
+    pub panes: Vec<PaneManager>,
     pub terminals: Vec<Option<Terminal>>, // indexed by terminal_id
     pub next_terminal_id: usize,
     /// Terminal IDs closed by cmd_close_tab / cmd_close_pane (TD-MEM-08).
     /// App drains this after each input cycle to clean up per-terminal state.
     pub closed_ids: Vec<usize>,
+    /// Ordered list of all workspaces (metadata only).
+    pub workspaces: Vec<Workspace>,
+    pub active_workspace_id: usize,
+    next_workspace_id: usize,
+    /// tabs+panes for inactive workspaces; restored on switch.
+    inactive_workspaces: Vec<WorkspaceData>,
 }
 
 impl Mux {
@@ -46,6 +67,10 @@ impl Mux {
             terminals: Vec::new(),
             next_terminal_id: 0,
             closed_ids: Vec::new(),
+            workspaces: vec![Workspace { id: 0, name: "main".to_string() }],
+            active_workspace_id: 0,
+            next_workspace_id: 1,
+            inactive_workspaces: Vec::new(),
         }
     }
 
@@ -641,6 +666,94 @@ impl Mux {
             }
             matches
         })
+    }
+
+    /// Index of the active workspace in `self.workspaces`.
+    pub fn active_workspace_index(&self) -> usize {
+        self.workspaces
+            .iter()
+            .position(|w| w.id == self.active_workspace_id)
+            .unwrap_or(0)
+    }
+
+    /// Archive the active workspace and activate a new empty one.
+    /// Caller must open an initial tab after calling this.
+    pub fn cmd_new_workspace(&mut self, name: String) {
+        let id = self.next_workspace_id;
+        self.next_workspace_id += 1;
+        self.workspaces.push(Workspace { id, name });
+        self.inactive_workspaces.push(WorkspaceData {
+            id: self.active_workspace_id,
+            tabs: std::mem::replace(&mut self.tabs, TabManager::new()),
+            panes: std::mem::take(&mut self.panes),
+        });
+        self.active_workspace_id = id;
+    }
+
+    /// Close the active workspace. No-op if only one workspace remains.
+    /// Caller must drain `closed_ids` to clean up external state.
+    pub fn cmd_close_workspace(&mut self) {
+        if self.workspaces.len() <= 1 {
+            return;
+        }
+        let all_tids: Vec<usize> = self.panes.iter().flat_map(|pm| pm.root.leaf_ids()).collect();
+        for tid in all_tids {
+            if let Some(slot) = self.terminals.get_mut(tid) {
+                *slot = None;
+            }
+            self.closed_ids.push(tid);
+        }
+        let pos = self.active_workspace_index();
+        self.workspaces.remove(pos);
+        let target_pos = pos.min(self.workspaces.len() - 1);
+        let target_id = self.workspaces[target_pos].id;
+        if let Some(idx) = self.inactive_workspaces.iter().position(|d| d.id == target_id) {
+            let data = self.inactive_workspaces.remove(idx);
+            self.tabs = data.tabs;
+            self.panes = data.panes;
+        }
+        self.active_workspace_id = target_id;
+    }
+
+    pub fn cmd_rename_workspace(&mut self, name: String) {
+        if let Some(w) = self.workspaces.iter_mut().find(|w| w.id == self.active_workspace_id) {
+            w.name = name;
+        }
+    }
+
+    pub fn cmd_switch_workspace(&mut self, id: usize) {
+        if id == self.active_workspace_id {
+            return;
+        }
+        self.inactive_workspaces.push(WorkspaceData {
+            id: self.active_workspace_id,
+            tabs: std::mem::replace(&mut self.tabs, TabManager::new()),
+            panes: std::mem::take(&mut self.panes),
+        });
+        if let Some(idx) = self.inactive_workspaces.iter().position(|d| d.id == id) {
+            let data = self.inactive_workspaces.remove(idx);
+            self.tabs = data.tabs;
+            self.panes = data.panes;
+            self.active_workspace_id = id;
+        } else {
+            // Target not found — undo the archive (shouldn't happen in practice).
+            let data = self.inactive_workspaces.pop().unwrap();
+            self.tabs = data.tabs;
+            self.panes = data.panes;
+        }
+    }
+
+    pub fn cmd_next_workspace(&mut self) {
+        let pos = self.active_workspace_index();
+        let id = self.workspaces[(pos + 1) % self.workspaces.len()].id;
+        self.cmd_switch_workspace(id);
+    }
+
+    pub fn cmd_prev_workspace(&mut self) {
+        let pos = self.active_workspace_index();
+        let len = self.workspaces.len();
+        let id = self.workspaces[if pos == 0 { len - 1 } else { pos - 1 }].id;
+        self.cmd_switch_workspace(id);
     }
 
     pub fn shutdown(&mut self) {

@@ -1736,7 +1736,11 @@ impl RenderContext {
             }
 
             let is_active = i == active_idx;
-            let pill_color = if is_active { ACTIVE_PILL } else { INACTIVE_PILL };
+            let pill_color = if is_active {
+                ACTIVE_PILL
+            } else {
+                INACTIVE_PILL
+            };
             let fg = if is_active { ACTIVE_FG } else { INACTIVE_FG };
 
             col += 1; // gap before pill

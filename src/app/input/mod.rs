@@ -59,6 +59,8 @@ pub struct InputHandler {
     /// Timestamp of the last keypress that was forwarded to the terminal.
     /// Used to measure input-to-pixel latency under RUST_LOG=petruterm=debug.
     pub last_key_instant: Option<std::time::Instant>,
+    /// Set when the first key of a two-key leader sequence is pressed (e.g. 'W' for workspace).
+    pub leader_prefix: Option<char>,
 }
 
 impl InputHandler {
@@ -93,6 +95,7 @@ impl InputHandler {
             resize_mode: false,
             input_echo: String::new(),
             last_key_instant: None,
+            leader_prefix: None,
         }
     }
 
@@ -192,6 +195,7 @@ impl InputHandler {
                 if Instant::now() >= deadline {
                     self.leader_active = false;
                     self.leader_deadline = None;
+                    self.leader_prefix = None;
                 }
             }
         }
@@ -250,6 +254,31 @@ impl InputHandler {
             return;
         }
 
+        // ── Workspace rename prompt ──────────────────────────────────────────
+        if ui.is_renaming_workspace() {
+            match &event.logical_key {
+                Key::Named(NamedKey::Escape) => {
+                    ui.workspace_rename_cancel();
+                }
+                Key::Named(NamedKey::Enter) => {
+                    ui.workspace_rename_confirm(mux);
+                }
+                Key::Named(NamedKey::Backspace) => {
+                    ui.workspace_rename_backspace();
+                }
+                Key::Named(NamedKey::Space) => {
+                    ui.workspace_rename_type(' ');
+                }
+                Key::Character(s) if !cmd && !ctrl => {
+                    for ch in s.chars() {
+                        ui.workspace_rename_type(ch);
+                    }
+                }
+                _ => {}
+            }
+            return;
+        }
+
         // ── Leader key activation — checked BEFORE panel/palette handlers so that
         // Ctrl+B always activates the leader even when the AI panel is focused.
         if ctrl && !shift && !cmd {
@@ -284,6 +313,7 @@ impl InputHandler {
             }
             self.leader_active = false;
             self.leader_deadline = None;
+            let leader_prefix = self.leader_prefix.take();
 
             // <leader> + Option/Alt + ←→↑↓ → resize pane (TD-042).
             // On macOS, Option+Arrow may arrive as Key::Character (OS word-nav transform),
@@ -316,6 +346,32 @@ impl InputHandler {
             }
 
             if let Key::Character(s) = &event.logical_key {
+                // Workspace sub-leader: W was pressed on the previous key.
+                if let Some('W') = leader_prefix {
+                    let action = match s.as_str() {
+                        "n" => Some(Action::NewWorkspace),
+                        "&" => Some(Action::CloseWorkspace),
+                        "," => Some(Action::RenameWorkspace),
+                        "j" => Some(Action::NextWorkspace),
+                        "k" => Some(Action::PrevWorkspace),
+                        _ => None,
+                    };
+                    if let Some(action) = action {
+                        if let Some(rc) = render_ctx.as_mut() {
+                            ui.handle_palette_action(action, mux, rc, config, window, wakeup_proxy);
+                        }
+                    }
+                    return;
+                }
+                // Leader W → enter workspace prefix mode (wait for sub-key).
+                if s.as_str() == "W" {
+                    self.leader_prefix = Some('W');
+                    self.leader_active = true;
+                    self.leader_deadline = Some(
+                        Instant::now() + std::time::Duration::from_millis(self.leader_timeout_ms),
+                    );
+                    return;
+                }
                 // Leader + 1-9: select tab by index (hardcoded, like Cmd+1-9)
                 if let Ok(n) = s.parse::<usize>() {
                     if (1..=9).contains(&n) {

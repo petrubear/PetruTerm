@@ -189,7 +189,8 @@ impl App {
                 0.0
             };
             let pad = &self.config.window.padding;
-            rc.renderer.set_padding(pad.left as f32, pad.top as f32 + title_h);
+            rc.renderer
+                .set_padding(pad.left as f32, pad.top as f32 + title_h);
         }
     }
 
@@ -254,7 +255,6 @@ impl App {
             .map(|rc| (rc.shaper.cell_width as u16, rc.shaper.cell_height as u16))
             .unwrap_or((8, 16))
     }
-
 
     fn open_initial_tab(&mut self) -> Result<()> {
         let viewport = self.viewport_rect();
@@ -334,7 +334,11 @@ impl App {
     /// Given a pixel x coordinate, return which tab index is under the cursor in the tab bar.
     fn hit_test_tab_bar(&self, x_px: f64) -> Option<usize> {
         let (cell_w, _) = self.cell_dims();
-        let sf = self.render_ctx.as_ref().map(|rc| rc.scale_factor as f64).unwrap_or(1.0);
+        let sf = self
+            .render_ctx
+            .as_ref()
+            .map(|rc| rc.scale_factor as f64)
+            .unwrap_or(1.0);
         let tabs_start_x = if self.config.window.title_bar_style == TitleBarStyle::Custom {
             132.0 * sf
         } else {

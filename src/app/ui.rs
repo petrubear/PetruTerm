@@ -113,6 +113,8 @@ pub struct UiManager {
     // ── Tab rename prompt ─────────────────────────────────────────────────────
     /// When `Some`, the user is typing a new name for the active tab.
     pub tab_rename_input: Option<String>,
+    /// When `Some`, the user is typing a new name for the active workspace.
+    pub workspace_rename_input: Option<String>,
 
     // ── Text search (Cmd+F) ───────────────────────────────────────────────────
     pub search_bar: SearchBar,
@@ -191,6 +193,7 @@ impl UiManager {
             git_branch_cwd: None,
             streaming_handle: None,
             tab_rename_input: None,
+            workspace_rename_input: None,
             search_bar: SearchBar::default(),
             file_scan_rx: None,
             pending_paste_rx: None,
@@ -615,6 +618,41 @@ impl UiManager {
 
     pub fn is_renaming_tab(&self) -> bool {
         self.tab_rename_input.is_some()
+    }
+
+    // ── Workspace rename prompt ───────────────────────────────────────────────
+
+    pub fn start_workspace_rename(&mut self, current_name: &str) {
+        self.workspace_rename_input = Some(current_name.to_string());
+    }
+
+    pub fn workspace_rename_type(&mut self, ch: char) {
+        if let Some(s) = &mut self.workspace_rename_input {
+            s.push(ch);
+        }
+    }
+
+    pub fn workspace_rename_backspace(&mut self) {
+        if let Some(s) = &mut self.workspace_rename_input {
+            s.pop();
+        }
+    }
+
+    pub fn workspace_rename_confirm(&mut self, mux: &mut Mux) {
+        if let Some(input) = self.workspace_rename_input.take() {
+            let trimmed = input.trim().to_string();
+            if !trimmed.is_empty() {
+                mux.cmd_rename_workspace(trimmed);
+            }
+        }
+    }
+
+    pub fn workspace_rename_cancel(&mut self) {
+        self.workspace_rename_input = None;
+    }
+
+    pub fn is_renaming_workspace(&self) -> bool {
+        self.workspace_rename_input.is_some()
     }
 
     // ── Chat panel operations ─────────────────────────────────────────────────
@@ -1092,6 +1130,35 @@ impl UiManager {
             Action::SwitchToTab(n) => {
                 mux.tabs.switch_to_index(n.saturating_sub(1));
             }
+            Action::NewWorkspace => {
+                let (cols, rows) = mux.active_terminal_size();
+                let (cell_w, cell_h) = (
+                    render_ctx.shaper.cell_width as u16,
+                    render_ctx.shaper.cell_height as u16,
+                );
+                let name = format!("workspace {}", mux.workspaces.len() + 1);
+                mux.cmd_new_workspace(name);
+                let viewport = Rect { x: 0.0, y: 0.0, w: 800.0, h: 600.0 };
+                let cwd = std::env::current_dir().ok();
+                mux.cmd_new_tab(config, viewport, cols as u16, rows as u16, cell_w, cell_h, wakeup_proxy, cwd);
+            }
+            Action::CloseWorkspace => {
+                mux.cmd_close_workspace();
+            }
+            Action::RenameWorkspace => {
+                let current = mux.workspaces
+                    .iter()
+                    .find(|w| w.id == mux.active_workspace_id)
+                    .map(|w| w.name.clone())
+                    .unwrap_or_default();
+                self.start_workspace_rename(&current);
+            }
+            Action::NextWorkspace => {
+                mux.cmd_next_workspace();
+            }
+            Action::PrevWorkspace => {
+                mux.cmd_prev_workspace();
+            }
             Action::SplitHorizontal => {
                 let (cols, rows) = mux.active_terminal_size();
                 let (cell_w, cell_h) = (
@@ -1345,6 +1412,7 @@ mod tests {
             git_branch_cwd: None,
             streaming_handle: None,
             tab_rename_input: None,
+            workspace_rename_input: None,
             search_bar: SearchBar::default(),
             file_scan_rx: None,
             pending_paste_rx: None,
@@ -1412,6 +1480,7 @@ mod tests {
             git_branch_cwd: Some(std::path::PathBuf::from("/tmp/test")),
             streaming_handle: None,
             tab_rename_input: None,
+            workspace_rename_input: None,
             search_bar: SearchBar::default(),
             file_scan_rx: None,
             pending_paste_rx: None,

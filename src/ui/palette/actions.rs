@@ -27,6 +27,12 @@ pub enum Action {
     NextTab,
     PrevTab,
     SwitchToTab(usize),
+    // Workspaces
+    NewWorkspace,
+    CloseWorkspace,
+    RenameWorkspace,
+    NextWorkspace,
+    PrevWorkspace,
     // Panes
     SplitHorizontal,
     SplitVertical,
@@ -66,6 +72,11 @@ impl std::str::FromStr for Action {
             "CloseTab" => Ok(Action::CloseTab),
             "NextTab" => Ok(Action::NextTab),
             "PrevTab" => Ok(Action::PrevTab),
+            "NewWorkspace" => Ok(Action::NewWorkspace),
+            "CloseWorkspace" => Ok(Action::CloseWorkspace),
+            "RenameWorkspace" => Ok(Action::RenameWorkspace),
+            "NextWorkspace" => Ok(Action::NextWorkspace),
+            "PrevWorkspace" => Ok(Action::PrevWorkspace),
             s if s.starts_with("Tab") => s[3..]
                 .parse::<usize>()
                 .map(Action::SwitchToTab)
@@ -229,6 +240,31 @@ pub fn built_in_actions(config: &Config) -> Vec<PaletteAction> {
             name: t!("palette.rename_tab").to_string(),
             action: Action::RenameTab,
             keybind: kb("RenameTab"),
+        },
+        PaletteAction {
+            name: "New Workspace".to_string(),
+            action: Action::NewWorkspace,
+            keybind: Some("^F W n".into()),
+        },
+        PaletteAction {
+            name: "Close Workspace".to_string(),
+            action: Action::CloseWorkspace,
+            keybind: Some("^F W &".into()),
+        },
+        PaletteAction {
+            name: "Rename Workspace".to_string(),
+            action: Action::RenameWorkspace,
+            keybind: Some("^F W ,".into()),
+        },
+        PaletteAction {
+            name: "Next Workspace".to_string(),
+            action: Action::NextWorkspace,
+            keybind: Some("^F W j".into()),
+        },
+        PaletteAction {
+            name: "Previous Workspace".to_string(),
+            action: Action::PrevWorkspace,
+            keybind: Some("^F W k".into()),
         },
         PaletteAction {
             name: t!("palette.switch_theme").to_string(),
