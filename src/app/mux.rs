@@ -85,8 +85,44 @@ impl Mux {
         let idx = self.active_tab_index();
         self.panes
             .get(idx)
-            .map(|p| p.root.leaf_ids().len())
+            .map(|p| p.root.leaf_count())
             .unwrap_or(0)
+    }
+
+    pub fn workspaces(&self) -> &[Workspace] {
+        &self.workspaces
+    }
+
+    pub fn workspace_count(&self) -> usize {
+        self.workspaces.len()
+    }
+
+    /// Return `(tab_count, pane_count)` for each workspace in display order.
+    pub fn workspace_tab_pane_counts(&self) -> Vec<(usize, usize)> {
+        self.workspaces
+            .iter()
+            .map(|w| {
+                if w.id == self.active_workspace_id {
+                    let tabs = self.tabs.tab_count();
+                    let panes = self
+                        .panes
+                        .iter()
+                        .map(|pm| pm.root.leaf_count())
+                        .sum::<usize>();
+                    (tabs, panes)
+                } else if let Some(data) = self.inactive_workspaces.iter().find(|d| d.id == w.id) {
+                    let tabs = data.tabs.tab_count();
+                    let panes = data
+                        .panes
+                        .iter()
+                        .map(|pm| pm.root.leaf_count())
+                        .sum::<usize>();
+                    (tabs, panes)
+                } else {
+                    (0, 0)
+                }
+            })
+            .collect()
     }
 
     pub fn focused_terminal_id(&self) -> usize {
@@ -733,6 +769,39 @@ impl Mux {
             .find(|w| w.id == self.active_workspace_id)
         {
             w.name = name;
+        }
+    }
+
+    pub fn cmd_rename_workspace_id(&mut self, id: usize, name: String) {
+        if let Some(w) = self.workspaces.iter_mut().find(|w| w.id == id) {
+            w.name = name;
+        }
+    }
+
+    pub fn cmd_close_workspace_id(&mut self, id: usize) {
+        if self.workspaces.len() <= 1 {
+            return;
+        }
+        if id == self.active_workspace_id {
+            self.cmd_close_workspace();
+            return;
+        }
+        if let Some(pos) = self.workspaces.iter().position(|w| w.id == id) {
+            self.workspaces.remove(pos);
+        }
+        if let Some(snapshot_idx) = self.inactive_workspaces.iter().position(|d| d.id == id) {
+            let data = self.inactive_workspaces.remove(snapshot_idx);
+            let all_tids: Vec<usize> = data
+                .panes
+                .iter()
+                .flat_map(|pm| pm.root.leaf_ids())
+                .collect();
+            for tid in all_tids {
+                if let Some(slot) = self.terminals.get_mut(tid) {
+                    *slot = None;
+                }
+                self.closed_ids.push(tid);
+            }
         }
     }
 

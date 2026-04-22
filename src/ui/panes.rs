@@ -137,6 +137,14 @@ impl PaneNode {
         }
     }
 
+    /// Count leaf panes recursively.
+    pub fn leaf_count(&self) -> usize {
+        match self {
+            PaneNode::Leaf { .. } => 1,
+            PaneNode::Split { left, right, .. } => left.leaf_count() + right.leaf_count(),
+        }
+    }
+
     pub fn rect(&self) -> Rect {
         match self {
             PaneNode::Leaf { rect, .. } | PaneNode::Split { rect, .. } => *rect,

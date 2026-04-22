@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use winit::window::Window;
 
+use crate::app::mux::Workspace;
 use crate::config::Config;
 use crate::font::{build_font_system, TextShaper};
 use crate::llm::ai_block::{AiBlock, AiState, AI_BLOCK_ROWS};
@@ -126,6 +127,9 @@ pub struct RenderContext {
     pub status_bar_key: u64,
     pub status_bar_instances_cache: Vec<CellVertex>,
     pub status_bar_rect_cache: Vec<RoundedRectInstance>,
+    pub sidebar_instances_cache: Vec<CellVertex>,
+    pub sidebar_rect_cache: Vec<RoundedRectInstance>,
+    pub sidebar_cache_key: Option<(usize, usize, usize)>,
 }
 
 impl RenderContext {
@@ -203,6 +207,9 @@ impl RenderContext {
             status_bar_key: 0,
             status_bar_instances_cache: Vec::new(),
             status_bar_rect_cache: Vec::new(),
+            sidebar_instances_cache: Vec::new(),
+            sidebar_rect_cache: Vec::new(),
+            sidebar_cache_key: None,
             content_end: 0,
             cursor_vertex_template: None,
         })
@@ -1325,6 +1332,164 @@ impl RenderContext {
             }
             AiState::Hidden => {}
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn build_workspace_sidebar_instances(
+        &mut self,
+        workspaces: &[Workspace],
+        active_workspace_id: usize,
+        nav_cursor: usize,
+        rename_input: Option<&str>,
+        sidebar_cols: usize,
+        counts: &[(usize, usize)],
+        sidebar_left_px: f32,
+        sidebar_top_px: f32,
+        sidebar_bottom_pad_px: f32,
+        font: &crate::config::schema::FontConfig,
+    ) {
+        if sidebar_cols == 0 {
+            return;
+        }
+
+        const SIDEBAR_BG: [f32; 4] = [0.161, 0.161, 0.212, 1.0];
+        const SIDEBAR_ITEM_ACTIVE_BG: [f32; 4] = [0.267, 0.278, 0.353, 1.0];
+        const SIDEBAR_ITEM_HOVER_BG: [f32; 4] = [0.196, 0.200, 0.259, 1.0];
+        const SIDEBAR_FG: [f32; 4] = [0.97, 0.97, 0.95, 1.0];
+        const SIDEBAR_DIM_FG: [f32; 4] = [0.61, 0.64, 0.75, 1.0];
+        const SIDEBAR_ACCENT: [f32; 4] = [0.74, 0.58, 0.98, 1.0];
+        const SIDEBAR_DOT_ACTIVE: [f32; 4] = [0.31, 0.98, 0.48, 1.0];
+        const SIDEBAR_SEP_FG: [f32; 4] = [0.35, 0.30, 0.48, 1.0];
+
+        let cw = self.shaper.cell_width;
+        let ch = self.shaper.cell_height;
+        let sidebar_px = sidebar_cols as f32 * cw;
+        let (_win_w, win_h) = self.renderer.size();
+        let visible_h = (win_h as f32 - sidebar_top_px - sidebar_bottom_pad_px).max(0.0);
+        let total_rows = (visible_h / ch).floor() as usize;
+        let key = (workspaces.len(), active_workspace_id, nav_cursor);
+
+        if rename_input.is_none() && self.sidebar_cache_key == Some(key) {
+            self.instances
+                .extend_from_slice(&self.sidebar_instances_cache);
+            self.rect_instances
+                .extend_from_slice(&self.sidebar_rect_cache);
+            return;
+        }
+
+        let inst_start = self.instances.len();
+        let rect_start = self.rect_instances.len();
+
+        self.rect_instances.push(RoundedRectInstance {
+            rect: [sidebar_left_px, sidebar_top_px, sidebar_px, visible_h],
+            color: SIDEBAR_BG,
+            radius: 0.0,
+            _pad: [0.0; 3],
+        });
+
+        let push_sidebar_row =
+            |this: &mut Self, text: &str, fg: [f32; 4], bg: [f32; 4], row: usize| {
+                let start = this.instances.len();
+                this.push_shaped_row(text, fg, bg, row, 0, sidebar_cols, font);
+                for inst in &mut this.instances[start..] {
+                    inst.grid_pos[0] -= sidebar_cols as f32;
+                }
+            };
+
+        let mut header = " Workspaces".to_string();
+        let header_chars = header.chars().count();
+        if sidebar_cols > header_chars + 2 {
+            header.push_str(&" ".repeat(sidebar_cols - header_chars - 2));
+        }
+        header.push('+');
+        push_sidebar_row(self, &header, SIDEBAR_ACCENT, SIDEBAR_BG, 0);
+        push_sidebar_row(
+            self,
+            &"─".repeat(sidebar_cols),
+            SIDEBAR_SEP_FG,
+            SIDEBAR_BG,
+            1,
+        );
+
+        for (idx, ws) in workspaces.iter().enumerate() {
+            let base_row = 2 + idx * 2;
+            let selected = idx == nav_cursor;
+            let active = ws.id == active_workspace_id;
+            let row_bg = if active {
+                SIDEBAR_ITEM_ACTIVE_BG
+            } else if selected {
+                SIDEBAR_ITEM_HOVER_BG
+            } else {
+                SIDEBAR_BG
+            };
+            let name = if selected {
+                if let Some(input) = rename_input {
+                    format!("{input}_")
+                } else {
+                    ws.name.clone()
+                }
+            } else {
+                ws.name.clone()
+            };
+            let trimmed_name: String = name.chars().take(sidebar_cols.saturating_sub(4)).collect();
+            let dot = if active { "●" } else { "·" };
+            let mut line = format!(" {dot} {trimmed_name}");
+            let line_w = line.chars().count();
+            if line_w < sidebar_cols {
+                line.push_str(&" ".repeat(sidebar_cols - line_w));
+            }
+            push_sidebar_row(self, &line, SIDEBAR_FG, row_bg, base_row);
+            let dot_col = if active {
+                SIDEBAR_DOT_ACTIVE
+            } else {
+                SIDEBAR_DIM_FG
+            };
+            let dot_start = self.instances.len();
+            self.push_shaped_row(dot, dot_col, row_bg, base_row, 2, 1, font);
+            for inst in &mut self.instances[dot_start..] {
+                inst.grid_pos[0] -= sidebar_cols as f32;
+            }
+
+            let (tabs, panes) = counts.get(idx).copied().unwrap_or((0, 0));
+            let tabs_str = if tabs == 1 {
+                "1 tab".to_string()
+            } else {
+                format!("{tabs} tabs")
+            };
+            let panes_str = if panes == 1 {
+                "1 pane".to_string()
+            } else {
+                format!("{panes} panes")
+            };
+            let subtitle = format!("  {tabs_str} · {panes_str}");
+            push_sidebar_row(self, &subtitle, SIDEBAR_DIM_FG, row_bg, base_row + 1);
+        }
+
+        if total_rows > 0 {
+            let footer_row = total_rows.saturating_sub(1);
+            let last_item_row = 2 + workspaces.len().saturating_mul(2);
+            if footer_row > last_item_row {
+                push_sidebar_row(
+                    self,
+                    " j/k ↕  Enter ✓  Esc ✕ ",
+                    SIDEBAR_DIM_FG,
+                    SIDEBAR_BG,
+                    footer_row,
+                );
+            }
+        }
+
+        self.sidebar_instances_cache.clear();
+        self.sidebar_instances_cache
+            .extend_from_slice(&self.instances[inst_start..]);
+        self.sidebar_rect_cache.clear();
+        self.sidebar_rect_cache
+            .extend_from_slice(&self.rect_instances[rect_start..]);
+        self.sidebar_cache_key = if rename_input.is_none() {
+            Some(key)
+        } else {
+            None
+        };
     }
 
     pub fn build_palette_instances(

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
+use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowAttributes, WindowId};
 
 use alacritty_terminal::selection::SelectionType;
@@ -25,6 +26,7 @@ pub use renderer::RenderContext;
 pub use ui::UiManager;
 
 pub const TITLEBAR_HEIGHT: f32 = 30.0;
+pub const SIDEBAR_COLS: usize = 28;
 
 /// Top-level application state. Delegates to specialized managers.
 pub struct App {
@@ -68,6 +70,8 @@ pub struct App {
     cached_cwd: Option<std::path::PathBuf>,
 
     sidebar_visible: bool,
+    sidebar_nav_cursor: usize,
+    sidebar_rename_input: Option<String>,
 
     /// Debounce timer for config hot-reload — actual reload deferred 300 ms after last event (TD-PERF-17).
     config_reload_at: Option<std::time::Instant>,
@@ -108,6 +112,8 @@ impl App {
             cursor_blink_dirty: false,
             cached_cwd: None,
             sidebar_visible: false,
+            sidebar_nav_cursor: 0,
+            sidebar_rename_input: None,
             config_reload_at: None,
             terminal_shell_ctxs: std::collections::HashMap::new(),
             separator_snapshot: Vec::new(),
@@ -194,8 +200,13 @@ impl App {
                 0.0
             };
             let pad = &self.config.window.padding;
+            let sidebar_px = if self.sidebar_visible {
+                SIDEBAR_COLS as f32 * rc.shaper.cell_width
+            } else {
+                0.0
+            };
             rc.renderer
-                .set_padding(pad.left as f32, pad.top as f32 + title_h);
+                .set_padding(pad.left as f32 + sidebar_px, pad.top as f32 + title_h);
         }
     }
 
@@ -209,9 +220,11 @@ impl App {
             } else {
                 0.0
             };
+            let sidebar_px = self.sidebar_width_px();
             let tab_h = self.tab_bar_height_px();
             let sb_h = self.status_bar_height_px();
-            let cols = ((w as f32 - pad.left as f32 - pad.right as f32 - panel_px) / cell_w as f32)
+            let cols = ((w as f32 - pad.left as f32 - pad.right as f32 - panel_px - sidebar_px)
+                / cell_w as f32)
                 .max(1.0) as u16;
             let rows = ((h as f32 - pad.top as f32 - pad.bottom as f32 - tab_h - sb_h)
                 / cell_h as f32)
@@ -225,6 +238,15 @@ impl App {
     fn chat_panel_width_px(&self) -> f32 {
         let (cell_w, _) = self.cell_dims();
         self.ui.panel().width_cols as f32 * cell_w as f32
+    }
+
+    fn sidebar_width_px(&self) -> f32 {
+        if self.sidebar_visible {
+            let (cell_w, _) = self.cell_dims();
+            SIDEBAR_COLS as f32 * cell_w as f32
+        } else {
+            0.0
+        }
     }
 
     /// Forward a `run_command` confirmation to the active PTY and clear the pending field.
@@ -287,15 +309,17 @@ impl App {
             } else {
                 0.0
             };
+            let sidebar_px = self.sidebar_width_px();
             Rect {
-                x: pad.left as f32,
+                x: pad.left as f32 + sidebar_px,
                 y: pad.top as f32 + tab_h,
-                w: (w as f32 - pad.left as f32 - pad.right as f32 - panel_px).max(0.0),
+                w: (w as f32 - pad.left as f32 - pad.right as f32 - panel_px - sidebar_px).max(0.0),
                 h: (h as f32 - pad.top as f32 - pad.bottom as f32 - tab_h - sb_h).max(0.0),
             }
         } else {
+            let sidebar_px = self.sidebar_width_px();
             Rect {
-                x: pad.left as f32,
+                x: pad.left as f32 + sidebar_px,
                 y: pad.top as f32 + tab_h,
                 w: 800.0,
                 h: 600.0,
@@ -400,8 +424,19 @@ impl App {
         }
         let (cw, _) = self.cell_dims();
         let term_right_px = self.config.window.padding.left as f64
+            + self.sidebar_width_px() as f64
             + self.mux.active_terminal_size().0 as f64 * cw as f64;
         self.input.mouse_pos.0 >= term_right_px
+    }
+
+    fn pixel_to_cell(&self, x: f64, y: f64) -> (usize, usize) {
+        self.input.pixel_to_cell(
+            x - self.sidebar_width_px() as f64,
+            y,
+            &self.config,
+            &self.render_ctx,
+            &self.mux,
+        )
     }
 
     /// If the pixel position `(px, py)` is within ±8 physical pixels of a pane
@@ -432,6 +467,147 @@ impl App {
             }
         }
         None
+    }
+
+    fn clamp_sidebar_cursor(&mut self) {
+        let count = self.mux.workspace_count();
+        self.sidebar_nav_cursor = self.sidebar_nav_cursor.min(count.saturating_sub(1));
+    }
+
+    fn sidebar_selected_workspace_id(&self) -> Option<usize> {
+        self.mux
+            .workspaces()
+            .get(self.sidebar_nav_cursor)
+            .map(|w| w.id)
+    }
+
+    fn handle_sidebar_key(&mut self, event: &winit::event::KeyEvent) -> bool {
+        if event.state != ElementState::Pressed || !self.sidebar_visible {
+            return false;
+        }
+
+        self.clamp_sidebar_cursor();
+
+        if self.sidebar_rename_input.is_some() {
+            match &event.logical_key {
+                Key::Named(NamedKey::Escape) => {
+                    self.sidebar_rename_input = None;
+                }
+                Key::Named(NamedKey::Enter) => {
+                    let name = self
+                        .sidebar_rename_input
+                        .as_ref()
+                        .map(|s| s.trim().to_string())
+                        .unwrap_or_default();
+                    if let Some(id) = self.sidebar_selected_workspace_id() {
+                        if !name.is_empty() {
+                            self.mux.cmd_rename_workspace_id(id, name);
+                        }
+                    }
+                    self.sidebar_rename_input = None;
+                }
+                Key::Named(NamedKey::Backspace) => {
+                    if let Some(input) = self.sidebar_rename_input.as_mut() {
+                        input.pop();
+                    }
+                }
+                Key::Named(NamedKey::Space) => {
+                    if let Some(input) = self.sidebar_rename_input.as_mut() {
+                        input.push(' ');
+                    }
+                }
+                Key::Character(s) => {
+                    if let Some(input) = self.sidebar_rename_input.as_mut() {
+                        input.push_str(s);
+                    }
+                }
+                _ => {}
+            }
+            return true;
+        }
+
+        match &event.logical_key {
+            Key::Named(NamedKey::Escape) => {
+                self.sidebar_visible = false;
+                self.sidebar_rename_input = None;
+                self.apply_tab_bar_padding();
+                self.resize_terminals_for_panel();
+                true
+            }
+            Key::Named(NamedKey::ArrowDown) => {
+                let max = self.mux.workspace_count().saturating_sub(1);
+                self.sidebar_nav_cursor = (self.sidebar_nav_cursor + 1).min(max);
+                true
+            }
+            Key::Named(NamedKey::ArrowUp) => {
+                self.sidebar_nav_cursor = self.sidebar_nav_cursor.saturating_sub(1);
+                true
+            }
+            Key::Named(NamedKey::Enter) => {
+                if let Some(id) = self.sidebar_selected_workspace_id() {
+                    self.mux.cmd_switch_workspace(id);
+                    self.refresh_status_cache();
+                }
+                self.sidebar_visible = false;
+                self.sidebar_rename_input = None;
+                self.apply_tab_bar_padding();
+                self.resize_terminals_for_panel();
+                true
+            }
+            Key::Character(s) if s == "j" => {
+                let max = self.mux.workspace_count().saturating_sub(1);
+                self.sidebar_nav_cursor = (self.sidebar_nav_cursor + 1).min(max);
+                true
+            }
+            Key::Character(s) if s == "k" => {
+                self.sidebar_nav_cursor = self.sidebar_nav_cursor.saturating_sub(1);
+                true
+            }
+            Key::Character(s) if s == "c" => {
+                let name = format!("ws{}", self.mux.workspace_count() + 1);
+                let (cols, rows) = self.default_grid_size();
+                let (cell_w, cell_h) = self.cell_dims();
+                let viewport = self.viewport_rect();
+                let cwd = self
+                    .mux
+                    .active_cwd()
+                    .or_else(|| std::env::current_dir().ok());
+                self.mux.cmd_new_workspace(name);
+                self.mux.cmd_new_tab(
+                    &self.config,
+                    viewport,
+                    cols,
+                    rows,
+                    cell_w,
+                    cell_h,
+                    self.wakeup_proxy.clone(),
+                    cwd,
+                );
+                self.sidebar_nav_cursor = self.mux.workspace_count().saturating_sub(1);
+                self.sidebar_rename_input = None;
+                true
+            }
+            Key::Character(s) if s == "r" => {
+                if let Some(ws) = self.mux.workspaces().get(self.sidebar_nav_cursor) {
+                    self.sidebar_rename_input = Some(ws.name.clone());
+                }
+                true
+            }
+            Key::Character(s) if s == "&" => {
+                if let Some(id) = self.sidebar_selected_workspace_id() {
+                    let prev_active = self.mux.active_workspace_id;
+                    self.mux.cmd_close_workspace_id(id);
+                    self.clamp_sidebar_cursor();
+                    if self.mux.active_workspace_id != prev_active {
+                        self.refresh_status_cache();
+                    }
+                    self.apply_tab_bar_padding();
+                    self.resize_terminals_for_panel();
+                }
+                true
+            }
+            _ => false,
+        }
     }
 
     #[cfg(target_os = "macos")]
@@ -1052,6 +1228,37 @@ impl ApplicationHandler<()> for App {
                         }
                     }
 
+                    if self.sidebar_visible {
+                        let counts = self.mux.workspace_tab_pane_counts();
+                        rc.build_workspace_sidebar_instances(
+                            self.mux.workspaces(),
+                            self.mux.active_workspace_id,
+                            self.sidebar_nav_cursor,
+                            self.sidebar_rename_input.as_deref(),
+                            SIDEBAR_COLS,
+                            &counts,
+                            self.config.window.padding.left as f32,
+                            sb_pad_y,
+                            self.config.window.padding.bottom as f32,
+                            &scaled_font,
+                        );
+                        let sidebar_sep_x = self.config.window.padding.left as f32
+                            + SIDEBAR_COLS as f32 * rc.shaper.cell_width;
+                        let sidebar_sep_y = sb_pad_y;
+                        let sidebar_sep_h = (rc.renderer.size().1 as f32
+                            - sidebar_sep_y
+                            - self.config.window.padding.bottom as f32)
+                            .max(0.0);
+                        rc.rect_instances.push(
+                            crate::renderer::rounded_rect::RoundedRectInstance {
+                                rect: [sidebar_sep_x, sidebar_sep_y, 1.0, sidebar_sep_h],
+                                color: [0.36, 0.31, 0.49, 1.0],
+                                radius: 0.0,
+                                _pad: [0.0; 3],
+                            },
+                        );
+                    }
+
                     // ── Overlays (search bar, palette, context menu) ─────────────────────
                     // Record the split point so the GPU renders these in a separate pass.
                     let overlay_start = rc.instances.len();
@@ -1155,6 +1362,12 @@ impl ApplicationHandler<()> for App {
                 is_synthetic: false,
                 ..
             } => {
+                if self.handle_sidebar_key(&event) {
+                    if let Some(w) = &self.window {
+                        w.request_redraw();
+                    }
+                    return;
+                }
                 let panel_was_visible = self.ui.is_panel_visible();
                 let tab_count_before = self.mux.tabs.tab_count();
                 let tab_idx_before = self.mux.active_tab_index();
@@ -1203,13 +1416,7 @@ impl ApplicationHandler<()> for App {
             }
             WindowEvent::CursorMoved { position, .. } => {
                 self.input.mouse_pos = (position.x, position.y);
-                let (col, row) = self.input.pixel_to_cell(
-                    position.x,
-                    position.y,
-                    &self.config,
-                    &self.render_ctx,
-                    &self.mux,
-                );
+                let (col, row) = self.pixel_to_cell(position.x, position.y);
                 // Update context menu hover — redraw if hovered item changed.
                 if self.ui.context_menu.update_hover(col, row) {
                     if let Some(w) = &self.window {
@@ -1241,15 +1448,33 @@ impl ApplicationHandler<()> for App {
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 let in_panel = self.mouse_in_panel();
-                let (col, row) = self.input.pixel_to_cell(
-                    self.input.mouse_pos.0,
-                    self.input.mouse_pos.1,
-                    &self.config,
-                    &self.render_ctx,
-                    &self.mux,
-                );
+                let (col, row) = self.pixel_to_cell(self.input.mouse_pos.0, self.input.mouse_pos.1);
                 match (button, state) {
                     (MouseButton::Left, ElementState::Pressed) => {
+                        if self.sidebar_visible {
+                            let sidebar_left = self.config.window.padding.left as f64;
+                            let sidebar_right = sidebar_left + self.sidebar_width_px() as f64;
+                            if self.input.mouse_pos.0 >= sidebar_left
+                                && self.input.mouse_pos.0 < sidebar_right
+                            {
+                                let (_, cell_h) = self.cell_dims();
+                                let list_top = self.config.window.padding.top as f64
+                                    + self.tab_bar_height_px() as f64
+                                    + 2.0 * cell_h as f64;
+                                let rel_y = self.input.mouse_pos.1 - list_top;
+                                if rel_y >= 0.0 {
+                                    let idx = (rel_y / (2.0 * cell_h as f64)).floor() as usize;
+                                    if idx < self.mux.workspace_count() {
+                                        self.sidebar_nav_cursor = idx;
+                                        self.sidebar_rename_input = None;
+                                    }
+                                }
+                                if let Some(w) = &self.window {
+                                    w.request_redraw();
+                                }
+                                return;
+                            }
+                        }
                         // Context menu: consume click if it lands inside the menu.
                         if self.ui.context_menu.visible {
                             if let Some(action) = self.ui.context_menu.hit_test(col, row) {
@@ -1335,6 +1560,10 @@ impl ApplicationHandler<()> for App {
                             // Sidebar toggle button: logical [80..102] scaled to physical
                             if x >= 80.0 * sf && x < 102.0 * sf {
                                 self.sidebar_visible = !self.sidebar_visible;
+                                self.sidebar_rename_input = None;
+                                self.clamp_sidebar_cursor();
+                                self.apply_tab_bar_padding();
+                                self.resize_terminals_for_panel();
                                 if let Some(w) = &self.window {
                                     w.request_redraw();
                                 }
@@ -1594,13 +1823,7 @@ impl ApplicationHandler<()> for App {
                     }
                     return;
                 }
-                let (col, row) = self.input.pixel_to_cell(
-                    self.input.mouse_pos.0,
-                    self.input.mouse_pos.1,
-                    &self.config,
-                    &self.render_ctx,
-                    &self.mux,
-                );
+                let (col, row) = self.pixel_to_cell(self.input.mouse_pos.0, self.input.mouse_pos.1);
                 let (any_mouse, _, _) = self
                     .mux
                     .active_terminal()
