@@ -22,7 +22,9 @@ fn detect_locale() -> String {
             if !code.is_empty()
                 && code != "c"
                 && code != "posix"
-                && rust_i18n::available_locales!().iter().any(|l| l.as_ref() == code.as_str())
+                && rust_i18n::available_locales!()
+                    .iter()
+                    .any(|l| l.as_ref() == code.as_str())
             {
                 return code;
             }
