@@ -1672,9 +1672,9 @@ impl RenderContext {
         // All pixel constants are in logical points; scale to physical pixels.
         let sf = self.scale_factor;
         let traffic_lights_reserve = 76.0 * sf;
-        let btn_w = 18.0 * sf;
-        let btn_y = 2.0 * sf;
-        let btn_h = 18.0 * sf;
+        let btn_w = 22.0 * sf;
+        let btn_y = 4.0 * sf;
+        let btn_h = 22.0 * sf;
         let btn_gap = 4.0 * sf;
         let sidebar_btn_x = traffic_lights_reserve + btn_gap;
         let layout_btn_x = sidebar_btn_x + btn_w + btn_gap;

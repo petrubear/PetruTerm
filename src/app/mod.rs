@@ -24,7 +24,7 @@ pub use mux::Mux;
 pub use renderer::RenderContext;
 pub use ui::UiManager;
 
-pub const TITLEBAR_HEIGHT: f32 = 22.0;
+pub const TITLEBAR_HEIGHT: f32 = 30.0;
 
 /// Top-level application state. Delegates to specialized managers.
 pub struct App {
