@@ -50,6 +50,8 @@ pub struct InputHandler {
     /// Set when a <leader>+Option+Arrow pane-resize keybind fires so that
     /// `app/mod.rs` knows to call `resize_terminals_for_panel` afterward.
     pub pane_ratio_adjusted: bool,
+    /// Set when <leader>+e+e fires so `app/mod.rs` can toggle the sidebar.
+    pub toggle_sidebar_requested: bool,
     /// Pane resize mode: activated by <leader>+Option+Arrow. While active, any
     /// arrow key (with or without Option) continues resizing. Any other key exits.
     pub resize_mode: bool,
@@ -92,6 +94,7 @@ impl InputHandler {
             cursor_blink_on: true,
             cursor_last_blink: Instant::now(),
             pane_ratio_adjusted: false,
+            toggle_sidebar_requested: false,
             resize_mode: false,
             input_echo: String::new(),
             last_key_instant: None,
@@ -346,31 +349,79 @@ impl InputHandler {
             }
 
             if let Key::Character(s) = &event.logical_key {
-                // Workspace sub-leader: W was pressed on the previous key.
-                if let Some('W') = leader_prefix {
-                    let action = match s.as_str() {
-                        "n" => Some(Action::NewWorkspace),
-                        "&" => Some(Action::CloseWorkspace),
-                        "," => Some(Action::RenameWorkspace),
-                        "j" => Some(Action::NextWorkspace),
-                        "k" => Some(Action::PrevWorkspace),
-                        _ => None,
-                    };
-                    if let Some(action) = action {
-                        if let Some(rc) = render_ctx.as_mut() {
-                            ui.handle_palette_action(action, mux, rc, config, window, wakeup_proxy);
+                // ── Sub-leader dispatch ───────────────────────────────────────
+                match leader_prefix {
+                    // 'a' prefix → AI actions.
+                    Some('a') => {
+                        let action = match s.as_str() {
+                            "a" => Some(Action::FocusAiPanel),
+                            "e" => Some(Action::ExplainLastOutput),
+                            "f" => Some(Action::FixLastError),
+                            "z" => Some(Action::UndoLastWrite),
+                            _ => None,
+                        };
+                        if let Some(action) = action {
+                            if let Some(rc) = render_ctx.as_mut() {
+                                ui.handle_palette_action(
+                                    action,
+                                    mux,
+                                    rc,
+                                    config,
+                                    window,
+                                    wakeup_proxy,
+                                );
+                            }
                         }
+                        return;
                     }
-                    return;
+                    // 'e' prefix → explorer / sidebar.
+                    Some('e') => {
+                        if s.as_str() == "e" {
+                            self.toggle_sidebar_requested = true;
+                        }
+                        return;
+                    }
+                    // 'W' prefix → workspace actions.
+                    Some('W') => {
+                        let action = match s.as_str() {
+                            "n" => Some(Action::NewWorkspace),
+                            "&" => Some(Action::CloseWorkspace),
+                            "," => Some(Action::RenameWorkspace),
+                            "j" => Some(Action::NextWorkspace),
+                            "k" => Some(Action::PrevWorkspace),
+                            _ => None,
+                        };
+                        if let Some(action) = action {
+                            if let Some(rc) = render_ctx.as_mut() {
+                                ui.handle_palette_action(
+                                    action,
+                                    mux,
+                                    rc,
+                                    config,
+                                    window,
+                                    wakeup_proxy,
+                                );
+                            }
+                        }
+                        return;
+                    }
+                    _ => {}
                 }
-                // Leader W → enter workspace prefix mode (wait for sub-key).
-                if s.as_str() == "W" {
-                    self.leader_prefix = Some('W');
-                    self.leader_active = true;
-                    self.leader_deadline = Some(
-                        Instant::now() + std::time::Duration::from_millis(self.leader_timeout_ms),
-                    );
-                    return;
+
+                // ── Single-key leader dispatch ────────────────────────────────
+                // Enter prefix mode for 'a' (AI) and 'e' (explorer).
+                match s.as_str() {
+                    "a" | "e" | "W" => {
+                        let prefix = s.chars().next().unwrap();
+                        self.leader_prefix = Some(prefix);
+                        self.leader_active = true;
+                        self.leader_deadline = Some(
+                            Instant::now()
+                                + std::time::Duration::from_millis(self.leader_timeout_ms),
+                        );
+                        return;
+                    }
+                    _ => {}
                 }
                 // Leader + 1-9: select tab by index (hardcoded, like Cmd+1-9)
                 if let Ok(n) = s.parse::<usize>() {

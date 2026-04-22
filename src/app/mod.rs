@@ -27,6 +27,8 @@ pub use ui::UiManager;
 
 pub const TITLEBAR_HEIGHT: f32 = 30.0;
 pub const SIDEBAR_COLS: usize = 28;
+/// Gap in physical pixels between the sidebar's right edge and the terminal content.
+pub const SIDEBAR_MARGIN: f32 = 6.0;
 
 /// Top-level application state. Delegates to specialized managers.
 pub struct App {
@@ -72,6 +74,9 @@ pub struct App {
     sidebar_visible: bool,
     sidebar_nav_cursor: usize,
     sidebar_rename_input: Option<String>,
+    /// True once the user presses an arrow key in the sidebar. Only then does
+    /// Enter confirm a workspace switch — prevents stealing Enter from the terminal.
+    sidebar_kbd_active: bool,
 
     /// Debounce timer for config hot-reload — actual reload deferred 300 ms after last event (TD-PERF-17).
     config_reload_at: Option<std::time::Instant>,
@@ -114,6 +119,7 @@ impl App {
             sidebar_visible: false,
             sidebar_nav_cursor: 0,
             sidebar_rename_input: None,
+            sidebar_kbd_active: false,
             config_reload_at: None,
             terminal_shell_ctxs: std::collections::HashMap::new(),
             separator_snapshot: Vec::new(),
@@ -201,7 +207,7 @@ impl App {
             };
             let pad = &self.config.window.padding;
             let sidebar_px = if self.sidebar_visible {
-                SIDEBAR_COLS as f32 * rc.shaper.cell_width
+                SIDEBAR_COLS as f32 * rc.shaper.cell_width + SIDEBAR_MARGIN
             } else {
                 0.0
             };
@@ -243,7 +249,7 @@ impl App {
     fn sidebar_width_px(&self) -> f32 {
         if self.sidebar_visible {
             let (cell_w, _) = self.cell_dims();
-            SIDEBAR_COLS as f32 * cell_w as f32
+            SIDEBAR_COLS as f32 * cell_w as f32 + SIDEBAR_MARGIN
         } else {
             0.0
         }
@@ -485,6 +491,51 @@ impl App {
         if event.state != ElementState::Pressed || !self.sidebar_visible {
             return false;
         }
+        // When leader is active, only intercept sidebar-specific final keys.
+        // Prefix keys (a, e, W) and all others pass through to normal leader dispatch.
+        if self.input.leader_active {
+            match &event.logical_key {
+                Key::Character(s) if s == "a" => {
+                    // leader+a: new workspace (overrides AI prefix in sidebar context).
+                    self.input.leader_active = false;
+                    self.input.leader_deadline = None;
+                    self.clamp_sidebar_cursor();
+                    let name = format!("ws{}", self.mux.workspace_count() + 1);
+                    let (cols, rows) = self.default_grid_size();
+                    let (cell_w, cell_h) = self.cell_dims();
+                    let viewport = self.viewport_rect();
+                    let cwd = self
+                        .mux
+                        .active_cwd()
+                        .or_else(|| std::env::current_dir().ok());
+                    self.mux.cmd_new_workspace(name);
+                    self.mux.cmd_new_tab(
+                        &self.config,
+                        viewport,
+                        cols,
+                        rows,
+                        cell_w,
+                        cell_h,
+                        self.wakeup_proxy.clone(),
+                        cwd,
+                    );
+                    self.sidebar_nav_cursor = self.mux.workspace_count().saturating_sub(1);
+                    self.sidebar_rename_input = None;
+                    return true;
+                }
+                Key::Character(s) if s == "." => {
+                    // leader+.: rename selected workspace (mirrors leader+, for RenameTab).
+                    self.input.leader_active = false;
+                    self.input.leader_deadline = None;
+                    self.clamp_sidebar_cursor();
+                    if let Some(ws) = self.mux.workspaces().get(self.sidebar_nav_cursor) {
+                        self.sidebar_rename_input = Some(ws.name.clone());
+                    }
+                    return true;
+                }
+                _ => return false,
+            }
+        }
 
         self.clamp_sidebar_cursor();
 
@@ -527,70 +578,29 @@ impl App {
         }
 
         match &event.logical_key {
-            Key::Named(NamedKey::Escape) => {
-                self.sidebar_visible = false;
-                self.sidebar_rename_input = None;
-                self.apply_tab_bar_padding();
-                self.resize_terminals_for_panel();
-                true
-            }
             Key::Named(NamedKey::ArrowDown) => {
                 let max = self.mux.workspace_count().saturating_sub(1);
                 self.sidebar_nav_cursor = (self.sidebar_nav_cursor + 1).min(max);
+                self.sidebar_kbd_active = true;
                 true
             }
             Key::Named(NamedKey::ArrowUp) => {
                 self.sidebar_nav_cursor = self.sidebar_nav_cursor.saturating_sub(1);
+                self.sidebar_kbd_active = true;
                 true
             }
-            Key::Named(NamedKey::Enter) => {
+            // Enter only confirms when the user has explicitly navigated via arrows,
+            // preventing the sidebar from stealing Enter while the terminal is in use.
+            Key::Named(NamedKey::Enter) if self.sidebar_kbd_active => {
                 if let Some(id) = self.sidebar_selected_workspace_id() {
                     self.mux.cmd_switch_workspace(id);
                     self.refresh_status_cache();
                 }
                 self.sidebar_visible = false;
                 self.sidebar_rename_input = None;
+                self.sidebar_kbd_active = false;
                 self.apply_tab_bar_padding();
                 self.resize_terminals_for_panel();
-                true
-            }
-            Key::Character(s) if s == "j" => {
-                let max = self.mux.workspace_count().saturating_sub(1);
-                self.sidebar_nav_cursor = (self.sidebar_nav_cursor + 1).min(max);
-                true
-            }
-            Key::Character(s) if s == "k" => {
-                self.sidebar_nav_cursor = self.sidebar_nav_cursor.saturating_sub(1);
-                true
-            }
-            Key::Character(s) if s == "c" => {
-                let name = format!("ws{}", self.mux.workspace_count() + 1);
-                let (cols, rows) = self.default_grid_size();
-                let (cell_w, cell_h) = self.cell_dims();
-                let viewport = self.viewport_rect();
-                let cwd = self
-                    .mux
-                    .active_cwd()
-                    .or_else(|| std::env::current_dir().ok());
-                self.mux.cmd_new_workspace(name);
-                self.mux.cmd_new_tab(
-                    &self.config,
-                    viewport,
-                    cols,
-                    rows,
-                    cell_w,
-                    cell_h,
-                    self.wakeup_proxy.clone(),
-                    cwd,
-                );
-                self.sidebar_nav_cursor = self.mux.workspace_count().saturating_sub(1);
-                self.sidebar_rename_input = None;
-                true
-            }
-            Key::Character(s) if s == "r" => {
-                if let Some(ws) = self.mux.workspaces().get(self.sidebar_nav_cursor) {
-                    self.sidebar_rename_input = Some(ws.name.clone());
-                }
                 true
             }
             Key::Character(s) if s == "&" => {
@@ -838,6 +848,8 @@ impl ApplicationHandler<()> for App {
                 // Capture status bar layout values before the mutable borrow of render_ctx.
                 let tab_bar_vis = self.tab_bar_visible();
                 let sb_pad_y = self.config.window.padding.top as f32 + self.tab_bar_height_px();
+                // Capture sidebar width before render_ctx is mutably borrowed.
+                let sidebar_px_snapshot = self.sidebar_width_px();
                 // Snapshot the active pane's shell context before the render_ctx borrow.
                 let sb_exit_code = self.active_shell_ctx().and_then(|c| {
                     if c.last_exit_code != 0 {
@@ -982,7 +994,7 @@ impl ApplicationHandler<()> for App {
                     }
 
                     // Pane separator lines (one RoundedRectInstance per separator).
-                    let sep_pad_x = self.config.window.padding.left as f32;
+                    let sep_pad_x = self.config.window.padding.left as f32 + sidebar_px_snapshot;
                     rc.build_pane_separators(&self.separator_snapshot, sep_pad_x, sb_pad_y);
 
                     // ── Tab bar / unified titlebar (always shown in Custom mode) ────────
@@ -1036,7 +1048,7 @@ impl ApplicationHandler<()> for App {
                                 &scaled_font,
                                 tab_total_cols,
                                 win_w,
-                                self.config.window.padding.left as f32,
+                                self.config.window.padding.left as f32 + sidebar_px_snapshot,
                                 gpu_pad_y,
                                 self.config.colors.background,
                                 rename_input,
@@ -1410,6 +1422,15 @@ impl ApplicationHandler<()> for App {
                     self.input.pane_ratio_adjusted = false;
                     self.resize_terminals_for_panel();
                 }
+                if self.input.toggle_sidebar_requested {
+                    self.input.toggle_sidebar_requested = false;
+                    self.sidebar_visible = !self.sidebar_visible;
+                    self.sidebar_rename_input = None;
+                    self.sidebar_kbd_active = false;
+                    self.clamp_sidebar_cursor();
+                    self.apply_tab_bar_padding();
+                    self.resize_terminals_for_panel();
+                }
                 if let Some(w) = &self.window {
                     w.request_redraw();
                 }
@@ -1452,21 +1473,82 @@ impl ApplicationHandler<()> for App {
                 match (button, state) {
                     (MouseButton::Left, ElementState::Pressed) => {
                         if self.sidebar_visible {
+                            let sf = self
+                                .render_ctx
+                                .as_ref()
+                                .map(|rc| rc.scale_factor as f64)
+                                .unwrap_or(1.0);
+                            // Sidebar occupies the visual column area only (not the margin).
+                            let sidebar_visual_right = self.config.window.padding.left as f64
+                                + SIDEBAR_COLS as f64 * self.cell_dims().0 as f64;
                             let sidebar_left = self.config.window.padding.left as f64;
-                            let sidebar_right = sidebar_left + self.sidebar_width_px() as f64;
+                            // Only intercept clicks that are (a) inside the visual sidebar area
+                            // and (b) below the titlebar so that the titlebar toggle button
+                            // remains reachable.
+                            let titlebar_bottom = TITLEBAR_HEIGHT as f64 * sf;
                             if self.input.mouse_pos.0 >= sidebar_left
-                                && self.input.mouse_pos.0 < sidebar_right
+                                && self.input.mouse_pos.0 < sidebar_visual_right
+                                && self.input.mouse_pos.1 >= titlebar_bottom
                             {
                                 let (_, cell_h) = self.cell_dims();
-                                let list_top = self.config.window.padding.top as f64
-                                    + self.tab_bar_height_px() as f64
-                                    + 2.0 * cell_h as f64;
+                                let sidebar_top = self.config.window.padding.top as f64
+                                    + self.tab_bar_height_px() as f64;
+                                let header_bottom = sidebar_top + cell_h as f64;
+                                // Click in the header row → create new workspace.
+                                if self.input.mouse_pos.1 < header_bottom {
+                                    let name = format!("ws{}", self.mux.workspace_count() + 1);
+                                    let (cols, rows) = self.default_grid_size();
+                                    let (cell_w, cell_h2) = self.cell_dims();
+                                    let viewport = self.viewport_rect();
+                                    let cwd = self
+                                        .mux
+                                        .active_cwd()
+                                        .or_else(|| std::env::current_dir().ok());
+                                    self.mux.cmd_new_workspace(name);
+                                    self.mux.cmd_new_tab(
+                                        &self.config,
+                                        viewport,
+                                        cols,
+                                        rows,
+                                        cell_w,
+                                        cell_h2,
+                                        self.wakeup_proxy.clone(),
+                                        cwd,
+                                    );
+                                    self.sidebar_nav_cursor =
+                                        self.mux.workspace_count().saturating_sub(1);
+                                    self.apply_tab_bar_padding();
+                                    self.resize_terminals_for_panel();
+                                    if let Some(w) = &self.window {
+                                        w.request_redraw();
+                                    }
+                                    return;
+                                }
+                                let list_top = sidebar_top + 2.0 * cell_h as f64;
                                 let rel_y = self.input.mouse_pos.1 - list_top;
                                 if rel_y >= 0.0 {
                                     let idx = (rel_y / (2.0 * cell_h as f64)).floor() as usize;
                                     if idx < self.mux.workspace_count() {
                                         self.sidebar_nav_cursor = idx;
-                                        self.sidebar_rename_input = None;
+                                        // usize::MAX sentinel distinguishes sidebar clicks
+                                        // from terminal cell clicks in register_click.
+                                        let clicks = self.input.register_click((idx, usize::MAX));
+                                        if clicks >= 2 {
+                                            // Double-click: enter rename mode.
+                                            if let Some(ws) = self.mux.workspaces().get(idx) {
+                                                self.sidebar_rename_input = Some(ws.name.clone());
+                                            }
+                                        } else {
+                                            // Single click: switch workspace and close.
+                                            self.sidebar_rename_input = None;
+                                            if let Some(id) = self.sidebar_selected_workspace_id() {
+                                                self.mux.cmd_switch_workspace(id);
+                                                self.refresh_status_cache();
+                                            }
+                                            self.sidebar_visible = false;
+                                            self.apply_tab_bar_padding();
+                                            self.resize_terminals_for_panel();
+                                        }
                                     }
                                 }
                                 if let Some(w) = &self.window {
@@ -1561,6 +1643,7 @@ impl ApplicationHandler<()> for App {
                             if x >= 80.0 * sf && x < 102.0 * sf {
                                 self.sidebar_visible = !self.sidebar_visible;
                                 self.sidebar_rename_input = None;
+                                self.sidebar_kbd_active = false;
                                 self.clamp_sidebar_cursor();
                                 self.apply_tab_bar_padding();
                                 self.resize_terminals_for_panel();

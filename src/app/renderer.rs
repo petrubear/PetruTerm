@@ -1471,7 +1471,7 @@ impl RenderContext {
             if footer_row > last_item_row {
                 push_sidebar_row(
                     self,
-                    " j/k ↕  Enter ✓  Esc ✕ ",
+                    " j/k ↕  Enter ✓  ^Fa +  ^F. ✎",
                     SIDEBAR_DIM_FG,
                     SIDEBAR_BG,
                     footer_row,
@@ -1886,10 +1886,11 @@ impl RenderContext {
             return;
         }
 
-        let tabs_start_col = ((tabs_start_x - pad_left) / cell_w).ceil() as usize;
+        let effective_tabs_start = tabs_start_x.max(pad_left);
+        let tabs_start_col = ((effective_tabs_start - pad_left) / cell_w).ceil().max(0.0) as usize;
         let tab_end_col = {
-            let avail_w = (win_w - right_reserve).max(tabs_start_x);
-            ((avail_w - pad_left) / cell_w) as usize
+            let avail_w = (win_w - right_reserve).max(effective_tabs_start);
+            (((avail_w - pad_left) / cell_w).max(0.0)) as usize
         };
         let max_cols = tab_end_col.min(total_cols);
 

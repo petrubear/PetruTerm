@@ -26,16 +26,15 @@ function module.apply_to_config(config)
     -- ── Overlays ──────────────────────────────────────────────────────────
     { mods = "LEADER", key = "o",  action = petruterm.action.CommandPalette },
 
-    -- ── AI panel ──────────────────────────────────────────────────────────
-    -- leader+a: abre el panel (si cerrado) o alterna focus terminal↔chat (si abierto)
-    -- Escape en el panel: quita focus (vuelve a terminal) sin cerrar
-    -- /q en el input del panel: cierra el panel
-    { mods = "LEADER", key = "a",  action = petruterm.action.FocusAiPanel  },
+    -- ── AI sub-leader (leader+a+*) ────────────────────────────────────────
+    -- leader+a+a : AI panel (open / toggle focus)
+    -- leader+a+e : Explain last output
+    -- leader+a+f : Fix last error
+    -- leader+a+z : Undo last write
+    -- (These are handled as hardcoded sub-leader sequences, not config entries.)
 
-    -- ── AI context actions ─────────────────────────────────────────────────
-    { mods = "LEADER", key = "e",  action = petruterm.action.ExplainLastOutput },
-    { mods = "LEADER", key = "f",  action = petruterm.action.FixLastError },
-    { mods = "LEADER", key = "z",  action = petruterm.action.UndoLastWrite },
+    -- ── Explorer sub-leader (leader+e+*) ──────────────────────────────────
+    -- leader+e+e : Toggle workspace sidebar
 
     -- ── Tabs (tmux-style) ─────────────────────────────────────────────────
     { mods = "LEADER", key = "c",  action = petruterm.action.NewTab },
