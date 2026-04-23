@@ -191,8 +191,8 @@ impl ColorScheme {
             [r, g, b, 1.0]
         }
         Self {
-            foreground: hex("#f8f8f2"),
-            background: hex("#22212c"),
+            foreground: hex("#e0e0e8"),
+            background: hex("#0e0e10"),
             cursor_bg: hex("#9580ff"),
             cursor_fg: hex("#f8f8f2"),
             cursor_border: hex("#9580ff"),
@@ -322,10 +322,10 @@ impl Default for ChatUiConfig {
     fn default() -> Self {
         Self {
             width_cols: 55,
-            background: [0.10, 0.09, 0.16, 1.0],
-            user_fg: [0.75, 0.90, 1.00, 1.0],
-            assistant_fg: [0.55, 1.00, 0.53, 1.0],
-            input_fg: [1.00, 1.00, 1.00, 1.0],
+            background: [0.075, 0.075, 0.086, 1.0], // #131316 panel
+            user_fg: [0.306, 0.788, 0.690, 1.0],    // #4ec9b0 teal
+            assistant_fg: [0.878, 0.878, 0.910, 1.0], // #e0e0e8
+            input_fg: [0.878, 0.878, 0.910, 1.0],   // #e0e0e8
         }
     }
 }
