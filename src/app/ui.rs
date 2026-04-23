@@ -681,8 +681,18 @@ impl UiManager {
                 body.map(|b| (skill.name.clone(), b))
             } else if let Some(name) = &active_skill_name {
                 // No new match — reuse the skill active in this conversation.
-                let found = self.skill_manager.skills().iter().find(|s| &s.name == name).cloned();
-                found.and_then(|s| self.skill_manager.read_body(&s).ok().map(|b| (name.clone(), b)))
+                let found = self
+                    .skill_manager
+                    .skills()
+                    .iter()
+                    .find(|s| &s.name == name)
+                    .cloned();
+                found.and_then(|s| {
+                    self.skill_manager
+                        .read_body(&s)
+                        .ok()
+                        .map(|b| (name.clone(), b))
+                })
             } else {
                 None
             }

@@ -504,8 +504,8 @@ impl InputHandler {
                         let text = ui.panel().input.clone();
                         if !text.is_empty() {
                             std::thread::spawn(move || {
-                                let _ = arboard::Clipboard::new()
-                                    .and_then(|mut cb| cb.set_text(text));
+                                let _ =
+                                    arboard::Clipboard::new().and_then(|mut cb| cb.set_text(text));
                             });
                         }
                         return;
