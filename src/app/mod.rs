@@ -1266,7 +1266,7 @@ impl ApplicationHandler<()> for App {
                         rc.rect_instances.push(
                             crate::renderer::rounded_rect::RoundedRectInstance {
                                 rect: [sidebar_sep_x, sidebar_sep_y, 1.0, sidebar_sep_h],
-                                color: [0.36, 0.31, 0.49, 1.0],
+                                color: [0.165, 0.165, 0.184, 1.0], // #2a2a2f border
                                 radius: 0.0,
                                 _pad: [0.0; 3],
                             },
@@ -1296,6 +1296,8 @@ impl ApplicationHandler<()> for App {
                             &scaled_font,
                             palette_cols,
                             total_rows,
+                            self.config.window.padding.left as f32 + sidebar_px_snapshot,
+                            sb_pad_y,
                         );
                     }
                     if self.ui.context_menu.visible {

@@ -42,18 +42,18 @@ impl Default for StatusBar {
     }
 }
 
-// ── Dracula Pro palette constants ────────────────────────────────────────────
-const BG_BAR: [f32; 4] = [0.16, 0.16, 0.22, 1.0]; // current-line #282a36
-const FG_DEFAULT: [f32; 4] = [0.97, 0.97, 0.95, 1.0]; // foreground   #f8f8f2
-const FG_DIM: [f32; 4] = [0.55, 0.56, 0.67, 1.0]; // comment      #6272a4
+// ── PetruTerm Dark palette constants ─────────────────────────────────────────
+const BG_BAR: [f32; 4] = [0.039, 0.039, 0.047, 1.0]; // #0a0a0c — deep black
+const FG_DEFAULT: [f32; 4] = [0.878, 0.878, 0.910, 1.0]; // #e0e0e8 — soft white
+const FG_DIM: [f32; 4] = [0.420, 0.420, 0.478, 1.0]; // #6b6b7a — muted
 
 const BG_LEADER_ACTIVE: [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // purple  #9580ff
-const BG_LEADER_RESIZE: [f32; 4] = [1.00, 0.72, 0.22, 1.0]; // orange  #ffb86c
-const BG_LEADER_INACTIVE: [f32; 4] = [0.22, 0.22, 0.30, 1.0]; // subdued
-const BG_CWD: [f32; 4] = [0.20, 0.20, 0.27, 1.0]; // slightly lighter
-const BG_GIT: [f32; 4] = [0.16, 0.28, 0.22, 1.0]; // green-tinted
+const BG_LEADER_RESIZE: [f32; 4] = [0.831, 0.643, 0.298, 1.0]; // amber #d4a44c
+const BG_LEADER_INACTIVE: [f32; 4] = [0.075, 0.075, 0.086, 1.0]; // #131316
+const BG_CWD: [f32; 4] = [0.039, 0.075, 0.063, 1.0]; // dark teal tint
+const BG_GIT: [f32; 4] = [0.075, 0.055, 0.020, 1.0]; // dark amber tint
 const BG_ERROR: [f32; 4] = [0.60, 0.12, 0.12, 1.0]; // red
-const BG_TIME: [f32; 4] = [0.13, 0.20, 0.30, 1.0]; // blue-tinted
+const BG_TIME: [f32; 4] = [0.039, 0.039, 0.047, 1.0]; // #0a0a0c
 
 impl StatusBar {
     /// Build the status bar from current application state.
@@ -104,7 +104,7 @@ impl StatusBar {
             let display = truncate_path(path, 25);
             bar.left.push(StatusBarSegment {
                 text: format!("  {display} "),
-                fg: FG_DEFAULT,
+                fg: [0.306, 0.788, 0.690, 1.0], // #4ec9b0 teal
                 bg: BG_CWD,
                 kind: SegmentKind::Cwd,
             });
@@ -115,7 +115,7 @@ impl StatusBar {
             if !branch.is_empty() {
                 bar.left.push(StatusBarSegment {
                     text: format!("  {branch} "),
-                    fg: FG_DEFAULT,
+                    fg: [0.831, 0.643, 0.298, 1.0], // #d4a44c amber
                     bg: BG_GIT,
                     kind: SegmentKind::GitBranch,
                 });

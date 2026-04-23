@@ -168,6 +168,42 @@ Body del prompt aquí...
 
 ---
 
+## Fase E: Design Refactor — Visual Overhaul
+**Branch:** `design-refactor`
+**Status: In progress — 2026-04-23**
+
+Objetivo: adoptar el estilo visual IDE moderno de la imagen de referencia. Solo cambios visuales/esteticos, sin nueva funcionalidad.
+
+### Paleta de colores target
+| Token | Hex | Uso |
+|---|---|---|
+| `BG_DEEP` | `#0e0e10` | Terminal area, fondo principal |
+| `BG_PANEL` | `#131316` | Sidebar, AI panel |
+| `BG_STATUS` | `#0a0a0c` | Status bar |
+| `BORDER` | `#2a2a2f` | Divisores, bordes de overlays |
+| `TEXT` | `#e0e0e8` | Texto principal |
+| `TEXT_MUTED` | `#6b6b7a` | Labels, subtitulos |
+| `ACCENT_TEAL` | `#4ec9b0` | Path en status bar |
+| `ACCENT_AMBER` | `#d4a44c` | Branch git, elementos activos |
+
+### Tareas
+
+- [x] **T1** — Paleta de colores base: constantes en `renderer.rs` y temas
+- [x] **T2** — Tab bar flat `zsh: N`: reemplazar pills SDF por tabs flat con nombre de proceso
+- [x] **T3** — Command palette overlay: esquinas redondeadas (~8px), borde `#2a2a2f`, fondo `#131316`
+- [x] **T4** — Sidebar + AI panel: `BG_PANEL` en ambos, header AI panel con borde separador
+- [x] **T5** — Divisores de pane: 1px logico, `#2a2a2f`
+- [x] **T6** — Status bar: nuevos colores `ACCENT_TEAL`/`ACCENT_AMBER`/`BG_STATUS`
+- [x] **T7** — Markdown en AI panel: `md_style_line()` — headers coloreados, bullets con `•`, code en verde
+
+### Notas de implementacion
+- T1 desbloquea T2–T6; hacerla primero
+- T7 es independiente, puede ir en paralelo con T2–T6
+- No se requiere blur gaussiano real — el command palette usa panel solido oscuro con borde
+- cosmic-text soporta font size variable por text run (necesario para T7)
+
+---
+
 ## Phase 4: Plugin Ecosystem
 **Status: Not started — después de Fases A–D**
 

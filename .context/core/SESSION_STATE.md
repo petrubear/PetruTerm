@@ -1,18 +1,23 @@
 # Session State
 
 **Last Updated:** 2026-04-23
-**Session Focus:** D-4 bug fixes post-launch.
+**Session Focus:** Fase E — Design Refactor (branch `design-refactor`)
 
-## Branch: `master`
+## Branch: `design-refactor` (base: `master`)
 
 ## Estado actual
 
 **Phase 1–3 + 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Fase B COMPLETE. Fase C-1 COMPLETE. Fase C-2 COMPLETE. Fase C-3 COMPLETE. Fase C-3.5 COMPLETE. Fase D-4 COMPLETE + bugs fixed.**
-**Siguiente: Fase D-1/D-2/D-3 (MCP) o Fase D-5 (project-level config).**
+**Fase E: Design Refactor — IN PROGRESS (branch design-refactor).**
+**Pendiente en master: Fase D-1/D-2/D-3 (MCP), Fase D-5 (project-level config).**
 
 ---
 
 ## Esta sesión (2026-04-23)
+
+### Fase E — Design Refactor — COMPLETA
+Branch `design-refactor`. Todos los cambios son visuales, compilacion limpia.
+T1: paleta oscura (#0e0e10, #131316, #2a2a2f, teal, amber). T2: tabs flat "title: N" con underline amber. T3: palette con rounded corners (8px) + border rect. T4: AI panel bg #131316, sidebar sep color. T5: divisores 1px #2a2a2f. T6: status bar teal/amber. T7: md_style_line() en respuestas AI (headers/bullets/code).
 
 ### D-4 Skills — bug fixes post-launch
 
