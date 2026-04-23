@@ -10,7 +10,7 @@ use crate::llm::LlmProvider;
 use crate::ui::{CommandPalette, ContextMenu, Rect, SearchBar, SplitDir};
 use crossbeam_channel::{Receiver, Sender};
 use rust_i18n::t;
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
@@ -60,9 +60,8 @@ pub struct UiManager {
     pub palette: CommandPalette,
     pub context_menu: ContextMenu,
 
-    // ── Chat panel (side panel, per-pane history) ─────────────────────────────
-    chat_panels: HashMap<usize, ChatPanel>,
-    active_panel_id: usize,
+    // ── Chat panel (side panel, workspace-level) ──────────────────────────────
+    chat_panel: ChatPanel,
     /// Width used when creating new ChatPanels (kept in sync with config.llm.ui.width_cols).
     panel_width_cols: u16,
     pub panel_focused: bool,
@@ -162,8 +161,6 @@ impl UiManager {
         let panel_width_cols = config.llm.ui.width_cols;
         let mut initial_panel = ChatPanel::new();
         initial_panel.width_cols = panel_width_cols;
-        let mut chat_panels = HashMap::new();
-        chat_panels.insert(0usize, initial_panel);
 
         let mut palette = CommandPalette::new(config);
         palette.rebuild_snippets(&config.snippets);
@@ -176,8 +173,7 @@ impl UiManager {
         Self {
             palette,
             context_menu: ContextMenu::new(),
-            chat_panels,
-            active_panel_id: 0,
+            chat_panel: initial_panel,
             panel_width_cols,
             panel_focused: false,
             file_picker_focused: false,
@@ -214,53 +210,30 @@ impl UiManager {
 
     // ── Panel accessors ───────────────────────────────────────────────────────
 
-    /// Update which terminal's chat history is active. Must be called whenever
-    /// the focused terminal changes (tab/pane switch).
-    pub fn set_active_terminal(&mut self, id: usize) {
-        if self.active_panel_id == id {
-            return;
-        }
-        self.active_panel_id = id;
-        let width = self.panel_width_cols;
-        self.chat_panels.entry(id).or_insert_with(|| {
-            let mut p = ChatPanel::new();
-            p.width_cols = width;
-            p
-        });
-    }
+    /// No-op — kept for call-site compatibility. Chat panel is now workspace-level.
+    pub fn set_active_terminal(&mut self, _id: usize) {}
 
     pub fn panel(&self) -> &ChatPanel {
-        self.chat_panels
-            .get(&self.active_panel_id)
-            .expect("active panel not initialized — call set_active_terminal first")
+        &self.chat_panel
     }
 
     pub fn panel_mut(&mut self) -> &mut ChatPanel {
-        self.chat_panels
-            .entry(self.active_panel_id)
-            .or_insert_with(ChatPanel::new)
+        &mut self.chat_panel
     }
 
-    /// Drop all state for a closed terminal (TD-MEM-20). Safe to call with any id.
-    pub fn remove_terminal_state(&mut self, tid: usize) {
-        self.chat_panels.remove(&tid);
-        if self.active_panel_id == tid {
-            self.active_panel_id = 0;
-            if let Some(h) = self.streaming_handle.take() {
-                h.abort();
-            }
+    /// Drop streaming state for a closed terminal (TD-MEM-20). Safe to call with any id.
+    pub fn remove_terminal_state(&mut self, _tid: usize) {
+        if let Some(h) = self.streaming_handle.take() {
+            h.abort();
         }
     }
 
     pub fn active_panel_id(&self) -> usize {
-        self.active_panel_id
+        0
     }
 
     pub fn is_panel_visible(&self) -> bool {
-        self.chat_panels
-            .get(&self.active_panel_id)
-            .map(|p| p.is_visible())
-            .unwrap_or(false)
+        self.chat_panel.is_visible()
     }
 
     pub fn is_block_visible(&self) -> bool {
@@ -274,12 +247,9 @@ impl UiManager {
     /// not the currently active panel — so tab-switching during streaming is safe.
     pub fn poll_ai_events(&mut self) -> bool {
         let mut changed = false;
-        while let Ok((panel_id, event)) = self.ai_rx.try_recv() {
+        while let Ok((_panel_id, event)) = self.ai_rx.try_recv() {
             changed = true;
-            // Skip events for panels that were removed after the task was spawned (TD-MEM-20).
-            let Some(panel) = self.chat_panels.get_mut(&panel_id) else {
-                continue;
-            };
+            let panel = &mut self.chat_panel;
             match event {
                 AiEvent::Token(tok) => panel.append_token(&tok),
                 AiEvent::Done => panel.mark_done(),
@@ -683,9 +653,7 @@ impl UiManager {
         // Canonicalize once — on macOS /var is a symlink to /private/var; without this
         // execute_tool's canon.starts_with(cwd) check always fails (TD-029).
         let cwd = cwd.canonicalize().unwrap_or(cwd);
-        // TD-019: capture the originating panel id before any await so tokens are
-        // routed back to the correct panel even if the user switches tabs mid-stream.
-        let panel_id = self.active_panel_id;
+        let panel_id = 0usize;
         let Some(user_content) = self.panel_mut().submit_input() else {
             return;
         };
@@ -705,17 +673,28 @@ impl UiManager {
              Use those tools when the user asks about code or files in their project."
         );
 
-        // Skill injection (D-4): fuzzy-match user query against loaded skills.
+        // Skill injection (D-4): match by query, or keep the panel's active skill.
+        let active_skill_name = self.panel().matched_skill.clone();
         let skill_match = {
             if let Some(skill) = self.skill_manager.match_query(&user_content) {
                 let body = self.skill_manager.read_body(skill).ok();
                 body.map(|b| (skill.name.clone(), b))
+            } else if let Some(name) = &active_skill_name {
+                // No new match — reuse the skill active in this conversation.
+                let found = self.skill_manager.skills().iter().find(|s| &s.name == name).cloned();
+                found.and_then(|s| self.skill_manager.read_body(&s).ok().map(|b| (name.clone(), b)))
             } else {
                 None
             }
         };
         if let Some((skill_name, skill_body)) = skill_match {
-            system_text.push_str(&format!("\n\n{skill_body}"));
+            system_text.push_str(&format!(
+                "\n\nThe following expert skill has been activated. \
+                 You MUST follow its instructions precisely. \
+                 All files referenced in the instructions (templates, guides, scripts) \
+                 are already included verbatim below — do NOT use file tools to read \
+                 them from disk, their content is already here:\n\n{skill_body}"
+            ));
             self.panel_mut().matched_skill = Some(skill_name);
         }
 
@@ -1109,7 +1088,7 @@ impl UiManager {
                 self.file_picker_focused = false;
                 true
             }
-            "skill" | "skills" => {
+            "skills" => {
                 let msg = {
                     let skills = self.skill_manager.skills();
                     if skills.is_empty() {
@@ -1138,7 +1117,7 @@ impl UiManager {
                 true
             }
             _ => {
-                let msg = format!("Unknown command: /{cmd}. Try /skill or /quit.");
+                let msg = format!("Unknown command: /{cmd}. Try /skills or /quit.");
                 self.panel_mut()
                     .messages
                     .push(crate::llm::ChatMessage::assistant(msg));
@@ -1486,8 +1465,7 @@ mod tests {
         let ui = UiManager {
             palette: CommandPalette::new(&config),
             context_menu: ContextMenu::new(),
-            chat_panels: HashMap::new(),
-            active_panel_id: 0,
+            chat_panel: ChatPanel::new(),
             panel_width_cols: 80,
             panel_focused: false,
             file_picker_focused: false,
@@ -1552,8 +1530,7 @@ mod tests {
         let mut ui = UiManager {
             palette: CommandPalette::new(&config),
             context_menu: ContextMenu::new(),
-            chat_panels: HashMap::new(),
-            active_panel_id: 0,
+            chat_panel: ChatPanel::new(),
             panel_width_cols: 80,
             panel_focused: false,
             file_picker_focused: false,

@@ -1,46 +1,39 @@
 # Session State
 
-**Last Updated:** 2026-04-22
-**Session Focus:** Fase D-4 Skills loader — COMPLETA.
+**Last Updated:** 2026-04-23
+**Session Focus:** D-4 bug fixes post-launch.
 
 ## Branch: `master`
 
 ## Estado actual
 
-**Phase 1–3 + 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Fase B COMPLETE. Fase C-1 COMPLETE. Fase C-2 COMPLETE. Fase C-3 COMPLETE. Fase C-3.5 COMPLETE. Fase D-4 COMPLETE.**
+**Phase 1–3 + 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Fase B COMPLETE. Fase C-1 COMPLETE. Fase C-2 COMPLETE. Fase C-3 COMPLETE. Fase C-3.5 COMPLETE. Fase D-4 COMPLETE + bugs fixed.**
 **Siguiente: Fase D-1/D-2/D-3 (MCP) o Fase D-5 (project-level config).**
 
 ---
 
-## Esta sesión (2026-04-22)
+## Esta sesión (2026-04-23)
 
-### D-4 Skills loader — COMPLETA
+### D-4 Skills — bug fixes post-launch
 
-Todos los todos implementados y commiteados:
+1. **`/skill` → `/skills`**: comando renombrado (plural). Removed alias singular.
+2. **YAML block scalar**: `parse_frontmatter` ahora parsea `description: >` multilinea; antes quedaba como `">"` y fuzzy match nunca activaba.
+3. **Explicit name match**: `match_query` primero busca el nombre exacto del skill en el mensaje antes de fuzzy-scoring.
+4. **Assets inlineados**: `read_body` llama `collect_skill_files(skill_dir)` — recorre recursivamente `references/`, `assets/`, `scripts/` y cualquier otro directorio, appending contenido verbatim al body.
+5. **Skill persiste en conversación**: `matched_skill` ya NO se limpia en `mark_done`/`mark_error`. `submit_ai_query` reutiliza el skill activo del panel si el query nuevo no matchea ninguno.
+6. **Chat panel workspace-level**: `HashMap<usize, ChatPanel>` → un solo `chat_panel: ChatPanel`. `set_active_terminal()` es no-op. El panel es visible en todos los panes del workspace.
+7. **Copy/paste en chat**: Cmd+V pega clipboard en el input; Cmd+C copia el input actual. Handler agregado antes del bloque `!cmd`.
+8. **Skill prompt**: system prompt indica explícitamente que los archivos referenciados ya están inlineados — no usar file tools para leerlos.
 
-- `d4-skills-rs` — `src/llm/skills.rs` creado: `SkillMeta`, `SkillManager` con `load/match_query/read_body/skills`. Frontmatter parseado manualmente, fuzzy via `SkimMatcherV2` (threshold 50), sin deps nuevas.
-- `d4-chat-panel` — `matched_skill: Option<String>` en `ChatPanel`, limpiado en `mark_done`/`mark_error`.
-- `d4-mod-rs` — `pub mod skills` registrado en `llm/mod.rs`.
-- `d4-slash` — thin dispatcher en `input/mod.rs`: Enter con `/` prefix → `ui.handle_slash_command`; `/q`/`/quit` migrados al dispatcher.
-- `d4-ui-rs` — `skill_manager: SkillManager` en `UiManager`; `submit_ai_query` inyecta skill body en system prompt y setea `matched_skill`; `handle_slash_command` implementado con `/q`, `/skill [filter]`, y fallback de error.
-- `d4-renderer` — Header AI panel muestra `⚡ skill-name` cuando skill está activo.
-- **clippy fixes** (eefc4ae): colapsar if anidado, `is_none_or`, eliminar `reload_local` sin consumidor.
-
-### Skill format
+### Skill format (agentskills.io standard)
 
 ```
-~/.config/petruterm/skills/<name>/SKILL.md   ← global
+~/.config/petruterm/skills/<name>/SKILL.md   ← required (frontmatter + instructions)
+~/.config/petruterm/skills/<name>/references/ ← guides loaded inline
+~/.config/petruterm/skills/<name>/assets/     ← templates loaded inline
+~/.config/petruterm/skills/<name>/scripts/    ← scripts loaded inline
 .petruterm/skills/<name>/SKILL.md            ← project-local (prioridad sobre global)
 ```
-
-### Lo hecho esta sesión (D-4)
-
-1. `src/llm/skills.rs` (nuevo)
-2. `src/llm/mod.rs` — pub mod skills
-3. `src/llm/chat_panel.rs` — matched_skill field
-4. `src/app/ui.rs` — SkillManager + handle_slash_command + skill injection
-5. `src/app/input/mod.rs` — slash dispatcher
-6. `src/app/renderer.rs` — ⚡ indicator en header
 
 ---
 

@@ -313,7 +313,6 @@ impl ChatPanel {
             self.messages.push(ChatMessage::assistant(response));
         }
         self.streaming_buf.clear();
-        self.matched_skill = None;
         // Drop oldest messages if history exceeds the cap, keeping wrapped_cache in sync.
         if self.messages.len() > MAX_MESSAGES {
             let drop = self.messages.len() - MAX_MESSAGES;
@@ -328,7 +327,6 @@ impl ChatPanel {
 
     pub fn mark_error(&mut self, msg: String) {
         self.streaming_buf.clear();
-        self.matched_skill = None;
         self.state = PanelState::Error(msg);
         self.dirty = true;
     }

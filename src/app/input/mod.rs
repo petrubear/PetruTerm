@@ -486,6 +486,35 @@ impl InputHandler {
             return;
         }
 
+        // ── Chat panel Cmd+C / Cmd+V ─────────────────────────────────────────
+        if ui.is_panel_visible() && ui.panel_focused && cmd {
+            if let Key::Character(s) = &event.logical_key {
+                match s.as_str() {
+                    "v" => {
+                        if let Ok(mut cb) = arboard::Clipboard::new() {
+                            if let Ok(text) = cb.get_text() {
+                                for ch in text.chars() {
+                                    ui.panel_mut().type_char(ch);
+                                }
+                            }
+                        }
+                        return;
+                    }
+                    "c" => {
+                        let text = ui.panel().input.clone();
+                        if !text.is_empty() {
+                            std::thread::spawn(move || {
+                                let _ = arboard::Clipboard::new()
+                                    .and_then(|mut cb| cb.set_text(text));
+                            });
+                        }
+                        return;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
         // ── Chat panel input ─────────────────────────────────────────────────
         if ui.is_panel_visible() && ui.panel_focused && !cmd {
             // ── Confirmation prompt mode ──────────────────────────────────────
