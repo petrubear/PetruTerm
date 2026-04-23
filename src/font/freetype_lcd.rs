@@ -61,7 +61,13 @@ impl FreeTypeLcdRasterizer {
         }
 
         let face = if let Some(ref font_path) = font_config.font_path {
-            Self::load_face_from_file(library, font_path)?
+            match Self::load_face_from_file(library, font_path) {
+                Ok(f) => f,
+                Err(e) => {
+                    unsafe { ft::FT_Done_FreeType(library) };
+                    return Err(e);
+                }
+            }
         } else {
             unsafe { ft::FT_Done_FreeType(library) };
             return Err(anyhow::anyhow!(

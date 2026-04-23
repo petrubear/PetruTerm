@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-04-19
-**Open Items:** 2
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 2 | **P3:** 0
+**Last Updated:** 2026-04-23
+**Open Items:** 7
+**Critical (P0):** 1 | **P1:** 0 | **P2:** 2 | **P3:** 4
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -14,6 +14,19 @@
 | P1 | Significant impact on velocity or correctness | This sprint |
 | P2 | Moderate impact, workaround exists | This quarter |
 | P3 | Minor, address when convenient | Backlog |
+
+---
+
+## P0 — Crítico
+
+### TD-MEM-27: LLM chat panel sin límites de memoria
+- **Archivos:** `src/llm/chat_panel.rs`
+- **Descripción:** El `ChatPanel` mantiene un `messages: Vec<ChatMessage>` con `MAX_MESSAGES = 200`, pero el `streaming_buf` y el `wrapped_cache` pueden acumular memoria sin control si el usuario mantiene conversaciones largas o adjunta archivos grandes. `estimated_tokens()` divide chars/4 pero no hay límite real de memoria.
+- **Root cause:** No hay límite de memoria total para el panel (ej. 10MB). Archivos adjuntos pueden ser grandes (hasta 512KB cada uno, 1MB total documentado en archive TD-030, pero sin límite de memoria activa).
+- **Impacto:** Consumo de memoria lineal con la duración de la sesión, especialmente problemático cuando se adjuntan archivos grandes o conversaciones largas.
+- **Fix propuesto:** Implementar un límite de memoria total para el panel (ej. 10MB) y descartar mensajes antiguos cuando se exceda. Opcional: truncar `streaming_buf` cuando supere un umbral.
+- **Severidad:** P0 — impacto medible en sesiones largas, pero no bloqueante.
+- **Auditoría:** 2026-04-23
 
 ---
 
@@ -32,6 +45,11 @@ _Ninguno abierto. Todos los P1 cerrados 2026-04-16 (TD-RENDER-01/02/03, TD-PERF-
 - **Resto abierto (DIFERIDO a Phase 2):** Glifos LCD bajo selección de mouse con colores personalizados (no inversión simple), y glifos no-LCD cuyos píxeles desbordan el bounding box de la celda (bearings negativos / ascendentes). Requiere clipping por bounding box real del glifo o expansión de quads bg a vecinos.
 - **Evidencia:** `Documents/ScreenShots/Screenshot 2026-04-19 at 17.25.40.png`, `17.28.34.png`.
 - **Severidad:** P2 — artefacto visual notable en uso normal (selección + vi).
+
+### TD-PERF-38: PTY buffer overflow sin backpressure efectivo — RESUELTO 2026-04-23
+Buffer `crossbeam_channel::bounded` aumentado de 256 → 1024 en `src/term/pty.rs:141`.
+Reduce drásticamente los `pty_backpressure_hit` en comandos de salida masiva (`cat`, `ls -R`).
+Backpressure real (pausa/resume signals al proceso hijo) diferido como mejora futura.
 
 ---
 
@@ -59,11 +77,19 @@ _TD-MEM-23 — RESUELTO 2026-04-19. `agent_step` ya toma `&[Value]`; llamada en 
 
 ---
 
+_TD-MEM-26 — RESUELTO 2026-04-23. `FreeTypeLcdRasterizer::new()` en `freetype_lcd.rs`: reemplazado `load_face_from_file()?` por `match` explícito que llama `FT_Done_FreeType(library)` antes de propagar el error. `FreeTypeCmapLookup::new()` en `shaper.rs` ya tenía todos los paths correctos._
+
+---
+
+_TD-MEM-27 — ABIERTO 2026-04-23. LLM chat panel sin límites de memoria activa. Ver auditoría 2026-04-23._
+
+---
+
 _TD-PERF-04 — RESUELTO 2026-04-19. `open_file_picker_async` usa `std::thread::spawn` + `crossbeam_channel::bounded(1)`; `poll_file_scan` drena sin bloquear._
 
 ---
 
-### TD-PERF-05: Atlas de glifos siempre 64 MB de VRAM desde arranque
+_TD-PERF-05: Atlas de glifos siempre 64 MB de VRAM desde arranque
 - **Archivo:** `src/renderer/atlas.rs:GlyphAtlas::new()`
 - **Descripción:** Textura RGBA 4096×4096 = 64 MB de VRAM al arranque. Menos crítico en Apple Silicon (unified memory); importante para Phase 2+ con GPUs discretas.
 - **Fix:** Empezar con 1024×1024 = 4 MB y crecer dinámicamente. Requiere recrear textura + re-subir glifos calientes.
@@ -100,6 +126,10 @@ _TD-PERF-21 — RESUELTO 2026-04-19. `last_filter_query` + path incremental en `
 ---
 
 _TD-PERF-22, 31, 32, 33, 34, 37 — RESUELTOS 2026-04-17. Ver archivo._
+
+---
+
+_TD-PERF-38 — RESUELTO 2026-04-23. `bounded::<PtyEvent>(256)` → `bounded::<PtyEvent>(1024)` en `pty.rs:141`. Reduce `pty_backpressure_hit` en salida masiva. Backpressure real (pause/resume signals) diferido._
 
 ---
 
@@ -170,6 +200,68 @@ _TD-MAINT-01 — RESUELTO 2026-04-19. `cargo-audit` instalado y ejecutado en CI 
 ---
 
 _TD-PERF-30 — RESUELTO (ya implementado). `benches/` existe con shaping/search/build_instances/rasterize. CI regression gate con critcmp >5%. Feature flag `profiling` con tracing-tracy. HUD F12 con frame times + latency p50/p95/p99. Ver ci.yml y benches/._
+
+---
+
+### TD-MEM-28: FreeTypeLcdRasterizer cache sin límite
+- **Archivos:** `src/font/freetype_lcd.rs`
+- **Descripción:** `FreeTypeLcdRasterizer` tiene un `cache: Mutex<HashMap<u64, LcdAtlasEntry>>` que crece sin límite. Cada glyph rasterizado se almacena aquí permanentemente.
+- **Root cause:** HashMap no tiene eviction LRU. Con LCD AA habilitado, cada glyph único se cachea forever.
+- **Impacto:** Memoria heap creciendo indefinidamente, lock contention en multi-thread si multiple paneles usan el mismo rasterizer.
+- **Fix propuesto:** Usar `lru::LruCache` con tamaño fijo (ej. 256 entradas) en lugar de `HashMap`.
+- **Severidad:** P3 — crecimiento lento en uso normal, noticeable en sesiones muy largas con muchos glyphs únicos.
+- **Auditoría:** 2026-04-23
+
+### TD-MEM-29: CellVertex overhead (80 bytes × 32K = 2.5 MB)
+- **Archivos:** `src/renderer/cell.rs`
+- **Descripción:** `CellVertex` tiene 80 bytes (sin contar padding). Con `MAX_INSTANCES = 32_768`, el buffer de instancias consume 2.5 MB. Si se renderizan 10 paneles (10 × 80 cols × 24 rows = 19,200 celdas), se usa casi toda la capacidad.
+- **Root cause:** `grid_pos: [f32; 2]` (8 bytes) + `atlas_uv: [f32; 4]` (16 bytes) + `fg: [f32; 4]` (16 bytes) + `bg: [f32; 4]` (16 bytes) + `glyph_offset: [f32; 2]` (8 bytes) + `glyph_size: [f32; 2]` (8 bytes) + `flags: u32` (4 bytes) + `_pad: u32` (4 bytes) = 80 bytes.
+- **Impacto:** Uso de memoria GPU elevado, posibles overflow si se excede `MAX_INSTANCES`.
+- **Fix propuesto:** Considerar usar `u16` para `grid_pos` en lugar de `f32` si el viewport es pequeño, o implementar batching por paneles.
+- **Severidad:** P3 — 2.5 MB es aceptable en hardware moderno, pero relevante para Phase 2+ con múltiples paneles.
+- **Auditoría:** 2026-04-23
+
+### TD-MEM-30: Bytecode cache de Lua no limpiado
+- **Archivos:** `src/config/lua.rs`
+- **Descripción:** El bytecode cache se almacena en `~/.cache/petruterm/lua-bc/` pero nunca se limpia. Con cada actualización de la app, los archivos `.luac` antiguos se acumulan.
+- **Root cause:** `load_or_compile_config` escribe cache pero no hay mecanismo para eliminar archivos `.luac` no modificados en los últimos 30 días.
+- **Impacto:** Uso gradual de espacio en disco (~10-50 KB por archivo, acumulación a largo plazo).
+- **Fix propuesto:** Implementar una política de limpieza que elimine archivos `.luac` no modificados en los últimos 30 días. Opcional: verificar versión del binario antes de usar cache.
+- **Severidad:** P3 — espacio en disco no es crítico, pero limpieza es buena práctica.
+- **Auditoría:** 2026-04-23
+
+### TD-PERF-39: String allocation en hot path de shaping
+- **Archivos:** `src/font/shaper.rs` (TextShaper)
+- **Descripción:** El método `shape_line()` crea múltiples `String` temporales (tokens, palabras) en el camino crítico de renderizado. Aunque hay `word_cache`, cada línea que no es ASCII puro requiere `split(' ')` y allocaciones.
+- **Root cause:** `try_word_cached_shape` usa `text.split(' ')` que crea `&str` temporales, y `word_cache_insert` usa `String::with_capacity` que puede allocar.
+- **Impacto:** GC pressure, allocation overhead en frames de alto FPS (especialmente 120 Hz).
+- **Fix propuesto:** Reutilizar `String` buffers desde `RenderContext` o usar `Cow<str>` para evitar allocaciones. Opcional: usar `SmallString` para palabras cortas (< 22 chars).
+- **Severidad:** P3 — medible en benchmarks, pero impacto real depende del workload.
+- **Auditoría:** 2026-04-23
+
+### TD-PERF-40: Vec no reutilizados en render loop
+- **Archivos:** `src/app/renderer.rs` (RenderContext)
+- **Descripción:** Aunque hay `cell_data_scratch`, `scratch_chars`, `scratch_str`, etc., algunos métodos como `build_all_pane_instances()` crean nuevos `Vec` en cada frame para `pane_infos`.
+- **Root cause:** `pane_infos` se construye en `build_all_pane_instances` llamando a `active_pane_infos` que puede allocar nuevos Vecs.
+- **Impacto:** Allocation overhead en cada frame, especialmente problemático a 120 FPS.
+- **Fix propuesto:** Mover `pane_infos` a `RenderContext` como buffer reutilizable. Opcional: usar `SmallVec` para paneles pequeños (≤ 4 paneles).
+- **Severidad:** P3 — allocation barata en Rust, pero evitable.
+- **Auditoría:** 2026-04-23
+
+---
+
+## Resumen de auditoría 2026-04-23
+
+| ID | Prioridad | Descripción | Estado |
+|----|-----------|-------------|--------|
+| TD-MEM-26 | P0 | FreeType memory leaks | RESUELTO |
+| TD-MEM-27 | P0 | LLM chat panel sin límites | ABIERTO |
+| TD-PERF-38 | P2 | PTY buffer overflow sin backpressure | RESUELTO |
+| TD-MEM-28 | P3 | FreeTypeLcdRasterizer cache sin límite | ABIERTO |
+| TD-MEM-29 | P3 | CellVertex overhead | ABIERTO |
+| TD-MEM-30 | P3 | Bytecode cache Lua no limpiado | ABIERTO |
+| TD-PERF-39 | P3 | String allocation hot path | ABIERTO |
+| TD-PERF-40 | P3 | Vec no reutilizados | ABIERTO |
 
 ---
 

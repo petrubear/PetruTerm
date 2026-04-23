@@ -138,7 +138,7 @@ impl Pty {
         direct_notifier: Arc<OnceLock<Notifier>>,
         working_directory: Option<std::path::PathBuf>,
     ) -> Result<Self> {
-        let (tx, rx) = crossbeam_channel::bounded::<PtyEvent>(256);
+        let (tx, rx) = crossbeam_channel::bounded::<PtyEvent>(1024);
         let tx_clone = tx.clone();
         let proxy = PtyEventProxy {
             tx,
