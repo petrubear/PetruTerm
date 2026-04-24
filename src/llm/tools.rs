@@ -113,6 +113,12 @@ impl AgentTool {
     pub fn all_specs() -> Vec<Value> {
         Self::all().iter().map(|t| t.to_openai_spec()).collect()
     }
+
+    /// Returns true if `name` is a built-in tool handled by `execute_tool`.
+    /// Any other name is assumed to be an MCP tool.
+    pub fn is_builtin(name: &str) -> bool {
+        matches!(name, "read_file" | "list_dir" | "write_file" | "run_command")
+    }
 }
 
 /// A single tool call requested by the LLM.

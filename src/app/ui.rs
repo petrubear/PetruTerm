@@ -3,6 +3,8 @@ use crate::app::renderer::RenderContext;
 use crate::config::{self, Config};
 use crate::llm::ai_block::AiBlock;
 use crate::llm::chat_panel::{AiEvent, ChatPanel, ConfirmDisplay};
+use crate::llm::mcp::config as mcp_config;
+use crate::llm::mcp::manager::McpManager;
 use crate::llm::shell_context::ShellContext;
 use crate::llm::skills::SkillManager;
 use crate::llm::tools::{execute_tool, AgentStepResult, AgentTool};
@@ -135,6 +137,9 @@ pub struct UiManager {
 
     // ── Skills (D-4) ─────────────────────────────────────────────────────────
     pub skill_manager: SkillManager,
+
+    // ── MCP (D-1/D-2/D-3) ────────────────────────────────────────────────────
+    pub mcp_manager: std::sync::Arc<McpManager>,
 }
 
 impl UiManager {
@@ -169,6 +174,21 @@ impl UiManager {
         if let Ok(cwd) = std::env::current_dir() {
             skill_manager.load(&cwd);
         }
+
+        let mcp_manager = {
+            let mut mgr = McpManager::new();
+            if let Ok(cwd) = std::env::current_dir() {
+                if let Ok(cfg) = mcp_config::load(&cwd) {
+                    if !cfg.is_empty() {
+                        let errors = tokio_rt.block_on(mgr.start_all(&cfg));
+                        for (name, err) in &errors {
+                            log::warn!("MCP server '{name}' failed to start: {err:#}");
+                        }
+                    }
+                }
+            }
+            std::sync::Arc::new(mgr)
+        };
 
         Self {
             palette,
@@ -205,6 +225,7 @@ impl UiManager {
             branch_scan_rx: None,
             branch_scan_cwd: None,
             skill_manager,
+            mcp_manager,
         }
     }
 
@@ -751,8 +772,10 @@ impl UiManager {
             api_msgs.push(msg.to_api_value());
         }
 
-        let tool_specs = AgentTool::all_specs();
+        let mut tool_specs = AgentTool::all_specs();
+        tool_specs.extend(self.mcp_manager.all_tools_openai());
         let tx = self.ai_tx.clone();
+        let mcp_manager = std::sync::Arc::clone(&self.mcp_manager);
 
         // Cancel any previous in-flight stream for this UI (TD-MEM-12).
         if let Some(h) = self.streaming_handle.take() {
@@ -852,8 +875,8 @@ impl UiManager {
                                         _ => t!("ai.command_rejected").to_string(),
                                     }
                                 }
-                            } else {
-                                // ── Read-only tools — execute immediately ─────────────────
+                            } else if AgentTool::is_builtin(&call.name) {
+                                // ── Built-in read-only tools — execute immediately ────────
                                 let _ = tx.send((
                                     panel_id,
                                     AiEvent::ToolStatus {
@@ -869,6 +892,35 @@ impl UiManager {
                                     AiEvent::ToolStatus {
                                         tool: call.name.clone(),
                                         path: path_str.clone(),
+                                        done: true,
+                                    },
+                                ));
+                                let _ = wakeup_proxy.send_event(());
+                                r
+                            } else {
+                                // ── MCP tool — route to the registered server ─────────────
+                                let args = serde_json::from_str::<serde_json::Value>(
+                                    &call.arguments,
+                                )
+                                .unwrap_or(serde_json::json!({}));
+                                let _ = tx.send((
+                                    panel_id,
+                                    AiEvent::ToolStatus {
+                                        tool: call.name.clone(),
+                                        path: String::new(),
+                                        done: false,
+                                    },
+                                ));
+                                let _ = wakeup_proxy.send_event(());
+                                let r = match mcp_manager.call_tool(&call.name, args).await {
+                                    Ok(text) => text,
+                                    Err(e) => format!("MCP error: {e:#}"),
+                                };
+                                let _ = tx.send((
+                                    panel_id,
+                                    AiEvent::ToolStatus {
+                                        tool: call.name.clone(),
+                                        path: String::new(),
                                         done: true,
                                     },
                                 ));
@@ -1515,6 +1567,7 @@ mod tests {
             branch_scan_rx: None,
             branch_scan_cwd: None,
             skill_manager: SkillManager::new(),
+            mcp_manager: std::sync::Arc::new(McpManager::new()),
         };
 
         // Simulate an in-flight fetch by setting the flag and spawn time.
@@ -1583,6 +1636,7 @@ mod tests {
             branch_scan_rx: None,
             branch_scan_cwd: None,
             skill_manager: SkillManager::new(),
+            mcp_manager: std::sync::Arc::new(McpManager::new()),
         };
 
         // Cache should still be "main" before the call.
