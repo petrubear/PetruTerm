@@ -327,7 +327,12 @@ impl UiManager {
 
     /// Poll for async git branch results and refresh the cache if due.
     /// Returns true if the cache was updated (caller should redraw).
-    pub fn poll_git_branch(&mut self, cwd: Option<&std::path::Path>, dirty_check: bool, ttl: std::time::Duration) -> bool {
+    pub fn poll_git_branch(
+        &mut self,
+        cwd: Option<&std::path::Path>,
+        dirty_check: bool,
+        ttl: std::time::Duration,
+    ) -> bool {
         // Drain any result that arrived from a previous spawn.
         let mut updated = false;
         while let Ok(branch) = self.git_rx.try_recv() {
@@ -1585,7 +1590,11 @@ mod tests {
         assert!(ui.git_branch_in_flight);
 
         // Call poll_git_branch — it should detect the timeout (>30s) and reset in_flight.
-        let updated = ui.poll_git_branch(Some(&std::path::PathBuf::from("/tmp/test")), false, std::time::Duration::from_secs(5));
+        let updated = ui.poll_git_branch(
+            Some(&std::path::PathBuf::from("/tmp/test")),
+            false,
+            std::time::Duration::from_secs(5),
+        );
 
         // After timeout recovery:
         // - in_flight should be false (timeout recovered)

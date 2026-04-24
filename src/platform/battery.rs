@@ -31,14 +31,12 @@ mod macos {
         fn CFArrayGetCount(array: *const c_void) -> isize;
         fn CFArrayGetValueAtIndex(array: *const c_void, idx: isize) -> *const c_void;
         fn CFDictionaryGetValue(dict: *const c_void, key: *const c_void) -> *const c_void;
-        fn CFStringCreateWithCString(alloc: *const c_void, s: *const c_char, enc: u32)
-            -> *mut c_void;
-        fn CFStringGetCString(
-            s: *const c_void,
-            buf: *mut c_char,
-            len: isize,
+        fn CFStringCreateWithCString(
+            alloc: *const c_void,
+            s: *const c_char,
             enc: u32,
-        ) -> bool;
+        ) -> *mut c_void;
+        fn CFStringGetCString(s: *const c_void, buf: *mut c_char, len: isize, enc: u32) -> bool;
         fn CFNumberGetValue(n: *const c_void, t: c_int, out: *mut c_void) -> bool;
         fn CFRelease(cf: *const c_void);
     }
@@ -100,9 +98,11 @@ mod macos {
                         cfdict_str(desc, "Power Source State").as_deref() == Some("Battery Power");
                     let current = cfdict_i32(desc, "Current Capacity").unwrap_or(0);
                     let max = cfdict_i32(desc, "Max Capacity").unwrap_or(100).max(1);
-                    let percent =
-                        ((current as f32 / max as f32) * 100.0).clamp(0.0, 100.0) as u8;
-                    Some(BatteryStatus { on_battery, percent })
+                    let percent = ((current as f32 / max as f32) * 100.0).clamp(0.0, 100.0) as u8;
+                    Some(BatteryStatus {
+                        on_battery,
+                        percent,
+                    })
                 } else {
                     None
                 }

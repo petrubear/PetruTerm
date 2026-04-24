@@ -66,6 +66,7 @@ impl StatusBar {
     /// - `cwd`: current working directory (None if unavailable).
     /// - `git_branch`: cached git branch string (None if not a git repo or not yet fetched).
     /// - `last_exit_code`: last exit code from shell context (None if unavailable).
+    #[allow(clippy::too_many_arguments)]
     pub fn build(
         leader_active: bool,
         leader_resize_mode: bool,

@@ -1218,13 +1218,21 @@ impl ApplicationHandler<()> for App {
                             };
                         let sb_win_w = rc.renderer.size().0 as f32;
                         // Key: all inputs that affect segment text + layout (TD-PERF-10).
+                        // Include current minute so the time widget invalidates the cache
+                        // at each minute boundary (the WaitUntil in about_to_wait wakes us).
                         let sb_key = {
                             let flags = [
                                 self.input.leader_active as u8,
                                 leader_resize_mode as u8,
                                 sb_exit_code_raw as u8,
-                                self.battery_status.as_ref().map(|s| s.percent).unwrap_or(255),
-                                self.battery_status.as_ref().map(|s| s.on_battery as u8).unwrap_or(0),
+                                self.battery_status
+                                    .as_ref()
+                                    .map(|s| s.percent)
+                                    .unwrap_or(255),
+                                self.battery_status
+                                    .as_ref()
+                                    .map(|s| s.on_battery as u8)
+                                    .unwrap_or(0),
                             ];
                             let col_bytes = sb_total_cols.to_le_bytes();
                             let row_bytes = total_rows.to_le_bytes();
@@ -1238,6 +1246,11 @@ impl ApplicationHandler<()> for App {
                             let branch_bytes =
                                 self.ui.git_branch_cache.as_deref().unwrap_or("").as_bytes();
                             let leader_bytes = self.config.leader.key.as_bytes();
+                            let mins_now = std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .map(|d| (d.as_secs() / 60) as u32)
+                                .unwrap_or(0);
+                            let mins_bytes = mins_now.to_le_bytes();
                             static_hash(&[
                                 &flags,
                                 &col_bytes,
@@ -1246,6 +1259,7 @@ impl ApplicationHandler<()> for App {
                                 cwd_bytes,
                                 branch_bytes,
                                 leader_bytes,
+                                &mins_bytes,
                             ])
                         };
                         if rc.status_bar_key == sb_key && !rc.status_bar_instances_cache.is_empty()
@@ -2143,12 +2157,14 @@ impl ApplicationHandler<()> for App {
         {
             self.ui.git_branch_last_poll = std::time::Instant::now();
             let git_ttl = if self.battery_saver_active {
-                std::time::Duration::from_secs(30)
+                std::time::Duration::from_secs(60)
             } else {
-                std::time::Duration::from_secs(5)
+                std::time::Duration::from_secs(15)
             };
             let git_dirty = self.config.status_bar.git_dirty_check && !self.battery_saver_active;
-            let git_updated = self.ui.poll_git_branch(self.cached_cwd.as_deref(), git_dirty, git_ttl);
+            let git_updated =
+                self.ui
+                    .poll_git_branch(self.cached_cwd.as_deref(), git_dirty, git_ttl);
             if git_updated {
                 // Invalidate status bar key so it rebuilds on the next frame.
                 if let Some(rc) = &mut self.render_ctx {
@@ -2165,7 +2181,13 @@ impl ApplicationHandler<()> for App {
         // drag, no overlay, and no search bar open. When idle, we skip cursor blink
         // entirely (many terminals do this) and use ControlFlow::Wait so the OS
         // keeps the event loop dormant until a real event arrives.
-        let any_overlay = self.ui.is_panel_visible()
+        //
+        // The AI panel alone does NOT prevent idle when it is in the background
+        // (terminal focused, nothing streaming). The panel cursor goes solid and the
+        // thread parks — same energy profile as a plain terminal. Blink resumes as
+        // soon as the user focuses the panel or LLM output starts arriving
+        // (had_ai = true from poll_ai_events).
+        let any_overlay = (self.ui.is_panel_visible() && self.ui.panel_focused)
             || self.ui.palette.visible
             || self.ui.context_menu.visible
             || self.ui.search_bar.visible
@@ -2174,8 +2196,13 @@ impl ApplicationHandler<()> for App {
         let idle =
             !had_pty_data && !had_ai && !self.pending_pty_redraw && !any_overlay && !any_drag;
 
-        // Blink only when focused and not idle (TD-MEM-19: no wasted redraws in background).
-        if !idle && self.window_focused && self.input.update_cursor_blink() {
+        // Blink only when focused, not idle, and not in battery-saver mode.
+        // On battery the cursor stays solid — eliminates the 530 ms periodic GPU wakeup.
+        if !idle
+            && self.window_focused
+            && !self.battery_saver_active
+            && self.input.update_cursor_blink()
+        {
             // Input rows are rebuilt fresh every frame (TD-PERF-10), so blink alone does not
             // require a full content rebuild. Only mark dirty when the file picker is open,
             // because its search-query cursor lives in the content section.
@@ -2220,24 +2247,45 @@ impl ApplicationHandler<()> for App {
             // else: WaitUntil below will wake us at pty_deadline to retry.
         }
 
+        // Schedule a wakeup at the top of the next minute so the status bar time
+        // widget stays accurate even when the thread would otherwise be parked.
+        let next_minute_wake = {
+            let now_inst = std::time::Instant::now();
+            let secs_now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            let secs_remaining = 60 - (secs_now % 60);
+            now_inst + std::time::Duration::from_secs(secs_remaining)
+        };
+
         if idle || !self.window_focused {
             // Fully idle or window not focused: park the thread.
             // When unfocused, blink is suspended — no need to schedule a wakeup for it.
             // PTY data still arrives via user_event (winit wakes us), so background processes run.
-            if self.pending_pty_redraw {
-                event_loop
-                    .set_control_flow(winit::event_loop::ControlFlow::WaitUntil(pty_deadline));
-            } else {
-                event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
-            }
-        } else {
-            let blink_ms = if self.battery_saver_active { 750 } else { 530 };
-            let blink_deadline =
-                self.input.cursor_last_blink + std::time::Duration::from_millis(blink_ms);
+            // Wake at the next minute boundary to refresh the status bar clock.
             let wake = if self.pending_pty_redraw {
-                blink_deadline.min(pty_deadline)
+                pty_deadline.min(next_minute_wake)
             } else {
-                blink_deadline
+                next_minute_wake
+            };
+            event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(wake));
+        } else if self.battery_saver_active {
+            // On battery: no blink timer — cursor stays solid, thread parks until
+            // PTY data, user input, or the minute boundary for the status bar clock.
+            let wake = if self.pending_pty_redraw {
+                pty_deadline.min(next_minute_wake)
+            } else {
+                next_minute_wake
+            };
+            event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(wake));
+        } else {
+            let blink_deadline =
+                self.input.cursor_last_blink + std::time::Duration::from_millis(530);
+            let wake = if self.pending_pty_redraw {
+                blink_deadline.min(pty_deadline).min(next_minute_wake)
+            } else {
+                blink_deadline.min(next_minute_wake)
             };
             event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(wake));
         }
