@@ -174,6 +174,7 @@ impl UiManager {
         if let Ok(cwd) = std::env::current_dir() {
             skill_manager.load(&cwd);
         }
+        let skill_count = skill_manager.skills().len();
 
         let mcp_manager = {
             let mut mgr = McpManager::new();
@@ -189,6 +190,10 @@ impl UiManager {
             }
             std::sync::Arc::new(mgr)
         };
+        let mcp_connected = mcp_manager.connected_count();
+
+        initial_panel.mcp_connected = mcp_connected;
+        initial_panel.skill_count = skill_count;
 
         Self {
             palette,

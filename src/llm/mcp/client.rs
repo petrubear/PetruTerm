@@ -64,12 +64,21 @@ impl McpClient {
     pub async fn connect(name: String, cfg: McpServerConfig) -> Result<Self> {
         let (msg_tx, msg_rx) = mpsc::channel::<OutboundMsg>(32);
 
+        // Augment PATH with common binary locations so tools like `npx` are found
+        // even when PetruTerm is launched from an environment with a minimal PATH
+        // (e.g. macOS app bundle, lazy-loaded nvm/node in zsh).
+        let augmented_path = {
+            let current = std::env::var("PATH").unwrap_or_default();
+            format!("/opt/homebrew/bin:/usr/local/bin:/usr/bin:{current}")
+        };
+
         let mut child = tokio::process::Command::new(&cfg.command)
             .args(&cfg.args)
             .envs(&cfg.env)
+            .env("PATH", &augmented_path)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
+            .stderr(std::process::Stdio::inherit()) // forward MCP server errors to PetruTerm stderr
             .kill_on_drop(true)
             .spawn()
             .with_context(|| format!("Failed to spawn MCP server '{name}' ({})", cfg.command))?;

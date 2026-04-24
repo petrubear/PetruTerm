@@ -783,10 +783,19 @@ impl RenderContext {
         {
             let provider = &config.llm.provider;
             let model = &config.llm.model;
+
+            // Build capability badge: [mcp:N skills:M] — only shown when non-zero
+            let badge = match (panel.mcp_connected, panel.skill_count) {
+                (0, 0) => String::new(),
+                (m, 0) => format!(" [mcp:{m}]"),
+                (0, s) => format!(" [skills:{s}]"),
+                (m, s) => format!(" [mcp:{m} skills:{s}]"),
+            };
+
             let label = if let Some(skill) = &panel.matched_skill {
-                format!(" ✦ AI  {}:{}  ⚡{} ", provider, model, skill)
+                format!(" ✦ AI  {}:{}{}  ⚡{} ", provider, model, badge, skill)
             } else {
-                format!(" ✦ AI  {}:{} ", provider, model)
+                format!(" ✦ AI  {}:{}{} ", provider, model, badge)
             };
             let label_chars = label.chars().count();
             let mut buf = std::mem::take(&mut self.fmt_buf);

@@ -104,6 +104,11 @@ impl McpManager {
         !self.clients.is_empty()
     }
 
+    /// Number of currently connected MCP servers.
+    pub fn connected_count(&self) -> usize {
+        self.clients.len()
+    }
+
     /// Server names currently connected.
     #[allow(dead_code)]
     pub fn server_names(&self) -> Vec<&str> {

@@ -138,6 +138,12 @@ pub struct ChatPanel {
     /// Cleared when the response completes or errors.
     pub matched_skill: Option<String>,
 
+    // ── Status indicators (shown in header) ───────────────────────────────────
+    /// Number of successfully connected MCP servers.
+    pub mcp_connected: usize,
+    /// Total number of available skills.
+    pub skill_count: usize,
+
     // ── File picker ───────────────────────────────────────────────────────────
     /// Whether the file picker overlay is open.
     pub file_picker_open: bool,
@@ -165,6 +171,8 @@ impl ChatPanel {
             attached_file_chars: Vec::new(),
             confirm_display: None,
             matched_skill: None,
+            mcp_connected: 0,
+            skill_count: 0,
             file_picker_open: false,
             file_picker_query: String::new(),
             file_picker_items: Vec::new(),
