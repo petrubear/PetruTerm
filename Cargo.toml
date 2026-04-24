@@ -71,6 +71,9 @@ lru = "0.17"
 # Fast non-cryptographic hash for internal cache keys (TD-PERF-34)
 rustc-hash = "2"
 
+# Faster Mutex/RwLock — ~2x faster than std on uncontended paths (REC-PERF-02)
+parking_lot = "0.12"
+
 # GPU buffer casting
 bytemuck = { version = "1", features = ["derive"] }
 

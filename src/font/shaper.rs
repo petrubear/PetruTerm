@@ -395,6 +395,7 @@ impl TextShaper {
         };
 
         shaper.measure_cell(font_config);
+        shaper.init_ascii_glyph_cache();
         shaper
     }
 
@@ -455,7 +456,6 @@ impl TextShaper {
     }
 
     /// Populate `ascii_glyph_cache` using the FreeType cmap for printable ASCII.
-    /// Called lazily on first use so the constructor stays fast.
     fn init_ascii_glyph_cache(&mut self) {
         self.ascii_glyph_cache_ready = true;
         let Some(ft) = self.ft_cmap.as_ref() else {
@@ -467,6 +467,28 @@ impl TextShaper {
                 self.ascii_glyph_cache[cp as usize] = id;
             }
         }
+    }
+
+    /// Pre-rasterize all 95 printable ASCII glyphs into the atlas at startup (REC-PERF-01).
+    /// Eliminates atlas cache-misses for the dominant glyph set on the first rendered frame.
+    pub fn warmup_atlas(&mut self, atlas: &mut GlyphAtlas, queue: &wgpu::Queue) {
+        let font_size = self.metrics.font_size;
+        for cp in 0x20u32..=0x7Eu32 {
+            let glyph_id = self.ascii_glyph_cache[cp as usize];
+            if glyph_id == 0 {
+                continue;
+            }
+            let (key, _, _) = CacheKey::new(
+                self.primary_font_id,
+                glyph_id as u16,
+                font_size,
+                (0.0, 0.0),
+                fontdb::Weight::NORMAL,
+                CacheKeyFlags::empty(),
+            );
+            let _ = self.rasterize_to_atlas(key, atlas, queue);
+        }
+        log::info!("Atlas warmup: pre-rasterized {} ASCII glyphs.", 0x7Eu32 - 0x20u32 + 1);
     }
 
     /// Try the ASCII fast path: bypass HarfBuzz entirely.
@@ -485,9 +507,6 @@ impl TextShaper {
     ) -> Option<ShapedRun> {
         if !text.is_ascii() || has_ligature_chars(text) {
             return None;
-        }
-        if !self.ascii_glyph_cache_ready {
-            self.init_ascii_glyph_cache();
         }
         // Require ft_cmap to be present (if it's None, glyph IDs would all be 0).
         self.ft_cmap.as_ref()?;

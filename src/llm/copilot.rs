@@ -5,7 +5,8 @@ use reqwest::Client;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use serde_json::Value;
-use std::sync::{Arc, Mutex};
+use parking_lot::Mutex;
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use super::tools::AgentStepResult;
@@ -240,7 +241,7 @@ impl CopilotProvider {
             .as_secs();
 
         {
-            let guard = self.cached_jwt.lock().unwrap();
+            let guard = self.cached_jwt.lock();
             if let Some(cached) = guard.as_ref() {
                 if cached.expires_at > now + REFRESH_MARGIN_SECS {
                     return Ok(cached.token.clone());
@@ -273,7 +274,7 @@ impl CopilotProvider {
             .context("Failed to parse Copilot token response")?;
 
         let jwt = SecretString::from(resp.token);
-        *self.cached_jwt.lock().unwrap() = Some(CachedJwt {
+        *self.cached_jwt.lock() = Some(CachedJwt {
             token: jwt.clone(),
             expires_at: resp.expires_at,
         });

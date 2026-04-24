@@ -3,7 +3,7 @@ use freetype::freetype as ft;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::sync::Mutex;
+use parking_lot::Mutex;
 
 use crate::config::schema::FontConfig;
 use crate::renderer::lcd_atlas::LcdGlyphAtlas;
@@ -122,12 +122,12 @@ impl FreeTypeLcdRasterizer {
     pub fn rasterize(&mut self, glyph_id: u32, queue: &wgpu::Queue) -> Option<LcdAtlasEntry> {
         let cache_key = glyph_id as u64;
 
-        if let Some(cached) = self.cache.lock().unwrap().get(&cache_key) {
+        if let Some(cached) = self.cache.lock().get(&cache_key) {
             return Some(*cached);
         }
 
         if let Some(entry) = self.lcd_atlas.borrow_mut().get_and_touch(cache_key) {
-            self.cache.lock().unwrap().insert(cache_key, entry);
+            self.cache.lock().insert(cache_key, entry);
             return Some(entry);
         }
 
@@ -189,7 +189,7 @@ impl FreeTypeLcdRasterizer {
             }
         };
 
-        self.cache.lock().unwrap().insert(cache_key, entry);
+        self.cache.lock().insert(cache_key, entry);
         Some(entry)
     }
 
@@ -203,7 +203,7 @@ impl FreeTypeLcdRasterizer {
     /// Must be called whenever `LcdGlyphAtlas::clear()` is called, since the
     /// local cache holds UVs that would point into the now-empty texture.
     pub fn clear_local_cache(&mut self) {
-        self.cache.lock().unwrap().clear();
+        self.cache.lock().clear();
     }
 
     unsafe fn deinterleave_lcd(

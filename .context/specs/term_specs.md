@@ -568,3 +568,39 @@ Copied to `~/.config/petruterm/` on first launch if directory doesn't exist.
           └── assets/            # themes, icons
   ```
 - No code signing for Phase 1 (dev use only); add in post-Phase 3
+
+
+---
+
+## 15. Frame Budget (REC-PERF-05)
+
+Performance targets for PetruTerm on Apple Silicon (primary platform, Phase 1).
+
+| Scenario | Target | Metric |
+|---|---|---|
+| Input-to-pixel (keystroke visible on screen) | < 8 ms p99 | One frame at 120 Hz |
+| Steady-state idle (no terminal activity) | 0 CPU/GPU work | ControlFlow::Wait + focus guard |
+| Cache-miss cold start (first frame after launch) | < 16 ms | One frame at 60 Hz |
+| Atlas evict + reshape storm (large scroll) | < 50 ms | Acceptable stutter budget |
+| Streaming LLM token render | < 16 ms per token frame | Smooth at 60+ Hz |
+
+### HUD monitoring
+
+Press **F12** in-app to toggle the latency HUD. Displays rolling p50/p95/p99 frame times.
+p99 > 8 ms renders in red as a regression signal.
+
+### CI regression gate
+
+`benches/` contains criterion benchmarks for `shape_line`, `search`, and `build_instances`.
+CI fails if any benchmark regresses > 5% versus the stored baseline (critcmp).
+
+### Measurement methodology
+
+Latency samples collected via `latency_samples: VecDeque<f32>` (120 entries) on `RenderContext`.
+Sampled from `RedrawRequested` entry to `queue.submit()`. The HUD displays p50/p95/p99 live.
+
+### Known headroom
+
+- `build_instances` hot path: damage tracking skips undamaged rows (alacritty_terminal `TermDamage` API).
+- Atlas warmup at startup: all 95 printable ASCII glyphs pre-rasterized to eliminate cold-start misses.
+- `parking_lot::Mutex` used for all internal locks: ~2x faster than `std::sync::Mutex` on uncontended paths.

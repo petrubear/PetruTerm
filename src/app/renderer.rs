@@ -162,6 +162,12 @@ impl RenderContext {
         // Finalize renderer setup with shaper info
         let mut renderer = renderer;
         renderer.set_cell_size(shaper.cell_width, shaper.cell_height);
+
+        // Pre-rasterize printable ASCII into the atlas to eliminate cold-start cache misses (REC-PERF-01).
+        {
+            let (atlas, queue) = renderer.atlas_and_queue();
+            shaper.warmup_atlas(atlas, queue);
+        }
         if let Some(atlas) = shaper.lcd_atlas.take() {
             renderer.set_lcd_atlas(atlas);
         }

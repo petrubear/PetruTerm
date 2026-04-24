@@ -244,11 +244,18 @@ _TD-MCP-01 — RESUELTO 2026-04-24. Hot-reload de `mcp.json` implementado en D-5
 
 ## Recomendaciones generales (no-issues, direcciones estratégicas)
 
-### REC-PERF-01: Pre-shape ASCII range al arranque
-El 95%+ de los glifos tipeados son ASCII imprimible (32-126). Pre-shape + pre-rasterize al cargar la fuente y marcar esas entradas como "hot / never evict" en el atlas. Elimina cache-misses para el caso dominante.
+### REC-PERF-01: Pre-shape ASCII range al arranque — RESUELTO 2026-04-24
+`init_ascii_glyph_cache()` ahora se llama eagerly en `TextShaper::new()` (no lazy).
+`warmup_atlas()` rasteriza los 95 glyphs ASCII imprimibles al atlas en `RenderContext::new()`
+justo después de `set_cell_size`, eliminando cache-misses en el primer frame renderizado.
+"Never evict" diferido — requeriría nuevo flag en `GlyphAtlas`; el atlas de 64 MB es suficientemente
+grande para que los ASCII no sean eviccionados en la práctica.
 
-### REC-PERF-02: `parking_lot::Mutex` en lugar de `std::sync::Mutex`
-En macOS `parking_lot` es ~2× más rápido en paths no contendidos. Relevante si aparece contention con PTY reader + main thread. Auditar dónde se usa `Arc<Mutex<...>>`.
+### REC-PERF-02: `parking_lot::Mutex` en lugar de `std::sync::Mutex` — RESUELTO 2026-04-24
+`parking_lot = "0.12"` añadido a `Cargo.toml`. Reemplazado en los 3 sitios donde se usaba
+`std::sync::Mutex`: `font/freetype_lcd.rs`, `font/loader.rs` (FONT_PATH_CACHE estático),
+`llm/copilot.rs` (JWT cache). Ningún lock se mantiene a través de `.await`, seguro en los 3 casos.
+`.lock().unwrap()` → `.lock()` (parking_lot no devuelve Result).
 
 ### REC-PERF-03: Damage tracking de alacritty_terminal — RESUELTO 2026-04-18
 `collect_grid_cells_for` integra `TermDamage` API. Filas no dañadas se saltan
@@ -257,12 +264,9 @@ cuando no hay selection/search activo. Ver commit `2c945fe`.
 ### REC-PERF-04: Medir antes de optimizar
 **Ningún fix P2/P3 debe implementarse sin profiling previo**. Instalar TD-PERF-30 primero. Algunos items pueden resultar irrelevantes en la práctica; otros no detectados aquí pueden ser los verdaderos cuellos de botella.
 
-### REC-PERF-05: Frame budget explícito
-Documentar en `.context/specs/term_specs.md`:
-- **Input-to-pixel p99:** < 8 ms (un frame a 120 Hz).
-- **Steady-state idle:** 0 trabajo (no dirty → no redraw).
-- **Cache-miss cold start:** < 16 ms (un frame a 60 Hz).
-- **Atlas evict + reshape storm:** < 50 ms.
+### REC-PERF-05: Frame budget explícito — RESUELTO 2026-04-24
+Documentado en `.context/specs/term_specs.md` §15 con tabla de targets, metodología de medición,
+referencia al HUD F12, y descripción del CI criterion gate.
 
-### REC-PERF-06: Criterion CI gating
-Baseline almacenado en `target/criterion/baseline/`. PR falla si `shape_line` regresa >5%, `build_instances` >3%, `search` >10%.
+### REC-PERF-06: Criterion CI gating — RESUELTO (ya implementado)
+`benches/` con shaping/search/build_instances. CI regression gate con critcmp >5%. Ver ci.yml.

@@ -99,7 +99,7 @@ pub fn build_font_system(
 
 /// Locates the user-selected font for LCD AA and sets font_path in the config.
 static FONT_PATH_CACHE: std::sync::OnceLock<
-    std::sync::Mutex<std::collections::HashMap<String, Option<PathBuf>>>,
+    parking_lot::Mutex<std::collections::HashMap<String, Option<PathBuf>>>,
 > = std::sync::OnceLock::new();
 
 pub fn locate_font_for_lcd(font_config: &mut FontConfig) {
@@ -107,11 +107,11 @@ pub fn locate_font_for_lcd(font_config: &mut FontConfig) {
         return;
     }
 
-    let cache =
-        FONT_PATH_CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+    let cache = FONT_PATH_CACHE
+        .get_or_init(|| parking_lot::Mutex::new(std::collections::HashMap::new()));
 
     {
-        let cache = cache.lock().unwrap();
+        let cache = cache.lock();
         if let Some(cached_path) = cache.get(&font_config.family) {
             font_config.font_path = cached_path.clone();
             return;
@@ -122,7 +122,6 @@ pub fn locate_font_for_lcd(font_config: &mut FontConfig) {
     let path = locator.locate_font(&font_config.family).map(|p| p.path);
     cache
         .lock()
-        .unwrap()
         .insert(font_config.family.clone(), path.clone());
     font_config.font_path = path;
 }
