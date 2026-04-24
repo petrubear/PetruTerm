@@ -42,6 +42,14 @@ impl McpManager {
         for (name, result) in results {
             match result {
                 Ok(client) => {
+                    let tool_names: Vec<&str> =
+                        client.tools.iter().map(|t| t.name.as_str()).collect();
+                    log::info!(
+                        "MCP server '{}' connected ({} tools: {})",
+                        name,
+                        tool_names.len(),
+                        tool_names.join(", ")
+                    );
                     // Register each tool, first-registered wins on name conflict.
                     for tool in &client.tools {
                         self.tool_routes
