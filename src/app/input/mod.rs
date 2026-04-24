@@ -35,6 +35,8 @@ pub struct InputHandler {
     /// whether a click was a drag (keep selection) or a plain click (clear it,
     /// so a single-cell selection doesn't linger with inverted colours).
     pub mouse_dragged: bool,
+    /// Pixel position where the left button was pressed. Used for drag-threshold detection.
+    pub mouse_press_pos: (f64, f64),
     pub scroll_pixel_accum: f64,
     /// Consecutive click count (1 = single, 2 = double, 3+ = triple) for selection type.
     pub click_count: u32,
@@ -86,6 +88,7 @@ impl InputHandler {
             mouse_pos: (0.0, 0.0),
             mouse_left_pressed: false,
             mouse_dragged: false,
+            mouse_press_pos: (0.0, 0.0),
             scroll_pixel_accum: 0.0,
             click_count: 0,
             last_click_time: Instant::now(),

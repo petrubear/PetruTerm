@@ -1008,6 +1008,12 @@ impl ApplicationHandler<()> for App {
                     // Pane separator lines (one RoundedRectInstance per separator).
                     let sep_pad_x = self.config.window.padding.left as f32 + sidebar_px_snapshot;
                     rc.build_pane_separators(&self.separator_snapshot, sep_pad_x, sb_pad_y);
+                    // Focus border — only when there are multiple panes.
+                    if pane_infos.len() > 1 {
+                        if let Some(focused) = pane_infos.iter().find(|p| p.focused) {
+                            rc.build_focus_border(focused, sep_pad_x, sb_pad_y);
+                        }
+                    }
 
                     // ── Tab bar / unified titlebar (always shown in Custom mode) ────────
                     let renaming = self.ui.is_renaming_tab();
@@ -1479,16 +1485,22 @@ impl ApplicationHandler<()> for App {
                         w.request_redraw();
                     }
                 } else if self.input.mouse_left_pressed && !self.mouse_in_panel() {
-                    if let Some(terminal) = self.mux.active_terminal() {
-                        terminal.update_selection(col, row);
-                        let (any_mouse, _, motion) = terminal.mouse_mode_flags();
-                        if any_mouse && motion {
-                            self.input.send_mouse_report(32, col, row, true, &self.mux);
+                    let dx = position.x - self.input.mouse_press_pos.0;
+                    let dy = position.y - self.input.mouse_press_pos.1;
+                    // Only treat as a drag once the cursor moves at least 4 physical pixels.
+                    // This prevents trackpad micro-jitter from creating lingering selections.
+                    if dx * dx + dy * dy >= 16.0 {
+                        if let Some(terminal) = self.mux.active_terminal() {
+                            terminal.update_selection(col, row);
+                            let (any_mouse, _, motion) = terminal.mouse_mode_flags();
+                            if any_mouse && motion {
+                                self.input.send_mouse_report(32, col, row, true, &self.mux);
+                            }
                         }
-                    }
-                    self.input.mouse_dragged = true;
-                    if let Some(w) = &self.window {
-                        w.request_redraw();
+                        self.input.mouse_dragged = true;
+                        if let Some(w) = &self.window {
+                            w.request_redraw();
+                        }
                     }
                 }
             }
@@ -1848,6 +1860,7 @@ impl ApplicationHandler<()> for App {
                             }
                             self.input.mouse_left_pressed = true;
                             self.input.mouse_dragged = false;
+                            self.input.mouse_press_pos = self.input.mouse_pos;
                             if !self
                                 .mux
                                 .active_terminal()

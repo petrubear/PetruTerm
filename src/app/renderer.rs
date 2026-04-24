@@ -537,6 +537,30 @@ impl RenderContext {
         }
     }
 
+    /// Draw a 1-pixel accent border around the focused pane. Only called when pane_count > 1.
+    pub fn build_focus_border(
+        &mut self,
+        focused: &crate::ui::PaneInfo,
+        pad_x: f32,
+        pad_y: f32,
+    ) {
+        const FOCUS_COLOR: [f32; 4] = [0.306, 0.788, 0.690, 0.9]; // teal accent
+        let cw = self.shaper.cell_width;
+        let ch = self.shaper.cell_height;
+        let x = pad_x + focused.col_offset as f32 * cw;
+        let y = pad_y + focused.row_offset as f32 * ch;
+        let w = focused.cols as f32 * cw;
+        let h = focused.rows as f32 * ch;
+        // top
+        self.rect_instances.push(RoundedRectInstance { rect: [x, y - 1.0, w, 1.0], color: FOCUS_COLOR, radius: 0.0, _pad: [0.0; 3] });
+        // bottom
+        self.rect_instances.push(RoundedRectInstance { rect: [x, y + h, w, 1.0], color: FOCUS_COLOR, radius: 0.0, _pad: [0.0; 3] });
+        // left
+        self.rect_instances.push(RoundedRectInstance { rect: [x - 1.0, y - 1.0, 1.0, h + 2.0], color: FOCUS_COLOR, radius: 0.0, _pad: [0.0; 3] });
+        // right
+        self.rect_instances.push(RoundedRectInstance { rect: [x + w, y - 1.0, 1.0, h + 2.0], color: FOCUS_COLOR, radius: 0.0, _pad: [0.0; 3] });
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn push_shaped_row(
         &mut self,
