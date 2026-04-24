@@ -19,6 +19,10 @@ pub struct Config {
     pub status_bar: StatusBarConfig,
     pub keyboard: KeyboardConfig,
     pub battery_saver: BatterySaverMode,
+    /// GPU power preference used when selecting the wgpu adapter at startup.
+    /// `"high_performance"` prefers the discrete GPU; `"low_power"` prefers the
+    /// integrated GPU. Has no effect at runtime — requires a restart to apply.
+    pub gpu_preference: GpuPreference,
 }
 
 /// Keyboard behaviour options.
@@ -88,6 +92,7 @@ impl Default for Config {
             status_bar: StatusBarConfig::default(),
             keyboard: KeyboardConfig::default(),
             battery_saver: BatterySaverMode::default(),
+            gpu_preference: GpuPreference::default(),
         }
     }
 }
@@ -102,6 +107,20 @@ pub enum BatterySaverMode {
     Always,
     /// Never apply restrictions.
     Never,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum GpuPreference {
+    /// Prefer the integrated / low-power GPU (better battery life).
+    /// On Apple Silicon this still uses the single unified GPU but requests the
+    /// low-power power-state from Metal.
+    #[default]
+    LowPower,
+    /// Prefer the discrete / high-performance GPU (best rendering speed).
+    HighPerformance,
+    /// Let wgpu choose without any preference hint.
+    None,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

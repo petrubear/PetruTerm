@@ -29,6 +29,8 @@ pub struct GpuRenderer {
     surface_config: wgpu::SurfaceConfiguration,
     size: (u32, u32),
     bg_color: wgpu::Color,
+    /// Present modes supported by the surface/adapter (captured at init).
+    available_present_modes: Vec<wgpu::PresentMode>,
 
     // Cell rendering resources
     pipeline: CellPipeline,
@@ -85,7 +87,15 @@ impl GpuRenderer {
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
+                power_preference: match config.gpu_preference {
+                    crate::config::schema::GpuPreference::HighPerformance => {
+                        wgpu::PowerPreference::HighPerformance
+                    }
+                    crate::config::schema::GpuPreference::None => wgpu::PowerPreference::None,
+                    crate::config::schema::GpuPreference::LowPower => {
+                        wgpu::PowerPreference::LowPower
+                    }
+                },
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             })
@@ -128,6 +138,7 @@ impl GpuRenderer {
         };
         log::info!("Surface present mode: {:?}", present_mode);
 
+        let available_present_modes = caps.present_modes.clone();
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
@@ -263,6 +274,7 @@ impl GpuRenderer {
             surface_config,
             size: (inner.width, inner.height),
             bg_color: bg,
+            available_present_modes,
             pipeline,
             bg_aware_pipeline,
             atlas,
@@ -284,6 +296,19 @@ impl GpuRenderer {
             rect_instance_buffer,
             rect_instance_count: 0,
         })
+    }
+
+    /// Switch the surface present mode at runtime.
+    /// Use `wgpu::PresentMode::Fifo` (vsync) to reduce GPU wakeup frequency on battery,
+    /// or `wgpu::PresentMode::Mailbox` for lowest latency when on power.
+    /// Has immediate effect — no restart required.
+    pub fn set_present_mode(&mut self, mode: wgpu::PresentMode) {
+        if self.surface_config.present_mode == mode {
+            return;
+        }
+        self.surface_config.present_mode = mode;
+        self.surface.configure(&self.device, &self.surface_config);
+        log::info!("Present mode switched to {:?}", mode);
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
@@ -554,6 +579,11 @@ impl GpuRenderer {
 
     pub fn size(&self) -> (u32, u32) {
         self.size
+    }
+
+    /// Returns the present modes supported by this surface/adapter.
+    pub fn surface_caps_present_modes(&self) -> &[wgpu::PresentMode] {
+        &self.available_present_modes
     }
 
     /// Set the LCD atlas and create the bind group for the LCD render pass.

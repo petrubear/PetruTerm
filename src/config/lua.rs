@@ -538,6 +538,16 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
         };
     }
 
+    if let Ok(gp) = table.get::<String>("gpu_preference") {
+        config.gpu_preference = match gp.as_str() {
+            "high_performance" | "HighPerformance" => {
+                crate::config::schema::GpuPreference::HighPerformance
+            }
+            "none" | "None" => crate::config::schema::GpuPreference::None,
+            _ => crate::config::schema::GpuPreference::LowPower,
+        };
+    }
+
     if let Ok(kb_table) = table.get::<LuaTable>("keyboard") {
         if let Ok(v) = kb_table.get::<bool>("option_as_meta") {
             config.keyboard.option_as_meta = v;

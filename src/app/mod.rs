@@ -2139,6 +2139,20 @@ impl ApplicationHandler<()> for App {
                 if changed {
                     if let Some(rc) = &mut self.render_ctx {
                         rc.status_bar_key = 0;
+                        // Switch present mode immediately: Fifo (vsync) on battery to
+                        // reduce GPU wakeup frequency; best available mode on AC power.
+                        let mode = if active {
+                            wgpu::PresentMode::Fifo
+                        } else if rc
+                            .renderer
+                            .surface_caps_present_modes()
+                            .contains(&wgpu::PresentMode::Mailbox)
+                        {
+                            wgpu::PresentMode::Mailbox
+                        } else {
+                            wgpu::PresentMode::FifoRelaxed
+                        };
+                        rc.renderer.set_present_mode(mode);
                     }
                     if let Some(w) = &self.window {
                         w.request_redraw();
