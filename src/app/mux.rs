@@ -515,12 +515,19 @@ impl Mux {
             .unwrap_or((0, 0))
     }
 
-    pub fn active_pane_infos(&self, viewport: Rect, cell_w: f32, cell_h: f32) -> Vec<PaneInfo> {
+    /// Fill `out` with PaneInfo for the active tab, reusing its allocation.
+    pub fn fill_active_pane_infos(
+        &self,
+        viewport: Rect,
+        cell_w: f32,
+        cell_h: f32,
+        out: &mut Vec<PaneInfo>,
+    ) {
         let tab_idx = self.active_tab_index();
-        self.panes
-            .get(tab_idx)
-            .map(|p| p.pane_infos(viewport, cell_w, cell_h))
-            .unwrap_or_default()
+        match self.panes.get(tab_idx) {
+            Some(pm) => pm.fill_pane_infos(viewport, cell_w, cell_h, out),
+            None => out.clear(),
+        }
     }
 
     /// Return separator lines between panes in the active tab.

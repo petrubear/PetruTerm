@@ -37,6 +37,7 @@ fn config_stdlib() -> StdLib {
 /// On any error reading or writing the cache the loader silently falls back to
 /// compiling from source, so this is always a transparent optimisation.
 pub fn load_config(path: &Path) -> Result<Config> {
+    evict_stale_lua_cache();
     let lua = Lua::new_with(config_stdlib(), LuaOptions::default())
         .map_err(|e| anyhow::anyhow!("Lua VM init error: {e}"))?;
     inject_petruterm_global(&lua).map_err(|e| anyhow::anyhow!("Lua setup error: {e}"))?;
@@ -60,10 +61,55 @@ fn hash_path(path: &Path) -> u64 {
     h.finish()
 }
 
-/// Return the path to `~/.cache/petruterm/lua-bc/{hash}.luac`.
+/// Return the path to `~/.cache/petruterm/lua-bc/{version}/{hash}.luac`.
+/// The version subdirectory automatically invalidates cache entries from older binaries.
 fn bytecode_cache_path(src_path: &Path) -> Option<std::path::PathBuf> {
-    let cache_dir = dirs::cache_dir()?.join("petruterm").join("lua-bc");
+    let cache_dir = dirs::cache_dir()?
+        .join("petruterm")
+        .join("lua-bc")
+        .join(env!("CARGO_PKG_VERSION"));
     Some(cache_dir.join(format!("{:016x}.luac", hash_path(src_path))))
+}
+
+/// Remove stale bytecode cache entries: old version directories and .luac files not
+/// modified in more than 30 days. Called once at startup; errors are silently ignored.
+fn evict_stale_lua_cache() {
+    let Some(cache_root) = dirs::cache_dir().map(|d| d.join("petruterm").join("lua-bc")) else {
+        return;
+    };
+    let cutoff = std::time::SystemTime::now()
+        .checked_sub(std::time::Duration::from_secs(30 * 24 * 3600))
+        .unwrap_or(std::time::UNIX_EPOCH);
+    let current_version = env!("CARGO_PKG_VERSION");
+    let Ok(entries) = std::fs::read_dir(&cache_root) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        if entry.file_name().to_string_lossy() != current_version {
+            let _ = std::fs::remove_dir_all(&path);
+            continue;
+        }
+        // Current version dir: evict .luac files not touched in >30 days.
+        if let Ok(files) = std::fs::read_dir(&path) {
+            for file in files.flatten() {
+                let fp = file.path();
+                if fp.extension().map_or(false, |e| e == "luac") {
+                    let stale = fp
+                        .metadata()
+                        .and_then(|m| m.modified())
+                        .map(|m| m < cutoff)
+                        .unwrap_or(false);
+                    if stale {
+                        let _ = std::fs::remove_file(&fp);
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Get the mtime of a file as a `SystemTime`, returns `None` on any error.

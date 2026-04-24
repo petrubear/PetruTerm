@@ -5,6 +5,16 @@ Ordered newest-first within each date group.
 
 ---
 
+## Resolved 2026-04-24 — P3 backlog
+
+### TD-MEM-30: Bytecode cache de Lua sin eviction
+`bytecode_cache_path` ahora incluye `CARGO_PKG_VERSION` como subdirectorio (`lua-bc/{version}/{hash}.luac`). `evict_stale_lua_cache()` llamado al arranque desde `load_config()`: borra directorios de versiones antiguas y `.luac` no modificados en >30 días.
+
+### TD-PERF-40: Vec<PaneInfo> reasignado cada frame
+`pane_infos: Vec<PaneInfo>` añadido a `RenderContext`. `fill_pane_infos` en `PaneManager` y `fill_active_pane_infos` en `Mux` escriben en un `&mut Vec` externo. En el render loop, `std::mem::take(&mut rc.pane_infos)` reutiliza la capacidad; restaurado con `rc.pane_infos = pane_infos` tras el último uso.
+
+---
+
 ## Resolved 2026-04-24 — D-5 + REC-PERF sprint
 
 ### TD-MCP-01: MCP config no hot-reloadable

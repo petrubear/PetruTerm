@@ -131,6 +131,8 @@ pub struct RenderContext {
     pub sidebar_instances_cache: Vec<CellVertex>,
     pub sidebar_rect_cache: Vec<RoundedRectInstance>,
     pub sidebar_cache_key: Option<(usize, usize, usize, usize)>,
+    /// Reusable per-frame pane layout buffer — avoids a Vec<PaneInfo> alloc every frame (TD-PERF-40).
+    pub pane_infos: Vec<crate::ui::PaneInfo>,
 }
 
 impl RenderContext {
@@ -218,6 +220,7 @@ impl RenderContext {
             sidebar_instances_cache: Vec::new(),
             sidebar_rect_cache: Vec::new(),
             sidebar_cache_key: None,
+            pane_infos: Vec::new(),
             content_end: 0,
             cursor_vertex_template: None,
         })

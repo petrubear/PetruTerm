@@ -909,9 +909,6 @@ impl ApplicationHandler<()> for App {
                 // Compute viewport and per-pane layout.
                 let viewport = self.viewport_rect();
                 let (cell_w, cell_h) = self.cell_dims();
-                let pane_infos = self
-                    .mux
-                    .active_pane_infos(viewport, cell_w as f32, cell_h as f32);
                 self.separator_snapshot =
                     self.mux
                         .active_pane_separators(viewport, cell_w as f32, cell_h as f32);
@@ -1026,6 +1023,15 @@ impl ApplicationHandler<()> for App {
                         self.ui.search_bar.scroll_needed = false;
                     }
 
+                    // ── Per-pane layout (reuse Vec allocation from rc — TD-PERF-40) ─────
+                    let mut pane_infos = std::mem::take(&mut rc.pane_infos);
+                    self.mux.fill_active_pane_infos(
+                        viewport,
+                        cell_w as f32,
+                        cell_h as f32,
+                        &mut pane_infos,
+                    );
+
                     // ── Build cell instances for every pane ──────────────────────────────
                     let search_arg = if self.ui.search_bar.visible {
                         Some(&self.ui.search_bar)
@@ -1076,6 +1082,8 @@ impl ApplicationHandler<()> for App {
                             rc.build_focus_border(focused);
                         }
                     }
+
+                    rc.pane_infos = pane_infos;
 
                     // ── Tab bar / unified titlebar (always shown in Custom mode) ────────
                     let renaming = self.ui.is_renaming_tab();

@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-04-24
-**Open Items:** 2
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 2 open, 3 deferred
+**Open Items:** 0
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0 open, 3 deferred
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -39,17 +39,7 @@ _Ninguno abierto._
 
 ## P3 — Prioridad baja / Backlog
 
-### TD-MEM-30: Bytecode cache de Lua no limpiado
-- **Archivos:** `src/config/lua.rs`
-- **Descripción:** `~/.cache/petruterm/lua-bc/` acumula `.luac` viejos con cada actualización. `load_or_compile_config` escribe pero no limpia.
-- **Fix propuesto:** Eliminar `.luac` no modificados en >30 días. Verificar versión del binario antes de usar cache.
-- **Severidad:** P3 — espacio en disco, no crítico.
-
-### TD-PERF-40: Vec no reutilizados en render loop
-- **Archivos:** `src/app/renderer.rs` (RenderContext)
-- **Descripción:** `build_all_pane_instances()` crea `pane_infos` nuevo cada frame via `active_pane_infos`.
-- **Fix propuesto:** Mover `pane_infos` a `RenderContext` como buffer reutilizable. `SmallVec` para ≤4 paneles.
-- **Severidad:** P3 — allocation barata en Rust, pero evitable.
+_Ninguno abierto._
 
 **TD-PERF-03** — DIFERIDO a Phase 2+. `write_buffer` es memcpy en Apple Silicon unified memory — no medible. Dirty-rect tracking aplica solo con GPUs discretas.
 

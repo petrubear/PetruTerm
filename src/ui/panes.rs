@@ -378,6 +378,20 @@ impl PaneManager {
     /// content never renders flush against the divider line.
     pub fn pane_infos(&self, viewport: Rect, cell_w: f32, cell_h: f32) -> Vec<PaneInfo> {
         let mut result = Vec::new();
+        self.fill_pane_infos(viewport, cell_w, cell_h, &mut result);
+        result
+    }
+
+    /// Fill `out` (cleared first) with PaneInfo for all leaf panes.
+    /// Reuse the caller's Vec to avoid a per-frame heap allocation.
+    pub fn fill_pane_infos(
+        &self,
+        viewport: Rect,
+        cell_w: f32,
+        cell_h: f32,
+        out: &mut Vec<PaneInfo>,
+    ) {
+        out.clear();
         collect_leaf_infos_impl(
             &self.root,
             viewport,
@@ -385,9 +399,8 @@ impl PaneManager {
             cell_h,
             self.focused_terminal,
             PanePad::default(),
-            &mut result,
+            out,
         );
-        result
     }
 
     /// Collect separator lines between panes (one per internal Split node).
