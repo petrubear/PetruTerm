@@ -436,12 +436,24 @@ impl App {
     }
 
     fn pixel_to_cell(&self, x: f64, y: f64) -> (usize, usize) {
-        self.input.pixel_to_cell(
+        // Subtract tab bar height so y is relative to the content viewport top.
+        let tab_h = self.tab_bar_height_px() as f64;
+        let (raw_col, raw_row) = self.input.pixel_to_cell(
             x - self.sidebar_width_px() as f64,
-            y,
+            y - tab_h,
             &self.config,
             &self.render_ctx,
-            &self.mux,
+        );
+        // Subtract the focused pane's offset to convert viewport coords to terminal-local coords.
+        let (cell_w, cell_h) = self.cell_dims();
+        let viewport = self.viewport_rect();
+        let (col_off, row_off) = self
+            .mux
+            .focused_pane_offset(viewport, cell_w as f32, cell_h as f32);
+        let (term_cols, term_rows) = self.mux.active_terminal_size();
+        (
+            raw_col.saturating_sub(col_off).min(term_cols.saturating_sub(1)),
+            raw_row.saturating_sub(row_off).min(term_rows.saturating_sub(1)),
         )
     }
 

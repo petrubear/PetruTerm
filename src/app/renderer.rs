@@ -130,7 +130,7 @@ pub struct RenderContext {
     pub status_bar_rect_cache: Vec<RoundedRectInstance>,
     pub sidebar_instances_cache: Vec<CellVertex>,
     pub sidebar_rect_cache: Vec<RoundedRectInstance>,
-    pub sidebar_cache_key: Option<(usize, usize, usize)>,
+    pub sidebar_cache_key: Option<(usize, usize, usize, usize)>,
 }
 
 impl RenderContext {
@@ -1428,7 +1428,11 @@ impl RenderContext {
         let (_win_w, win_h) = self.renderer.size();
         let visible_h = (win_h as f32 - sidebar_top_px - sidebar_bottom_pad_px).max(0.0);
         let total_rows = (visible_h / ch).floor() as usize;
-        let key = (workspaces.len(), active_workspace_id, nav_cursor);
+        let counts_hash: usize = counts
+            .iter()
+            .map(|(t, p)| t.wrapping_mul(10_000).wrapping_add(*p))
+            .sum();
+        let key = (workspaces.len(), active_workspace_id, nav_cursor, counts_hash);
 
         if rename_input.is_none() && self.sidebar_cache_key == Some(key) {
             self.instances

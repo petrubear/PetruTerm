@@ -502,6 +502,19 @@ impl Mux {
     }
 
     /// Return layout info for each leaf pane in the active tab.
+    pub fn focused_pane_offset(&self, viewport: Rect, cell_w: f32, cell_h: f32) -> (usize, usize) {
+        let tab_idx = self.active_tab_index();
+        self.panes
+            .get(tab_idx)
+            .and_then(|pm| {
+                pm.pane_infos(viewport, cell_w, cell_h)
+                    .into_iter()
+                    .find(|i| i.focused)
+            })
+            .map(|i| (i.col_offset, i.row_offset))
+            .unwrap_or((0, 0))
+    }
+
     pub fn active_pane_infos(&self, viewport: Rect, cell_w: f32, cell_h: f32) -> Vec<PaneInfo> {
         let tab_idx = self.active_tab_index();
         self.panes
