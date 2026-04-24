@@ -521,8 +521,8 @@ impl App {
         // Prefix keys (a, e, W) and all others pass through to normal leader dispatch.
         if self.input.leader_active {
             match &event.logical_key {
-                Key::Character(s) if s == "a" => {
-                    // leader+a: new workspace (overrides AI prefix in sidebar context).
+                Key::Character(s) if s == "w" => {
+                    // leader+w: new workspace (sidebar context).
                     self.input.leader_active = false;
                     self.input.leader_deadline = None;
                     self.clamp_sidebar_cursor();
