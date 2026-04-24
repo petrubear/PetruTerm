@@ -1,7 +1,7 @@
 # Session State
 
 **Last Updated:** 2026-04-24
-**Session Focus:** MCP D1/D2/D3 + battery/GPU optimizations + MCP path fix + UI polish
+**Session Focus:** MCP D1/D2/D3 + battery/GPU optimizations + MCP path fix + UI polish + slash commands + keybind fixes
 
 ## Branch: `master`
 
@@ -10,6 +10,25 @@
 **Phase 1–3 + 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Fase B COMPLETE. Fase C-1 COMPLETE. Fase C-2 COMPLETE. Fase C-3 COMPLETE. Fase C-3.5 COMPLETE. Fase D-1/D-2/D-3/D-4 COMPLETE. v0.1.3 publicado.**
 
 **MCP end-to-end operativo y verificado.** Battery saver con GPU preference wired.
+
+---
+
+## Esta sesión (2026-04-24) — Slash commands + keybind fixes
+
+### /skills color formatting
+- **Bug:** `/skills` mostraba nombre y descripcion en la misma linea, dificil de leer como bloque.
+- **Fix:** `src/app/ui.rs` `handle_slash_command` — formato cambiado a `## name\ndescription`. El renderer ya aplica `md_style_line` a mensajes de asistente: `##` → teal, `#` → purple, descripcion en color normal.
+- **Resultado:** nombre del skill en teal, descripcion en fg normal — visualmente distintos.
+
+### /mcp slash command (nuevo)
+- **Nuevo:** `/mcp` en el input del panel AI lista todos los servidores MCP conectados agrupados por nombre, con conteo de herramientas y la lista de tool names.
+- **Implementacion:** `src/app/ui.rs` — usa `McpManager::all_tools()` + `connected_count()`. Mismo esquema de color: `# MCP` en purple, `## server (N tools)` en teal.
+
+### Leader+w para nuevo workspace
+- **Bug:** crear workspace requeria `Leader+W+n` (3 teclas, Shift necesario). Ademas, `handle_sidebar_key` en `src/app/mod.rs` interceptaba `leader+a` cuando el sidebar estaba abierto y creaba un workspace, rompiendo `leader+a+a` para abrir el chat.
+- **Fix 1:** `src/app/input/mod.rs` — `Leader+w` (lowercase, single key) dispara `Action::NewWorkspace` directamente antes del bloque de prefijos. `Leader+W+n` conservado como alias.
+- **Fix 2:** `src/app/mod.rs` `handle_sidebar_key` — el interceptor `"a"` cambiado a `"w"`. `Leader+a` ya no es secuestrado por el sidebar; siempre entra al prefijo AI.
+- **Docs:** `AGENTS.md` keybinds table actualizada con workspace shortcuts completos y AI sub-leader expandido (`a a`, `a e`, `a f`, `a z`). `/skills` y `/mcp` agregados como panel slash commands.
 
 ---
 

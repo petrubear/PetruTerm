@@ -125,7 +125,6 @@ Leader key: `Ctrl+F` (timeout 1000ms)
 | `Leader n/b`           | Next/prev tab                              |
 | `Leader ,`             | Rename tab                                 |
 | `Leader w`             | New workspace                              |
-| `Leader W n`           | New workspace (alias)                      |
 | `Leader W &`           | Close workspace                            |
 | `Leader W ,`           | Rename workspace                           |
 | `Leader W j/k`         | Next/prev workspace                        |
@@ -134,12 +133,15 @@ Leader key: `Ctrl+F` (timeout 1000ms)
 | `Leader x`             | Close pane                                 |
 | `Leader h/j/k/l`       | Focus pane (vim-style)                     |
 | `Leader Option+arrows` | Resize pane                                |
-| `Leader a`             | Open AI panel / toggle focus terminal↔chat |
+| `Leader a`             | Enter AI sub-leader                        |
+| `Leader a a`           | Open AI panel / toggle focus terminal↔chat |
+| `Leader a e`           | Explain last output                        |
+| `Leader a f`           | Fix last error                             |
+| `Leader a z`           | Undo last write                            |
 | `Escape` (in panel)    | Return to terminal without closing panel   |
 | `/q` (in panel input)  | Close the panel                            |
-| `Leader e`             | Explain last output                        |
-| `Leader f`             | Fix last error                             |
-| `Leader z`             | Undo last write                            |
+| `/skills` (in panel)   | List loaded skills                         |
+| `/mcp` (in panel)      | List connected MCP servers and their tools |
 | `Leader o`             | Command palette                            |
 | `Ctrl+Space`           | Inline AI block                            |
 | Right-click            | Context menu                               |
