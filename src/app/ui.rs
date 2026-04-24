@@ -777,8 +777,17 @@ impl UiManager {
             api_msgs.push(msg.to_api_value());
         }
 
-        let mut tool_specs = AgentTool::all_specs();
-        tool_specs.extend(self.mcp_manager.all_tools_openai());
+        // MCP tools go first so the LLM encounters them before built-ins.
+        // Built-ins whose functionality is covered by MCP are excluded to avoid
+        // the LLM picking the more restricted built-in variant.
+        let mcp_tool_names: Vec<String> = self
+            .mcp_manager
+            .all_tools()
+            .into_iter()
+            .map(|(_, t)| t.name.clone())
+            .collect();
+        let mut tool_specs = self.mcp_manager.all_tools_openai();
+        tool_specs.extend(AgentTool::specs_excluding(&mcp_tool_names));
         let tx = self.ai_tx.clone();
         let mcp_manager = std::sync::Arc::clone(&self.mcp_manager);
 

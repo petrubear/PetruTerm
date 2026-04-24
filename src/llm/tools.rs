@@ -109,7 +109,38 @@ impl AgentTool {
         ]
     }
 
-    /// Spec array ready to include in the API request.
+    /// Spec array for built-in tools, excluding any whose functionality is already
+    /// covered by `mcp_tool_names`.
+    ///
+    /// Rules:
+    /// - A built-in is excluded when its exact name appears in `mcp_tool_names`.
+    /// - `list_dir` is additionally excluded when any MCP tool name contains "list"
+    ///   or "director" (e.g. `list_directory` from the filesystem server).
+    ///   This prevents the LLM from picking the workspace-restricted built-in when
+    ///   a more capable MCP equivalent exists.
+    pub fn specs_excluding(mcp_tool_names: &[String]) -> Vec<Value> {
+        let has_list_overlap = mcp_tool_names
+            .iter()
+            .any(|n| n.contains("list") || n.contains("director"));
+
+        Self::all()
+            .into_iter()
+            .filter(|t| {
+                let n = t.name();
+                if mcp_tool_names.iter().any(|m| m == n) {
+                    return false; // exact name match — MCP overrides
+                }
+                if n == "list_dir" && has_list_overlap {
+                    return false; // semantic overlap with MCP directory listing
+                }
+                true
+            })
+            .map(|t| t.to_openai_spec())
+            .collect()
+    }
+
+    /// Spec array ready to include in the API request (all built-ins, no filtering).
+    #[allow(dead_code)]
     pub fn all_specs() -> Vec<Value> {
         Self::all().iter().map(|t| t.to_openai_spec()).collect()
     }
