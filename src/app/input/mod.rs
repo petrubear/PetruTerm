@@ -408,6 +408,21 @@ impl InputHandler {
                 }
 
                 // ── Single-key leader dispatch ────────────────────────────────
+                // Leader+w → new workspace (single key, no sub-prefix).
+                if s.as_str() == "w" {
+                    if let Some(rc) = render_ctx.as_mut() {
+                        ui.handle_palette_action(
+                            Action::NewWorkspace,
+                            mux,
+                            rc,
+                            config,
+                            window,
+                            wakeup_proxy,
+                        );
+                    }
+                    return;
+                }
+
                 // Enter prefix mode for 'a' (AI) and 'e' (explorer).
                 match s.as_str() {
                     "a" | "e" | "W" => {

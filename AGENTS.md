@@ -124,6 +124,11 @@ Leader key: `Ctrl+F` (timeout 1000ms)
 | `Leader &`             | Close tab                                  |
 | `Leader n/b`           | Next/prev tab                              |
 | `Leader ,`             | Rename tab                                 |
+| `Leader w`             | New workspace                              |
+| `Leader W n`           | New workspace (alias)                      |
+| `Leader W &`           | Close workspace                            |
+| `Leader W ,`           | Rename workspace                           |
+| `Leader W j/k`         | Next/prev workspace                        |
 | `Leader %`             | Split horizontal                           |
 | `Leader "`             | Split vertical                             |
 | `Leader x`             | Close pane                                 |
