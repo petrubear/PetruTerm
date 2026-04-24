@@ -5,6 +5,31 @@ Ordered newest-first within each date group.
 
 ---
 
+## Resolved 2026-04-24 — D-5 + REC-PERF sprint
+
+### TD-MCP-01: MCP config no hot-reloadable
+`config/watcher.rs` filtro extendido a `.json`. `app/mod.rs` añade `mcp_watcher` (notify sobre `.petruterm/`) + `mcp_reload_at` debounce 300ms separado. `app/ui.rs` `reload_mcp(cwd)` crea nuevo `McpManager`, `block_on(start_all())`, reemplaza el Arc. Cubre global y project-local.
+
+### TD-GPU-01: gpu_preference hardcodeado a HighPerformance
+`GpuRenderer::new()` lee `config.gpu_preference`. Default `"low_power"` en `perf.lua`. Present mode cambia automáticamente a Fifo en batería y Mailbox/FifoRelaxed en AC (runtime, sin reinicio).
+
+### REC-PERF-01: Pre-shape ASCII range al arranque
+`init_ascii_glyph_cache()` llamado eagerly en `TextShaper::new()`. `warmup_atlas()` pre-rasteriza 95 glyphs ASCII al atlas en `RenderContext::new()` tras `set_cell_size`, eliminando cache-misses en el primer frame. "Never evict" diferido (atlas 64 MB suficientemente grande en práctica).
+
+### REC-PERF-02: parking_lot::Mutex
+`parking_lot = "0.12"` añadido. Reemplazado `std::sync::Mutex` en `font/freetype_lcd.rs`, `font/loader.rs` (FONT_PATH_CACHE estático), `llm/copilot.rs` (JWT cache). Ningún lock se mantiene a través de `.await`. `.lock().unwrap()` → `.lock()` (infallible).
+
+### REC-PERF-05: Frame budget documentado
+`.context/specs/term_specs.md` §15 — tabla de targets (p99 <8ms, idle 0 CPU/GPU, cold start <16ms, atlas storm <50ms), metodología HUD F12, referencia al CI criterion gate.
+
+### REC-PERF-06: Criterion CI gating
+Ya implementado. `benches/` con shaping/search/build_instances. CI regression gate critcmp >5%. Ver ci.yml.
+
+### REC-PERF-03: Damage tracking de alacritty_terminal
+`collect_grid_cells_for` integra `TermDamage` API. Filas no dañadas se saltan cuando no hay selection/search activo. Commit `2c945fe` (2026-04-18).
+
+---
+
 ## Resolved 2026-04-23 — Auditoría de performance y memoria
 
 ### TD-MEM-26: FreeType memory leaks en FreeTypeCmapLookup y FreeTypeLcdRasterizer
@@ -36,6 +61,21 @@ Ordered newest-first within each date group.
 - **Severidad:** P2 — noticeable en cargas de trabajo intensas, pero workaround: usar `ls | head`.
 - **Auditoría:** 2026-04-23
 - **Estado:** ABIERTO
+
+### TD-RENDER-04: LCD fringe bajo selección — RESUELTO
+`collect_grid_cells_for` aplica inversión fg/bg antes de construir vértices. `calculate_row_hash` incluye colores → cache invalida al activar selección. `can_skip=false` cuando `sel_range.is_some()`.
+
+### TD-MEM-28: FreeTypeLcdRasterizer cache sin límite — FALSO POSITIVO
+`cache` almacena solo UV pointers (16 bytes/entry), no glyph data. Atlas real tiene `evict_cold()` y `clear()`. `clear_local_cache()` existe. No hay leak.
+
+### TD-MEM-29: CellVertex overhead — FALSO POSITIVO
+Buffer GPU fijo de 2.5 MB por diseño, no heap leak. Overflow manejado con bounds check en `gpu.rs`.
+
+### TD-MEM-27: LLM chat panel sin límites — FALSO POSITIVO
+`MAX_MESSAGES=200` en `chat_panel.rs:9`. `mark_done()` drena `messages` y `wrapped_cache`. `streaming_buf.clear()` en `mark_done()` y `close()`. No hay leak real.
+
+### TD-PERF-39: String allocation hot path — FALSO POSITIVO
+`text.split(' ')` es iterador lazy. `try_word_cached_shape` usa `&str` refs. Clave de `word_cache` es hash u64. `LruCache(1024)` capacidad fija.
 
 ---
 

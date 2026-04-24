@@ -4,6 +4,98 @@ Completed phases. Active phases in [`build_phases.md`](./build_phases.md).
 
 ---
 
+## Fase E: Design Refactor — Visual Overhaul — COMPLETA 2026-04-23
+
+Objetivo: estilo visual IDE moderno. Solo cambios visuales, sin nueva funcionalidad.
+
+| Token | Hex | Uso |
+|---|---|---|
+| `BG_DEEP` | `#0e0e10` | Terminal area |
+| `BG_PANEL` | `#131316` | Sidebar, AI panel |
+| `BG_STATUS` | `#0a0a0c` | Status bar |
+| `BORDER` | `#2a2a2f` | Divisores, bordes overlays |
+| `ACCENT_TEAL` | `#4ec9b0` | Path en status bar |
+| `ACCENT_AMBER` | `#d4a44c` | Branch git, elementos activos |
+
+- [x] T1 — Paleta de colores base (constantes en `renderer.rs`)
+- [x] T2 — Tab bar flat `zsh: N` (pills SDF → tabs flat con nombre de proceso)
+- [x] T3 — Command palette overlay (corners ~8px, borde `#2a2a2f`, fondo `#131316`)
+- [x] T4 — Sidebar + AI panel (`BG_PANEL`, header con borde separador)
+- [x] T5 — Divisores de pane (1px lógico, `#2a2a2f`)
+- [x] T6 — Status bar (`ACCENT_TEAL`/`ACCENT_AMBER`/`BG_STATUS`)
+- [x] T7 — `md_style_line()` en AI panel (headers coloreados, bullets `•`, code verde)
+
+---
+
+## Fase D: AI Chat — MCP + Skills — COMPLETA 2026-04-24
+
+### D-1: MCP config loader — COMPLETA 2026-04-24
+- [x] `~/.config/petruterm/mcp/mcp.json` (`{ "mcpServers": { "name": { "command", "args", "env" } } }`)
+- [x] Merge con `.petruterm/mcp.json` del proyecto (proyecto tiene prioridad)
+- [x] XDG fallback para macOS (`dirs::config_dir()` → `~/Library/Application Support`)
+
+### D-2: MCP client (stdio transport) — COMPLETA 2026-04-24
+- [x] Spawn proceso por server, JSON-RPC 2.0 sobre stdin/stdout
+- [x] `initialize`, `tools/list`, `tools/call`
+- [x] `kill_on_drop(true)` al cerrar; PATH augmentado con `/opt/homebrew/bin:/usr/local/bin`
+- [x] stderr → `Stdio::inherit()` para debugging
+
+### D-3: MCP tool integration en chat — COMPLETA 2026-04-24
+- [x] MCP tools PRIMERO, built-ins filtrados via `AgentTool::specs_excluding(mcp_names)`
+- [x] Status lines: `✓ filesystem.list_directory(/tmp)` (server.tool() format)
+- [x] Header badge `[mcp:N skills:M]` en AI panel
+
+### D-4: Skills loader (agentskills.io format) — COMPLETA 2026-04-22
+- [x] `SkillManager`: `load(cwd)`, fuzzy match (SkimMatcherV2, threshold 50), `read_body` lazy
+- [x] `~/.config/petruterm/skills/<name>/SKILL.md` (global) + `.petruterm/skills/` (project-local)
+- [x] Slash commands: `/skills` (color via `md_style_line`), `/mcp`, `/q`
+- [x] `⚡ skill-name` en header AI panel cuando skill activo
+
+### D-5: Project-level config + MCP hot-reload — COMPLETA 2026-04-24
+- [x] `.petruterm/mcp.json` y `.petruterm/skills/` (project-local, implementado en D-1/D-4)
+- [x] `config/watcher.rs`: filtro extendido a `.json`
+- [x] `app/mod.rs`: `mcp_watcher` (notify sobre `.petruterm/`) + `mcp_reload_at` debounce 300ms
+- [x] `app/ui.rs`: `reload_mcp(cwd)` — crea nuevo McpManager, start_all(), reemplaza Arc
+
+---
+
+## Fase C: Titlebar Custom + Workspaces — COMPLETA 2026-04-22
+
+### C-1: Titlebar custom (NSWindow híbrido) — 2026-04-21
+- [x] `TITLEBAR_HEIGHT = 30.0`; tab pills SDF; botones sidebar/AI/layout en titlebar
+- [x] BTN_COLOR: Dracula Current Line [0.267, 0.278, 0.353, 1.0]; `padding.top = 5`
+
+### C-2: Modelo Workspace en Mux — 2026-04-21
+- [x] `Workspace { id, name }` en Mux; create/rename/close/switch/next/prev
+- [x] Leader keybinds: `w` (nuevo, single key), `W &/,/j/k`; rename prompt
+
+### C-3: Sidebar de Workspaces — 2026-04-21
+- [x] Drawer lateral izquierdo; lista con dot indicador; `j/k/Enter/c/&/r/Esc`
+- [x] Subtítulo `N tabs · M panes`; colores Dracula Pro
+
+### C-3.5: AI panel right sidebar + iconos titlebar — 2026-04-22
+- [x] Tercer botón AI en titlebar; iconos `≡` / `✦`; botones tintan purple cuando abierto
+- [x] Header AI panel restyled: `SIDEBAR_BG + accent`, formato ` ✦ AI  provider:model`
+
+---
+
+## Fase B: Menu Bar nativo macOS — COMPLETA 2026-04-20
+- [x] Crate `muda`; File/View/AI/Window menus; acciones via `MenuEvent` drain en `about_to_wait`
+
+---
+
+## Fase A: Fundación — Versionado + i18n — COMPLETA 2026-04-19 (v0.1.0)
+- [x] `rust-i18n` 3.1; `locales/en.toml` + `locales/es.toml` (35 strings)
+- [x] Release workflow `release.yml`; tag `v0.1.0` publicado
+
+---
+
+## Fase 3.6: GitHub Copilot Provider — COMPLETA 2026-04-19
+- [x] `CopilotProvider` con JWT cache + auto-refresh; device flow OAuth
+- [x] Auth: `GITHUB_TOKEN` → `gh auth token` → Keychain (`GITHUB_COPILOT_OAUTH_TOKEN`)
+
+---
+
 ## Phase 3.5: Performance Sprint — Sub-phases completadas
 **Archivado:** 2026-04-18 | **Activo:** ver Sprint cierre en `build_phases.md`
 
