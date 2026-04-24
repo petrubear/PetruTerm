@@ -1110,6 +1110,7 @@ impl ApplicationHandler<()> for App {
                         let panel_cols_changed = rc.panel_cache_term_cols != total_cols;
                         if panel_dirty || force_rebuild || panel_cols_changed {
                             let panel_start = rc.instances.len();
+                            let rect_start = rc.rect_instances.len();
                             self.ui.panel_mut().dirty = false;
                             // Pre-wrap message lines once per dirty rebuild (TD-PERF-05).
                             let msg_wrap_w = self.ui.panel().width_cols.saturating_sub(8) as usize;
@@ -1127,13 +1128,19 @@ impl ApplicationHandler<()> for App {
                                 total_cols,
                                 total_rows,
                                 blink,
+                                self.config.window.padding.left as f32 + sidebar_px_snapshot,
+                                sb_pad_y,
                             );
                             rc.panel_instances_cache.clear();
                             rc.panel_instances_cache
                                 .extend_from_slice(&rc.instances[panel_start..]);
+                            rc.panel_rect_cache.clear();
+                            rc.panel_rect_cache
+                                .extend_from_slice(&rc.rect_instances[rect_start..]);
                             rc.panel_cache_term_cols = total_cols;
                         } else {
                             rc.instances.extend_from_slice(&rc.panel_instances_cache);
+                            rc.rect_instances.extend_from_slice(&rc.panel_rect_cache);
                         }
                         // Input rows (2 lines + hints) are always rebuilt fresh — cursor
                         // blink only touches these 3 rows, not the full message history (TD-PERF-10).
@@ -1146,6 +1153,8 @@ impl ApplicationHandler<()> for App {
                             total_cols,
                             total_rows,
                             blink,
+                            self.config.window.padding.left as f32 + sidebar_px_snapshot,
+                            sb_pad_y,
                         );
                     }
 

@@ -83,6 +83,7 @@ pub struct RenderContext {
     /// Reusable line buffer for `build_chat_panel_instances` — avoids Vec realloc per rebuild.
     /// Strings inside are reused across frames when capacity permits (TD-PERF-13).
     pub scratch_lines: Vec<(String, [f32; 4])>,
+    pub panel_rect_cache: Vec<RoundedRectInstance>,
     /// Incremented each rendered frame; used for spinner animation to avoid O(n) chars().count().
     pub frame_counter: u64,
     /// Rounded rect instances for the tab bar pills and status bar background.
@@ -175,6 +176,7 @@ impl RenderContext {
             lcd_instances: Vec::new(),
             panel_cache_term_cols: 0,
             panel_instances_cache: Vec::new(),
+            panel_rect_cache: Vec::new(),
             cell_data_scratch: Vec::new(),
             scratch_terminal_id: None,
             scratch_chars: Vec::new(),
@@ -659,6 +661,8 @@ impl RenderContext {
         term_cols: usize,
         screen_rows: usize,
         cursor_blink_on: bool,
+        pad_x: f32,
+        pad_y: f32,
     ) {
         use crate::llm::chat_panel::{word_wrap, ConfirmDisplay, PanelState, MAX_FILE_ROWS};
         use crate::llm::diff::DiffKind;
@@ -670,7 +674,9 @@ impl RenderContext {
         }
 
         // ── Colors (Dracula Pro palette) ─────────────────────────────────────
-        let panel_bg = config.llm.ui.background;
+        let actual_panel_bg = config.llm.ui.background;
+        let panel_bg = [0.0; 4]; // transparent
+
         let user_fg = config.llm.ui.user_fg;
         let asst_fg = config.llm.ui.assistant_fg;
         let input_fg = config.llm.ui.input_fg;
@@ -690,6 +696,31 @@ impl RenderContext {
 
         let co = term_cols; // grid column where panel begins
 
+        // ── Background Rect ──────────────────────────────────────────────────
+        let radius = 10.0 * self.scale_factor;
+        let border = 1.0 * self.scale_factor;
+        let cw = self.shaper.cell_width;
+        let ch = self.shaper.cell_height;
+        let px = pad_x + co as f32 * cw;
+        let py = pad_y;
+        let pw = panel_cols as f32 * cw;
+        let ph = screen_rows as f32 * ch;
+
+        self.rect_instances
+            .push(crate::renderer::rounded_rect::RoundedRectInstance {
+                rect: [px - border, py, pw + 2.0 * border, ph],
+                color: SEP_FG, // border
+                radius: radius + border,
+                _pad: [0.0; 3],
+            });
+        self.rect_instances
+            .push(crate::renderer::rounded_rect::RoundedRectInstance {
+                rect: [px, py, pw, ph],
+                color: actual_panel_bg,
+                radius,
+                _pad: [0.0; 3],
+            });
+
         // ── Fixed bottom rows (always present) ───────────────────────────────
         // input_row1/2 and hints_row are rendered by build_chat_panel_input_rows (TD-PERF-10).
         let sep_row = screen_rows - 4;
@@ -704,7 +735,8 @@ impl RenderContext {
         };
 
         // ── Row 0: panel header (sidebar-style) ──────────────────────────────
-        const HEADER_BG: [f32; 4] = [0.075, 0.075, 0.086, 1.0]; // #131316 panel
+        const HEADER_BG: [f32; 4] = [0.0; 4]; // transparent
+
         const HEADER_ACCENT: [f32; 4] = [0.74, 0.58, 0.98, 1.0];
         const HEADER_DIM: [f32; 4] = [0.420, 0.420, 0.478, 1.0]; // #6b6b7a muted
         {
@@ -744,9 +776,9 @@ impl RenderContext {
             // Row 1: search input
             let q = &panel.file_picker_query;
             let q_display = if file_picker_focused && cursor_blink_on {
-                format!("│ > {}\u{258b}", q)
+                format!("  > {}\u{258b}", q)
             } else {
-                format!("│ > {}", q)
+                format!("  > {}", q)
             };
             self.push_shaped_row(&q_display, input_fg, panel_bg, 1, co, panel_cols, font);
 
@@ -766,13 +798,13 @@ impl RenderContext {
                     let attached = panel.attached_files.iter().any(|p| p.ends_with(path));
                     let marker = if attached { "✓ " } else { "  " };
                     let (text, fg) = if i == panel.file_picker_cursor {
-                        (format!("│ ▸ {}{}", marker, trimmed), PICK_SEL)
+                        (format!("  ▸ {}{}", marker, trimmed), PICK_SEL)
                     } else {
-                        (format!("│   {}{}", marker, trimmed), PICK_FG)
+                        (format!("    {}{}", marker, trimmed), PICK_FG)
                     };
                     self.push_shaped_row(&text, fg, panel_bg, row, co, panel_cols, font);
                 } else {
-                    self.push_shaped_row("│", SEP_FG, panel_bg, row, co, panel_cols, font);
+                    self.push_shaped_row("", SEP_FG, panel_bg, row, co, panel_cols, font);
                 }
             }
         } else if matches!(panel.state, PanelState::AwaitingConfirm) {
@@ -793,7 +825,7 @@ impl RenderContext {
                         .file_name()
                         .and_then(|n| n.to_str())
                         .unwrap_or(path.as_str());
-                    let title_line = format!("│ Write: {} (+{added} -{removed})", rel_path);
+                    let title_line = format!("  Write: {} (+{added} -{removed})", rel_path);
                     let title_trimmed: String = title_line.chars().take(panel_cols).collect();
                     self.push_shaped_row(
                         &title_trimmed,
@@ -811,16 +843,16 @@ impl RenderContext {
                         let row = 2 + i;
                         if let Some(dl) = diff.get(i) {
                             let (prefix, fg) = match dl.kind {
-                                DiffKind::Added => ("│ + ", ADD_FG),
-                                DiffKind::Removed => ("│ - ", REM_FG),
-                                DiffKind::Context => ("│   ", CTX_FG2),
+                                DiffKind::Added => ("  + ", ADD_FG),
+                                DiffKind::Removed => ("  - ", REM_FG),
+                                DiffKind::Context => ("    ", CTX_FG2),
                             };
                             let max_w = panel_cols.saturating_sub(prefix.chars().count());
                             let text: String = dl.text.chars().take(max_w).collect();
                             let line = format!("{prefix}{text}");
                             self.push_shaped_row(&line, fg, panel_bg, row, co, panel_cols, font);
                         } else {
-                            self.push_shaped_row("│", SEP_FG, panel_bg, row, co, panel_cols, font);
+                            self.push_shaped_row("", SEP_FG, panel_bg, row, co, panel_cols, font);
                         }
                     }
                 }
@@ -857,16 +889,16 @@ impl RenderContext {
                         .nth(max_cmd)
                         .map(|(i, _)| &cmd[..i])
                         .unwrap_or(cmd);
-                    let cmd_line = format!("│   {}", cmd_trunc);
+                    let cmd_line = format!("    {}", cmd_trunc);
                     self.push_shaped_row(&cmd_line, ADD_FG, panel_bg, 2, co, panel_cols, font);
                     // Rest: empty
                     for row in 3..sep_row {
-                        self.push_shaped_row("│", SEP_FG, panel_bg, row, co, panel_cols, font);
+                        self.push_shaped_row("", SEP_FG, panel_bg, row, co, panel_cols, font);
                     }
                 }
                 None => {
                     for row in 1..sep_row {
-                        self.push_shaped_row("│", SEP_FG, panel_bg, row, co, panel_cols, font);
+                        self.push_shaped_row("", SEP_FG, panel_bg, row, co, panel_cols, font);
                     }
                 }
             }
@@ -900,7 +932,7 @@ impl RenderContext {
                     } else {
                         name
                     };
-                    let line = format!("│   {}", trimmed);
+                    let line = format!("    {}", trimmed);
                     self.push_shaped_row(&line, DIM_FG, panel_bg, 2 + i, co, panel_cols, font);
                 }
                 // Thin separator after file section (use pre-built cache from ChatPanel — TD-PERF-13)
@@ -954,8 +986,8 @@ impl RenderContext {
             // ensure_wrap_cache() is called in mod.rs before this function runs.
             for (msg_idx, msg) in panel.messages.iter().enumerate() {
                 let (first_p, cont_p, fg) = match msg.role {
-                    ChatRole::User => ("│  You  ", "│       ", user_fg),
-                    ChatRole::Assistant => ("│   AI  ", "│       ", asst_fg),
+                    ChatRole::User => ("   You  ", "        ", user_fg),
+                    ChatRole::Assistant => ("    AI  ", "        ", asst_fg),
                     ChatRole::System => continue,
                     ChatRole::Tool(_) => continue,
                 };
@@ -969,7 +1001,7 @@ impl RenderContext {
                         push_line!(p, line.as_str(), fg);
                     }
                 }
-                push_line!("│", "", SEP_FG);
+                push_line!("", "", SEP_FG);
             }
 
             if panel.is_streaming() && !panel.streaming_buf.is_empty() {
@@ -1012,7 +1044,7 @@ impl RenderContext {
                     .map(|s| s.as_str())
                     .chain(partial_lines.iter().map(|s| s.as_str()));
                 for (i, line) in all_lines.enumerate() {
-                    let p = if i == 0 { "│   AI  " } else { "│       " };
+                    let p = if i == 0 { "    AI  " } else { "        " };
                     let (md_fg, md_text) = md_style_line(line, STREAM_FG);
                     push_line!(p, md_text.as_ref(), md_fg);
                 }
@@ -1023,7 +1055,7 @@ impl RenderContext {
                 buf.clear();
                 let _ = std::fmt::write(
                     &mut buf,
-                    format_args!("│   {}  {}", spin, t!("ai.thinking")),
+                    format_args!("    {}  {}", spin, t!("ai.thinking")),
                 );
                 push_line!("", buf.as_str(), STREAM_FG);
                 self.fmt_buf = buf;
@@ -1033,9 +1065,9 @@ impl RenderContext {
                 let wrapped = word_wrap(err, msg_inner_w);
                 for (i, line) in wrapped.iter().enumerate() {
                     let p = if i == 0 {
-                        "│  \u{2717}    "
+                        "   \u{2717}    "
                     } else {
-                        "│       "
+                        "        "
                     };
                     push_line!(p, line.as_str(), ERR_FG);
                 }
@@ -1044,10 +1076,10 @@ impl RenderContext {
             if panel.is_idle() {
                 if let Some(cmd) = panel.last_assistant_command() {
                     let max_cmd_w = panel_cols.saturating_sub(5);
-                    push_line!("│", "", SEP_FG);
+                    push_line!("", "", SEP_FG);
                     let mut buf = std::mem::take(&mut self.fmt_buf);
                     buf.clear();
-                    buf.push_str("│ \u{23ce}  ");
+                    buf.push_str("  \u{23ce}  ");
                     let cmd_chars: usize = cmd.chars().count();
                     if cmd_chars > max_cmd_w {
                         let end = cmd
@@ -1076,7 +1108,7 @@ impl RenderContext {
                 let (text, fg) = all_lines
                     .get(visible_start + i)
                     .map(|(t, f)| (t.as_str(), *f))
-                    .unwrap_or(("│", SEP_FG));
+                    .unwrap_or(("", SEP_FG));
                 self.push_shaped_row(text, fg, panel_bg, row, co, panel_cols, font);
             }
 
@@ -1111,6 +1143,8 @@ impl RenderContext {
         term_cols: usize,
         screen_rows: usize,
         cursor_blink_on: bool,
+        _pad_x: f32,
+        _pad_y: f32,
     ) {
         use crate::llm::chat_panel::{wrap_input, ConfirmDisplay, PanelState};
         use crate::llm::ChatRole;
@@ -1120,7 +1154,7 @@ impl RenderContext {
             return;
         }
 
-        let panel_bg = config.llm.ui.background;
+        let panel_bg = [0.0; 4]; // transparent
         let input_fg = config.llm.ui.input_fg;
 
         const HINT_FG: [f32; 4] = [0.420, 0.420, 0.478, 1.0]; // #6b6b7a muted
@@ -1144,8 +1178,8 @@ impl RenderContext {
             };
             const CONFIRM_YES: [f32; 4] = [0.50, 0.98, 0.60, 1.0];
             const CONFIRM_NO: [f32; 4] = [1.00, 0.47, 0.47, 1.0];
-            let yes_line = format!("│  {yes_label}");
-            let no_line = format!("│  {no_label}");
+            let yes_line = format!("   {yes_label}");
+            let no_line = format!("   {no_label}");
             self.push_shaped_row(
                 &yes_line,
                 CONFIRM_YES,
@@ -1179,8 +1213,8 @@ impl RenderContext {
                     String::new(),
                 )
             };
-            let line1 = format!("│ \u{25b8}  {}", vis1);
-            let line2 = format!("│    {}", vis2);
+            let line1 = format!("  \u{25b8}  {}", vis1);
+            let line2 = format!("     {}", vis2);
             self.push_shaped_row(&line1, inp_fg, panel_bg, input_row1, co, panel_cols, font);
             self.push_shaped_row(&line2, inp_fg, panel_bg, input_row2, co, panel_cols, font);
         }
@@ -1192,20 +1226,20 @@ impl RenderContext {
             .iter()
             .any(|m| matches!(m.role, ChatRole::Assistant));
         let hints: String = if file_picker_focused {
-            format!("│ ↑↓ navigate   Enter: attach   Tab: close  Tokens: {tokens}")
+            format!("  ↑↓ navigate   Enter: attach   Tab: close  Tokens: {tokens}")
         } else if !panel_focused {
-            format!("│ <Leader>a: focus   Esc: close   Tokens: {tokens}")
+            format!("  <Leader>a: focus   Esc: close   Tokens: {tokens}")
         } else {
             let base = match &panel.state {
                 PanelState::Idle if !panel.input.trim().is_empty() => {
-                    "│ Enter: send   Tab: files   Esc: close"
+                    "  Enter: send   Tab: files   Esc: close"
                 }
-                PanelState::Idle if has_assistant => "│ Enter: run \u{23ce}   Tab: files",
-                PanelState::Idle => "│ Enter: send   Tab: files   Esc: close",
-                PanelState::Loading | PanelState::Streaming => "│ streaming\u{2026}",
-                PanelState::Error(_) => "│ Esc: dismiss",
-                PanelState::AwaitingConfirm => "│ y/Enter: confirm   n/Esc: reject",
-                PanelState::Hidden => "│",
+                PanelState::Idle if has_assistant => "  Enter: run \u{23ce}   Tab: files",
+                PanelState::Idle => "  Enter: send   Tab: files   Esc: close",
+                PanelState::Loading | PanelState::Streaming => "  streaming\u{2026}",
+                PanelState::Error(_) => "  Esc: dismiss",
+                PanelState::AwaitingConfirm => "  y/Enter: confirm   n/Esc: reject",
+                PanelState::Hidden => " ",
             };
             format!("{base}   Tokens: {tokens}")
         };
@@ -1378,7 +1412,8 @@ impl RenderContext {
             return;
         }
 
-        const SIDEBAR_BG: [f32; 4] = [0.075, 0.075, 0.086, 1.0]; // #131316 panel
+        let actual_sidebar_bg = [0.075, 0.075, 0.086, 1.0]; // #131316 panel
+        const SIDEBAR_BG: [f32; 4] = [0.0; 4]; // transparent
         const SIDEBAR_ITEM_ACTIVE_BG: [f32; 4] = [0.12, 0.12, 0.14, 1.0];
         const SIDEBAR_ITEM_HOVER_BG: [f32; 4] = [0.10, 0.10, 0.12, 1.0];
         const SIDEBAR_FG: [f32; 4] = [0.878, 0.878, 0.910, 1.0]; // #e0e0e8
@@ -1406,10 +1441,23 @@ impl RenderContext {
         let inst_start = self.instances.len();
         let rect_start = self.rect_instances.len();
 
+        let radius = 10.0 * self.scale_factor;
+        let border = 1.0 * self.scale_factor;
+        self.rect_instances.push(RoundedRectInstance {
+            rect: [
+                sidebar_left_px - border,
+                sidebar_top_px - border,
+                sidebar_px + 2.0 * border,
+                visible_h + 2.0 * border,
+            ],
+            color: SIDEBAR_SEP_FG,
+            radius: radius + border,
+            _pad: [0.0; 3],
+        });
         self.rect_instances.push(RoundedRectInstance {
             rect: [sidebar_left_px, sidebar_top_px, sidebar_px, visible_h],
-            color: SIDEBAR_BG,
-            radius: 0.0,
+            color: actual_sidebar_bg,
+            radius,
             _pad: [0.0; 3],
         });
 
@@ -1429,13 +1477,7 @@ impl RenderContext {
         }
         header.push('+');
         push_sidebar_row(self, &header, SIDEBAR_ACCENT, SIDEBAR_BG, 0);
-        push_sidebar_row(
-            self,
-            &"─".repeat(sidebar_cols),
-            SIDEBAR_SEP_FG,
-            SIDEBAR_BG,
-            1,
-        );
+        push_sidebar_row(self, "", SIDEBAR_SEP_FG, SIDEBAR_BG, 1);
 
         for (idx, ws) in workspaces.iter().enumerate() {
             let base_row = 2 + idx * 2;
@@ -1537,12 +1579,12 @@ impl RenderContext {
         let start_col = (total_cols - palette_width) / 2;
         let start_row = (total_rows - palette_height) / 2;
 
-        let bg = [0.075, 0.075, 0.086, 1.0]; // #131316 panel
+        let bg = [0.11, 0.11, 0.14, 0.95]; // softer, translucent panel
         let transparent = [0.0f32; 4];
         let fg = [0.878, 0.878, 0.910, 1.0]; // #e0e0e8
-        let highlight_bg = [0.13, 0.13, 0.16, 1.0];
+        let highlight_bg = [0.22, 0.22, 0.28, 1.0];
         let prompt_fg = [0.306, 0.788, 0.690, 1.0]; // #4ec9b0 teal
-        let border_color = [0.165, 0.165, 0.184, 1.0]; // #2a2a2f
+        let border_color = [0.25, 0.25, 0.32, 1.0]; // lighter border
 
         let cw = self.shaper.cell_width;
         let ch = self.shaper.cell_height;
@@ -1550,7 +1592,7 @@ impl RenderContext {
         let py = pad_y + start_row as f32 * ch;
         let pw = palette_width as f32 * cw;
         let ph = palette_height as f32 * ch;
-        let radius = 8.0 * self.scale_factor;
+        let radius = 12.0 * self.scale_factor;
         let border = 1.0 * self.scale_factor;
 
         // Border rect (drawn first — behind panel bg)
@@ -1573,7 +1615,7 @@ impl RenderContext {
             _pad: [0.0; 3],
         });
 
-        let prompt = format!(" > {}▋", palette.query);
+        let prompt = format!("   > {}▋", palette.query);
         self.push_shaped_row(
             &prompt,
             prompt_fg,
@@ -1605,16 +1647,21 @@ impl RenderContext {
 
             if let Some(action) = palette.results.get(result_idx) {
                 if is_selected {
-                    // Highlight row: full-width rect so it fills the rounded panel
+                    // Highlight row: pill-style rect with padding
                     self.rect_instances.push(RoundedRectInstance {
-                        rect: [px, pad_y + row as f32 * ch, pw, ch],
+                        rect: [
+                            px + 6.0 * self.scale_factor,
+                            pad_y + row as f32 * ch,
+                            pw - 12.0 * self.scale_factor,
+                            ch,
+                        ],
                         color: highlight_bg,
-                        radius: 0.0,
+                        radius: 6.0 * self.scale_factor,
                         _pad: [0.0; 3],
                     });
                 }
 
-                let name_text = format!("  {}", action.name);
+                let name_text = format!("    {}", action.name);
                 self.push_shaped_row(
                     &name_text,
                     fg,
