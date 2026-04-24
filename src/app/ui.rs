@@ -899,10 +899,9 @@ impl UiManager {
                                 r
                             } else {
                                 // ── MCP tool — route to the registered server ─────────────
-                                let args = serde_json::from_str::<serde_json::Value>(
-                                    &call.arguments,
-                                )
-                                .unwrap_or(serde_json::json!({}));
+                                let args =
+                                    serde_json::from_str::<serde_json::Value>(&call.arguments)
+                                        .unwrap_or(serde_json::json!({}));
                                 let _ = tx.send((
                                     panel_id,
                                     AiEvent::ToolStatus {

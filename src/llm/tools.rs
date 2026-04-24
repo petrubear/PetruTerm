@@ -117,7 +117,10 @@ impl AgentTool {
     /// Returns true if `name` is a built-in tool handled by `execute_tool`.
     /// Any other name is assumed to be an MCP tool.
     pub fn is_builtin(name: &str) -> bool {
-        matches!(name, "read_file" | "list_dir" | "write_file" | "run_command")
+        matches!(
+            name,
+            "read_file" | "list_dir" | "write_file" | "run_command"
+        )
     }
 }
 

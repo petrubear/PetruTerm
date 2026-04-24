@@ -281,7 +281,11 @@ pub(crate) fn parse_tools_list(result: &Value) -> Result<Vec<McpTool>> {
                 .get("inputSchema")
                 .cloned()
                 .unwrap_or_else(|| json!({ "type": "object", "properties": {} }));
-            Some(McpTool { name, description, input_schema })
+            Some(McpTool {
+                name,
+                description,
+                input_schema,
+            })
         })
         .collect();
 

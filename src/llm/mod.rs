@@ -1,8 +1,8 @@
 pub mod ai_block;
 pub mod chat_panel;
-pub mod mcp;
 pub mod copilot;
 pub mod diff;
+pub mod mcp;
 pub mod openai_compat;
 pub mod openrouter;
 pub mod shell_context;
