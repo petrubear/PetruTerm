@@ -916,10 +916,11 @@ impl UiManager {
                                 let args =
                                     serde_json::from_str::<serde_json::Value>(&call.arguments)
                                         .unwrap_or(serde_json::json!({}));
+                                let display_name = format!("mcp.{}", call.name);
                                 let _ = tx.send((
                                     panel_id,
                                     AiEvent::ToolStatus {
-                                        tool: call.name.clone(),
+                                        tool: display_name.clone(),
                                         path: String::new(),
                                         done: false,
                                     },
@@ -932,7 +933,7 @@ impl UiManager {
                                 let _ = tx.send((
                                     panel_id,
                                     AiEvent::ToolStatus {
-                                        tool: call.name.clone(),
+                                        tool: display_name,
                                         path: String::new(),
                                         done: true,
                                     },
