@@ -5,6 +5,40 @@ Ordered newest-first within each date group.
 
 ---
 
+## Resolved 2026-04-23 — Auditoría de performance y memoria
+
+### TD-MEM-26: FreeType memory leaks en FreeTypeCmapLookup y FreeTypeLcdRasterizer
+- **Archivos:** `src/font/shaper.rs`, `src/font/freetype_lcd.rs`
+- **Descripción:** Los structs `FreeTypeCmapLookup` y `FreeTypeLcdRasterizer` manejan punteros crudos de FreeType (`FT_Library`, `FT_Face`) pero no hay verificación de errores en todas las rutas de creación. Si falla la inicialización, los recursos pueden no liberarse correctamente.
+- **Root cause:** Constructores usan `unsafe` blocks con `FT_Init_FreeType`, `FT_New_Face`, etc., pero en caminos de error (ej. path no UTF-8, FT_Set_Char_Size falla), no se llama a `FT_Done_Face`/`FT_Done_FreeType` antes de retornar `None`.
+- **Impacto:** Fugas de memoria en la biblioteca FreeType, acumulación de memoria no gestionada por Rust.
+- **Fix propuesto:** Asegurar que todos los constructores verifiquen errores y llamen a las funciones de limpieza correspondientes (`FT_Done_Face`, `FT_Done_FreeType`) en todos los caminos de error. Usar `defer!` o patrón `Guard` para liberación automática.
+- **Severidad:** P0 — leak crítico en paths de error, pero raro en producción (normalmente los archivos existen y la fuente es válida).
+- **Auditoría:** 2026-04-23
+- **Estado:** ABIERTO
+
+### TD-MEM-27: LLM chat panel sin límites de memoria
+- **Archivos:** `src/llm/chat_panel.rs`
+- **Descripción:** El `ChatPanel` mantiene un `messages: Vec<ChatMessage>` con `MAX_MESSAGES = 200`, pero el `streaming_buf` y el `wrapped_cache` pueden acumular memoria sin control si el usuario mantiene conversaciones largas o adjunta archivos grandes. `estimated_tokens()` divide chars/4 pero no hay límite real de memoria.
+- **Root cause:** No hay límite de memoria total para el panel (ej. 10MB). Archivos adjuntos pueden ser grandes (hasta 512KB cada uno, 1MB total documentado en archive TD-030, pero sin límite de memoria activa).
+- **Impacto:** Consumo de memoria lineal con la duración de la sesión, especialmente problemático cuando se adjuntan archivos grandes o conversaciones largas.
+- **Fix propuesto:** Implementar un límite de memoria total para el panel (ej. 10MB) y descartar mensajes antiguos cuando se exceda. Opcional: truncar `streaming_buf` cuando supere un umbral.
+- **Severidad:** P0 — impacto medible en sesiones largas, pero no bloqueante.
+- **Auditoría:** 2026-04-23
+- **Estado:** ABIERTO
+
+### TD-PERF-38: PTY buffer overflow sin backpressure efectivo
+- **Archivos:** `src/term/pty.rs`
+- **Descripción:** El canal `crossbeam_channel::bounded::<PtyEvent>(256)` tiene un tamaño fijo de 256 mensajes. Si el terminal genera salida rápida (ej. `ls -R`, `cat` de archivo grande), el buffer se llena y los eventos se descartan con `pty_backpressure_hit`.
+- **Root cause:** `try_send` devuelve `Err` silenciosamente cuando el canal está lleno. No hay mecanismo para notificar al proceso hijo que debe pausar la salida.
+- **Impacto:** Pérdida de datos de salida del terminal, comportamiento inconsistente en comandos con mucha salida.
+- **Fix propuesto:** Aumentar el tamaño del buffer (ej. 1024) O implementar un mecanismo de backpressure que notifique al proceso hijo para pausar la salida (ej. pausa/resume signals).
+- **Severidad:** P2 — noticeable en cargas de trabajo intensas, pero workaround: usar `ls | head`.
+- **Auditoría:** 2026-04-23
+- **Estado:** ABIERTO
+
+---
+
 ## Resolved 2026-04-18 — TD-OP-02 (3rd iteration): font_index threading
 
 ### TD-OP-02: FreeType cmap opens wrong face for .ttc collection fonts
