@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-04-23
-**Open Items:** 2
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 2
+**Last Updated:** 2026-04-24
+**Open Items:** 3
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 3
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -234,6 +234,16 @@ _TD-PERF-39 — FALSO POSITIVO 2026-04-23. `text.split(' ')` es un iterador lazy
 | TD-MEM-30 | P3 | Bytecode cache Lua no limpiado | ABIERTO |
 | TD-PERF-39 | P3 | String allocation hot path | FALSO POSITIVO |
 | TD-PERF-40 | P3 | Vec no reutilizados | ABIERTO |
+| TD-MCP-01  | P3 | MCP config no hot-reloadable | ABIERTO |
+
+---
+
+### TD-MCP-01: MCP config no hot-reloadable (D-5)
+- **Archivos:** `src/llm/mcp/config.rs`, `src/app/ui.rs`
+- **Descripción:** `mcp.json` se lee una sola vez al arrancar. Cambios requieren reiniciar PetruTerm. Los servidores MCP tampoco se reconectan automáticamente si caen.
+- **Fix propuesto:** Watcher via `notify` (ya en codebase) sobre `mcp.json`; al detectar cambio, llamar `mgr.start_all()` con el diff (conectar nuevos, desconectar eliminados). Corresponde a Fase D-5.
+- **Severidad:** P3 — workaround: reiniciar la app.
+- **Auditoría:** 2026-04-24
 
 ---
 

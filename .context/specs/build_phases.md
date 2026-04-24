@@ -105,16 +105,22 @@
 ### D-1: MCP config loader — COMPLETA 2026-04-24
 - [x] `~/.config/petruterm/mcp/mcp.json` (formato: `{ "mcpServers": { "name": { "command", "args", "env" } } }`)
 - [x] Merge con `.petruterm/mcp.json` del proyecto (proyecto tiene prioridad)
+- [x] XDG fallback: también verifica `~/.config/petruterm/mcp/mcp.json` en macOS (donde `dirs::config_dir()` → `~/Library/Application Support`)
 
 ### D-2: MCP client (stdio transport) — COMPLETA 2026-04-24
 - [x] Spawn proceso por server, JSON-RPC 2.0 sobre stdin/stdout
 - [x] `initialize`, `tools/list`, `tools/call`
 - [x] Lifecycle: spawn al arrancar app (`start_all()`), `kill_on_drop(true)` al cerrar
+- [x] PATH augmentado con `/opt/homebrew/bin:/usr/local/bin` al spawnar (fix nvm lazy-load)
+- [x] stderr forwarded al proceso padre (`Stdio::inherit()`) para debugging
 
 ### D-3: MCP tool integration en chat — COMPLETA 2026-04-24
 - [x] LLM engine recibe tool list de MCP servers activos (`all_tools_openai()`)
 - [x] Rutear tool calls al server correcto (`tool_routes` HashMap)
-- [x] Dispatch en `submit_ai_query`: builtin → MCP fallback
+- [x] Dispatch en `submit_ai_query`: MCP tools PRIMERO, built-ins filtrados (no duplicar cobertura)
+- [x] `AgentTool::specs_excluding(mcp_names)` — excluye built-ins cubiertos por MCP
+- [x] Status lines: `✓ filesystem.list_directory(/tmp)` (server.tool() format)
+- [x] Header badge `[mcp:N skills:M]` en AI panel
 
 ### D-4: Skills loader (formato agentskills.io)
 **Status: COMPLETA — 2026-04-22**

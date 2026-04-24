@@ -55,7 +55,7 @@ pub fn load(cwd: &Path) -> Result<McpConfig> {
     //    ~/.config is a separate location that many users expect to work.
     if let Some(home) = dirs::home_dir() {
         let xdg_path = home.join(".config/petruterm/mcp/mcp.json");
-        let already_loaded = platform_path.as_ref().map_or(false, |p| p == &xdg_path);
+        let already_loaded = platform_path.as_ref() == Some(&xdg_path);
         if !already_loaded && xdg_path.exists() {
             let servers = parse_file(&xdg_path)
                 .with_context(|| format!("Failed to parse {}", xdg_path.display()))?;

@@ -1,7 +1,7 @@
 # Session State
 
 **Last Updated:** 2026-04-24
-**Session Focus:** MCP D1/D2/D3 + battery/GPU optimizations
+**Session Focus:** MCP D1/D2/D3 + battery/GPU optimizations + MCP path fix + UI polish
 
 ## Branch: `master`
 
@@ -9,47 +9,55 @@
 
 **Phase 1–3 + 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Fase B COMPLETE. Fase C-1 COMPLETE. Fase C-2 COMPLETE. Fase C-3 COMPLETE. Fase C-3.5 COMPLETE. Fase D-1/D-2/D-3/D-4 COMPLETE. v0.1.3 publicado.**
 
+**MCP end-to-end operativo y verificado.** Battery saver con GPU preference wired.
+
 ---
 
-## Esta sesión (2026-04-24)
+## Esta sesión (2026-04-24) — MCP debugging + UI polish
+
+### MCP path fix (macOS)
+- **Bug:** `dirs::config_dir()` en macOS → `~/Library/Application Support`, no `~/.config`. El config loader solo miraba el path de la plataforma.
+- **Fix:** `src/llm/mcp/config.rs` — `load()` ahora verifica también `~/.config/petruterm/mcp/mcp.json` como XDG fallback (solo si es distinto al platform path). Commit `641fed3`.
+- **Log:** Añadido `log::info!` en `manager.rs` al conectar cada servidor con lista de tools.
+
+### MCP spawn: PATH y stderr
+- **Bug:** `npx` no se encontraba en entornos con nvm lazy-loaded en zsh (PATH mínimo heredado).
+- **Fix:** `src/llm/mcp/client.rs` — PATH augmentado con `/opt/homebrew/bin:/usr/local/bin` al spawnar. stderr cambiado de `Stdio::null()` a `Stdio::inherit()` para debugging. Commit `0eb5f97`.
+
+### Header badge `[mcp:N skills:M]`
+- **Cambio:** `src/llm/chat_panel.rs` — campos `mcp_connected: usize` + `skill_count: usize` en `ChatPanel`.
+- **Wire:** `src/app/ui.rs` — setea los campos tras `start_all()` y `skill_manager.load()`. Nuevos métodos: `McpManager::connected_count()`, usa `skill_manager.skills().len()`.
+- **Render:** `src/app/renderer.rs` — header muestra badge dinámico `[mcp:N skills:M]` (oculto si ambos 0). Commit `0eb5f97`.
+
+### MCP tool priority over built-ins
+- **Bug:** LLM elegía `list_dir` (built-in, restringido al CWD) en lugar de `list_directory` (MCP) porque los built-ins iban primero en la lista.
+- **Fix:** `src/llm/tools.rs` — nuevo método `AgentTool::specs_excluding(mcp_tool_names)`: excluye built-ins cubiertos por MCP (exact name match o `list_dir` cuando MCP tiene tool con "list"/"director"). `src/app/ui.rs` — MCP tools van PRIMERO, built-ins filtrados después. Commit `a08f357`.
+
+### MCP tool status display: `server.tool()`
+- **Cambio:** `src/app/ui.rs` — en el branch MCP del dispatch, `display_name = format!("{}.{}", server, call.name)` usando `McpManager::server_for_tool()`.
+- **Nuevo método:** `McpManager::server_for_tool(name) -> Option<&str>` en `manager.rs`.
+- Resultado: `✓ filesystem.list_directory(/tmp)` en lugar de `✓ list_directory()`. Commits `d7fa302`, `62c0771`.
+
+### MCP /tmp symlink fix (user config)
+- `/tmp` en macOS es symlink → `/private/tmp`. El MCP filesystem server resuelve el path al arrancar y almacena `/private/tmp`, pero las requests con `/tmp` fallaban el check de acceso.
+- Config del usuario actualizada: `~/.config/petruterm/mcp/mcp.json` ahora usa `/private/tmp` y `/Users/edison`.
+
+---
+
+## Esta sesión (2026-04-24) — GPU/Battery
 
 ### MCP D-1 / D-2 / D-3 — COMPLETAS
 
-- **D-1** (`src/llm/mcp/config.rs`): `McpConfig` loader — parsea `~/.config/petruterm/mcp/mcp.json` + merge con `.petruterm/mcp.json` local. Commit `062f7c1`.
-- **D-2** (`src/llm/mcp/client.rs`, `manager.rs`): `McpClient` con JSON-RPC 2.0 sobre stdio, `initialize` handshake, `tools/list`, `tools/call`. `McpManager` con `start_all()` concurrente, `all_tools_openai()`, `call_tool()` por routing. Commit `e6f911f`.
-- **D-3** (`src/app/ui.rs`, `src/llm/tools.rs`): `mcp_manager: Arc<McpManager>` en `UiManager`; tools MCP mergeados en tool_specs; dispatch loop: builtin → MCP fallback. Commit `1277677`.
-- **40 tests pasando.**
+- **D-1** (`src/llm/mcp/config.rs`): `McpConfig` loader. Commit `062f7c1`.
+- **D-2** (`src/llm/mcp/client.rs`, `manager.rs`): `McpClient` JSON-RPC 2.0 stdio. Commit `e6f911f`.
+- **D-3** (`src/app/ui.rs`, `src/llm/tools.rs`): integración en chat. Commit `1277677`.
 
-### Análisis y fix de consumo de batería
+### Battery/GPU fix
 
-- **Diagnóstico:** cursor blink 530ms (mayor impacto), `gpu_preference` hardcodeado como `HighPerformance` ignorando config, doc comment incorrecto (30s vs 60s TTL).
-- **`gpu_preference` wired** (`src/config/schema.rs`, `src/config/lua.rs`, `src/renderer/gpu.rs`): enum `GpuPreference { LowPower, HighPerformance, None }` añadido al schema y parser Lua. `GpuRenderer::new()` usa la preferencia configurada al seleccionar el adaptador.
-- **Present mode automático en batería** (`src/app/mod.rs`): cuando `battery_saver_active` cambia, se llama `renderer.set_present_mode(Fifo)` en batería y `Mailbox`/`FifoRelaxed` en AC. Efecto inmediato, sin reinicio.
-- **`available_present_modes`** almacenado en `GpuRenderer` para consulta en runtime.
-- **Default cambiado** a `"low_power"` en `config/default/perf.lua`.
-- **Doc fix**: comment de `battery_saver` en `perf.lua` corregido (30s → 60s, añadido "switches present mode to Fifo").
-- Commit `d27d272`.
-
----
-
-## Esta sesión (2026-04-24 — battery saver previo)
-
-### Battery saver mode
-
-- `ControlFlow::Poll` → `ControlFlow::Wait` en `main.rs` (eliminado busy-loop inicial).
-- `src/platform/battery.rs`: IOKit FFI via `IOPSCopyPowerSourcesInfo` — sin dependencias nuevas. Consulta cada 30s en `about_to_wait`.
-- `config.battery_saver`: enum `Auto|Always|Never` en `schema.rs`, parseado desde Lua.
-- Restricciones en modo batería (`Auto` + desconectado):
-  - `git_dirty_check` forzado a `false` (elimina `git status --porcelain`)
-  - Git poll TTL: 5s → 60s
-  - Cursor blink: desactivado (solid cursor)
-  - Present mode: Mailbox → Fifo
-- Status bar: segmento `BAT XX%` (verde / rojo < 20%) visible solo en batería.
-
-### Focus border — left-edge pane overlap fix (v0.1.3)
-
-- **Fix:** cuando `col_offset == 0`, borde izquierdo desplazado un `cell_w` hacia la izquierda.
-- **Archivo:** `src/app/renderer.rs` → `build_focus_border`
+- `gpu_preference` wired desde config → `GpuRenderer::new()` (`schema.rs`, `lua.rs`, `gpu.rs`).
+- Present mode automático en batería: Fifo en batería, Mailbox/FifoRelaxed en AC.
+- Fix crash: `FifoRelaxed` verificado contra `available_present_modes` antes de usarlo.
+- Default `"low_power"` en `perf.lua`. Commits `d27d272`, `8c3d211`.
 
 ---
 
