@@ -544,13 +544,32 @@ impl RenderContext {
         let border = 1.5 * self.scale_factor;
         let radius = 6.0 * self.scale_factor;
         let inset = border * 0.5;
+
+        let cell_w = self.shaper.cell_width;
+        let cell_h = self.shaper.cell_height;
+
+        // For panes at the left/top viewport edge (col_offset == 0 or row_offset == 0),
+        // pane_rect.x/y equals the text start position — there is no separator gap on
+        // that side.  Shift the border rect one cell outward so the stroke falls in the
+        // window margin rather than overlapping the first column/row of text.  Out-of-
+        // bounds pixels are clipped by the GPU, so the left/top border line simply
+        // disappears behind the window edge (same visual as a pane with a separator on
+        // that side, where the stroke sits in the separator gap).
+        let x = if focused.col_offset == 0 {
+            focused.pane_rect.x - cell_w
+        } else {
+            focused.pane_rect.x + inset
+        };
+        let y = if focused.row_offset == 0 {
+            focused.pane_rect.y - cell_h
+        } else {
+            focused.pane_rect.y + inset
+        };
+        let right = focused.pane_rect.x + focused.pane_rect.w - inset;
+        let bottom = focused.pane_rect.y + focused.pane_rect.h - inset;
+
         self.rect_instances.push(RoundedRectInstance {
-            rect: [
-                focused.pane_rect.x + inset,
-                focused.pane_rect.y + inset,
-                focused.pane_rect.w - border,
-                focused.pane_rect.h - border,
-            ],
+            rect: [x, y, right - x, bottom - y],
             color: FOCUS_COLOR,
             radius,
             border_width: border,
