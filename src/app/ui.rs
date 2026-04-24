@@ -916,7 +916,10 @@ impl UiManager {
                                 let args =
                                     serde_json::from_str::<serde_json::Value>(&call.arguments)
                                         .unwrap_or(serde_json::json!({}));
-                                let display_name = format!("mcp.{}", call.name);
+                                let display_name = match mcp_manager.server_for_tool(&call.name) {
+                                    Some(server) => format!("{}.{}", server, call.name),
+                                    None => format!("mcp.{}", call.name),
+                                };
                                 let _ = tx.send((
                                     panel_id,
                                     AiEvent::ToolStatus {

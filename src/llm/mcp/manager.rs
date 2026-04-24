@@ -104,6 +104,11 @@ impl McpManager {
         !self.clients.is_empty()
     }
 
+    /// Returns the server name that owns `tool_name`, or `None` if not found.
+    pub fn server_for_tool(&self, tool_name: &str) -> Option<&str> {
+        self.tool_routes.get(tool_name).map(String::as_str)
+    }
+
     /// Number of currently connected MCP servers.
     pub fn connected_count(&self) -> usize {
         self.clients.len()
