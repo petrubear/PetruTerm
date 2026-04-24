@@ -1,15 +1,37 @@
 # Session State
 
 **Last Updated:** 2026-04-24
-**Session Focus:** MCP D1/D2/D3 + battery/GPU optimizations + MCP path fix + UI polish + slash commands + keybind fixes
+**Session Focus:** D-5 hot-reload MCP + REC-PERF-01/02/05 + slash commands + keybind fixes
 
 ## Branch: `master`
 
 ## Estado actual
 
-**Phase 1–3 + 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Fase B COMPLETE. Fase C-1 COMPLETE. Fase C-2 COMPLETE. Fase C-3 COMPLETE. Fase C-3.5 COMPLETE. Fase D-1/D-2/D-3/D-4 COMPLETE. v0.1.3 publicado.**
+**Phase 1–3 + 3.5 + A + 3.6 + B + C + D (todas las fases) COMPLETE. v0.1.3 publicado.**
+**Fase 4 (plugins) es la siguiente fase mayor. Deuda técnica: 2 items P3 abiertos (TD-MEM-30, TD-PERF-40).**
 
-**MCP end-to-end operativo y verificado.** Battery saver con GPU preference wired.
+---
+
+## Esta sesión (2026-04-24) — D-5 + Recomendaciones estratégicas
+
+### D-5: MCP hot-reload
+- `config/watcher.rs` — filtro extendido a `.json` además de `.lua`
+- `app/mod.rs` — `mcp_watcher: Option<ConfigWatcher>` (notify sobre CWD `.petruterm/`) + `mcp_reload_at: Option<Instant>` (debounce 300ms separado). `check_config_reload` enruta eventos `.json` → `mcp_reload_at`, `.lua` → `config_reload_at`. Al disparar, llama `ui.reload_mcp(cwd)`.
+- `app/ui.rs` — `reload_mcp(cwd)`: crea nuevo `McpManager`, `block_on(start_all())`, reemplaza `Arc`, actualiza `chat_panel.mcp_connected`.
+- Cubre: global `~/Library/Application Support/petruterm/mcp/mcp.json` + project-local `.petruterm/mcp.json`.
+
+### REC-PERF-01: ASCII warmup al arranque
+- `font/shaper.rs` — `init_ascii_glyph_cache()` llamado eagerly en el constructor (antes era lazy en `try_ascii_fast_path`).
+- `font/shaper.rs` — nuevo método `warmup_atlas(atlas, queue)`: pre-rasteriza los 95 glyphs ASCII imprimibles al atlas.
+- `app/renderer.rs` — `warmup_atlas` llamado en `RenderContext::new()` tras `set_cell_size`, eliminando cache-misses en el primer frame.
+
+### REC-PERF-02: parking_lot::Mutex
+- `Cargo.toml` — `parking_lot = "0.12"` añadido.
+- Reemplazado `std::sync::Mutex` en: `font/freetype_lcd.rs` (glyph cache), `font/loader.rs` (FONT_PATH_CACHE estático), `llm/copilot.rs` (JWT cache). Ningún lock se mantiene a través de `.await`.
+- `.lock().unwrap()` → `.lock()` (parking_lot infallible).
+
+### REC-PERF-05: Frame budget documentado
+- `.context/specs/term_specs.md` §15 — tabla de targets (p99 < 8ms, idle 0 CPU/GPU, cold start < 16ms, atlas storm < 50ms), metodología HUD F12, referencia al CI criterion gate.
 
 ---
 

@@ -1,12 +1,12 @@
 # Active Context
 
-**Current Focus:** v0.1.3 publicado — Fase D completa en master
+**Current Focus:** Fase D completa — próximo: Fase 4 (plugins)
 **Last Active:** 2026-04-24
 
 ## Estado actual del proyecto
 
-**Phase 1–3 COMPLETE. Phase 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Fase B COMPLETE. Fase C COMPLETE. Fase D-1/D-2/D-3/D-4 COMPLETE.**
-**v0.1.3 publicado. Build limpio: check + test + clippy + fmt PASS. CI verde.**
+**Phase 1–3 COMPLETE. Phase 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Fase B COMPLETE. Fase C COMPLETE. Fase D (D-1/D-2/D-3/D-4/D-5) COMPLETE. REC-PERF-01/02/05 COMPLETE.**
+**v0.1.3 publicado. Build limpio. CI verde. Deuda P3 abierta: TD-MEM-30, TD-PERF-40.**
 
 ## Roadmap acordado (en orden)
 
@@ -17,10 +17,11 @@
 5. ~~**Fase C**~~ COMPLETO — Titlebar custom (NSWindow híbrido) + Workspaces
 6. ~~**Fase D-1/D-2/D-3**~~ COMPLETO — MCP integration (config, client, chat wiring)
 7. ~~**Fase D-4**~~ COMPLETO — AI Chat Skills (agentskills.io format)
-8. ~~**Bug fixes**~~ COMPLETO — Focus border alignment (v0.1.2), left-edge overlap (v0.1.3)
-9. ~~**UI polish**~~ COMPLETO — /skills color, /mcp command, Leader+w workspace, Leader+a fix
-10. **Fase D-5** — Project-level config
-11. **Fase 4** — Plugin ecosystem (Lua, lazy.nvim-style)
+8. ~~**Fase D-5**~~ COMPLETO — MCP hot-reload (notify + debounce + reload_mcp)
+9. ~~**Bug fixes**~~ COMPLETO — Focus border (v0.1.2), left-edge overlap (v0.1.3), Leader+a sidebar hijack
+10. ~~**UI polish**~~ COMPLETO — /skills color, /mcp command, Leader+w workspace
+11. ~~**REC-PERF-01/02/05**~~ COMPLETO — ASCII warmup, parking_lot, frame budget doc
+12. **Fase 4** — Plugin ecosystem (Lua, lazy.nvim-style)
 
 ## Invariantes arquitectonicos clave (no romper)
 
