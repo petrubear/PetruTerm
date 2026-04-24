@@ -87,6 +87,10 @@ pub struct App {
 
     /// Debounce timer for config hot-reload — actual reload deferred 300 ms after last event (TD-PERF-17).
     config_reload_at: Option<std::time::Instant>,
+    /// Watches CWD's `.petruterm/` directory for project-local MCP config changes.
+    mcp_watcher: Option<ConfigWatcher>,
+    /// Debounce timer for MCP hot-reload, separate from lua config reload.
+    mcp_reload_at: Option<std::time::Instant>,
     /// Per-terminal shell context (exit code + last command), keyed by terminal_id.
     /// Stored with the mtime of the context file to skip redundant disk reads when
     /// the file has not changed since the last PTY event (TD-PERF-09).
@@ -105,6 +109,12 @@ impl App {
             .exists()
             .then(|| ConfigWatcher::new(&config::config_dir()).ok())
             .flatten();
+
+        let mcp_watcher = std::env::current_dir()
+            .ok()
+            .map(|cwd| cwd.join(".petruterm"))
+            .filter(|p| p.is_dir())
+            .and_then(|p| ConfigWatcher::new(&p).ok());
 
         Self {
             config: config.clone(),
@@ -131,6 +141,8 @@ impl App {
             battery_last_poll: std::time::Instant::now(),
             battery_saver_active: false,
             config_reload_at: None,
+            mcp_watcher,
+            mcp_reload_at: None,
             terminal_shell_ctxs: std::collections::HashMap::new(),
             separator_snapshot: Vec::new(),
         }
@@ -407,17 +419,40 @@ impl App {
     }
 
     fn check_config_reload(&mut self) {
+        const DEBOUNCE_MS: u64 = 300;
+
+        // Global config dir watcher — split lua (app config) vs json (MCP config).
         if let Some(watcher) = &self.config_watcher {
-            if watcher.poll().is_some() {
-                // Debounce: defer reload 300 ms after the last event (TD-PERF-17).
-                self.config_reload_at =
-                    Some(std::time::Instant::now() + std::time::Duration::from_millis(300));
+            if let Some(path) = watcher.poll() {
+                if path.extension().is_some_and(|e| e == "json") {
+                    self.mcp_reload_at = Some(
+                        std::time::Instant::now()
+                            + std::time::Duration::from_millis(DEBOUNCE_MS),
+                    );
+                } else {
+                    self.config_reload_at = Some(
+                        std::time::Instant::now()
+                            + std::time::Duration::from_millis(DEBOUNCE_MS),
+                    );
+                }
             }
         }
-        let ready = self
+
+        // Project-local .petruterm/ watcher.
+        if let Some(watcher) = &self.mcp_watcher {
+            if watcher.poll().is_some() {
+                self.mcp_reload_at = Some(
+                    std::time::Instant::now()
+                        + std::time::Duration::from_millis(DEBOUNCE_MS),
+                );
+            }
+        }
+
+        // Fire lua config reload.
+        if self
             .config_reload_at
-            .is_some_and(|t| std::time::Instant::now() >= t);
-        if ready {
+            .is_some_and(|t| std::time::Instant::now() >= t)
+        {
             self.config_reload_at = None;
             if let Ok(new_cfg) = config::reload() {
                 self.config = new_cfg;
@@ -427,10 +462,23 @@ impl App {
                 }
                 self.ui.palette.rebuild_keybinds(&self.config);
                 self.ui.palette.rebuild_snippets(&self.config.snippets);
-                // TD-020: also rewire LLM provider so provider/width_cols stay in sync.
                 self.ui.rewire_llm_provider(&self.config);
                 log::info!("Config hot-reloaded.");
             }
+        }
+
+        // Fire MCP reload.
+        if self
+            .mcp_reload_at
+            .is_some_and(|t| std::time::Instant::now() >= t)
+        {
+            self.mcp_reload_at = None;
+            let cwd = self
+                .cached_cwd
+                .clone()
+                .or_else(|| std::env::current_dir().ok())
+                .unwrap_or_default();
+            self.ui.reload_mcp(&cwd);
         }
     }
 

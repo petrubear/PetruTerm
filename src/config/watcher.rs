@@ -21,7 +21,10 @@ impl ConfigWatcher {
                     EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_)
                 ) {
                     for path in event.paths {
-                        if path.extension().is_some_and(|e| e == "lua") {
+                        if path
+                            .extension()
+                            .is_some_and(|e| e == "lua" || e == "json")
+                        {
                             let _ = tx.try_send(path);
                         }
                     }

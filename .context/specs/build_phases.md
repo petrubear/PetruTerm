@@ -167,10 +167,13 @@ Body del prompt aquí...
 - `src/app/input/mod.rs` — slash dispatcher en Enter handler
 - `src/app/renderer.rs` — `⚡ skill-name` en header AI panel
 
-### D-5: Project-level config
+### D-5: Project-level config — COMPLETA 2026-04-24
 - [x] `.petruterm/mcp.json` — MCP servers del proyecto (implementado en D-1: `load(cwd)` merge)
 - [x] `.petruterm/skills/` — Skills del proyecto (implementado en D-4 como `reload_local`)
-- [ ] Hot-reload de `.petruterm/mcp.json` al cambiar (actualmente solo se lee al arrancar)
+- [x] Hot-reload de `mcp.json` al cambiar (global y project-local)
+  - `config/watcher.rs`: filtro extendido a `.json` además de `.lua`
+  - `app/mod.rs`: `mcp_watcher` (notify sobre CWD `.petruterm/`) + `mcp_reload_at` (debounce 300ms separado del config lua)
+  - `app/ui.rs`: `reload_mcp(cwd)` — crea nuevo `McpManager`, `start_all()`, reemplaza el Arc
 
 ---
 

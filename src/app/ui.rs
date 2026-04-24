@@ -1137,6 +1137,25 @@ impl UiManager {
         }
     }
 
+    /// Reload MCP servers from disk config. Creates a fresh McpManager, starts all
+    /// servers, and replaces the Arc. Called on hot-reload of mcp.json (D-5).
+    pub fn reload_mcp(&mut self, cwd: &std::path::Path) {
+        match crate::llm::mcp::config::load(cwd) {
+            Ok(cfg) => {
+                let mut mgr = McpManager::new();
+                let errors = self.tokio_rt.block_on(mgr.start_all(&cfg));
+                for (name, err) in &errors {
+                    log::warn!("MCP hot-reload: server '{name}' failed to start: {err:#}");
+                }
+                let connected = mgr.connected_count();
+                self.mcp_manager = std::sync::Arc::new(mgr);
+                self.chat_panel.mcp_connected = connected;
+                log::info!("MCP hot-reloaded: {connected} server(s) connected.");
+            }
+            Err(e) => log::warn!("MCP hot-reload: failed to load config: {e:#}"),
+        }
+    }
+
     /// TD-020: Re-wire the LLM provider and panel width from a fresh config.
     /// Call this on every config reload (both hot-reload and palette-triggered).
     pub fn rewire_llm_provider(&mut self, config: &Config) {
