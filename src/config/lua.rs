@@ -97,7 +97,7 @@ fn evict_stale_lua_cache() {
         if let Ok(files) = std::fs::read_dir(&path) {
             for file in files.flatten() {
                 let fp = file.path();
-                if fp.extension().map_or(false, |e| e == "luac") {
+                if fp.extension().is_some_and(|e| e == "luac") {
                     let stale = fp
                         .metadata()
                         .and_then(|m| m.modified())

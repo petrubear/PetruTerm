@@ -1,9 +1,9 @@
 #![allow(dead_code)]
 use freetype::freetype as ft;
+use parking_lot::Mutex;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use parking_lot::Mutex;
 
 use crate::config::schema::FontConfig;
 use crate::renderer::lcd_atlas::LcdGlyphAtlas;

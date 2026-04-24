@@ -488,7 +488,10 @@ impl TextShaper {
             );
             let _ = self.rasterize_to_atlas(key, atlas, queue);
         }
-        log::info!("Atlas warmup: pre-rasterized {} ASCII glyphs.", 0x7Eu32 - 0x20u32 + 1);
+        log::info!(
+            "Atlas warmup: pre-rasterized {} ASCII glyphs.",
+            0x7Eu32 - 0x20u32 + 1
+        );
     }
 
     /// Try the ASCII fast path: bypass HarfBuzz entirely.

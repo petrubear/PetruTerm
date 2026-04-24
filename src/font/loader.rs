@@ -107,8 +107,8 @@ pub fn locate_font_for_lcd(font_config: &mut FontConfig) {
         return;
     }
 
-    let cache = FONT_PATH_CACHE
-        .get_or_init(|| parking_lot::Mutex::new(std::collections::HashMap::new()));
+    let cache =
+        FONT_PATH_CACHE.get_or_init(|| parking_lot::Mutex::new(std::collections::HashMap::new()));
 
     {
         let cache = cache.lock();

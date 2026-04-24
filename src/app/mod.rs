@@ -426,13 +426,11 @@ impl App {
             if let Some(path) = watcher.poll() {
                 if path.extension().is_some_and(|e| e == "json") {
                     self.mcp_reload_at = Some(
-                        std::time::Instant::now()
-                            + std::time::Duration::from_millis(DEBOUNCE_MS),
+                        std::time::Instant::now() + std::time::Duration::from_millis(DEBOUNCE_MS),
                     );
                 } else {
                     self.config_reload_at = Some(
-                        std::time::Instant::now()
-                            + std::time::Duration::from_millis(DEBOUNCE_MS),
+                        std::time::Instant::now() + std::time::Duration::from_millis(DEBOUNCE_MS),
                     );
                 }
             }
@@ -441,10 +439,8 @@ impl App {
         // Project-local .petruterm/ watcher.
         if let Some(watcher) = &self.mcp_watcher {
             if watcher.poll().is_some() {
-                self.mcp_reload_at = Some(
-                    std::time::Instant::now()
-                        + std::time::Duration::from_millis(DEBOUNCE_MS),
-                );
+                self.mcp_reload_at =
+                    Some(std::time::Instant::now() + std::time::Duration::from_millis(DEBOUNCE_MS));
             }
         }
 
