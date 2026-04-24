@@ -1,7 +1,7 @@
 # Session State
 
-**Last Updated:** 2026-04-23
-**Session Focus:** Fase E — Design Refactor (branch `design-refactor`)
+**Last Updated:** 2026-04-23 (tarde)
+**Session Focus:** Focus border fix + sidebar pills + deuda técnica
 
 ## Branch: `design-refactor` (base: `master`)
 
@@ -13,7 +13,26 @@
 
 ---
 
-## Esta sesión (2026-04-23)
+## Esta sesión (2026-04-23 tarde)
+
+### Focus border — alineación + rounded outline
+
+- **`pane_rect` snapping** (`src/ui/panes.rs`): `collect_leaf_infos_impl` ahora snapea los cuatro bordes del rect al grid de celdas con `.round()`, idéntico a `collect_separators_impl`. Antes los bordes crudos de pixel no coincidían con los separadores cuando el rect no era exactamente divisible por `cell_w/h`.
+- **Shader ring mode** (`src/renderer/rounded_rect.rs`): `border_width: f32` añadido como `@location(3)` reusando `_pad[0]` (stride 48 bytes sin cambio). Cuando `> 0` renderiza solo el anillo SDF entre borde exterior e interior. Todos los rects existentes pasan `border_width: 0.0` → sin cambio de comportamiento.
+- **`build_focus_border`** (`src/app/renderer.rs`): de 4 rects 1px a un solo `RoundedRectInstance` con `border_width=1.5*sf`, `radius=6*sf`. Alineación garantizada por snapping.
+
+### Sidebar — pill-style active items
+
+- Items activos/hover con `RoundedRectInstance` pill (`radius=6px`, `margin=8px`), sin dot bullet en texto. Accent bar teal 3px a la izquierda del pill activo.
+
+### Deuda técnica — auditoría de falsos positivos (usuario)
+
+Cerrados como FALSO POSITIVO: TD-MEM-27, TD-MEM-28, TD-MEM-29, TD-PERF-39, TD-RENDER-04.
+Resuelto real: TD-PERF-38 (PTY buffer 256→1024).
+
+---
+
+## Esta sesión (2026-04-23 mañana)
 
 ### Fase E — Design Refactor — COMPLETA
 Branch `design-refactor`. Todos los cambios son visuales, compilacion limpia.

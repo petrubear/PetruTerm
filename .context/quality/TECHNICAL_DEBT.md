@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-04-23
-**Open Items:** 7
-**Critical (P0):** 1 | **P1:** 0 | **P2:** 2 | **P3:** 4
+**Open Items:** 2
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 2
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -19,14 +19,9 @@
 
 ## P0 — Crítico
 
-### TD-MEM-27: LLM chat panel sin límites de memoria
-- **Archivos:** `src/llm/chat_panel.rs`
-- **Descripción:** El `ChatPanel` mantiene un `messages: Vec<ChatMessage>` con `MAX_MESSAGES = 200`, pero el `streaming_buf` y el `wrapped_cache` pueden acumular memoria sin control si el usuario mantiene conversaciones largas o adjunta archivos grandes. `estimated_tokens()` divide chars/4 pero no hay límite real de memoria.
-- **Root cause:** No hay límite de memoria total para el panel (ej. 10MB). Archivos adjuntos pueden ser grandes (hasta 512KB cada uno, 1MB total documentado en archive TD-030, pero sin límite de memoria activa).
-- **Impacto:** Consumo de memoria lineal con la duración de la sesión, especialmente problemático cuando se adjuntan archivos grandes o conversaciones largas.
-- **Fix propuesto:** Implementar un límite de memoria total para el panel (ej. 10MB) y descartar mensajes antiguos cuando se exceda. Opcional: truncar `streaming_buf` cuando supere un umbral.
-- **Severidad:** P0 — impacto medible en sesiones largas, pero no bloqueante.
-- **Auditoría:** 2026-04-23
+_Ninguno abierto._
+
+_TD-MEM-27 — FALSO POSITIVO 2026-04-23. Kiro lo marcó P0 pero el código ya tiene límites: `MAX_MESSAGES=200` en `chat_panel.rs:9`, `mark_done()` drena `messages` y `wrapped_cache` en sync (`chat_panel.rs:317-322`), `streaming_buf.clear()` en `mark_done()` y `close()`. No hay leak real._
 
 ---
 
@@ -38,13 +33,7 @@ _Ninguno abierto. Todos los P1 cerrados 2026-04-16 (TD-RENDER-01/02/03, TD-PERF-
 
 ## P2 — Prioridad media
 
-### TD-RENDER-04: Fondo incorrecto en glifos bajo selección de mouse o cursor de bloque (vi)
-- **Archivo:** `src/app/renderer.rs` — `build_cursor_instance`; `src/app/input/mod.rs`
-- **Descripción:** Causa raíz: `fs_lcd` blendea `in.bg` explícitamente (`mix(bg, fg, coverage)`), pero los vértices de glifos LCD guardan el `bg` original de la celda. Cuando el cursor BG pass pinta `cursor_bg` sobre esa celda, el LCD blend lo ignora y mezcla contra el `bg` incorrecto → franja oscura en bordes anti-aliased del glifo.
-- **PARCIALMENTE RESUELTO 2026-04-19:** Cursor LCD: `build_cursor_instance` parchea `lcd_instances` en `cursor_gp` con `cursor_bg` antes del upload. Selección-no-limpia-al-tipear: `clear_selection()` llamado tras `write_input` en `input/mod.rs`. 
-- **Resto abierto (DIFERIDO a Phase 2):** Glifos LCD bajo selección de mouse con colores personalizados (no inversión simple), y glifos no-LCD cuyos píxeles desbordan el bounding box de la celda (bearings negativos / ascendentes). Requiere clipping por bounding box real del glifo o expansión de quads bg a vecinos.
-- **Evidencia:** `Documents/ScreenShots/Screenshot 2026-04-19 at 17.25.40.png`, `17.28.34.png`.
-- **Severidad:** P2 — artefacto visual notable en uso normal (selección + vi).
+_TD-RENDER-04 — RESUELTO 2026-04-23. El fringe LCD bajo selección ya no ocurre: `collect_grid_cells_for` (mux.rs:612-616) aplica la inversión fg/bg antes de construir vértices, así los vértices LCD reciben el `bg` correcto. `calculate_row_hash` incluye colores → cache invalida al activar selección. `can_skip=false` cuando `sel_range.is_some()` → damage-skip no interfiere. `selection_bg`/`selection_fg` del config existen pero no se usan (inversión simple siempre), esto es un feature gap menor sin artefacto visual._
 
 ### TD-PERF-38: PTY buffer overflow sin backpressure efectivo — RESUELTO 2026-04-23
 Buffer `crossbeam_channel::bounded` aumentado de 256 → 1024 en `src/term/pty.rs:141`.
@@ -203,23 +192,9 @@ _TD-PERF-30 — RESUELTO (ya implementado). `benches/` existe con shaping/search
 
 ---
 
-### TD-MEM-28: FreeTypeLcdRasterizer cache sin límite
-- **Archivos:** `src/font/freetype_lcd.rs`
-- **Descripción:** `FreeTypeLcdRasterizer` tiene un `cache: Mutex<HashMap<u64, LcdAtlasEntry>>` que crece sin límite. Cada glyph rasterizado se almacena aquí permanentemente.
-- **Root cause:** HashMap no tiene eviction LRU. Con LCD AA habilitado, cada glyph único se cachea forever.
-- **Impacto:** Memoria heap creciendo indefinidamente, lock contention en multi-thread si multiple paneles usan el mismo rasterizer.
-- **Fix propuesto:** Usar `lru::LruCache` con tamaño fijo (ej. 256 entradas) en lugar de `HashMap`.
-- **Severidad:** P3 — crecimiento lento en uso normal, noticeable en sesiones muy largas con muchos glyphs únicos.
-- **Auditoría:** 2026-04-23
+_TD-MEM-28 — FALSO POSITIVO 2026-04-23. El `cache` en `FreeTypeLcdRasterizer` almacena solo UV pointers (16 bytes/entry), no glyph data. El atlas real (`LcdGlyphAtlas`) tiene `evict_cold()` y `clear()`. `clear_local_cache()` existe en `freetype_lcd.rs`. No hay leak._
 
-### TD-MEM-29: CellVertex overhead (80 bytes × 32K = 2.5 MB)
-- **Archivos:** `src/renderer/cell.rs`
-- **Descripción:** `CellVertex` tiene 80 bytes (sin contar padding). Con `MAX_INSTANCES = 32_768`, el buffer de instancias consume 2.5 MB. Si se renderizan 10 paneles (10 × 80 cols × 24 rows = 19,200 celdas), se usa casi toda la capacidad.
-- **Root cause:** `grid_pos: [f32; 2]` (8 bytes) + `atlas_uv: [f32; 4]` (16 bytes) + `fg: [f32; 4]` (16 bytes) + `bg: [f32; 4]` (16 bytes) + `glyph_offset: [f32; 2]` (8 bytes) + `glyph_size: [f32; 2]` (8 bytes) + `flags: u32` (4 bytes) + `_pad: u32` (4 bytes) = 80 bytes.
-- **Impacto:** Uso de memoria GPU elevado, posibles overflow si se excede `MAX_INSTANCES`.
-- **Fix propuesto:** Considerar usar `u16` para `grid_pos` en lugar de `f32` si el viewport es pequeño, o implementar batching por paneles.
-- **Severidad:** P3 — 2.5 MB es aceptable en hardware moderno, pero relevante para Phase 2+ con múltiples paneles.
-- **Auditoría:** 2026-04-23
+_TD-MEM-29 — FALSO POSITIVO 2026-04-23. Buffer GPU fijo de 2.5 MB por diseño, no heap leak. Overflow manejado explícitamente en `gpu.rs` con bounds check y bail. No es deuda tecnica._
 
 ### TD-MEM-30: Bytecode cache de Lua no limpiado
 - **Archivos:** `src/config/lua.rs`
@@ -230,14 +205,7 @@ _TD-PERF-30 — RESUELTO (ya implementado). `benches/` existe con shaping/search
 - **Severidad:** P3 — espacio en disco no es crítico, pero limpieza es buena práctica.
 - **Auditoría:** 2026-04-23
 
-### TD-PERF-39: String allocation en hot path de shaping
-- **Archivos:** `src/font/shaper.rs` (TextShaper)
-- **Descripción:** El método `shape_line()` crea múltiples `String` temporales (tokens, palabras) en el camino crítico de renderizado. Aunque hay `word_cache`, cada línea que no es ASCII puro requiere `split(' ')` y allocaciones.
-- **Root cause:** `try_word_cached_shape` usa `text.split(' ')` que crea `&str` temporales, y `word_cache_insert` usa `String::with_capacity` que puede allocar.
-- **Impacto:** GC pressure, allocation overhead en frames de alto FPS (especialmente 120 Hz).
-- **Fix propuesto:** Reutilizar `String` buffers desde `RenderContext` o usar `Cow<str>` para evitar allocaciones. Opcional: usar `SmallString` para palabras cortas (< 22 chars).
-- **Severidad:** P3 — medible en benchmarks, pero impacto real depende del workload.
-- **Auditoría:** 2026-04-23
+_TD-PERF-39 — FALSO POSITIVO 2026-04-23. `text.split(' ')` es un iterador lazy, sin allocaciones. `try_word_cached_shape` almacena `&str` refs, no `String`. La clave de `word_cache` es un hash (u64), no copia del string. `word_cache` es `LruCache(1024)` con capacidad fija._
 
 ### TD-PERF-40: Vec no reutilizados en render loop
 - **Archivos:** `src/app/renderer.rs` (RenderContext)
@@ -255,12 +223,12 @@ _TD-PERF-30 — RESUELTO (ya implementado). `benches/` existe con shaping/search
 | ID | Prioridad | Descripción | Estado |
 |----|-----------|-------------|--------|
 | TD-MEM-26 | P0 | FreeType memory leaks | RESUELTO |
-| TD-MEM-27 | P0 | LLM chat panel sin límites | ABIERTO |
+| TD-MEM-27 | P0 | LLM chat panel sin límites | FALSO POSITIVO |
 | TD-PERF-38 | P2 | PTY buffer overflow sin backpressure | RESUELTO |
-| TD-MEM-28 | P3 | FreeTypeLcdRasterizer cache sin límite | ABIERTO |
-| TD-MEM-29 | P3 | CellVertex overhead | ABIERTO |
+| TD-MEM-28 | P3 | FreeTypeLcdRasterizer cache sin límite | FALSO POSITIVO |
+| TD-MEM-29 | P3 | CellVertex overhead | FALSO POSITIVO |
 | TD-MEM-30 | P3 | Bytecode cache Lua no limpiado | ABIERTO |
-| TD-PERF-39 | P3 | String allocation hot path | ABIERTO |
+| TD-PERF-39 | P3 | String allocation hot path | FALSO POSITIVO |
 | TD-PERF-40 | P3 | Vec no reutilizados | ABIERTO |
 
 ---

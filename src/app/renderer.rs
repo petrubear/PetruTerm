@@ -82,7 +82,7 @@ pub struct RenderContext {
     gap_buf: String,
     /// Reusable line buffer for `build_chat_panel_instances` — avoids Vec realloc per rebuild.
     /// Strings inside are reused across frames when capacity permits (TD-PERF-13).
-    pub scratch_lines: Vec<(String, [f32; 4])>,
+    pub scratch_lines: Vec<(String, [f32; 4], Option<[f32; 4]>)>,
     pub panel_rect_cache: Vec<RoundedRectInstance>,
     /// Incremented each rendered frame; used for spinner animation to avoid O(n) chars().count().
     pub frame_counter: u64,
@@ -532,33 +532,30 @@ impl RenderContext {
                 rect: [x, y, w, h],
                 color: SEP_COLOR,
                 radius: 0.0,
-                _pad: [0.0; 3],
+                border_width: 0.0, _pad: [0.0; 2],
             });
         }
     }
 
-    /// Draw a 1-pixel accent border around the focused pane. Only called when pane_count > 1.
-    pub fn build_focus_border(
-        &mut self,
-        focused: &crate::ui::PaneInfo,
-        pad_x: f32,
-        pad_y: f32,
-    ) {
-        const FOCUS_COLOR: [f32; 4] = [0.306, 0.788, 0.690, 0.9]; // teal accent
-        let cw = self.shaper.cell_width;
-        let ch = self.shaper.cell_height;
-        let x = pad_x + focused.col_offset as f32 * cw;
-        let y = pad_y + focused.row_offset as f32 * ch;
-        let w = focused.cols as f32 * cw;
-        let h = focused.rows as f32 * ch;
-        // top
-        self.rect_instances.push(RoundedRectInstance { rect: [x, y - 1.0, w, 1.0], color: FOCUS_COLOR, radius: 0.0, _pad: [0.0; 3] });
-        // bottom
-        self.rect_instances.push(RoundedRectInstance { rect: [x, y + h, w, 1.0], color: FOCUS_COLOR, radius: 0.0, _pad: [0.0; 3] });
-        // left
-        self.rect_instances.push(RoundedRectInstance { rect: [x - 1.0, y - 1.0, 1.0, h + 2.0], color: FOCUS_COLOR, radius: 0.0, _pad: [0.0; 3] });
-        // right
-        self.rect_instances.push(RoundedRectInstance { rect: [x + w, y - 1.0, 1.0, h + 2.0], color: FOCUS_COLOR, radius: 0.0, _pad: [0.0; 3] });
+    /// Draw a rounded accent outline around the focused pane. Only called when pane_count > 1.
+    /// Uses pane_rect (snapped to cell grid) to align exactly with separator lines.
+    pub fn build_focus_border(&mut self, focused: &crate::ui::PaneInfo) {
+        const FOCUS_COLOR: [f32; 4] = [0.306, 0.788, 0.690, 0.85];
+        let border = 1.5 * self.scale_factor;
+        let radius = 6.0 * self.scale_factor;
+        let inset = border * 0.5;
+        self.rect_instances.push(RoundedRectInstance {
+            rect: [
+                focused.pane_rect.x + inset,
+                focused.pane_rect.y + inset,
+                focused.pane_rect.w - border,
+                focused.pane_rect.h - border,
+            ],
+            color: FOCUS_COLOR,
+            radius,
+            border_width: border,
+            _pad: [0.0; 2],
+        });
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -735,14 +732,14 @@ impl RenderContext {
                 rect: [px - border, py, pw + 2.0 * border, ph],
                 color: SEP_FG, // border
                 radius: radius + border,
-                _pad: [0.0; 3],
+                border_width: 0.0, _pad: [0.0; 2],
             });
         self.rect_instances
             .push(crate::renderer::rounded_rect::RoundedRectInstance {
                 rect: [px, py, pw, ph],
                 color: actual_panel_bg,
                 radius,
-                _pad: [0.0; 3],
+                border_width: 0.0, _pad: [0.0; 2],
             });
 
         // ── Fixed bottom rows (always present) ───────────────────────────────
@@ -987,20 +984,21 @@ impl RenderContext {
 
             // Helper: write `prefix + content` into all_lines[line_idx], reusing String capacity.
             macro_rules! push_line {
-                ($prefix:expr, $content:expr, $color:expr) => {{
+                ($prefix:expr, $content:expr, $color:expr, $accent:expr) => {{
                     let p: &str = $prefix;
                     let c: &str = $content;
                     if line_idx < all_lines.len() {
-                        let (s, col) = &mut all_lines[line_idx];
+                        let (s, col, acc) = &mut all_lines[line_idx];
                         s.clear();
                         s.push_str(p);
                         s.push_str(c);
                         *col = $color;
+                        *acc = $accent;
                     } else {
                         let mut s = String::with_capacity(p.len() + c.len());
                         s.push_str(p);
                         s.push_str(c);
-                        all_lines.push((s, $color));
+                        all_lines.push((s, $color, $accent));
                     }
                     line_idx += 1;
                 }};
@@ -1008,10 +1006,13 @@ impl RenderContext {
 
             // Use pre-wrapped lines from the cache (TD-PERF-05).
             // ensure_wrap_cache() is called in mod.rs before this function runs.
+            let user_accent = [0.20, 0.60, 0.98, 1.0]; // Blue accent for user
+            let asst_accent = [0.306, 0.788, 0.690, 1.0]; // Teal/green accent for AI
+
             for (msg_idx, msg) in panel.messages.iter().enumerate() {
-                let (first_p, cont_p, fg) = match msg.role {
-                    ChatRole::User => ("   You  ", "        ", user_fg),
-                    ChatRole::Assistant => ("    AI  ", "        ", asst_fg),
+                let (first_p, cont_p, fg, accent) = match msg.role {
+                    ChatRole::User => ("   You  ", "        ", user_fg, Some(user_accent)),
+                    ChatRole::Assistant => ("    AI  ", "        ", asst_fg, Some(asst_accent)),
                     ChatRole::System => continue,
                     ChatRole::Tool(_) => continue,
                 };
@@ -1020,12 +1021,12 @@ impl RenderContext {
                     let p = if i == 0 { first_p } else { cont_p };
                     if is_assistant {
                         let (md_fg, md_text) = md_style_line(line.as_str(), fg);
-                        push_line!(p, md_text.as_ref(), md_fg);
+                        push_line!(p, md_text.as_ref(), md_fg, accent);
                     } else {
-                        push_line!(p, line.as_str(), fg);
+                        push_line!(p, line.as_str(), fg, accent);
                     }
                 }
-                push_line!("", "", SEP_FG);
+                push_line!("", "", SEP_FG, None);
             }
 
             if panel.is_streaming() && !panel.streaming_buf.is_empty() {
@@ -1070,7 +1071,7 @@ impl RenderContext {
                 for (i, line) in all_lines.enumerate() {
                     let p = if i == 0 { "    AI  " } else { "        " };
                     let (md_fg, md_text) = md_style_line(line, STREAM_FG);
-                    push_line!(p, md_text.as_ref(), md_fg);
+                    push_line!(p, md_text.as_ref(), md_fg, Some(asst_accent));
                 }
             }
 
@@ -1081,7 +1082,7 @@ impl RenderContext {
                     &mut buf,
                     format_args!("    {}  {}", spin, t!("ai.thinking")),
                 );
-                push_line!("", buf.as_str(), STREAM_FG);
+                push_line!("", buf.as_str(), STREAM_FG, Some(asst_accent));
                 self.fmt_buf = buf;
             }
 
@@ -1093,14 +1094,14 @@ impl RenderContext {
                     } else {
                         "        "
                     };
-                    push_line!(p, line.as_str(), ERR_FG);
+                    push_line!(p, line.as_str(), ERR_FG, None);
                 }
             }
 
             if panel.is_idle() {
                 if let Some(cmd) = panel.last_assistant_command() {
                     let max_cmd_w = panel_cols.saturating_sub(5);
-                    push_line!("", "", SEP_FG);
+                    push_line!("", "", SEP_FG, None);
                     let mut buf = std::mem::take(&mut self.fmt_buf);
                     buf.clear();
                     buf.push_str("  \u{23ce}  ");
@@ -1116,7 +1117,7 @@ impl RenderContext {
                     } else {
                         buf.push_str(&cmd);
                     }
-                    push_line!("", buf.as_str(), RUN_FG);
+                    push_line!("", buf.as_str(), RUN_FG, None);
                     self.fmt_buf = buf;
                 }
             }
@@ -1127,13 +1128,24 @@ impl RenderContext {
 
             let visible_start = total_lines.saturating_sub(history_rows + panel.scroll_offset);
 
+            let accent_x = pad_x + co as f32 * cw + 2.0 * self.scale_factor;
+
             for i in 0..history_rows {
                 let row = history_start_row + i;
-                let (text, fg) = all_lines
+                let (text, fg, accent) = all_lines
                     .get(visible_start + i)
-                    .map(|(t, f)| (t.as_str(), *f))
-                    .unwrap_or(("", SEP_FG));
+                    .map(|(t, f, a)| (t.as_str(), *f, *a))
+                    .unwrap_or(("", SEP_FG, None));
                 self.push_shaped_row(text, fg, panel_bg, row, co, panel_cols, font);
+
+                if let Some(color) = accent {
+                    self.rect_instances.push(RoundedRectInstance {
+                        rect: [accent_x, pad_y + row as f32 * ch, 3.0 * self.scale_factor, ch],
+                        color,
+                        radius: 1.5 * self.scale_factor,
+                        border_width: 0.0, _pad: [0.0; 2],
+                    });
+                }
             }
 
             self.scratch_lines = all_lines;
@@ -1471,22 +1483,25 @@ impl RenderContext {
 
         let radius = 10.0 * self.scale_factor;
         let border = 1.0 * self.scale_factor;
+        // Reduce the physical background width to create visual padding with the terminal
+        let visible_sidebar_px = sidebar_px - (8.0 * self.scale_factor);
+
         self.rect_instances.push(RoundedRectInstance {
             rect: [
                 sidebar_left_px - border,
                 sidebar_top_px - border,
-                sidebar_px + 2.0 * border,
+                visible_sidebar_px + 2.0 * border,
                 visible_h + 2.0 * border,
             ],
             color: SIDEBAR_SEP_FG,
             radius: radius + border,
-            _pad: [0.0; 3],
+            border_width: 0.0, _pad: [0.0; 2],
         });
         self.rect_instances.push(RoundedRectInstance {
-            rect: [sidebar_left_px, sidebar_top_px, sidebar_px, visible_h],
+            rect: [sidebar_left_px, sidebar_top_px, visible_sidebar_px, visible_h],
             color: actual_sidebar_bg,
             radius,
-            _pad: [0.0; 3],
+            border_width: 0.0, _pad: [0.0; 2],
         });
 
         let push_sidebar_row =
@@ -1511,13 +1526,40 @@ impl RenderContext {
             let base_row = 2 + idx * 2;
             let selected = idx == nav_cursor;
             let active = ws.id == active_workspace_id;
-            let row_bg = if active {
-                SIDEBAR_ITEM_ACTIVE_BG
-            } else if selected {
-                SIDEBAR_ITEM_HOVER_BG
-            } else {
-                SIDEBAR_BG
-            };
+
+            if active || selected {
+                let row_bg = if active {
+                    SIDEBAR_ITEM_ACTIVE_BG
+                } else {
+                    SIDEBAR_ITEM_HOVER_BG
+                };
+                let margin_x = 8.0 * self.scale_factor;
+                let margin_y = 2.0 * self.scale_factor;
+                let pill_px = sidebar_left_px + margin_x;
+                let pill_py = sidebar_top_px + (base_row as f32 * ch) + margin_y;
+                let pill_pw = visible_sidebar_px - 2.0 * margin_x;
+                let pill_ph = 2.0 * ch - 2.0 * margin_y;
+
+                self.rect_instances.push(RoundedRectInstance {
+                    rect: [pill_px, pill_py, pill_pw, pill_ph],
+                    color: row_bg,
+                    radius: 6.0 * self.scale_factor,
+                    border_width: 0.0, _pad: [0.0; 2],
+                });
+
+                if active {
+                    let accent_w = 3.0 * self.scale_factor;
+                    let accent_h = pill_ph - 8.0 * self.scale_factor;
+                    let accent_py = pill_py + 4.0 * self.scale_factor;
+                    self.rect_instances.push(RoundedRectInstance {
+                        rect: [pill_px, accent_py, accent_w, accent_h],
+                        color: SIDEBAR_DOT_ACTIVE,
+                        radius: 1.5 * self.scale_factor,
+                        border_width: 0.0, _pad: [0.0; 2],
+                    });
+                }
+            }
+
             let name = if selected {
                 if let Some(input) = rename_input {
                     format!("{input}_")
@@ -1527,24 +1569,20 @@ impl RenderContext {
             } else {
                 ws.name.clone()
             };
+
+            let name_fg = if active {
+                [1.0, 1.0, 1.0, 1.0] // Bright white for active
+            } else {
+                SIDEBAR_FG // Use default sidebar foreground for inactive
+            };
+
             let trimmed_name: String = name.chars().take(sidebar_cols.saturating_sub(4)).collect();
-            let dot = if active { "●" } else { "·" };
-            let mut line = format!(" {dot} {trimmed_name}");
+            let mut line = format!("   {trimmed_name}");
             let line_w = line.chars().count();
             if line_w < sidebar_cols {
                 line.push_str(&" ".repeat(sidebar_cols - line_w));
             }
-            push_sidebar_row(self, &line, SIDEBAR_FG, row_bg, base_row);
-            let dot_col = if active {
-                SIDEBAR_DOT_ACTIVE
-            } else {
-                SIDEBAR_DIM_FG
-            };
-            let dot_start = self.instances.len();
-            self.push_shaped_row(dot, dot_col, row_bg, base_row, 2, 1, font);
-            for inst in &mut self.instances[dot_start..] {
-                inst.grid_pos[0] -= sidebar_cols as f32;
-            }
+            push_sidebar_row(self, &line, name_fg, SIDEBAR_BG, base_row);
 
             let (tabs, panes) = counts.get(idx).copied().unwrap_or((0, 0));
             let tabs_str = if tabs == 1 {
@@ -1557,8 +1595,12 @@ impl RenderContext {
             } else {
                 format!("{panes} panes")
             };
-            let subtitle = format!("  {tabs_str} · {panes_str}");
-            push_sidebar_row(self, &subtitle, SIDEBAR_DIM_FG, row_bg, base_row + 1);
+            let mut subtitle = format!("   {tabs_str} · {panes_str}");
+            let sub_w = subtitle.chars().count();
+            if sub_w < sidebar_cols {
+                subtitle.push_str(&" ".repeat(sidebar_cols - sub_w));
+            }
+            push_sidebar_row(self, &subtitle, SIDEBAR_DIM_FG, SIDEBAR_BG, base_row + 1);
         }
 
         if total_rows > 0 {
@@ -1633,14 +1675,14 @@ impl RenderContext {
             ],
             color: border_color,
             radius: radius + border,
-            _pad: [0.0; 3],
+            border_width: 0.0, _pad: [0.0; 2],
         });
         // Panel background rect with rounded corners
         self.rect_instances.push(RoundedRectInstance {
             rect: [px, py, pw, ph],
             color: bg,
             radius,
-            _pad: [0.0; 3],
+            border_width: 0.0, _pad: [0.0; 2],
         });
 
         let prompt = format!("   > {}▋", palette.query);
@@ -1685,7 +1727,7 @@ impl RenderContext {
                         ],
                         color: highlight_bg,
                         radius: 6.0 * self.scale_factor,
-                        _pad: [0.0; 3],
+                        border_width: 0.0, _pad: [0.0; 2],
                     });
                 }
 
@@ -1831,7 +1873,7 @@ impl RenderContext {
                     rect: [0.0, bar_y, win_w, cell_h + SB_EXTRA_PX],
                     color: bar_bg,
                     radius: 0.0,
-                    _pad: [0.0; 3],
+                    border_width: 0.0, _pad: [0.0; 2],
                 });
         }
         use crate::config::schema::StatusBarStyle;
@@ -2022,13 +2064,13 @@ impl RenderContext {
                 BTN_COLOR
             },
             radius,
-            _pad: [0.0; 3],
+            border_width: 0.0, _pad: [0.0; 2],
         });
         self.rect_instances.push(RoundedRectInstance {
             rect: [ai_btn_x, btn_y, btn_w, btn_h],
             color: if panel_visible { BTN_ACTIVE } else { BTN_COLOR },
             radius,
-            _pad: [0.0; 3],
+            border_width: 0.0, _pad: [0.0; 2],
         });
         // ── Button icons ─────────────────────────────────────────────────
         let mk_icon_x =
@@ -2114,7 +2156,7 @@ impl RenderContext {
                     rect: [tab_x, pill_y, tab_w, pill_h],
                     color: ACTIVE_TAB_BG,
                     radius: flat_radius,
-                    _pad: [0.0; 3],
+                    border_width: 0.0, _pad: [0.0; 2],
                 });
                 // Amber underline at the bottom edge of the titlebar
                 let underline_h = (1.5 * sf).max(1.0);
@@ -2122,7 +2164,7 @@ impl RenderContext {
                     rect: [tab_x, pill_y + pill_h - underline_h, tab_w, underline_h],
                     color: ACTIVE_UNDERLINE,
                     radius: 0.0,
-                    _pad: [0.0; 3],
+                    border_width: 0.0, _pad: [0.0; 2],
                 });
             }
 

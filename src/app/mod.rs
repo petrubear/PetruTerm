@@ -1011,7 +1011,7 @@ impl ApplicationHandler<()> for App {
                     // Focus border — only when there are multiple panes.
                     if pane_infos.len() > 1 {
                         if let Some(focused) = pane_infos.iter().find(|p| p.focused) {
-                            rc.build_focus_border(focused, sep_pad_x, sb_pad_y);
+                            rc.build_focus_border(focused);
                         }
                     }
 
@@ -1295,7 +1295,7 @@ impl ApplicationHandler<()> for App {
                                 rect: [sidebar_sep_x, sidebar_sep_y, 1.0, sidebar_sep_h],
                                 color: [0.165, 0.165, 0.184, 1.0], // #2a2a2f border
                                 radius: 0.0,
-                                _pad: [0.0; 3],
+                                border_width: 0.0, _pad: [0.0; 2],
                             },
                         );
                     }

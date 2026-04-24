@@ -342,16 +342,19 @@ fn find_rect(node: &PaneNode, target: usize) -> Option<Rect> {
 #[derive(Debug, Clone, Copy)]
 pub struct PaneInfo {
     pub terminal_id: usize,
-    /// Column offset from the viewport left edge (in cell units).
+    /// Column offset from the viewport left edge (in cell units), after separator inset.
     pub col_offset: usize,
-    /// Row offset from the viewport top edge (in cell units).
+    /// Row offset from the viewport top edge (in cell units), after separator inset.
     pub row_offset: usize,
-    /// Width of this pane in terminal columns.
+    /// Width of this pane in terminal columns (after separator inset).
     pub cols: usize,
-    /// Height of this pane in terminal rows.
+    /// Height of this pane in terminal rows (after separator inset).
     pub rows: usize,
     /// Whether this pane currently has keyboard focus.
     pub focused: bool,
+    /// Raw pixel rect of this pane in the same coordinate space as the viewport rect.
+    /// Use this (not col/row_offset) to align with separator lines.
+    pub pane_rect: crate::ui::Rect,
 }
 
 /// A separator line between two adjacent panes.
@@ -423,6 +426,14 @@ fn collect_leaf_infos_impl(
             let row_offset = ((rect.y - viewport.y) / cell_h).round() as usize + pt;
             let cols = ((rect.w / cell_w).floor() as usize).saturating_sub(pl + pr);
             let rows = ((rect.h / cell_h).floor() as usize).saturating_sub(pt + pb);
+            // Snap pane_rect edges to the cell grid so the focus border aligns exactly
+            // with separator lines, which use the same round() formula.
+            let snap_x = |px: f32| viewport.x + ((px - viewport.x) / cell_w).round() * cell_w;
+            let snap_y = |py: f32| viewport.y + ((py - viewport.y) / cell_h).round() * cell_h;
+            let sx = snap_x(rect.x);
+            let sy = snap_y(rect.y);
+            let sx2 = snap_x(rect.x + rect.w);
+            let sy2 = snap_y(rect.y + rect.h);
             result.push(PaneInfo {
                 terminal_id: *terminal_id,
                 col_offset,
@@ -430,6 +441,7 @@ fn collect_leaf_infos_impl(
                 cols: cols.max(1),
                 rows: rows.max(1),
                 focused: *terminal_id == focused,
+                pane_rect: crate::ui::Rect { x: sx, y: sy, w: sx2 - sx, h: sy2 - sy },
             });
         }
         PaneNode::Split {

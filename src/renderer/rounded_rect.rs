@@ -8,17 +8,19 @@ struct RectUniforms {
 }
 
 struct RectInstance {
-    @location(0) rect:   vec4<f32>,   // x, y, w, h in physical pixels
-    @location(1) color:  vec4<f32>,   // rgba (straight alpha)
-    @location(2) radius: f32,
+    @location(0) rect:         vec4<f32>,  // x, y, w, h in physical pixels
+    @location(1) color:        vec4<f32>,  // rgba (straight alpha)
+    @location(2) radius:       f32,
+    @location(3) border_width: f32,        // 0 = filled; >0 = stroke-only ring
 }
 
 struct VertexOut {
-    @builtin(position) clip_pos: vec4<f32>,
-    @location(0) local_pos:  vec2<f32>,  // pixel position within the rect
-    @location(1) half_size:  vec2<f32>,  // half of rect size
-    @location(2) color:      vec4<f32>,
-    @location(3) radius:     f32,
+    @builtin(position) clip_pos:    vec4<f32>,
+    @location(0) local_pos:         vec2<f32>,  // pixel position within the rect
+    @location(1) half_size:         vec2<f32>,  // half of rect size
+    @location(2) color:             vec4<f32>,
+    @location(3) radius:            f32,
+    @location(4) border_width:      f32,
 }
 
 @group(0) @binding(0) var<uniform> u: RectUniforms;
@@ -41,11 +43,12 @@ fn vs_main(@builtin(vertex_index) vi: u32, inst: RectInstance) -> VertexOut {
     let half = inst.rect.zw * 0.5;
 
     var out: VertexOut;
-    out.clip_pos = vec4(ndc, 0.0, 1.0);
-    out.local_pos = q * inst.rect.zw;
-    out.half_size = half;
-    out.color     = inst.color;
-    out.radius    = inst.radius;
+    out.clip_pos    = vec4(ndc, 0.0, 1.0);
+    out.local_pos   = q * inst.rect.zw;
+    out.half_size   = half;
+    out.color       = inst.color;
+    out.radius      = inst.radius;
+    out.border_width = inst.border_width;
     return out;
 }
 
@@ -58,7 +61,16 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
                  + min(max(q_sdf.x, q_sdf.y), 0.0)
                  - in.radius;
 
-    let alpha = in.color.a * (1.0 - smoothstep(-0.5, 0.5, dist));
+    var alpha: f32;
+    if in.border_width > 0.0 {
+        // Ring: keep only the band between outer edge and inner edge.
+        let inner_dist = dist + in.border_width;
+        let outer_a = 1.0 - smoothstep(-0.5, 0.5, dist);
+        let inner_a = smoothstep(-0.5, 0.5, inner_dist);
+        alpha = in.color.a * outer_a * inner_a;
+    } else {
+        alpha = in.color.a * (1.0 - smoothstep(-0.5, 0.5, dist));
+    }
     if alpha < 0.001 { discard; }
 
     // Premultiplied alpha output
@@ -67,7 +79,7 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
 "#;
 
 /// Per-instance data for a rounded rectangle draw call.
-/// Stride = 48 bytes. `_pad` is NOT bound to a shader location.
+/// Stride = 48 bytes.
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct RoundedRectInstance {
@@ -77,7 +89,9 @@ pub struct RoundedRectInstance {
     pub color: [f32; 4],
     /// Corner radius in physical pixels.
     pub radius: f32,
-    pub _pad: [f32; 3],
+    /// Stroke width in physical pixels. 0 = filled, >0 = ring/outline only.
+    pub border_width: f32,
+    pub _pad: [f32; 2],
 }
 
 /// Compiled wgpu pipeline and uniform resources for rounded rect rendering.
@@ -145,6 +159,12 @@ impl RoundedRectPipeline {
                     format: wgpu::VertexFormat::Float32,
                     offset: 32,
                     shader_location: 2,
+                },
+                // location(3): border_width — f32 at offset 36
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32,
+                    offset: 36,
+                    shader_location: 3,
                 },
             ],
         };
