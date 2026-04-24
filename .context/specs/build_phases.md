@@ -4,18 +4,17 @@
 
 ---
 
-## Phase 4: Lua Scripting
-**Status: Not started — próxima fase**
+## Phase 4: Lua Scripting — COMPLETA 2026-04-24
 
 ### F-1: Event hooks — `petruterm.on(event, fn)`
-- [ ] `config/lua.rs`: almacenar callbacks en `HashMap<String, Vec<LuaFunction>>` (reemplazar stub no-op)
-- [ ] Disparar `tab_created` / `tab_closed` desde `mux.cmd_new_tab` / `cmd_close_tab`
-- [ ] Disparar `pane_split` desde `mux.cmd_split`
-- [ ] Disparar `terminal_exit` desde `close_exited_terminals`
-- [ ] Disparar `ai_response` desde `poll_ai_events`
+- [x] `config/lua.rs`: callbacks en `_pt_handlers` registry table (reemplaza stub no-op)
+- [x] Disparar `tab_created` / `tab_closed` desde `mux.cmd_new_tab` / `cmd_close_tab`
+- [x] Disparar `pane_split` / `pane_closed` desde `mux.cmd_split` / `cmd_close_pane`
+- [x] Disparar `terminal_exit` desde `close_exited_terminals`
+- [x] Disparar `ai_response` desde `poll_ai_events`
 
 ### F-2: Toast notifications — `petruterm.notify(msg, ms?)`
-- [ ] `toast: Option<(String, Instant, u64)>` en `App` (texto, deadline, duración ms)
-- [ ] Render: rect semitransparente + texto en overlay, esquina superior derecha
-- [ ] Solicitar redraw automático hasta expiración
-- [ ] Exponer `petruterm.notify(msg, ms?)` en la Lua API (`ms` opcional, default 3000)
+- [x] `toast: Option<(String, Instant)>` en `App`
+- [x] Render: rect semitransparente + texto en overlay, esquina superior derecha
+- [x] Redraw automático hasta expiración + frame final de limpieza
+- [x] `petruterm.notify(msg, ms?)` en Lua API (`ms` opcional, default 3000)
