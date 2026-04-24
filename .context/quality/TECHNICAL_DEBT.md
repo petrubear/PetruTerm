@@ -124,6 +124,10 @@ _TD-PERF-38 — RESUELTO 2026-04-23. `bounded::<PtyEvent>(256)` → `bounded::<P
 
 ## P3 — Prioridad baja / Backlog
 
+_TD-GPU-01 — RESUELTO 2026-04-24. `GpuRenderer::new()` ahora lee `config.gpu_preference` (enum `LowPower/HighPerformance/None`) en lugar de hardcodear `PowerPreference::HighPerformance`. Default cambiado a `"low_power"` en `perf.lua`. Present mode cambia automáticamente a `Fifo` al activar battery saver y vuelve a `Mailbox`/`FifoRelaxed` en AC (runtime, sin reinicio)._
+
+---
+
 _TD-MEM-14 — RESUELTO 2026-04-19. `sync_channel(1)` + `try_send`; eventos extras descartados silenciosamente. Ver archivo._
 
 ---

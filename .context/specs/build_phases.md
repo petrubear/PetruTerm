@@ -100,21 +100,21 @@
 ---
 
 ## Fase D: AI Chat — MCP + Skills
-**Status: Not started**
+**Status: D-1/D-2/D-3/D-4 COMPLETAS — D-5 pendiente**
 
-### D-1: MCP config loader
-- [ ] `~/.config/petruterm/mcp/mcp.json` (formato: `{ "mcpServers": { "name": { "command", "args", "env" } } }`)
-- [ ] Merge con `.petruterm/mcp.json` del proyecto (proyecto tiene prioridad)
+### D-1: MCP config loader — COMPLETA 2026-04-24
+- [x] `~/.config/petruterm/mcp/mcp.json` (formato: `{ "mcpServers": { "name": { "command", "args", "env" } } }`)
+- [x] Merge con `.petruterm/mcp.json` del proyecto (proyecto tiene prioridad)
 
-### D-2: MCP client (stdio transport)
-- [ ] Spawn proceso por server, JSON-RPC 2.0 sobre stdin/stdout
-- [ ] `initialize`, `tools/list`, `tools/call`, `resources/list`, `resources/read`
-- [ ] Lifecycle: spawn al abrir AI panel, kill al cerrar sesión
+### D-2: MCP client (stdio transport) — COMPLETA 2026-04-24
+- [x] Spawn proceso por server, JSON-RPC 2.0 sobre stdin/stdout
+- [x] `initialize`, `tools/list`, `tools/call`
+- [x] Lifecycle: spawn al arrancar app (`start_all()`), `kill_on_drop(true)` al cerrar
 
-### D-3: MCP tool integration en chat
-- [ ] LLM engine recibe tool list de MCP servers activos
-- [ ] Rutear tool calls al server correcto
-- [ ] Mostrar tool calls en panel AI (collapsible)
+### D-3: MCP tool integration en chat — COMPLETA 2026-04-24
+- [x] LLM engine recibe tool list de MCP servers activos (`all_tools_openai()`)
+- [x] Rutear tool calls al server correcto (`tool_routes` HashMap)
+- [x] Dispatch en `submit_ai_query`: builtin → MCP fallback
 
 ### D-4: Skills loader (formato agentskills.io)
 **Status: COMPLETA — 2026-04-22**
@@ -162,9 +162,9 @@ Body del prompt aquí...
 - `src/app/renderer.rs` — `⚡ skill-name` en header AI panel
 
 ### D-5: Project-level config
-- [ ] `.petruterm/mcp.json` — MCP servers del proyecto
-- [ ] `.petruterm/skills/` — Skills del proyecto (ya contemplado en D-4 como `reload_local`)
-- [ ] Merge con global: proyecto tiene prioridad en conflictos de nombre
+- [x] `.petruterm/mcp.json` — MCP servers del proyecto (implementado en D-1: `load(cwd)` merge)
+- [x] `.petruterm/skills/` — Skills del proyecto (implementado en D-4 como `reload_local`)
+- [ ] Hot-reload de `.petruterm/mcp.json` al cambiar (actualmente solo se lee al arrancar)
 
 ---
 

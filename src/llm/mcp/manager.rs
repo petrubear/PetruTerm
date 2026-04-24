@@ -66,6 +66,7 @@ impl McpManager {
     }
 
     /// All raw tool definitions (used for display / palette).
+    #[allow(dead_code)]
     pub fn all_tools(&self) -> Vec<(String, &McpTool)> {
         self.clients
             .iter()
@@ -77,9 +78,10 @@ impl McpManager {
     ///
     /// `tool_name` is the bare name as returned by `tools/list` (no prefix).
     pub async fn call_tool(&self, tool_name: &str, arguments: Value) -> Result<String> {
-        let server_name = self.tool_routes.get(tool_name).ok_or_else(|| {
-            anyhow::anyhow!("No MCP server registered for tool '{tool_name}'")
-        })?;
+        let server_name = self
+            .tool_routes
+            .get(tool_name)
+            .ok_or_else(|| anyhow::anyhow!("No MCP server registered for tool '{tool_name}'"))?;
 
         let client = self.clients.get(server_name).ok_or_else(|| {
             anyhow::anyhow!("MCP server '{server_name}' registered but not connected")
@@ -89,11 +91,13 @@ impl McpManager {
     }
 
     /// True if at least one server is connected.
+    #[allow(dead_code)]
     pub fn is_active(&self) -> bool {
         !self.clients.is_empty()
     }
 
     /// Server names currently connected.
+    #[allow(dead_code)]
     pub fn server_names(&self) -> Vec<&str> {
         self.clients.keys().map(String::as_str).collect()
     }
