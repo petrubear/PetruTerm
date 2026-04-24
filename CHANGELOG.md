@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.1.3] — 2026-04-23
+
+### Fixed
+- Focus border on the left pane in a horizontal split no longer overlaps text in column 0. The border rect is now shifted one cell outward on the left side when the pane is at the viewport left edge (`col_offset == 0`), matching the behaviour of panes that have a separator on their left.
+
+---
+
+## [0.1.2] — 2026-04-23
+
+### Fixed
+- Focus border alignment: `pane_rect` edges are now snapped to the cell grid in `collect_leaf_infos_impl`, so the border lines up exactly with separator lines at all DPI settings.
+
+### Changed
+- Rounded-rect shader extended with `border_width` field for stroke-ring mode (`border_width > 0` = ring; `0` = filled).
+- `build_focus_border` replaced four 1 px filled rects with a single `RoundedRectInstance` stroke ring (`border_width = 1.5 × scale_factor`, `radius = 6 × scale_factor`).
+
+---
+
 ## [0.1.1] — 2026-04-19
 
 ### Features

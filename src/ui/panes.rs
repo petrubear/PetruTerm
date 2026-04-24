@@ -441,7 +441,12 @@ fn collect_leaf_infos_impl(
                 cols: cols.max(1),
                 rows: rows.max(1),
                 focused: *terminal_id == focused,
-                pane_rect: crate::ui::Rect { x: sx, y: sy, w: sx2 - sx, h: sy2 - sy },
+                pane_rect: crate::ui::Rect {
+                    x: sx,
+                    y: sy,
+                    w: sx2 - sx,
+                    h: sy2 - sy,
+                },
             });
         }
         PaneNode::Split {

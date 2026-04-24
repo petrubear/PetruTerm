@@ -447,13 +447,17 @@ impl App {
         // Subtract the focused pane's offset to convert viewport coords to terminal-local coords.
         let (cell_w, cell_h) = self.cell_dims();
         let viewport = self.viewport_rect();
-        let (col_off, row_off) = self
-            .mux
-            .focused_pane_offset(viewport, cell_w as f32, cell_h as f32);
+        let (col_off, row_off) =
+            self.mux
+                .focused_pane_offset(viewport, cell_w as f32, cell_h as f32);
         let (term_cols, term_rows) = self.mux.active_terminal_size();
         (
-            raw_col.saturating_sub(col_off).min(term_cols.saturating_sub(1)),
-            raw_row.saturating_sub(row_off).min(term_rows.saturating_sub(1)),
+            raw_col
+                .saturating_sub(col_off)
+                .min(term_cols.saturating_sub(1)),
+            raw_row
+                .saturating_sub(row_off)
+                .min(term_rows.saturating_sub(1)),
         )
     }
 
@@ -1295,7 +1299,8 @@ impl ApplicationHandler<()> for App {
                                 rect: [sidebar_sep_x, sidebar_sep_y, 1.0, sidebar_sep_h],
                                 color: [0.165, 0.165, 0.184, 1.0], // #2a2a2f border
                                 radius: 0.0,
-                                border_width: 0.0, _pad: [0.0; 2],
+                                border_width: 0.0,
+                                _pad: [0.0; 2],
                             },
                         );
                     }

@@ -532,7 +532,8 @@ impl RenderContext {
                 rect: [x, y, w, h],
                 color: SEP_COLOR,
                 radius: 0.0,
-                border_width: 0.0, _pad: [0.0; 2],
+                border_width: 0.0,
+                _pad: [0.0; 2],
             });
         }
     }
@@ -749,14 +750,16 @@ impl RenderContext {
                 rect: [px - border, py, pw + 2.0 * border, ph],
                 color: SEP_FG, // border
                 radius: radius + border,
-                border_width: 0.0, _pad: [0.0; 2],
+                border_width: 0.0,
+                _pad: [0.0; 2],
             });
         self.rect_instances
             .push(crate::renderer::rounded_rect::RoundedRectInstance {
                 rect: [px, py, pw, ph],
                 color: actual_panel_bg,
                 radius,
-                border_width: 0.0, _pad: [0.0; 2],
+                border_width: 0.0,
+                _pad: [0.0; 2],
             });
 
         // ── Fixed bottom rows (always present) ───────────────────────────────
@@ -1157,10 +1160,16 @@ impl RenderContext {
 
                 if let Some(color) = accent {
                     self.rect_instances.push(RoundedRectInstance {
-                        rect: [accent_x, pad_y + row as f32 * ch, 3.0 * self.scale_factor, ch],
+                        rect: [
+                            accent_x,
+                            pad_y + row as f32 * ch,
+                            3.0 * self.scale_factor,
+                            ch,
+                        ],
                         color,
                         radius: 1.5 * self.scale_factor,
-                        border_width: 0.0, _pad: [0.0; 2],
+                        border_width: 0.0,
+                        _pad: [0.0; 2],
                     });
                 }
             }
@@ -1485,7 +1494,12 @@ impl RenderContext {
             .iter()
             .map(|(t, p)| t.wrapping_mul(10_000).wrapping_add(*p))
             .sum();
-        let key = (workspaces.len(), active_workspace_id, nav_cursor, counts_hash);
+        let key = (
+            workspaces.len(),
+            active_workspace_id,
+            nav_cursor,
+            counts_hash,
+        );
 
         if rename_input.is_none() && self.sidebar_cache_key == Some(key) {
             self.instances
@@ -1512,13 +1526,20 @@ impl RenderContext {
             ],
             color: SIDEBAR_SEP_FG,
             radius: radius + border,
-            border_width: 0.0, _pad: [0.0; 2],
+            border_width: 0.0,
+            _pad: [0.0; 2],
         });
         self.rect_instances.push(RoundedRectInstance {
-            rect: [sidebar_left_px, sidebar_top_px, visible_sidebar_px, visible_h],
+            rect: [
+                sidebar_left_px,
+                sidebar_top_px,
+                visible_sidebar_px,
+                visible_h,
+            ],
             color: actual_sidebar_bg,
             radius,
-            border_width: 0.0, _pad: [0.0; 2],
+            border_width: 0.0,
+            _pad: [0.0; 2],
         });
 
         let push_sidebar_row =
@@ -1561,7 +1582,8 @@ impl RenderContext {
                     rect: [pill_px, pill_py, pill_pw, pill_ph],
                     color: row_bg,
                     radius: 6.0 * self.scale_factor,
-                    border_width: 0.0, _pad: [0.0; 2],
+                    border_width: 0.0,
+                    _pad: [0.0; 2],
                 });
 
                 if active {
@@ -1572,7 +1594,8 @@ impl RenderContext {
                         rect: [pill_px, accent_py, accent_w, accent_h],
                         color: SIDEBAR_DOT_ACTIVE,
                         radius: 1.5 * self.scale_factor,
-                        border_width: 0.0, _pad: [0.0; 2],
+                        border_width: 0.0,
+                        _pad: [0.0; 2],
                     });
                 }
             }
@@ -1692,14 +1715,16 @@ impl RenderContext {
             ],
             color: border_color,
             radius: radius + border,
-            border_width: 0.0, _pad: [0.0; 2],
+            border_width: 0.0,
+            _pad: [0.0; 2],
         });
         // Panel background rect with rounded corners
         self.rect_instances.push(RoundedRectInstance {
             rect: [px, py, pw, ph],
             color: bg,
             radius,
-            border_width: 0.0, _pad: [0.0; 2],
+            border_width: 0.0,
+            _pad: [0.0; 2],
         });
 
         let prompt = format!("   > {}▋", palette.query);
@@ -1744,7 +1769,8 @@ impl RenderContext {
                         ],
                         color: highlight_bg,
                         radius: 6.0 * self.scale_factor,
-                        border_width: 0.0, _pad: [0.0; 2],
+                        border_width: 0.0,
+                        _pad: [0.0; 2],
                     });
                 }
 
@@ -1890,7 +1916,8 @@ impl RenderContext {
                     rect: [0.0, bar_y, win_w, cell_h + SB_EXTRA_PX],
                     color: bar_bg,
                     radius: 0.0,
-                    border_width: 0.0, _pad: [0.0; 2],
+                    border_width: 0.0,
+                    _pad: [0.0; 2],
                 });
         }
         use crate::config::schema::StatusBarStyle;
@@ -2081,13 +2108,15 @@ impl RenderContext {
                 BTN_COLOR
             },
             radius,
-            border_width: 0.0, _pad: [0.0; 2],
+            border_width: 0.0,
+            _pad: [0.0; 2],
         });
         self.rect_instances.push(RoundedRectInstance {
             rect: [ai_btn_x, btn_y, btn_w, btn_h],
             color: if panel_visible { BTN_ACTIVE } else { BTN_COLOR },
             radius,
-            border_width: 0.0, _pad: [0.0; 2],
+            border_width: 0.0,
+            _pad: [0.0; 2],
         });
         // ── Button icons ─────────────────────────────────────────────────
         let mk_icon_x =
@@ -2173,7 +2202,8 @@ impl RenderContext {
                     rect: [tab_x, pill_y, tab_w, pill_h],
                     color: ACTIVE_TAB_BG,
                     radius: flat_radius,
-                    border_width: 0.0, _pad: [0.0; 2],
+                    border_width: 0.0,
+                    _pad: [0.0; 2],
                 });
                 // Amber underline at the bottom edge of the titlebar
                 let underline_h = (1.5 * sf).max(1.0);
@@ -2181,7 +2211,8 @@ impl RenderContext {
                     rect: [tab_x, pill_y + pill_h - underline_h, tab_w, underline_h],
                     color: ACTIVE_UNDERLINE,
                     radius: 0.0,
-                    border_width: 0.0, _pad: [0.0; 2],
+                    border_width: 0.0,
+                    _pad: [0.0; 2],
                 });
             }
 

@@ -1,7 +1,63 @@
 # Session State
 
-**Last Updated:** 2026-04-23 (tarde)
-**Session Focus:** Focus border fix + sidebar pills + deuda técnica
+**Last Updated:** 2026-04-23 (noche)
+**Session Focus:** Focus border fix — left-edge pane overlap
+
+## Branch: `master`
+
+## Estado actual
+
+**Phase 1–3 + 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Fase B COMPLETE. Fase C-1 COMPLETE. Fase C-2 COMPLETE. Fase C-3 COMPLETE. Fase C-3.5 COMPLETE. Fase D-4 COMPLETE. v0.1.3 publicado.**
+
+---
+
+## Esta sesión (2026-04-23 noche)
+
+### Focus border — left-edge pane overlap fix (v0.1.3)
+
+- **Problema:** en `build_focus_border` el rect del borde se posicionaba en `pane_rect.x + inset`. Para el panel más a la izquierda (`col_offset == 0`), `pane_rect.x == viewport.x == text_start_x`, así que el trazo izquierdo (1.5px) caía encima de la primera columna de texto.
+- **Fix:** cuando `col_offset == 0`, se desplaza el borde izquierdo del rect un `cell_w` hacia la izquierda. Los píxeles fuera del viewport son clipeados por la GPU. El lado superior NO se desplaza (hacerlo empujaba el borde al área del title bar / botones semáforo).
+- **Archivo:** `src/app/renderer.rs` → `build_focus_border`
+
+---
+
+## Esta sesión (2026-04-23 tarde)
+
+### Focus border — alineación + rounded outline
+
+- **`pane_rect` snapping** (`src/ui/panes.rs`): `collect_leaf_infos_impl` ahora snapea los cuatro bordes del rect al grid de celdas con `.round()`, idéntico a `collect_separators_impl`.
+- **Shader ring mode** (`src/renderer/rounded_rect.rs`): `border_width: f32` añadido como `@location(3)`.
+- **`build_focus_border`** (`src/app/renderer.rs`): de 4 rects 1px a un solo `RoundedRectInstance` con `border_width=1.5*sf`, `radius=6*sf`.
+
+### Sidebar — pill-style active items
+
+- Items activos/hover con `RoundedRectInstance` pill (`radius=6px`, `margin=8px`).
+
+### Deuda técnica
+
+Cerrados como FALSO POSITIVO: TD-MEM-27, TD-MEM-28, TD-MEM-29, TD-PERF-39, TD-RENDER-04.
+Resuelto real: TD-PERF-38 (PTY buffer 256→1024).
+
+---
+
+## Sesiones anteriores (resumen)
+
+### 2026-04-23 mañana — Fase E + D-4 bugs
+- Design refactor branch: paleta oscura, tabs flat, palette corners, AI panel.
+- Skills D-4 bugs: /skills plural, YAML block scalar, explicit name match, assets inlineados, skill persiste, chat panel workspace-level, copy/paste.
+
+### 2026-04-22 mañana — Fase C-3.5 + D-4 planificación
+- Botones sidebar + AI en titlebar; header AI panel restyled.
+
+### 2026-04-21 — Fase C-1 bugs + C-2 + C-3
+- BTN_COLOR fix, padding.top fix, Workspace model en Mux, Sidebar izquierdo drawer.
+
+### 2026-04-20 — Fase C-1 inicial + Fase B cerrada
+- Unified titlebar (traffic lights + buttons + tab pills), AppMenu con muda.
+
+### 2026-04-19 — Fase A + Fase 3.6
+- v0.1.0 publicado, GitHub Copilot provider.
+
 
 ## Branch: `design-refactor` (base: `master`)
 

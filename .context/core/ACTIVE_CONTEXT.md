@@ -1,23 +1,25 @@
 # Active Context
 
-**Current Focus:** Fase C — Titlebar custom + Workspaces
-**Last Active:** 2026-04-20
+**Current Focus:** v0.1.3 publicado — Fase D/E completas en master
+**Last Active:** 2026-04-23
 
 ## Estado actual del proyecto
 
-**Phase 1–3 COMPLETE. Phase 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE.**
-**v0.1.1 publicado. Build limpio: check + test + clippy + fmt PASS. CI verde.**
+**Phase 1–3 COMPLETE. Phase 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Fase B COMPLETE. Fase C COMPLETE. Fase D-4 COMPLETE.**
+**v0.1.3 publicado. Build limpio: check + test + clippy + fmt PASS. CI verde.**
 
 ## Roadmap acordado (en orden)
 
 1. ~~**Sprint cierre 3.5**~~ COMPLETO
 2. ~~**Fase A**~~ COMPLETO — Versionado semántico + i18n (v0.1.0)
 3. ~~**Fase 3.6**~~ COMPLETO — GitHub Copilot provider (v0.1.1)
-4. ~~**Copilot OAuth doc+validation**~~ COMPLETO — README actualizado (device-flow), osascript dialog + /usr/bin/open para .app bundle
-5. ~~**Fase B**~~ COMPLETO — Menu bar nativo macOS (crate `muda`)
-5. **Fase C** — Titlebar custom (NSWindow híbrido) + Workspaces
-6. **Fase D** — AI Chat MCP + Skills (agentskills.io format)
-7. **Fase 4** — Plugin ecosystem (Lua, lazy.nvim-style)
+4. ~~**Fase B**~~ COMPLETO — Menu bar nativo macOS (crate `muda`)
+5. ~~**Fase C**~~ COMPLETO — Titlebar custom (NSWindow híbrido) + Workspaces
+6. ~~**Fase D-4**~~ COMPLETO — AI Chat Skills (agentskills.io format)
+7. ~~**Bug fixes**~~ COMPLETO — Focus border alignment (v0.1.2), left-edge overlap (v0.1.3)
+8. **Fase D-1/D-2/D-3** — MCP integration
+9. **Fase D-5** — Project-level config
+10. **Fase 4** — Plugin ecosystem (Lua, lazy.nvim-style)
 
 ## Invariantes arquitectonicos clave (no romper)
 
