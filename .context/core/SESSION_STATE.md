@@ -1,7 +1,7 @@
 # Session State
 
-**Last Updated:** 2026-04-23 (noche)
-**Session Focus:** Focus border fix — left-edge pane overlap
+**Last Updated:** 2026-04-24
+**Session Focus:** Battery saver mode + energy optimizations
 
 ## Branch: `master`
 
@@ -11,7 +11,19 @@
 
 ---
 
-## Esta sesión (2026-04-23 noche)
+## Esta sesión (2026-04-24)
+
+### Battery saver mode
+
+- `ControlFlow::Poll` → `ControlFlow::Wait` en `main.rs` (eliminado busy-loop inicial).
+- `src/platform/battery.rs`: IOKit FFI via `IOPSCopyPowerSourcesInfo` — sin dependencias nuevas. Consulta cada 30s en `about_to_wait`.
+- `config.battery_saver`: enum `Auto|Always|Never` en `schema.rs`, parseado desde Lua.
+- Restricciones en modo batería (`Auto` + desconectado):
+  - `git_dirty_check` forzado a `false` (elimina `git status --porcelain`)
+  - Git poll TTL: 5s → 30s
+  - Cursor blink: 530ms → 750ms
+- Status bar: segmento `BAT XX%` (verde / rojo < 20%) visible solo en batería.
+- Config de usuario: `battery_saver = "auto"`, `git_dirty_check = true` (activo solo en AC).
 
 ### Focus border — left-edge pane overlap fix (v0.1.3)
 

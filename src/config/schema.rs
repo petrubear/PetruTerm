@@ -18,6 +18,7 @@ pub struct Config {
     pub llm: LlmConfig,
     pub status_bar: StatusBarConfig,
     pub keyboard: KeyboardConfig,
+    pub battery_saver: BatterySaverMode,
 }
 
 /// Keyboard behaviour options.
@@ -36,6 +37,9 @@ pub struct StatusBarConfig {
     pub enabled: bool,
     pub position: StatusBarPosition,
     pub style: StatusBarStyle,
+    /// Run `git status --porcelain` to show dirty indicator (`*`) next to branch name.
+    /// Disabled by default: costs an extra subprocess every 5 s on top of `git branch`.
+    pub git_dirty_check: bool,
 }
 
 impl Default for StatusBarConfig {
@@ -44,6 +48,7 @@ impl Default for StatusBarConfig {
             enabled: true,
             position: StatusBarPosition::Bottom,
             style: StatusBarStyle::Plain,
+            git_dirty_check: false,
         }
     }
 }
@@ -82,8 +87,21 @@ impl Default for Config {
             llm: LlmConfig::default(),
             status_bar: StatusBarConfig::default(),
             keyboard: KeyboardConfig::default(),
+            battery_saver: BatterySaverMode::default(),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum BatterySaverMode {
+    /// Activate restrictions automatically when running on battery power.
+    #[default]
+    Auto,
+    /// Always apply restrictions, regardless of power source.
+    Always,
+    /// Never apply restrictions.
+    Never,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

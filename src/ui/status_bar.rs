@@ -9,6 +9,7 @@ pub enum SegmentKind {
     Cwd,
     GitBranch,
     ExitCode,
+    Battery,
     Time,
 }
 
@@ -73,6 +74,7 @@ impl StatusBar {
         git_branch: Option<&str>,
         last_exit_code: Option<i32>,
         style: StatusBarStyle,
+        battery: Option<(u8, bool)>,
     ) -> Self {
         let mut bar = StatusBar {
             style,
@@ -134,6 +136,21 @@ impl StatusBar {
                     kind: SegmentKind::ExitCode,
                 });
             }
+        }
+
+        // Battery — shown only when running on battery power.
+        if let Some((percent, true)) = battery {
+            let (fg, bg) = if percent < 20 {
+                ([1.0_f32, 0.35, 0.35, 1.0], [0.25_f32, 0.05, 0.05, 1.0])
+            } else {
+                ([0.55_f32, 0.85, 0.60, 1.0], [0.04_f32, 0.12, 0.06, 1.0])
+            };
+            bar.right.push(StatusBarSegment {
+                text: format!(" BAT {percent}% "),
+                fg,
+                bg,
+                kind: SegmentKind::Battery,
+            });
         }
 
         // Date + time.

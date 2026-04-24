@@ -327,7 +327,7 @@ impl UiManager {
 
     /// Poll for async git branch results and refresh the cache if due.
     /// Returns true if the cache was updated (caller should redraw).
-    pub fn poll_git_branch(&mut self, cwd: Option<&std::path::Path>) -> bool {
+    pub fn poll_git_branch(&mut self, cwd: Option<&std::path::Path>, dirty_check: bool, ttl: std::time::Duration) -> bool {
         // Drain any result that arrived from a previous spawn.
         let mut updated = false;
         while let Ok(branch) = self.git_rx.try_recv() {
@@ -357,7 +357,7 @@ impl UiManager {
         let cwd_changed = cwd.map(|p| p.to_path_buf()) != self.git_branch_cwd;
         let ttl_expired = self
             .git_branch_fetched_at
-            .map(|t| t.elapsed() > std::time::Duration::from_secs(5))
+            .map(|t| t.elapsed() > ttl)
             .unwrap_or(true);
 
         if (cwd_changed || ttl_expired) && !self.git_branch_in_flight {
@@ -369,7 +369,7 @@ impl UiManager {
                 let cwd_owned = cwd_path.to_path_buf();
                 log::debug!("Spawning git branch fetch for CWD: {:?}", cwd_owned);
                 self.tokio_rt.spawn(async move {
-                    let branch = fetch_git_branch(&cwd_owned).await;
+                    let branch = fetch_git_branch(&cwd_owned, dirty_check).await;
                     let _ = tx.send(branch);
                 });
             }
@@ -1402,7 +1402,7 @@ impl UiManager {
 /// Async helper: fetch the current git branch for `cwd`.
 /// Returns the branch name (with dirty `*` suffix if uncommitted changes),
 /// or an empty string if `cwd` is not a git repo.
-async fn fetch_git_branch(cwd: &std::path::Path) -> String {
+async fn fetch_git_branch(cwd: &std::path::Path, dirty_check: bool) -> String {
     use tokio::process::Command;
 
     let branch = Command::new("git")
@@ -1419,7 +1419,10 @@ async fn fetch_git_branch(cwd: &std::path::Path) -> String {
         return String::new();
     }
 
-    // Check for uncommitted changes.
+    if !dirty_check {
+        return branch;
+    }
+
     let dirty = Command::new("git")
         .args(["-C", &cwd.to_string_lossy(), "status", "--porcelain"])
         .output()
@@ -1518,7 +1521,7 @@ mod tests {
         let test_cwd = std::path::PathBuf::from("/tmp/test");
 
         // Call poll_git_branch — it should NOT spawn a new fetch because in_flight is true.
-        let updated = ui.poll_git_branch(Some(&test_cwd));
+        let updated = ui.poll_git_branch(Some(&test_cwd), false, std::time::Duration::from_secs(5));
 
         // We expect that in_flight remains true (no new spawn triggered).
         assert!(
@@ -1582,7 +1585,7 @@ mod tests {
         assert!(ui.git_branch_in_flight);
 
         // Call poll_git_branch — it should detect the timeout (>30s) and reset in_flight.
-        let updated = ui.poll_git_branch(Some(&std::path::PathBuf::from("/tmp/test")));
+        let updated = ui.poll_git_branch(Some(&std::path::PathBuf::from("/tmp/test")), false, std::time::Duration::from_secs(5));
 
         // After timeout recovery:
         // - in_flight should be false (timeout recovered)

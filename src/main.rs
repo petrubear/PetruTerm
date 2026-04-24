@@ -3,6 +3,7 @@ mod config;
 mod font;
 mod i18n;
 mod llm;
+mod platform;
 mod renderer;
 mod term;
 mod ui;
@@ -98,8 +99,8 @@ fn main() -> Result<()> {
     #[cfg(not(target_os = "macos"))]
     let event_loop = EventLoop::new()?;
 
-    // Poll mode: we drive redraws from PTY events and input, not OS events only.
-    event_loop.set_control_flow(ControlFlow::Poll);
+    // about_to_wait sets Wait/WaitUntil each frame; PTY threads wake via wakeup_proxy.
+    event_loop.set_control_flow(ControlFlow::Wait);
 
     // Proxy lets PTY background threads wake the winit event loop immediately
     // (e.g. on shell exit) without waiting for the next WaitUntil blink timer.

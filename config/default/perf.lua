@@ -25,6 +25,18 @@ function module.apply_to_config(config)
 
   -- Inject shell integration (CWD tracking, exit codes, last command).
   config.shell_integration = true
+
+  -- Show dirty indicator (*) next to the git branch name in the status bar.
+  -- Requires running `git status --porcelain` every 5 s — costs an extra subprocess.
+  -- Enable if you want the indicator; leave false to save CPU/battery.
+  config.status_bar.git_dirty_check = false
+
+  -- Battery saver mode: "auto" | "always" | "never"
+  -- "auto": when on battery, disables git_dirty_check, extends git poll TTL to 30 s,
+  --         slows cursor blink to 750 ms, and shows a BAT XX% indicator in the status bar.
+  -- "always": apply restrictions regardless of power source.
+  -- "never":  never apply restrictions.
+  config.battery_saver = "auto"
 end
 
 return module

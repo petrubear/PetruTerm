@@ -525,6 +525,17 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
                 _ => crate::config::schema::StatusBarStyle::Plain,
             };
         }
+        if let Ok(d) = sb_table.get::<bool>("git_dirty_check") {
+            config.status_bar.git_dirty_check = d;
+        }
+    }
+
+    if let Ok(bs) = table.get::<String>("battery_saver") {
+        config.battery_saver = match bs.as_str() {
+            "always" | "Always" => crate::config::schema::BatterySaverMode::Always,
+            "never" | "Never" => crate::config::schema::BatterySaverMode::Never,
+            _ => crate::config::schema::BatterySaverMode::Auto,
+        };
     }
 
     if let Ok(kb_table) = table.get::<LuaTable>("keyboard") {

@@ -78,6 +78,13 @@ pub struct App {
     /// Enter confirm a workspace switch — prevents stealing Enter from the terminal.
     sidebar_kbd_active: bool,
 
+    /// Current battery status. None until the first poll or on desktops with no battery.
+    battery_status: Option<crate::platform::battery::BatteryStatus>,
+    /// Last time battery status was queried via IOKit.
+    battery_last_poll: std::time::Instant,
+    /// True when battery-saver restrictions are currently active.
+    battery_saver_active: bool,
+
     /// Debounce timer for config hot-reload — actual reload deferred 300 ms after last event (TD-PERF-17).
     config_reload_at: Option<std::time::Instant>,
     /// Per-terminal shell context (exit code + last command), keyed by terminal_id.
@@ -120,6 +127,9 @@ impl App {
             sidebar_nav_cursor: 0,
             sidebar_rename_input: None,
             sidebar_kbd_active: false,
+            battery_status: None,
+            battery_last_poll: std::time::Instant::now(),
+            battery_saver_active: false,
             config_reload_at: None,
             terminal_shell_ctxs: std::collections::HashMap::new(),
             separator_snapshot: Vec::new(),
@@ -1213,6 +1223,8 @@ impl ApplicationHandler<()> for App {
                                 self.input.leader_active as u8,
                                 leader_resize_mode as u8,
                                 sb_exit_code_raw as u8,
+                                self.battery_status.as_ref().map(|s| s.percent).unwrap_or(255),
+                                self.battery_status.as_ref().map(|s| s.on_battery as u8).unwrap_or(0),
                             ];
                             let col_bytes = sb_total_cols.to_le_bytes();
                             let row_bytes = total_rows.to_le_bytes();
@@ -1246,6 +1258,10 @@ impl ApplicationHandler<()> for App {
                         } else {
                             let inst_start = rc.instances.len();
                             let rect_start = rc.rect_instances.len();
+                            let battery = self
+                                .battery_status
+                                .as_ref()
+                                .map(|s| (s.percent, s.on_battery));
                             let bar = crate::ui::status_bar::StatusBar::build(
                                 self.input.leader_active,
                                 leader_resize_mode,
@@ -1254,6 +1270,7 @@ impl ApplicationHandler<()> for App {
                                 self.ui.git_branch_cache.as_deref(),
                                 sb_exit_code,
                                 self.config.status_bar.style.clone(),
+                                battery,
                             );
                             rc.build_status_bar_instances(
                                 &bar,
@@ -1790,6 +1807,7 @@ impl ApplicationHandler<()> for App {
                                     git_branch.as_deref(),
                                     None,
                                     self.config.status_bar.style.clone(),
+                                    None,
                                 );
                                 match bar.click_kind(col, total_cols) {
                                     Some(crate::ui::status_bar::SegmentKind::GitBranch) => {
@@ -2084,15 +2102,53 @@ impl ApplicationHandler<()> for App {
         self.flush_pending_pty_run();
         self.flush_pending_paste();
 
+        // ── Battery status poll (every 30 s, or immediately on first frame) ─
+        if self.battery_status.is_none()
+            || self.battery_last_poll.elapsed() >= std::time::Duration::from_secs(30)
+        {
+            self.battery_last_poll = std::time::Instant::now();
+            if let Some(status) = crate::platform::battery::query() {
+                use crate::config::schema::BatterySaverMode;
+                let active = match self.config.battery_saver {
+                    BatterySaverMode::Always => true,
+                    BatterySaverMode::Never => false,
+                    BatterySaverMode::Auto => status.on_battery,
+                };
+                let changed = self.battery_saver_active != active
+                    || self
+                        .battery_status
+                        .as_ref()
+                        .map(|s| s.percent != status.percent || s.on_battery != status.on_battery)
+                        .unwrap_or(true);
+                self.battery_status = Some(status);
+                self.battery_saver_active = active;
+                if changed {
+                    if let Some(rc) = &mut self.render_ctx {
+                        rc.status_bar_key = 0;
+                    }
+                    if let Some(w) = &self.window {
+                        w.request_redraw();
+                    }
+                }
+            }
+        }
+
         // ── Independent git branch poll (TD-PERF-19) ────────────────────────
         // Runs at most once per second, regardless of PTY/render activity.
         // Removed from the render hot path (was called every RedrawRequested).
+        // TTL is 5 s normally, 30 s in battery-saver mode.
         if self.config.status_bar.enabled
             && self.window_focused
             && self.ui.git_branch_last_poll.elapsed() >= std::time::Duration::from_secs(1)
         {
             self.ui.git_branch_last_poll = std::time::Instant::now();
-            let git_updated = self.ui.poll_git_branch(self.cached_cwd.as_deref());
+            let git_ttl = if self.battery_saver_active {
+                std::time::Duration::from_secs(30)
+            } else {
+                std::time::Duration::from_secs(5)
+            };
+            let git_dirty = self.config.status_bar.git_dirty_check && !self.battery_saver_active;
+            let git_updated = self.ui.poll_git_branch(self.cached_cwd.as_deref(), git_dirty, git_ttl);
             if git_updated {
                 // Invalidate status bar key so it rebuilds on the next frame.
                 if let Some(rc) = &mut self.render_ctx {
@@ -2175,8 +2231,9 @@ impl ApplicationHandler<()> for App {
                 event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
             }
         } else {
+            let blink_ms = if self.battery_saver_active { 750 } else { 530 };
             let blink_deadline =
-                self.input.cursor_last_blink + std::time::Duration::from_millis(530);
+                self.input.cursor_last_blink + std::time::Duration::from_millis(blink_ms);
             let wake = if self.pending_pty_redraw {
                 blink_deadline.min(pty_deadline)
             } else {
