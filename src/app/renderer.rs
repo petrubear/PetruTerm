@@ -546,25 +546,23 @@ impl RenderContext {
         let inset = border * 0.5;
 
         let cell_w = self.shaper.cell_width;
-        let cell_h = self.shaper.cell_height;
 
-        // For panes at the left/top viewport edge (col_offset == 0 or row_offset == 0),
-        // pane_rect.x/y equals the text start position — there is no separator gap on
-        // that side.  Shift the border rect one cell outward so the stroke falls in the
-        // window margin rather than overlapping the first column/row of text.  Out-of-
-        // bounds pixels are clipped by the GPU, so the left/top border line simply
-        // disappears behind the window edge (same visual as a pane with a separator on
-        // that side, where the stroke sits in the separator gap).
+        // For panes at the left viewport edge (col_offset == 0), pane_rect.x equals the
+        // text start position — there is no separator gap on that side.  Shift the border
+        // rect's left edge one cell outward so the stroke falls in the window margin rather
+        // than overlapping the first column of text.  Out-of-bounds pixels are GPU-clipped,
+        // so the left border line disappears behind the window frame (same visual as a pane
+        // with a left separator, where the stroke already sits in the separator gap).
+        //
+        // The top edge is NOT shifted: the viewport's top padding (tab bar + window chrome)
+        // provides enough vertical space so the top stroke doesn't visibly overlap text, and
+        // shifting upward would push the border into the title bar / traffic-light area.
         let x = if focused.col_offset == 0 {
             focused.pane_rect.x - cell_w
         } else {
             focused.pane_rect.x + inset
         };
-        let y = if focused.row_offset == 0 {
-            focused.pane_rect.y - cell_h
-        } else {
-            focused.pane_rect.y + inset
-        };
+        let y = focused.pane_rect.y + inset;
         let right = focused.pane_rect.x + focused.pane_rect.w - inset;
         let bottom = focused.pane_rect.y + focused.pane_rect.h - inset;
 
