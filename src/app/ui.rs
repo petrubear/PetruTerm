@@ -1185,12 +1185,12 @@ impl UiManager {
                                     || s.name.contains(args)
                                     || s.description.contains(args)
                             })
-                            .map(|s| format!("  {} — {}", s.name, s.description))
+                            .map(|s| format!("## {}\n{}", s.name, s.description))
                             .collect();
                         if filtered.is_empty() {
                             format!("No skills matching '{args}'")
                         } else {
-                            format!("Skills:\n{}", filtered.join("\n"))
+                            format!("# Skills\n{}", filtered.join("\n"))
                         }
                     }
                 };
@@ -1200,8 +1200,53 @@ impl UiManager {
                 self.panel_mut().dirty = true;
                 true
             }
+            "mcp" => {
+                let msg = if self.mcp_manager.connected_count() == 0 {
+                    "No MCP servers connected.".to_string()
+                } else {
+                    let mut tools = self.mcp_manager.all_tools();
+                    tools.sort_by(|(a, _), (b, _)| a.cmp(b));
+
+                    // Group tool names by server, preserving sort order.
+                    let mut servers: Vec<(String, Vec<String>)> = Vec::new();
+                    for (server, tool) in &tools {
+                        if let Some(entry) = servers.iter_mut().find(|(s, _)| s == server) {
+                            entry.1.push(tool.name.clone());
+                        } else {
+                            servers.push((server.clone(), vec![tool.name.clone()]));
+                        }
+                    }
+
+                    let lines: Vec<String> = servers
+                        .iter()
+                        .map(|(name, tool_names)| {
+                            let n = tool_names.len();
+                            format!(
+                                "## {} ({} tool{})\n{}",
+                                name,
+                                n,
+                                if n == 1 { "" } else { "s" },
+                                tool_names.join(", ")
+                            )
+                        })
+                        .collect();
+
+                    let n = servers.len();
+                    format!(
+                        "# MCP ({} server{})\n{}",
+                        n,
+                        if n == 1 { "" } else { "s" },
+                        lines.join("\n")
+                    )
+                };
+                self.panel_mut()
+                    .messages
+                    .push(crate::llm::ChatMessage::assistant(msg));
+                self.panel_mut().dirty = true;
+                true
+            }
             _ => {
-                let msg = format!("Unknown command: /{cmd}. Try /skills or /quit.");
+                let msg = format!("Unknown command: /{cmd}. Try /skills, /mcp or /quit.");
                 self.panel_mut()
                     .messages
                     .push(crate::llm::ChatMessage::assistant(msg));
