@@ -80,14 +80,14 @@ fn main() -> Result<()> {
     log::info!("PetruTerm starting up");
 
     // Load config (copies defaults to ~/.config/petruterm/ on first launch).
-    let config = match config::load() {
-        Ok(c) => {
+    let (config, lua) = match config::load() {
+        Ok((c, l)) => {
             log::info!("Config loaded successfully.");
-            c
+            (c, Some(l))
         }
         Err(e) => {
             log::warn!("Failed to load config ({e}); using defaults.");
-            config::Config::default()
+            (config::Config::default(), None)
         }
     };
 
@@ -106,7 +106,7 @@ fn main() -> Result<()> {
     // (e.g. on shell exit) without waiting for the next WaitUntil blink timer.
     let wakeup_proxy = event_loop.create_proxy();
 
-    let mut app = App::new(config, wakeup_proxy);
+    let mut app = App::new(config, lua, wakeup_proxy);
     event_loop.run_app(&mut app)?;
 
     log::info!("PetruTerm exiting.");

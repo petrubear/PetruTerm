@@ -1292,7 +1292,7 @@ impl UiManager {
                 self.palette.open();
             }
             Action::ReloadConfig => {
-                if let Ok(new_cfg) = config::reload() {
+                if let Ok((new_cfg, _lua)) = config::reload() {
                     *config = new_cfg;
                     render_ctx
                         .renderer

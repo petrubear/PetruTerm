@@ -51,6 +51,8 @@ pub struct Mux {
     /// Terminal IDs closed by cmd_close_tab / cmd_close_pane (TD-MEM-08).
     /// App drains this after each input cycle to clean up per-terminal state.
     pub closed_ids: Vec<usize>,
+    /// Lua event names queued by cmd_* methods. App drains and fires after input handling.
+    pub pending_lua_events: Vec<&'static str>,
     /// Ordered list of all workspaces (metadata only).
     pub workspaces: Vec<Workspace>,
     pub active_workspace_id: usize,
@@ -67,6 +69,7 @@ impl Mux {
             terminals: Vec::new(),
             next_terminal_id: 0,
             closed_ids: Vec::new(),
+            pending_lua_events: Vec::new(),
             workspaces: vec![Workspace {
                 id: 0,
                 name: "main".to_string(),
@@ -378,6 +381,7 @@ impl Mux {
             Ok(terminal_id) => {
                 self.tabs.new_tab("zsh");
                 self.panes.push(PaneManager::new(viewport, terminal_id));
+                self.pending_lua_events.push("tab_created");
             }
             Err(e) => log::error!("Failed to open terminal for new tab: {e}"),
         }
@@ -397,6 +401,7 @@ impl Mux {
                 self.closed_ids.push(tid);
             }
             self.panes.remove(active);
+            self.pending_lua_events.push("tab_closed");
         }
     }
 
@@ -433,6 +438,7 @@ impl Mux {
                 if let Some(pane_mgr) = self.panes.get_mut(active) {
                     pane_mgr.split(dir, new_id);
                 }
+                self.pending_lua_events.push("pane_split");
             }
             Err(e) => log::error!("Failed to create terminal for split: {e}"),
         }
@@ -446,6 +452,7 @@ impl Mux {
                     *slot = None;
                 }
                 self.closed_ids.push(closed_id);
+                self.pending_lua_events.push("pane_closed");
             }
         }
     }

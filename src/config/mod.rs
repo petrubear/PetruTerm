@@ -82,10 +82,8 @@ pub fn list_themes() -> Vec<String> {
 }
 
 /// Load the user config, falling back to the embedded default if the file doesn't exist.
-///
-/// On every launch, ensures all default config files exist in ~/.config/petruterm/.
-/// Files that already exist are never overwritten; only missing ones are created.
-pub fn load() -> Result<Config> {
+/// Returns both the parsed Config and the live Lua VM (which holds registered event callbacks).
+pub fn load() -> Result<(Config, mlua::Lua)> {
     let dir = config_dir();
     let path = config_path();
 
@@ -109,7 +107,8 @@ pub fn load() -> Result<Config> {
 }
 
 /// Reload the config (called by hot-reload watcher).
-pub fn reload() -> Result<Config> {
+/// Returns both the parsed Config and a fresh Lua VM with any new callbacks registered.
+pub fn reload() -> Result<(Config, mlua::Lua)> {
     let path = config_path();
     if path.exists() {
         lua::load_config(&path)

@@ -101,10 +101,15 @@ pub struct App {
             std::time::SystemTime,
         ),
     >,
+    /// Live Lua VM — kept alive so petruterm.on() callbacks registered in config.lua
+    /// can be called at runtime.
+    lua: Option<mlua::Lua>,
+    /// Active toast notification: (message, expiry). Rendered as an overlay until expiry.
+    toast: Option<(String, std::time::Instant)>,
 }
 
 impl App {
-    pub fn new(config: Config, wakeup_proxy: EventLoopProxy<()>) -> Self {
+    pub fn new(config: Config, lua: Option<mlua::Lua>, wakeup_proxy: EventLoopProxy<()>) -> Self {
         let config_watcher = config::config_dir()
             .exists()
             .then(|| ConfigWatcher::new(&config::config_dir()).ok())
@@ -145,6 +150,42 @@ impl App {
             mcp_reload_at: None,
             terminal_shell_ctxs: std::collections::HashMap::new(),
             separator_snapshot: Vec::new(),
+            lua,
+            toast: None,
+        }
+    }
+
+    /// Drain mux.pending_lua_events, fire each via Lua, drain any queued toast.
+    fn dispatch_lua_events(&mut self) {
+        let events: Vec<&'static str> = std::mem::take(&mut self.mux.pending_lua_events);
+        if events.is_empty() {
+            return;
+        }
+        if let Some(lua) = &self.lua {
+            for event in events {
+                crate::config::lua::fire_lua_event(lua, event);
+            }
+            if let Some((msg, ms)) = crate::config::lua::drain_lua_toast(lua) {
+                let deadline = std::time::Instant::now() + std::time::Duration::from_millis(ms);
+                self.toast = Some((msg, deadline));
+                if let Some(w) = &self.window {
+                    w.request_redraw();
+                }
+            }
+        }
+    }
+
+    /// Fire a single Lua event (terminal_exit, ai_response) and drain any queued toast.
+    fn fire_lua_event(&mut self, event: &str) {
+        if let Some(lua) = &self.lua {
+            crate::config::lua::fire_lua_event(lua, event);
+            if let Some((msg, ms)) = crate::config::lua::drain_lua_toast(lua) {
+                let deadline = std::time::Instant::now() + std::time::Duration::from_millis(ms);
+                self.toast = Some((msg, deadline));
+                if let Some(w) = &self.window {
+                    w.request_redraw();
+                }
+            }
         }
     }
 
@@ -385,6 +426,7 @@ impl App {
         }
         self.apply_tab_bar_padding();
         self.resize_terminals_for_panel();
+        self.fire_lua_event("terminal_exit");
         false
     }
 
@@ -450,8 +492,9 @@ impl App {
             .is_some_and(|t| std::time::Instant::now() >= t)
         {
             self.config_reload_at = None;
-            if let Ok(new_cfg) = config::reload() {
+            if let Ok((new_cfg, new_lua)) = config::reload() {
                 self.config = new_cfg;
+                self.lua = Some(new_lua);
                 if let Some(rc) = &mut self.render_ctx {
                     rc.renderer
                         .update_bg_color(self.config.colors.background_wgpu());
@@ -856,6 +899,9 @@ impl ApplicationHandler<()> for App {
                 }
                 let had_ai = self.ui.poll_ai_events();
                 let had_ai_block = self.ui.poll_ai_block_events();
+                if had_ai {
+                    self.fire_lua_event("ai_response");
+                }
                 self.flush_pending_pty_run();
                 self.flush_pending_paste();
                 self.ui.poll_file_scan();
@@ -1424,6 +1470,27 @@ impl ApplicationHandler<()> for App {
                         );
                     }
 
+                    // ── Toast notification ──────────────────────────────────────────────
+                    let toast_active = self
+                        .toast
+                        .as_ref()
+                        .is_some_and(|(_, deadline)| std::time::Instant::now() < *deadline);
+                    if toast_active {
+                        if let Some((msg, _)) = &self.toast {
+                            let pad_x =
+                                self.config.window.padding.left as f32 + sidebar_px_snapshot;
+                            rc.build_toast_instances(
+                                msg,
+                                &scaled_font,
+                                total_cols,
+                                pad_x,
+                                sb_pad_y,
+                            );
+                        }
+                    } else {
+                        self.toast = None;
+                    }
+
                     // ── Debug HUD (F12) — rendered last so it appears above all overlays ─
                     if rc.hud_visible {
                         rc.build_debug_hud_instances(&scaled_font);
@@ -1522,6 +1589,7 @@ impl ApplicationHandler<()> for App {
                         rc.row_caches.remove(&tid);
                     }
                 }
+                self.dispatch_lua_events();
                 if self.ui.is_panel_visible() != panel_was_visible {
                     self.resize_terminals_for_panel();
                 }
@@ -2310,6 +2378,20 @@ impl ApplicationHandler<()> for App {
                 }
             }
             // else: WaitUntil below will wake us at pty_deadline to retry.
+        }
+
+        // Keep redrawing while a toast is active; clear it once expired.
+        if let Some((_, deadline)) = &self.toast {
+            if std::time::Instant::now() < *deadline {
+                if let Some(w) = &self.window {
+                    w.request_redraw();
+                }
+            } else {
+                self.toast = None;
+                if let Some(w) = &self.window {
+                    w.request_redraw(); // one final frame to clear the toast
+                }
+            }
         }
 
         // Schedule a wakeup at the top of the next minute so the status bar time

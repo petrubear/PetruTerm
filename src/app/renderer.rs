@@ -2566,4 +2566,55 @@ impl RenderContext {
             self.push_shaped_row(text, *fg, HUD_BG, row, 0, hud_width, font);
         }
     }
+
+    /// Render a toast notification in the top-right corner.
+    pub fn build_toast_instances(
+        &mut self,
+        msg: &str,
+        font: &crate::config::schema::FontConfig,
+        total_cols: usize,
+        pad_x: f32,
+        pad_y: f32,
+    ) {
+        let toast_width = (msg.len() + 4).min(total_cols);
+        if toast_width == 0 || total_cols < toast_width {
+            return;
+        }
+
+        let bg = [0.11, 0.11, 0.14, 0.92];
+        let fg = [0.878, 0.878, 0.910, 1.0];
+        let border_color = [0.25, 0.25, 0.32, 1.0];
+
+        let cw = self.shaper.cell_width;
+        let ch = self.shaper.cell_height;
+        let start_col = total_cols - toast_width;
+        let px = pad_x + start_col as f32 * cw;
+        let py = pad_y + ch * 0.5; // half-cell gap from top
+        let pw = toast_width as f32 * cw;
+        let radius = 8.0 * self.scale_factor;
+        let border = 1.0 * self.scale_factor;
+
+        self.rect_instances.push(RoundedRectInstance {
+            rect: [
+                px - border,
+                py - border,
+                pw + 2.0 * border,
+                ch + 2.0 * border,
+            ],
+            color: border_color,
+            radius: radius + border,
+            border_width: 0.0,
+            _pad: [0.0; 2],
+        });
+        self.rect_instances.push(RoundedRectInstance {
+            rect: [px, py, pw, ch],
+            color: bg,
+            radius,
+            border_width: 0.0,
+            _pad: [0.0; 2],
+        });
+
+        let label = format!("  {msg}  ");
+        self.push_shaped_row(&label, fg, [0.0; 4], 0, start_col, toast_width, font);
+    }
 }

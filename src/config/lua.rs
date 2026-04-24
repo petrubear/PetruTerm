@@ -36,7 +36,7 @@ fn config_stdlib() -> StdLib {
 /// The cache is reused when its mtime is >= the source file's mtime.
 /// On any error reading or writing the cache the loader silently falls back to
 /// compiling from source, so this is always a transparent optimisation.
-pub fn load_config(path: &Path) -> Result<Config> {
+pub fn load_config(path: &Path) -> Result<(Config, Lua)> {
     evict_stale_lua_cache();
     let lua = Lua::new_with(config_stdlib(), LuaOptions::default())
         .map_err(|e| anyhow::anyhow!("Lua VM init error: {e}"))?;
@@ -46,12 +46,12 @@ pub fn load_config(path: &Path) -> Result<Config> {
     let config_src = std::fs::read_to_string(path)
         .map_err(|e| anyhow::anyhow!("Failed to read config {}: {e}", path.display()))?;
 
-    // --- bytecode cache ---------------------------------------------------
     let config_table: LuaTable = load_or_compile_config(&lua, path, &config_src)
         .map_err(|e| anyhow::anyhow!("Lua eval error in {}: {e}", path.display()))?;
-    // ----------------------------------------------------------------------
 
-    table_to_config(config_table).map_err(|e| anyhow::anyhow!("Config parse error: {e}"))
+    let config =
+        table_to_config(config_table).map_err(|e| anyhow::anyhow!("Config parse error: {e}"))?;
+    Ok((config, lua))
 }
 
 /// Compute a stable u64 hash of a path string.
@@ -186,7 +186,7 @@ fn load_or_compile_config(lua: &Lua, src_path: &Path, src: &str) -> LuaResult<Lu
 ///
 /// `preloaded` is a list of `(module_name, source)` pairs registered into
 /// `package.preload` so that `require("ui")` etc. work without the filesystem.
-pub fn load_config_str(src: &str, name: &str, preloaded: &[(&str, &str)]) -> Result<Config> {
+pub fn load_config_str(src: &str, name: &str, preloaded: &[(&str, &str)]) -> Result<(Config, Lua)> {
     let lua = Lua::new_with(config_stdlib(), LuaOptions::default())
         .map_err(|e| anyhow::anyhow!("Lua VM init error: {e}"))?;
     inject_petruterm_global(&lua).map_err(|e| anyhow::anyhow!("Lua setup error: {e}"))?;
@@ -199,7 +199,9 @@ pub fn load_config_str(src: &str, name: &str, preloaded: &[(&str, &str)]) -> Res
         .eval()
         .map_err(|e| anyhow::anyhow!("Lua eval error in {name}: {e}"))?;
 
-    table_to_config(config_table).map_err(|e| anyhow::anyhow!("Config parse error in {name}: {e}"))
+    let config = table_to_config(config_table)
+        .map_err(|e| anyhow::anyhow!("Config parse error in {name}: {e}"))?;
+    Ok((config, lua))
 }
 
 /// Load a theme file (returns a `ColorScheme` table) from disk.
@@ -339,9 +341,33 @@ fn inject_petruterm_global(lua: &Lua) -> LuaResult<()> {
     }
     petruterm.set("action", action)?;
 
-    // petruterm.on(event, fn) — event registration (no-op for now; Phase 3)
-    let on_fn = lua.create_function(|_, (_event, _cb): (String, LuaFunction)| Ok(()))?;
+    // _pt_handlers: { event_name: [fn, ...] } — populated by petruterm.on().
+    lua.set_named_registry_value("_pt_handlers", lua.create_table()?)?;
+
+    // petruterm.on(event, fn) — register a callback for a named event.
+    let on_fn = lua.create_function(|lua, (event, cb): (String, LuaFunction)| {
+        let handlers: LuaTable = lua.named_registry_value("_pt_handlers")?;
+        let cbs: LuaTable = match handlers.get::<Option<LuaTable>>(event.as_str())? {
+            Some(t) => t,
+            None => {
+                let t = lua.create_table()?;
+                handlers.set(event.as_str(), t.clone())?;
+                t
+            }
+        };
+        cbs.push(cb)?;
+        Ok(())
+    })?;
     petruterm.set("on", on_fn)?;
+
+    // petruterm.notify(msg [, ms]) — queue a toast notification.
+    // Stored as two registry values; Rust drains them after each event dispatch.
+    let notify_fn = lua.create_function(|lua, (msg, ms): (String, Option<u64>)| {
+        lua.set_named_registry_value("_pt_notify_msg", msg)?;
+        lua.set_named_registry_value("_pt_notify_ms", ms.unwrap_or(3000))?;
+        Ok(())
+    })?;
+    petruterm.set("notify", notify_fn)?;
 
     lua.globals().set("petruterm", petruterm)?;
 
@@ -351,6 +377,32 @@ fn inject_petruterm_global(lua: &Lua) -> LuaResult<()> {
         .exec()?;
 
     Ok(())
+}
+
+/// Call all Lua callbacks registered for `event` via `petruterm.on()`.
+pub fn fire_lua_event(lua: &Lua, event: &str) {
+    let Ok(handlers) = lua.named_registry_value::<LuaTable>("_pt_handlers") else {
+        return;
+    };
+    let Ok(cbs) = handlers.get::<LuaTable>(event) else {
+        return;
+    };
+    for f in cbs.sequence_values::<LuaFunction>().flatten() {
+        if let Err(e) = f.call::<()>(()) {
+            log::warn!("petruterm.on({event}) callback error: {e}");
+        }
+    }
+}
+
+/// Drain a pending `petruterm.notify()` call, returning `(message, duration_ms)` if one exists.
+pub fn drain_lua_toast(lua: &Lua) -> Option<(String, u64)> {
+    let msg = lua.named_registry_value::<String>("_pt_notify_msg").ok()?;
+    let ms = lua
+        .named_registry_value::<u64>("_pt_notify_ms")
+        .unwrap_or(3000);
+    let _ = lua.unset_named_registry_value("_pt_notify_msg");
+    let _ = lua.unset_named_registry_value("_pt_notify_ms");
+    Some((msg, ms))
 }
 
 /// Register embedded Lua sources into `package.preload` so `require()` works
