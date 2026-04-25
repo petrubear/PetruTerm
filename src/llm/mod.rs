@@ -7,6 +7,7 @@ pub mod openai_compat;
 pub mod openrouter;
 pub mod shell_context;
 pub mod skills;
+pub mod steering;
 pub mod tools;
 
 use anyhow::{Context, Result};

@@ -7,6 +7,7 @@ use crate::llm::mcp::config as mcp_config;
 use crate::llm::mcp::manager::McpManager;
 use crate::llm::shell_context::ShellContext;
 use crate::llm::skills::SkillManager;
+use crate::llm::steering::SteeringManager;
 use crate::llm::tools::{execute_tool, AgentStepResult, AgentTool};
 use crate::llm::LlmProvider;
 use crate::ui::{CommandPalette, ContextMenu, Rect, SearchBar, SplitDir};
@@ -138,6 +139,9 @@ pub struct UiManager {
     // ── Skills (D-4) ─────────────────────────────────────────────────────────
     pub skill_manager: SkillManager,
 
+    // ── Steering files ───────────────────────────────────────────────────────
+    pub steering_manager: SteeringManager,
+
     // ── MCP (D-1/D-2/D-3) ────────────────────────────────────────────────────
     pub mcp_manager: std::sync::Arc<McpManager>,
 }
@@ -171,8 +175,10 @@ impl UiManager {
         palette.rebuild_snippets(&config.snippets);
 
         let mut skill_manager = SkillManager::new();
+        let mut steering_manager = SteeringManager::new();
         if let Ok(cwd) = std::env::current_dir() {
             skill_manager.load(&cwd);
+            steering_manager.load(&cwd);
         }
         let skill_count = skill_manager.skills().len();
 
@@ -230,6 +236,7 @@ impl UiManager {
             branch_scan_rx: None,
             branch_scan_cwd: None,
             skill_manager,
+            steering_manager,
             mcp_manager,
         }
     }
@@ -704,6 +711,11 @@ impl UiManager {
              Use those tools when the user asks about code or files in their project."
         );
 
+        // Steering files: global/project Markdown rules always active.
+        if let Some(block) = self.steering_manager.context_block() {
+            system_text.push_str(&format!("\n\n{block}"));
+        }
+
         // Skill injection (D-4): match by query, or keep the panel's active skill.
         let active_skill_name = self.panel().matched_skill.clone();
         let skill_match = {
@@ -1168,6 +1180,10 @@ impl UiManager {
             (None, None)
         };
         self.panel_width_cols = config.llm.ui.width_cols;
+        if let Ok(cwd) = std::env::current_dir() {
+            self.skill_manager.load(&cwd);
+            self.steering_manager.load(&cwd);
+        }
     }
 
     // ── Slash command dispatcher (D-4) ───────────────────────────────────────
@@ -1648,6 +1664,7 @@ mod tests {
             branch_scan_rx: None,
             branch_scan_cwd: None,
             skill_manager: SkillManager::new(),
+            steering_manager: SteeringManager::new(),
             mcp_manager: std::sync::Arc::new(McpManager::new()),
         };
 
@@ -1717,6 +1734,7 @@ mod tests {
             branch_scan_rx: None,
             branch_scan_cwd: None,
             skill_manager: SkillManager::new(),
+            steering_manager: SteeringManager::new(),
             mcp_manager: std::sync::Arc::new(McpManager::new()),
         };
 
