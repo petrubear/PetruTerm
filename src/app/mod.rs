@@ -1216,7 +1216,13 @@ impl ApplicationHandler<()> for App {
                                 rc.instances.extend_from_slice(&rc.scroll_bar_cache);
                             } else {
                                 let start = rc.instances.len();
-                                rc.build_scroll_bar_instances(disp_off, hist, term_rows, term_cols, &self.config.colors);
+                                rc.build_scroll_bar_instances(
+                                    disp_off,
+                                    hist,
+                                    term_rows,
+                                    term_cols,
+                                    &self.config.colors,
+                                );
                                 rc.scroll_bar_cache.clear();
                                 rc.scroll_bar_cache
                                     .extend_from_slice(&rc.instances[start..]);

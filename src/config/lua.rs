@@ -265,13 +265,13 @@ fn table_to_color_scheme(table: LuaTable) -> LuaResult<ColorScheme> {
         selection_fg: get_color("selection_fg"),
         ansi: get_palette("ansi"),
         brights: get_palette("brights"),
-        ui_accent:         get_opt_color("ui_accent"),
-        ui_surface:        get_opt_color("ui_surface"),
+        ui_accent: get_opt_color("ui_accent"),
+        ui_surface: get_opt_color("ui_surface"),
         ui_surface_active: get_opt_color("ui_surface_active"),
-        ui_surface_hover:  get_opt_color("ui_surface_hover"),
-        ui_muted:          get_opt_color("ui_muted"),
-        ui_success:        get_opt_color("ui_success"),
-        ui_overlay:        get_opt_color("ui_overlay"),
+        ui_surface_hover: get_opt_color("ui_surface_hover"),
+        ui_muted: get_opt_color("ui_muted"),
+        ui_success: get_opt_color("ui_success"),
+        ui_overlay: get_opt_color("ui_overlay"),
     };
     scheme.derive_ui_colors();
     Ok(scheme)

@@ -220,7 +220,6 @@ pub struct ColorScheme {
     // ── Semantic UI tokens ────────────────────────────────────────────────
     // All default to [0,0,0,0] as sentinel; derive_ui_colors() fills them
     // from base colors when not explicitly set by a theme.
-
     /// Focus border, toast border, sidebar accent. Default: cursor_bg.
     #[serde(default)]
     pub ui_accent: [f32; 4],
@@ -254,14 +253,24 @@ impl ColorScheme {
         }
         if self.ui_surface == zero {
             let [r, g, b, _] = self.background;
-            self.ui_surface = [(r + 0.15).min(1.0), (g + 0.15).min(1.0), (b + 0.15).min(1.0), 1.0];
+            self.ui_surface = [
+                (r + 0.15).min(1.0),
+                (g + 0.15).min(1.0),
+                (b + 0.15).min(1.0),
+                1.0,
+            ];
         }
         if self.ui_surface_active == zero {
             self.ui_surface_active = self.selection_bg;
         }
         if self.ui_surface_hover == zero {
             let [r, g, b, _] = self.background;
-            self.ui_surface_hover = [(r + 0.08).min(1.0), (g + 0.08).min(1.0), (b + 0.08).min(1.0), 1.0];
+            self.ui_surface_hover = [
+                (r + 0.08).min(1.0),
+                (g + 0.08).min(1.0),
+                (b + 0.08).min(1.0),
+                1.0,
+            ];
         }
         if self.ui_muted == zero {
             let [r, g, b, _] = self.foreground;
@@ -316,13 +325,13 @@ impl ColorScheme {
                 hex("#99ffee"),
                 hex("#ffffff"),
             ],
-            ui_accent:         hex("#9580ff"),   // purple — matches cursor_bg
-            ui_surface:        hex("#131316"),   // panel bg
-            ui_surface_active: hex("#454158"),   // selection_bg
-            ui_surface_hover:  hex("#1a1a1e"),   // background +8%
-            ui_muted:          hexa("#e0e0e8", 0.35), // foreground at 35% alpha
-            ui_success:        hex("#8aff80"),   // ansi green
-            ui_overlay:        hexa("#131316", 0.95), // panel bg near-opaque
+            ui_accent: hex("#9580ff"),         // purple — matches cursor_bg
+            ui_surface: hex("#131316"),        // panel bg
+            ui_surface_active: hex("#454158"), // selection_bg
+            ui_surface_hover: hex("#1a1a1e"),  // background +8%
+            ui_muted: hexa("#e0e0e8", 0.35),   // foreground at 35% alpha
+            ui_success: hex("#8aff80"),        // ansi green
+            ui_overlay: hexa("#131316", 0.95), // panel bg near-opaque
         }
     }
 

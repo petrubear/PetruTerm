@@ -549,7 +549,11 @@ impl RenderContext {
 
     /// Draw a rounded accent outline around the focused pane. Only called when pane_count > 1.
     /// Uses pane_rect (snapped to cell grid) to align exactly with separator lines.
-    pub fn build_focus_border(&mut self, focused: &crate::ui::PaneInfo, colors: &crate::config::schema::ColorScheme) {
+    pub fn build_focus_border(
+        &mut self,
+        focused: &crate::ui::PaneInfo,
+        colors: &crate::config::schema::ColorScheme,
+    ) {
         let [r, g, b, _] = colors.ui_accent;
         let focus_color = [r, g, b, 0.85];
         let border = 1.5 * self.scale_factor;
@@ -1711,7 +1715,10 @@ impl RenderContext {
         let start_col = (total_cols - palette_width) / 2;
         let start_row = (total_rows - palette_height) / 2;
 
-        let bg = { let [r, g, b, _] = colors.ui_overlay; [r, g, b, 0.95] };
+        let bg = {
+            let [r, g, b, _] = colors.ui_overlay;
+            [r, g, b, 0.95]
+        };
         let transparent = [0.0f32; 4];
         let fg = colors.foreground;
         let highlight_bg = colors.ui_surface_active;
@@ -2122,7 +2129,10 @@ impl RenderContext {
         let text_top_y = pill_y + (pill_h - cell_h).max(0.0) / 2.0;
         let text_row_f = (text_top_y - gpu_pad_y) / cell_h;
 
-        let btn_active = { let [r, g, b, _] = colors.ui_accent; [r * 0.6, g * 0.6, b * 0.6, 1.0] };
+        let btn_active = {
+            let [r, g, b, _] = colors.ui_accent;
+            [r * 0.6, g * 0.6, b * 0.6, 1.0]
+        };
 
         // ── Left control buttons ─────────────────────────────────────────
         self.rect_instances.push(RoundedRectInstance {
