@@ -1,12 +1,12 @@
 # Active Context
 
-**Current Focus:** Phase 5 UX Polish — chat UX, keybinds y deuda residual
+**Current Focus:** Phase 5 UX Polish — estabilidad runtime y cierre de deuda UX
 **Last Active:** 2026-04-25
 
 ## Estado actual del proyecto
 
 **Phase 1–3 COMPLETE. Phase 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Fase B COMPLETE. Fase C COMPLETE. Fase D (D-1/D-2/D-3/D-4/D-5) COMPLETE. REC-PERF-01/02/05 COMPLETE. Phase 5 G-0 COMPLETE.**
-**v0.1.3 publicado. Build limpio. CI verde. Deuda abierta actual: TD-UX-04; diferidos: TD-PERF-03, TD-PERF-05, TD-PERF-29.**
+**v0.1.3 publicado. Build limpio. CI verde. Sin deuda abierta activa; diferidos: TD-PERF-03, TD-PERF-05, TD-PERF-29.**
 
 ## Roadmap acordado (en orden)
 
@@ -45,6 +45,10 @@
 **Background AI idle policy:**
 - `about_to_wait` distingue AI activity visible vs background. Solo panel enfocado / block visible pueden impedir idle.
 - Mantener esta separación para no reintroducir wakeups periódicos durante streaming en background.
+
+**AI completion notifications:**
+- `UiManager::poll_ai_events()` y `poll_ai_block_events()` devuelven `AiPollResult { changed, completed }`.
+- `ai_response` debe dispararse desde cualquier sitio que drene el canal AI cuando `completed == true`; no depender solo de `RedrawRequested`, porque `about_to_wait` puede consumir `AiEvent::Done` antes.
 
 ## Invariantes arquitectonicos clave (no romper)
 

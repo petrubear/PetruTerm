@@ -785,7 +785,12 @@ impl ApplicationHandler<()> for App {
         }
 
         // AI events are low-frequency; render immediately.
-        let ai_needs_redraw = self.ui.poll_ai_events() || self.ui.poll_ai_block_events();
+        let panel_ai = self.ui.poll_ai_events();
+        let block_ai = self.ui.poll_ai_block_events();
+        if panel_ai.completed {
+            self.fire_lua_event("ai_response");
+        }
+        let ai_needs_redraw = panel_ai.changed || block_ai.changed;
         self.flush_pending_pty_run();
         self.flush_pending_paste();
         let scan_ready = self.ui.poll_file_scan();
@@ -897,11 +902,13 @@ impl ApplicationHandler<()> for App {
                 for id in &data_ids {
                     self.update_terminal_shell_ctx(*id);
                 }
-                let had_ai = self.ui.poll_ai_events();
-                let had_ai_block = self.ui.poll_ai_block_events();
-                if had_ai {
+                let panel_ai = self.ui.poll_ai_events();
+                let block_ai = self.ui.poll_ai_block_events();
+                if panel_ai.completed {
                     self.fire_lua_event("ai_response");
                 }
+                let had_ai = panel_ai.changed;
+                let had_ai_block = block_ai.changed;
                 self.flush_pending_pty_run();
                 self.flush_pending_paste();
                 self.ui.poll_file_scan();
@@ -2248,8 +2255,13 @@ impl ApplicationHandler<()> for App {
             }
         }
 
-        let had_panel_ai = self.ui.poll_ai_events();
-        let had_ai_block = self.ui.poll_ai_block_events();
+        let panel_ai = self.ui.poll_ai_events();
+        let block_ai = self.ui.poll_ai_block_events();
+        if panel_ai.completed {
+            self.fire_lua_event("ai_response");
+        }
+        let had_panel_ai = panel_ai.changed;
+        let had_ai_block = block_ai.changed;
         let had_ai = had_panel_ai || had_ai_block;
         let scan_ready = self.ui.poll_file_scan();
         if had_ai || scan_ready {

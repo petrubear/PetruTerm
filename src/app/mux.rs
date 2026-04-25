@@ -743,10 +743,10 @@ impl Mux {
                 // Slide a window of query_len over the char array.
                 // Each index is a terminal column — no byte-offset ambiguity.
                 for col in 0..row_chars.len().saturating_sub(query_chars.len() - 1) {
-                    if row_chars[col..col + query_chars.len()] == query_chars[..] {
-                        if push_search_match(&mut matches, grid_row, col, query_len) {
-                            return (matches, true);
-                        }
+                    if row_chars[col..col + query_chars.len()] == query_chars[..]
+                        && push_search_match(&mut matches, grid_row, col, query_len)
+                    {
+                        return (matches, true);
                     }
                 }
             }

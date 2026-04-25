@@ -5,6 +5,13 @@ Ordered newest-first within each date group.
 
 ---
 
+## Resolved 2026-04-25 — Phase 5 UX polish
+
+### TD-UX-04: `ai_response` notification no disparaba
+`src/app/ui.rs` ahora devuelve `AiPollResult { changed, completed }` desde el polling de eventos AI para distinguir redraws normales de completions reales. `src/app/mod.rs` usa `completed` en todos los call sites que drenan esos eventos (`user_event`, `about_to_wait`, `RedrawRequested`) y dispara `fire_lua_event("ai_response")` inmediatamente cuando llega `AiEvent::Done`, evitando que el evento se pierda si el canal se drena antes del siguiente redraw.
+
+---
+
 ## Resolved 2026-04-24 — P3 backlog
 
 ### TD-MEM-30: Bytecode cache de Lua sin eviction

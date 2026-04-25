@@ -149,6 +149,12 @@ pub struct UiManager {
     pub mcp_manager: std::sync::Arc<McpManager>,
 }
 
+#[derive(Default, Clone, Copy)]
+pub struct AiPollResult {
+    pub changed: bool,
+    pub completed: bool,
+}
+
 impl UiManager {
     pub fn new(config: &Config) -> Self {
         let (ai_tx, ai_rx) = crossbeam_channel::bounded(256);
@@ -283,14 +289,17 @@ impl UiManager {
     /// Poll streaming tokens for the chat panel. Returns true if content changed.
     /// TD-019: routes each event to the panel that originated the request (by panel_id),
     /// not the currently active panel — so tab-switching during streaming is safe.
-    pub fn poll_ai_events(&mut self) -> bool {
-        let mut changed = false;
+    pub fn poll_ai_events(&mut self) -> AiPollResult {
+        let mut result = AiPollResult::default();
         while let Ok((_panel_id, event)) = self.ai_rx.try_recv() {
-            changed = true;
+            result.changed = true;
             let panel = &mut self.chat_panel;
             match event {
                 AiEvent::Token(tok) => panel.append_token(&tok),
-                AiEvent::Done => panel.mark_done(),
+                AiEvent::Done => {
+                    panel.mark_done();
+                    result.completed = true;
+                }
                 AiEvent::Error(e) => {
                     log::error!("LLM error: {e}");
                     panel.mark_error(classify_llm_error(&e));
@@ -315,17 +324,20 @@ impl UiManager {
                 }
             }
         }
-        changed
+        result
     }
 
     /// Poll streaming tokens for the inline AI block. Returns true if content changed.
-    pub fn poll_ai_block_events(&mut self) -> bool {
-        let mut changed = false;
+    pub fn poll_ai_block_events(&mut self) -> AiPollResult {
+        let mut result = AiPollResult::default();
         while let Ok(event) = self.block_rx.try_recv() {
-            changed = true;
+            result.changed = true;
             match event {
                 AiEvent::Token(tok) => self.ai_block.append_token(&tok),
-                AiEvent::Done => self.ai_block.mark_done(),
+                AiEvent::Done => {
+                    self.ai_block.mark_done();
+                    result.completed = true;
+                }
                 AiEvent::Error(e) => {
                     log::error!("AI block error: {e}");
                     self.ai_block.mark_error(e);
@@ -336,7 +348,7 @@ impl UiManager {
                 | AiEvent::UndoState { .. } => {} // AI block doesn't handle these
             }
         }
-        changed
+        result
     }
 
     // ── Confirmation helpers ──────────────────────────────────────────────────

@@ -1,14 +1,14 @@
 # Session State
 
 **Last Updated:** 2026-04-25
-**Session Focus:** Phase 5 UX Polish — chat UX + keybind/docs sync
+**Session Focus:** Phase 5 UX Polish — cierre de deuda UX + CI local
 
 ## Branch: `master`
 
 ## Estado actual
 
 **Phase 1–3 + 3.5 + A + 3.6 + B + C + D (todas las fases) COMPLETE. Phase 5 G-0 COMPLETE.**
-**v0.1.3 publicado. Fase 4 (plugins) y Phase 5 (UX Polish) en paralelo. Deuda técnica abierta actual: TD-UX-04 + diferidos TD-PERF-03 / TD-PERF-05 / TD-PERF-29.**
+**v0.1.3 publicado. Fase 4 (plugins) y Phase 5 (UX Polish) en paralelo. Sin deuda técnica abierta activa; quedan diferidos TD-PERF-03 / TD-PERF-05 / TD-PERF-29.**
 
 ---
 
@@ -25,6 +25,8 @@
 - `src/app/renderer.rs` — hints del panel actualizados: `Leader+a a` para cerrar, `Leader+A` para reenfocar. `Esc` queda documentado y mantenido como “volver foco a terminal” o dismiss del error.
 - `README.md` — tabla de keybinds y referencias de AI actualizadas al mapa real (`Leader+a+a`, `Leader+a+e/f/z`, `Leader+A`, `Leader+e+e`, `Leader+W+*`, `Cmd+K`, `Cmd+F`, `F12`, `Ctrl+Space`). Nota añadida: `a`, `e`, `W` son prefijos reservados del input layer, no bindings simples de `config.keys`.
 - `src/llm/mcp/config.rs` — test `missing_file_returns_empty` aislado del entorno real con `load_from_paths(...)`; ya no depende de `dirs::config_dir()` / `home_dir()` del usuario.
+- `src/app/ui.rs`, `src/app/mod.rs` — `ai_response` ya no depende del path de redraw. `AiEvent::Done` marca `completed` durante el polling y la notificación Lua se dispara inmediatamente aunque `about_to_wait` drene el canal antes de `RedrawRequested`.
+- `src/app/mux.rs` — búsqueda capped pasa limpio por Clippy tras colapsar el nested `if` en el scan loop del grid.
 
 ### Config del usuario verificada
 - `~/.config/petruterm/keybinds.lua` estaba desactualizado (bindings simples `Leader+a`, `Leader+e`, `Leader+f`). Se alineó con el dispatcher actual: `Leader+A` explícito y secuencias `Leader+a+*` documentadas como built-in.
