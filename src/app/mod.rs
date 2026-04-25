@@ -1121,7 +1121,7 @@ impl ApplicationHandler<()> for App {
                     // Focus border — only when there are multiple panes.
                     if pane_infos.len() > 1 {
                         if let Some(focused) = pane_infos.iter().find(|p| p.focused) {
-                            rc.build_focus_border(focused);
+                            rc.build_focus_border(focused, &self.config.colors);
                         }
                     }
 
@@ -1184,6 +1184,7 @@ impl ApplicationHandler<()> for App {
                                 self.sidebar_visible,
                                 self.ui.is_panel_visible(),
                                 rename_input,
+                                &self.config.colors,
                             );
                             rc.tab_bar_instances_cache.clear();
                             rc.tab_bar_instances_cache
@@ -1215,7 +1216,7 @@ impl ApplicationHandler<()> for App {
                                 rc.instances.extend_from_slice(&rc.scroll_bar_cache);
                             } else {
                                 let start = rc.instances.len();
-                                rc.build_scroll_bar_instances(disp_off, hist, term_rows, term_cols);
+                                rc.build_scroll_bar_instances(disp_off, hist, term_rows, term_cols, &self.config.colors);
                                 rc.scroll_bar_cache.clear();
                                 rc.scroll_bar_cache
                                     .extend_from_slice(&rc.instances[start..]);
@@ -1391,6 +1392,7 @@ impl ApplicationHandler<()> for App {
                                 total_rows,
                                 sb_pad_y,
                                 sb_win_w,
+                                &self.config.colors,
                             );
                             rc.status_bar_instances_cache.clear();
                             rc.status_bar_instances_cache
@@ -1415,6 +1417,7 @@ impl ApplicationHandler<()> for App {
                             sb_pad_y,
                             self.config.window.padding.bottom as f32,
                             &scaled_font,
+                            &self.config.colors,
                         );
                         let sidebar_sep_x = self.config.window.padding.left as f32
                             + SIDEBAR_COLS as f32 * rc.shaper.cell_width;
@@ -1426,7 +1429,7 @@ impl ApplicationHandler<()> for App {
                         rc.rect_instances.push(
                             crate::renderer::rounded_rect::RoundedRectInstance {
                                 rect: [sidebar_sep_x, sidebar_sep_y, 1.0, sidebar_sep_h],
-                                color: [0.165, 0.165, 0.184, 1.0], // #2a2a2f border
+                                color: self.config.colors.ui_muted,
                                 radius: 0.0,
                                 border_width: 0.0,
                                 _pad: [0.0; 2],
@@ -1443,6 +1446,7 @@ impl ApplicationHandler<()> for App {
                             &scaled_font,
                             total_cols,
                             total_rows,
+                            &self.config.colors,
                         );
                     }
                     if self.ui.palette.visible {
@@ -1459,6 +1463,7 @@ impl ApplicationHandler<()> for App {
                             total_rows,
                             self.config.window.padding.left as f32 + sidebar_px_snapshot,
                             sb_pad_y,
+                            &self.config.colors,
                         );
                     }
                     if self.ui.context_menu.visible {
@@ -1467,6 +1472,7 @@ impl ApplicationHandler<()> for App {
                             &scaled_font,
                             total_cols,
                             total_rows,
+                            &self.config.colors,
                         );
                     }
 
@@ -1485,6 +1491,7 @@ impl ApplicationHandler<()> for App {
                                 total_cols,
                                 pad_x,
                                 sb_pad_y,
+                                &self.config.colors,
                             );
                         }
                     } else {

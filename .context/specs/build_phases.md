@@ -23,11 +23,11 @@ tiene ~17 colores hardcodeados en `renderer.rs` que ignoran el tema activo.
 | `ui_overlay` | Bg toast, modales semitransparentes | `background` + alpha 0.95 |
 
 **Pasos:**
-- [ ] Agregar los 7 campos a `ColorScheme` con `#[serde(default)]` + función `derive_ui_colors(&self)` que los calcula desde los colores base cuando no se especifican
-- [ ] Actualizar `dracula-pro.lua` con valores explícitos para los 7 tokens
-- [ ] Actualizar los otros 4 temas bundled con valores coherentes (catppuccin, tokyo-night, gruvbox, one-dark)
-- [ ] Reemplazar los ~17 literales en `renderer.rs` por referencias a `colors.ui_*`
-- [ ] Exponer los tokens en la API Lua de temas (documentar en `config/default/ui.lua`)
+- [x] Agregar los 7 campos a `ColorScheme` con `#[serde(default)]` + función `derive_ui_colors(&self)` que los calcula desde los colores base cuando no se especifican
+- [x] Actualizar `dracula-pro.lua` con valores explícitos para los 7 tokens
+- [x] Actualizar los otros 4 temas bundled con valores coherentes (catppuccin, tokyo-night, gruvbox, one-dark)
+- [x] Reemplazar los ~17 literales en `renderer.rs` por referencias a `colors.ui_*`
+- [x] Exponer los tokens en la API Lua de temas (documentar en `config/default/ui.lua`)
 
 ### G-1: Maximizar / minimizar panes
 - [ ] `Leader z` — zoom del pane activo (ocupa todo el área de terminal, oculta separadores)

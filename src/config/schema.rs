@@ -216,9 +216,66 @@ pub struct ColorScheme {
     pub ansi: [[f32; 4]; 8],
     /// Bright ANSI colors 8-15.
     pub brights: [[f32; 4]; 8],
+
+    // ── Semantic UI tokens ────────────────────────────────────────────────
+    // All default to [0,0,0,0] as sentinel; derive_ui_colors() fills them
+    // from base colors when not explicitly set by a theme.
+
+    /// Focus border, toast border, sidebar accent. Default: cursor_bg.
+    #[serde(default)]
+    pub ui_accent: [f32; 4],
+    /// Background for panels, sidebar, palette, chat header. Default: background +15% brightness.
+    #[serde(default)]
+    pub ui_surface: [f32; 4],
+    /// Selected item in palette / sidebar. Default: selection_bg.
+    #[serde(default)]
+    pub ui_surface_active: [f32; 4],
+    /// Hover item in palette / sidebar / context menu. Default: background +8% brightness.
+    #[serde(default)]
+    pub ui_surface_hover: [f32; 4],
+    /// Separators and secondary text. Default: foreground at 35% alpha.
+    #[serde(default)]
+    pub ui_muted: [f32; 4],
+    /// Positive indicators ("yes" confirm, success). Default: ansi[2] (green).
+    #[serde(default)]
+    pub ui_success: [f32; 4],
+    /// Semi-transparent background for toasts and modals. Default: background at 0.95 alpha.
+    #[serde(default)]
+    pub ui_overlay: [f32; 4],
 }
 
 impl ColorScheme {
+    /// Fill any UI token that is still the zero sentinel from base colors.
+    /// Call this after deserialization when tokens may not have been specified.
+    pub fn derive_ui_colors(&mut self) {
+        let zero = [0.0f32; 4];
+        if self.ui_accent == zero {
+            self.ui_accent = self.cursor_bg;
+        }
+        if self.ui_surface == zero {
+            let [r, g, b, _] = self.background;
+            self.ui_surface = [(r + 0.15).min(1.0), (g + 0.15).min(1.0), (b + 0.15).min(1.0), 1.0];
+        }
+        if self.ui_surface_active == zero {
+            self.ui_surface_active = self.selection_bg;
+        }
+        if self.ui_surface_hover == zero {
+            let [r, g, b, _] = self.background;
+            self.ui_surface_hover = [(r + 0.08).min(1.0), (g + 0.08).min(1.0), (b + 0.08).min(1.0), 1.0];
+        }
+        if self.ui_muted == zero {
+            let [r, g, b, _] = self.foreground;
+            self.ui_muted = [r, g, b, 0.35];
+        }
+        if self.ui_success == zero {
+            self.ui_success = self.ansi[2];
+        }
+        if self.ui_overlay == zero {
+            let [r, g, b, _] = self.background;
+            self.ui_overlay = [r, g, b, 0.95];
+        }
+    }
+
     pub fn dracula_pro() -> Self {
         fn hex(s: &str) -> [f32; 4] {
             let s = s.trim_start_matches('#');
@@ -226,6 +283,10 @@ impl ColorScheme {
             let g = u8::from_str_radix(&s[2..4], 16).unwrap() as f32 / 255.0;
             let b = u8::from_str_radix(&s[4..6], 16).unwrap() as f32 / 255.0;
             [r, g, b, 1.0]
+        }
+        fn hexa(s: &str, a: f32) -> [f32; 4] {
+            let [r, g, b, _] = hex(s);
+            [r, g, b, a]
         }
         Self {
             foreground: hex("#e0e0e8"),
@@ -255,6 +316,13 @@ impl ColorScheme {
                 hex("#99ffee"),
                 hex("#ffffff"),
             ],
+            ui_accent:         hex("#9580ff"),   // purple — matches cursor_bg
+            ui_surface:        hex("#131316"),   // panel bg
+            ui_surface_active: hex("#454158"),   // selection_bg
+            ui_surface_hover:  hex("#1a1a1e"),   // background +8%
+            ui_muted:          hexa("#e0e0e8", 0.35), // foreground at 35% alpha
+            ui_success:        hex("#8aff80"),   // ansi green
+            ui_overlay:        hexa("#131316", 0.95), // panel bg near-opaque
         }
     }
 

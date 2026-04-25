@@ -549,8 +549,9 @@ impl RenderContext {
 
     /// Draw a rounded accent outline around the focused pane. Only called when pane_count > 1.
     /// Uses pane_rect (snapped to cell grid) to align exactly with separator lines.
-    pub fn build_focus_border(&mut self, focused: &crate::ui::PaneInfo) {
-        const FOCUS_COLOR: [f32; 4] = [0.306, 0.788, 0.690, 0.85];
+    pub fn build_focus_border(&mut self, focused: &crate::ui::PaneInfo, colors: &crate::config::schema::ColorScheme) {
+        let [r, g, b, _] = colors.ui_accent;
+        let focus_color = [r, g, b, 0.85];
         let border = 1.5 * self.scale_factor;
         let radius = 6.0 * self.scale_factor;
         let inset = border * 0.5;
@@ -578,7 +579,7 @@ impl RenderContext {
 
         self.rect_instances.push(RoundedRectInstance {
             rect: [x, y, right - x, bottom - y],
-            color: FOCUS_COLOR,
+            color: focus_color,
             radius,
             border_width: border,
             _pad: [0.0; 2],
@@ -729,14 +730,14 @@ impl RenderContext {
         let asst_fg = config.llm.ui.assistant_fg;
         let input_fg = config.llm.ui.input_fg;
 
-        const BORDER_FG: [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // purple
+        let border_fg = config.colors.ui_accent;
         const STREAM_FG: [f32; 4] = [0.95, 0.98, 0.55, 1.0]; // yellow
         const ERR_FG: [f32; 4] = [1.00, 0.33, 0.33, 1.0]; // red
-        const SEP_FG: [f32; 4] = [0.165, 0.165, 0.184, 1.0]; // #2a2a2f border
-        const DIM_FG: [f32; 4] = [0.420, 0.420, 0.478, 1.0]; // #6b6b7a muted
+        let sep_fg = config.colors.ui_muted;
+        let dim_fg = config.colors.ui_muted;
         const RUN_FG: [f32; 4] = [0.50, 0.98, 0.60, 1.0]; // green — run bar
         const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached files
-        const PICK_SEL: [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // purple — picker highlight
+        let pick_sel = config.colors.ui_accent;
         const PICK_FG: [f32; 4] = [0.80, 0.80, 0.90, 1.0]; // soft white — picker items
 
         const SPIN: [&str; 8] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"];
@@ -757,7 +758,7 @@ impl RenderContext {
         self.rect_instances
             .push(crate::renderer::rounded_rect::RoundedRectInstance {
                 rect: [px - border, py, pw + 2.0 * border, ph],
-                color: SEP_FG, // border
+                color: sep_fg, // border
                 radius: radius + border,
                 border_width: 0.0,
                 _pad: [0.0; 2],
@@ -857,13 +858,13 @@ impl RenderContext {
                     let attached = panel.attached_files.iter().any(|p| p.ends_with(path));
                     let marker = if attached { "✓ " } else { "  " };
                     let (text, fg) = if i == panel.file_picker_cursor {
-                        (format!("  ▸ {}{}", marker, trimmed), PICK_SEL)
+                        (format!("  ▸ {}{}", marker, trimmed), pick_sel)
                     } else {
                         (format!("    {}{}", marker, trimmed), PICK_FG)
                     };
                     self.push_shaped_row(&text, fg, panel_bg, row, co, panel_cols, font);
                 } else {
-                    self.push_shaped_row("", SEP_FG, panel_bg, row, co, panel_cols, font);
+                    self.push_shaped_row("", sep_fg, panel_bg, row, co, panel_cols, font);
                 }
             }
         } else if matches!(panel.state, PanelState::AwaitingConfirm) {
@@ -888,7 +889,7 @@ impl RenderContext {
                     let title_trimmed: String = title_line.chars().take(panel_cols).collect();
                     self.push_shaped_row(
                         &title_trimmed,
-                        BORDER_FG,
+                        border_fg,
                         panel_bg,
                         1,
                         co,
@@ -911,7 +912,7 @@ impl RenderContext {
                             let line = format!("{prefix}{text}");
                             self.push_shaped_row(&line, fg, panel_bg, row, co, panel_cols, font);
                         } else {
-                            self.push_shaped_row("", SEP_FG, panel_bg, row, co, panel_cols, font);
+                            self.push_shaped_row("", sep_fg, panel_bg, row, co, panel_cols, font);
                         }
                     }
                 }
@@ -937,7 +938,7 @@ impl RenderContext {
                     let (run_title, title_fg) = if is_risky {
                         (t!("ai.run_command_destructive"), WARN_FG)
                     } else {
-                        (t!("ai.run_command"), BORDER_FG)
+                        (t!("ai.run_command"), border_fg)
                     };
                     // Row 1: title
                     self.push_shaped_row(&run_title, title_fg, panel_bg, 1, co, panel_cols, font);
@@ -952,12 +953,12 @@ impl RenderContext {
                     self.push_shaped_row(&cmd_line, ADD_FG, panel_bg, 2, co, panel_cols, font);
                     // Rest: empty
                     for row in 3..sep_row {
-                        self.push_shaped_row("", SEP_FG, panel_bg, row, co, panel_cols, font);
+                        self.push_shaped_row("", sep_fg, panel_bg, row, co, panel_cols, font);
                     }
                 }
                 None => {
                     for row in 1..sep_row {
-                        self.push_shaped_row("", SEP_FG, panel_bg, row, co, panel_cols, font);
+                        self.push_shaped_row("", sep_fg, panel_bg, row, co, panel_cols, font);
                     }
                 }
             }
@@ -992,12 +993,12 @@ impl RenderContext {
                         name
                     };
                     let line = format!("    {}", trimmed);
-                    self.push_shaped_row(&line, DIM_FG, panel_bg, 2 + i, co, panel_cols, font);
+                    self.push_shaped_row(&line, dim_fg, panel_bg, 2 + i, co, panel_cols, font);
                 }
                 // Thin separator after file section (use pre-built cache from ChatPanel — TD-PERF-13)
                 self.push_shaped_row(
                     &panel.thin_separator_cache,
-                    SEP_FG,
+                    sep_fg,
                     panel_bg,
                     1 + file_section_rows,
                     co,
@@ -1064,7 +1065,7 @@ impl RenderContext {
                         push_line!(p, line.as_str(), fg, accent);
                     }
                 }
-                push_line!("", "", SEP_FG, None);
+                push_line!("", "", sep_fg, None);
             }
 
             if panel.is_streaming() && !panel.streaming_buf.is_empty() {
@@ -1139,7 +1140,7 @@ impl RenderContext {
             if panel.is_idle() {
                 if let Some(cmd) = panel.last_assistant_command() {
                     let max_cmd_w = panel_cols.saturating_sub(5);
-                    push_line!("", "", SEP_FG, None);
+                    push_line!("", "", sep_fg, None);
                     let mut buf = std::mem::take(&mut self.fmt_buf);
                     buf.clear();
                     buf.push_str("  \u{23ce}  ");
@@ -1173,7 +1174,7 @@ impl RenderContext {
                 let (text, fg, accent) = all_lines
                     .get(visible_start + i)
                     .map(|(t, f, a)| (t.as_str(), *f, *a))
-                    .unwrap_or(("", SEP_FG, None));
+                    .unwrap_or(("", sep_fg, None));
                 self.push_shaped_row(text, fg, panel_bg, row, co, panel_cols, font);
 
                 if let Some(color) = accent {
@@ -1198,7 +1199,7 @@ impl RenderContext {
         // ── Separator (use pre-built cache from ChatPanel — TD-PERF-13) ─────
         self.push_shaped_row(
             &panel.separator_cache,
-            SEP_FG,
+            sep_fg,
             panel_bg,
             sep_row,
             co,
@@ -1237,8 +1238,8 @@ impl RenderContext {
         let panel_bg = [0.0; 4]; // transparent
         let input_fg = config.llm.ui.input_fg;
 
-        const HINT_FG: [f32; 4] = [0.420, 0.420, 0.478, 1.0]; // #6b6b7a muted
-        const DIM_FG: [f32; 4] = [0.420, 0.420, 0.478, 1.0]; // #6b6b7a muted
+        let hint_fg = config.colors.ui_muted;
+        let dim_fg = config.colors.ui_muted;
 
         let co = term_cols;
         let hints_row = screen_rows - 1;
@@ -1282,7 +1283,7 @@ impl RenderContext {
             let inp_fg = if panel_focused && !file_picker_focused {
                 input_fg
             } else {
-                DIM_FG
+                dim_fg
             };
             let n = input_lines.len();
             let (vis1, vis2) = if n >= 2 {
@@ -1326,7 +1327,7 @@ impl RenderContext {
         let hints_display: String = hints.chars().take(panel_cols).collect();
         self.push_shaped_row(
             &hints_display,
-            HINT_FG,
+            hint_fg,
             panel_bg,
             hints_row,
             co,
@@ -1357,11 +1358,11 @@ impl RenderContext {
         let hint_row = screen_rows - AI_BLOCK_ROWS + 3;
 
         const BLOCK_BG: [f32; 4] = [0.055, 0.055, 0.063, 1.0]; // #0e0e10 deep bg
-        const BORDER_FG: [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // purple
+        const AI_BORDER_FG: [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // purple
         const INPUT_FG: [f32; 4] = [0.95, 0.95, 0.95, 1.0]; // white
         const RESP_FG: [f32; 4] = [0.50, 0.98, 0.60, 1.0]; // green
         const STREAM_FG: [f32; 4] = [0.95, 0.98, 0.55, 1.0]; // yellow
-        const HINT_FG: [f32; 4] = [0.38, 0.44, 0.64, 1.0]; // dim gray
+        const AI_HINT_FG: [f32; 4] = [0.38, 0.44, 0.64, 1.0]; // dim gray
         const ERR_FG: [f32; 4] = [1.00, 0.33, 0.33, 1.0]; // red
 
         const SPIN: [&str; 8] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"];
@@ -1376,7 +1377,7 @@ impl RenderContext {
             title,
             "─".repeat(w.saturating_sub(side + title.chars().count()))
         );
-        self.push_shaped_row(&sep, BORDER_FG, BLOCK_BG, sep_row, 0, w, font);
+        self.push_shaped_row(&sep, AI_BORDER_FG, BLOCK_BG, sep_row, 0, w, font);
 
         // Input row: "⚡ > <query>[cursor]"
         let cursor = if matches!(block.state, AiState::Typing) {
@@ -1393,7 +1394,7 @@ impl RenderContext {
                 self.push_shaped_row("", BLOCK_BG, BLOCK_BG, resp_row, 0, w, font);
                 self.push_shaped_row(
                     "  Enter: send   Esc: cancel",
-                    HINT_FG,
+                    AI_HINT_FG,
                     BLOCK_BG,
                     hint_row,
                     0,
@@ -1411,7 +1412,7 @@ impl RenderContext {
                     w,
                     font,
                 );
-                self.push_shaped_row("  Esc: cancel", HINT_FG, BLOCK_BG, hint_row, 0, w, font);
+                self.push_shaped_row("  Esc: cancel", AI_HINT_FG, BLOCK_BG, hint_row, 0, w, font);
             }
             AiState::Streaming => {
                 let lines = word_wrap(&block.response, w.saturating_sub(4));
@@ -1419,7 +1420,7 @@ impl RenderContext {
                 self.push_shaped_row(&line, STREAM_FG, BLOCK_BG, resp_row, 0, w, font);
                 self.push_shaped_row(
                     &format!("  {} streaming\u{2026}   Esc: cancel", spin),
-                    HINT_FG,
+                    AI_HINT_FG,
                     BLOCK_BG,
                     hint_row,
                     0,
@@ -1456,7 +1457,7 @@ impl RenderContext {
                 }
                 self.push_shaped_row(
                     "  Enter: run \u{23ce}   Esc: dismiss",
-                    HINT_FG,
+                    AI_HINT_FG,
                     BLOCK_BG,
                     hint_row,
                     0,
@@ -1468,7 +1469,7 @@ impl RenderContext {
                 let lines = word_wrap(err, w.saturating_sub(4));
                 let line = format!("  \u{2717} {}", lines.first().cloned().unwrap_or_default()); // ✗
                 self.push_shaped_row(&line, ERR_FG, BLOCK_BG, resp_row, 0, w, font);
-                self.push_shaped_row("  Esc: dismiss", HINT_FG, BLOCK_BG, hint_row, 0, w, font);
+                self.push_shaped_row("  Esc: dismiss", AI_HINT_FG, BLOCK_BG, hint_row, 0, w, font);
             }
             AiState::Hidden => {}
         }
@@ -1487,20 +1488,21 @@ impl RenderContext {
         sidebar_top_px: f32,
         sidebar_bottom_pad_px: f32,
         font: &crate::config::schema::FontConfig,
+        colors: &crate::config::schema::ColorScheme,
     ) {
         if sidebar_cols == 0 {
             return;
         }
 
-        let actual_sidebar_bg = [0.075, 0.075, 0.086, 1.0]; // #131316 panel
+        let actual_sidebar_bg = colors.ui_surface;
         const SIDEBAR_BG: [f32; 4] = [0.0; 4]; // transparent
-        const SIDEBAR_ITEM_ACTIVE_BG: [f32; 4] = [0.12, 0.12, 0.14, 1.0];
-        const SIDEBAR_ITEM_HOVER_BG: [f32; 4] = [0.10, 0.10, 0.12, 1.0];
-        const SIDEBAR_FG: [f32; 4] = [0.878, 0.878, 0.910, 1.0]; // #e0e0e8
-        const SIDEBAR_DIM_FG: [f32; 4] = [0.420, 0.420, 0.478, 1.0]; // #6b6b7a
-        const SIDEBAR_ACCENT: [f32; 4] = [0.74, 0.58, 0.98, 1.0];
-        const SIDEBAR_DOT_ACTIVE: [f32; 4] = [0.306, 0.788, 0.690, 1.0]; // #4ec9b0 teal
-        const SIDEBAR_SEP_FG: [f32; 4] = [0.165, 0.165, 0.184, 1.0]; // #2a2a2f border
+        let sidebar_item_active_bg = colors.ui_surface_active;
+        let sidebar_item_hover_bg = colors.ui_surface_hover;
+        let sidebar_fg = colors.foreground;
+        let sidebar_dim_fg = colors.ui_muted;
+        let sidebar_accent = colors.ui_accent;
+        let sidebar_dot_active = colors.ui_accent;
+        let sidebar_sep_fg = colors.ui_muted;
 
         let cw = self.shaper.cell_width;
         let ch = self.shaper.cell_height;
@@ -1542,7 +1544,7 @@ impl RenderContext {
                 visible_sidebar_px + 2.0 * border,
                 visible_h + 2.0 * border,
             ],
-            color: SIDEBAR_SEP_FG,
+            color: sidebar_sep_fg,
             radius: radius + border,
             border_width: 0.0,
             _pad: [0.0; 2],
@@ -1575,8 +1577,8 @@ impl RenderContext {
             header.push_str(&" ".repeat(sidebar_cols - header_chars - 2));
         }
         header.push('+');
-        push_sidebar_row(self, &header, SIDEBAR_ACCENT, SIDEBAR_BG, 0);
-        push_sidebar_row(self, "", SIDEBAR_SEP_FG, SIDEBAR_BG, 1);
+        push_sidebar_row(self, &header, sidebar_accent, SIDEBAR_BG, 0);
+        push_sidebar_row(self, "", sidebar_sep_fg, SIDEBAR_BG, 1);
 
         for (idx, ws) in workspaces.iter().enumerate() {
             let base_row = 2 + idx * 2;
@@ -1585,9 +1587,9 @@ impl RenderContext {
 
             if active || selected {
                 let row_bg = if active {
-                    SIDEBAR_ITEM_ACTIVE_BG
+                    sidebar_item_active_bg
                 } else {
-                    SIDEBAR_ITEM_HOVER_BG
+                    sidebar_item_hover_bg
                 };
                 let margin_x = 8.0 * self.scale_factor;
                 let margin_y = 2.0 * self.scale_factor;
@@ -1610,7 +1612,7 @@ impl RenderContext {
                     let accent_py = pill_py + 4.0 * self.scale_factor;
                     self.rect_instances.push(RoundedRectInstance {
                         rect: [pill_px, accent_py, accent_w, accent_h],
-                        color: SIDEBAR_DOT_ACTIVE,
+                        color: sidebar_dot_active,
                         radius: 1.5 * self.scale_factor,
                         border_width: 0.0,
                         _pad: [0.0; 2],
@@ -1631,7 +1633,7 @@ impl RenderContext {
             let name_fg = if active {
                 [1.0, 1.0, 1.0, 1.0] // Bright white for active
             } else {
-                SIDEBAR_FG // Use default sidebar foreground for inactive
+                sidebar_fg // Use default sidebar foreground for inactive
             };
 
             let trimmed_name: String = name.chars().take(sidebar_cols.saturating_sub(4)).collect();
@@ -1658,7 +1660,7 @@ impl RenderContext {
             if sub_w < sidebar_cols {
                 subtitle.push_str(&" ".repeat(sidebar_cols - sub_w));
             }
-            push_sidebar_row(self, &subtitle, SIDEBAR_DIM_FG, SIDEBAR_BG, base_row + 1);
+            push_sidebar_row(self, &subtitle, sidebar_dim_fg, SIDEBAR_BG, base_row + 1);
         }
 
         if total_rows > 0 {
@@ -1668,7 +1670,7 @@ impl RenderContext {
                 push_sidebar_row(
                     self,
                     " j/k ↕  Enter ✓  ^Fa +  ^F. ✎",
-                    SIDEBAR_DIM_FG,
+                    sidebar_dim_fg,
                     SIDEBAR_BG,
                     footer_row,
                 );
@@ -1688,6 +1690,7 @@ impl RenderContext {
         };
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn build_palette_instances(
         &mut self,
         palette: &CommandPalette,
@@ -1696,6 +1699,7 @@ impl RenderContext {
         total_rows: usize,
         pad_x: f32,
         pad_y: f32,
+        colors: &crate::config::schema::ColorScheme,
     ) {
         let palette_width = 60_usize;
         let palette_height = 15_usize;
@@ -1707,12 +1711,12 @@ impl RenderContext {
         let start_col = (total_cols - palette_width) / 2;
         let start_row = (total_rows - palette_height) / 2;
 
-        let bg = [0.11, 0.11, 0.14, 0.95]; // softer, translucent panel
+        let bg = { let [r, g, b, _] = colors.ui_overlay; [r, g, b, 0.95] };
         let transparent = [0.0f32; 4];
-        let fg = [0.878, 0.878, 0.910, 1.0]; // #e0e0e8
-        let highlight_bg = [0.22, 0.22, 0.28, 1.0];
-        let prompt_fg = [0.306, 0.788, 0.690, 1.0]; // #4ec9b0 teal
-        let border_color = [0.25, 0.25, 0.32, 1.0]; // lighter border
+        let fg = colors.foreground;
+        let highlight_bg = colors.ui_surface_active;
+        let prompt_fg = colors.ui_accent;
+        let border_color = colors.ui_muted;
 
         let cw = self.shaper.cell_width;
         let ch = self.shaper.cell_height;
@@ -1832,6 +1836,7 @@ impl RenderContext {
         font: &crate::config::schema::FontConfig,
         total_cols: usize,
         total_rows: usize,
+        colors: &crate::config::schema::ColorScheme,
     ) {
         use crate::ui::context_menu::CONTEXT_MENU_WIDTH;
 
@@ -1846,12 +1851,12 @@ impl RenderContext {
             return;
         }
 
-        let bg = [0.075, 0.075, 0.086, 0.97]; // #131316 panel
-        let fg = [0.878, 0.878, 0.910, 1.0]; // #e0e0e8
-        let hover_bg = [0.12, 0.12, 0.14, 1.0];
-        let keybind_fg = [0.420, 0.420, 0.478, 1.0]; // #6b6b7a muted
+        let bg = colors.ui_overlay;
+        let fg = colors.foreground;
+        let hover_bg = colors.ui_surface_hover;
+        let keybind_fg = colors.ui_muted;
 
-        let sep_fg = [0.3, 0.3, 0.5, 1.0];
+        let sep_fg = colors.ui_muted;
 
         let label_fg: [f32; 4] = [0.65, 0.65, 0.80, 1.0]; // dim, non-interactive
 
@@ -1908,6 +1913,7 @@ impl RenderContext {
     ///
     /// Left segments are rendered with › separators; right segments are
     /// right-aligned with │ separators. The gap between them fills with `bar_bg`.
+    #[allow(clippy::too_many_arguments)]
     pub fn build_status_bar_instances(
         &mut self,
         bar: &crate::ui::status_bar::StatusBar,
@@ -1916,6 +1922,7 @@ impl RenderContext {
         row: usize,
         pad_y: f32,
         win_w: f32,
+        colors: &crate::config::schema::ColorScheme,
     ) {
         use crate::ui::status_bar::StatusBar;
 
@@ -1940,7 +1947,7 @@ impl RenderContext {
         }
         use crate::config::schema::StatusBarStyle;
         let powerline = bar.style == StatusBarStyle::Powerline;
-        let plain_sep_fg = [0.40, 0.40, 0.55, 1.0];
+        let plain_sep_fg = colors.ui_muted;
 
         // ── Left side ────────────────────────────────────────────────────────
         let mut col = 0usize;
@@ -2075,6 +2082,7 @@ impl RenderContext {
         panel_visible: bool,
         // When `Some`, the active tab pill shows this input string with a cursor instead of its title.
         rename_input: Option<&str>,
+        colors: &crate::config::schema::ColorScheme,
     ) {
         let _ = bar_bg;
 
@@ -2097,10 +2105,9 @@ impl RenderContext {
         let right_reserve = 100.0 * sf;
         let titlebar_h = super::TITLEBAR_HEIGHT * sf;
 
-        // Dracula palette
-        const ACTIVE_FG: [f32; 4] = [0.878, 0.878, 0.910, 1.0]; // #e0e0e8
-        const INACTIVE_FG: [f32; 4] = [0.420, 0.420, 0.478, 1.0]; // #6b6b7a muted
-        const BTN_COLOR: [f32; 4] = [0.165, 0.165, 0.184, 1.0]; // #2a2a2f border
+        let active_fg = colors.foreground;
+        let inactive_fg = colors.ui_muted;
+        let btn_color = colors.ui_surface;
         let transparent = [0.0f32; 4];
 
         let cell_w = self.shaper.cell_width;
@@ -2115,15 +2122,15 @@ impl RenderContext {
         let text_top_y = pill_y + (pill_h - cell_h).max(0.0) / 2.0;
         let text_row_f = (text_top_y - gpu_pad_y) / cell_h;
 
-        const BTN_ACTIVE: [f32; 4] = [0.36, 0.27, 0.60, 1.0]; // tinted purple when panel open
+        let btn_active = { let [r, g, b, _] = colors.ui_accent; [r * 0.6, g * 0.6, b * 0.6, 1.0] };
 
         // ── Left control buttons ─────────────────────────────────────────
         self.rect_instances.push(RoundedRectInstance {
             rect: [sidebar_btn_x, btn_y, btn_w, btn_h],
             color: if sidebar_visible {
-                BTN_ACTIVE
+                btn_active
             } else {
-                BTN_COLOR
+                btn_color
             },
             radius,
             border_width: 0.0,
@@ -2131,7 +2138,7 @@ impl RenderContext {
         });
         self.rect_instances.push(RoundedRectInstance {
             rect: [ai_btn_x, btn_y, btn_w, btn_h],
-            color: if panel_visible { BTN_ACTIVE } else { BTN_COLOR },
+            color: if panel_visible { btn_active } else { btn_color },
             radius,
             border_width: 0.0,
             _pad: [0.0; 2],
@@ -2139,8 +2146,8 @@ impl RenderContext {
         // ── Button icons ─────────────────────────────────────────────────
         let mk_icon_x =
             |btn_x: f32| -> f32 { (btn_x + (btn_w - cell_w) / 2.0 - pad_left) / cell_w };
-        const ICON_DIM: [f32; 4] = [0.420, 0.420, 0.478, 1.0]; // #6b6b7a muted
-        const ICON_LIT: [f32; 4] = [0.878, 0.878, 0.910, 1.0]; // #e0e0e8
+        let icon_dim = colors.ui_muted;
+        let icon_lit = colors.foreground;
         let sidebar_icon_col = mk_icon_x(sidebar_btn_x);
         let ai_icon_col = mk_icon_x(ai_btn_x);
 
@@ -2156,13 +2163,13 @@ impl RenderContext {
             self,
             "≡",
             sidebar_icon_col,
-            if sidebar_visible { ICON_LIT } else { ICON_DIM },
+            if sidebar_visible { icon_lit } else { icon_dim },
         );
         push_btn_icon(
             self,
             "✦",
             ai_icon_col,
-            if panel_visible { ICON_LIT } else { ICON_DIM },
+            if panel_visible { icon_lit } else { icon_dim },
         );
 
         // ── Flat tabs (only when 2+ tabs) ────────────────────────────────
@@ -2171,8 +2178,8 @@ impl RenderContext {
         }
 
         // Active tab: flat subtle rect, not a pill. Inactive: transparent bg.
-        const ACTIVE_TAB_BG: [f32; 4] = [0.13, 0.13, 0.155, 1.0]; // slightly elevated
-        const ACTIVE_UNDERLINE: [f32; 4] = [0.831, 0.643, 0.298, 1.0]; // #d4a44c amber
+        let active_tab_bg = colors.ui_surface_active;
+        let active_underline = colors.ui_accent;
         let flat_radius = 2.0 * sf;
 
         let effective_tabs_start = tabs_start_x.max(pad_left);
@@ -2191,7 +2198,7 @@ impl RenderContext {
             }
 
             let is_active = i == active_idx;
-            let fg = if is_active { ACTIVE_FG } else { INACTIVE_FG };
+            let fg = if is_active { active_fg } else { inactive_fg };
 
             col += 1; // gap before tab
             if col >= max_cols {
@@ -2218,7 +2225,7 @@ impl RenderContext {
                 // Subtle flat background rect
                 self.rect_instances.push(RoundedRectInstance {
                     rect: [tab_x, pill_y, tab_w, pill_h],
-                    color: ACTIVE_TAB_BG,
+                    color: active_tab_bg,
                     radius: flat_radius,
                     border_width: 0.0,
                     _pad: [0.0; 2],
@@ -2227,7 +2234,7 @@ impl RenderContext {
                 let underline_h = (1.5 * sf).max(1.0);
                 self.rect_instances.push(RoundedRectInstance {
                     rect: [tab_x, pill_y + pill_h - underline_h, tab_w, underline_h],
-                    color: ACTIVE_UNDERLINE,
+                    color: active_underline,
                     radius: 0.0,
                     border_width: 0.0,
                     _pad: [0.0; 2],
@@ -2253,14 +2260,15 @@ impl RenderContext {
         history_size: usize,
         screen_rows: usize,
         term_cols: usize,
+        colors: &crate::config::schema::ColorScheme,
     ) {
         if history_size == 0 || screen_rows == 0 || term_cols == 0 {
             return;
         }
 
         const SCROLLBAR_PX: f32 = 6.0;
-        const TRACK_COLOR: [f32; 4] = [0.075, 0.075, 0.086, 1.0]; // #131316
-        const THUMB_COLOR: [f32; 4] = [0.165, 0.165, 0.184, 1.0]; // #2a2a2f border
+        let track_color = colors.ui_surface;
+        let thumb_color = colors.ui_muted;
 
         let cell_w = self.shaper.cell_width;
         let cell_h = self.shaper.cell_height;
@@ -2285,7 +2293,7 @@ impl RenderContext {
             grid_pos: [col, 0.0],
             atlas_uv: [0.0; 4],
             fg: [0.0; 4],
-            bg: TRACK_COLOR,
+            bg: track_color,
             glyph_offset: x_off,
             glyph_size: [SCROLLBAR_PX, screen_rows as f32 * cell_h],
             flags: FLAG_CURSOR,
@@ -2297,7 +2305,7 @@ impl RenderContext {
             grid_pos: [col, thumb_start as f32],
             atlas_uv: [0.0; 4],
             fg: [0.0; 4],
-            bg: THUMB_COLOR,
+            bg: thumb_color,
             glyph_offset: x_off,
             glyph_size: [SCROLLBAR_PX, thumb_rows as f32 * cell_h],
             flags: FLAG_CURSOR,
@@ -2378,16 +2386,17 @@ impl RenderContext {
         font: &crate::config::schema::FontConfig,
         total_cols: usize,
         total_rows: usize,
+        colors: &crate::config::schema::ColorScheme,
     ) {
         if total_cols == 0 || total_rows == 0 {
             return;
         }
 
-        const BAR_BG: [f32; 4] = [0.075, 0.075, 0.086, 1.0]; // #131316 panel
-        const QUERY_FG: [f32; 4] = [0.878, 0.878, 0.910, 1.0]; // #e0e0e8
-        const COUNT_FG: [f32; 4] = [0.831, 0.643, 0.298, 1.0]; // #d4a44c amber
-        const HINT_FG: [f32; 4] = [0.420, 0.420, 0.478, 1.0]; // #6b6b7a muted
-        const CURSOR_FG: [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // purple
+        let bar_bg = colors.ui_surface;
+        let query_fg = colors.foreground;
+        let count_fg = colors.ui_accent;
+        let hint_fg = colors.ui_muted;
+        let cursor_fg = colors.ui_accent;
 
         let count_label = search.count_label();
 
@@ -2413,8 +2422,8 @@ impl RenderContext {
         let q_width = query_display.chars().count().min(bar_width);
         self.push_shaped_row(
             &query_display,
-            QUERY_FG,
-            BAR_BG,
+            query_fg,
+            bar_bg,
             row,
             col_offset,
             q_width,
@@ -2430,8 +2439,8 @@ impl RenderContext {
                 .min(bar_width.saturating_sub(q_width));
             self.push_shaped_row(
                 &count_display,
-                COUNT_FG,
-                BAR_BG,
+                count_fg,
+                bar_bg,
                 row,
                 seg_offset,
                 c_width,
@@ -2443,7 +2452,7 @@ impl RenderContext {
         // Segment 3: hint
         let remaining = bar_width.saturating_sub(seg_offset - col_offset);
         if remaining > 0 {
-            self.push_shaped_row(hint, HINT_FG, BAR_BG, row, seg_offset, remaining, font);
+            self.push_shaped_row(hint, hint_fg, bar_bg, row, seg_offset, remaining, font);
         }
 
         // Cursor blink at end of query (a 1-cell colored block)
@@ -2452,16 +2461,14 @@ impl RenderContext {
             self.instances.push(CellVertex {
                 grid_pos: [cursor_col as f32, row as f32],
                 atlas_uv: [0.0; 4],
-                fg: CURSOR_FG,
-                bg: CURSOR_FG,
+                fg: cursor_fg,
+                bg: cursor_fg,
                 glyph_offset: [0.0; 2],
                 glyph_size: [0.0; 2],
                 flags: 0,
                 _pad: 0,
             });
         }
-
-        let _ = CURSOR_FG; // suppress if unused after cursor removal
     }
 }
 
@@ -2575,15 +2582,16 @@ impl RenderContext {
         total_cols: usize,
         pad_x: f32,
         pad_y: f32,
+        colors: &crate::config::schema::ColorScheme,
     ) {
         let toast_width = (msg.len() + 4).min(total_cols);
         if toast_width == 0 || total_cols < toast_width {
             return;
         }
 
-        let bg = [0.22, 0.20, 0.32, 0.97];
-        let fg = [0.95, 0.95, 1.0, 1.0];
-        let border_color = [0.49, 0.36, 0.87, 1.0];
+        let bg = colors.ui_overlay;
+        let fg = colors.foreground;
+        let border_color = colors.ui_accent;
 
         let cw = self.shaper.cell_width;
         let ch = self.shaper.cell_height;

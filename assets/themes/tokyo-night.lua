@@ -16,4 +16,12 @@ return {
         "#414868", "#f7768e", "#9ece6a", "#e0af68",
         "#7aa2f7", "#bb9af7", "#7dcfff", "#c0caf5",
     },
+    -- UI tokens
+    ui_accent         = "#7aa2f7",
+    ui_surface        = "#24283b",
+    ui_surface_active = "#33467c",
+    ui_surface_hover  = "#1f2335",
+    ui_muted          = "#565f89",
+    ui_success        = "#9ece6a",
+    ui_overlay        = "#24283bf2",
 }

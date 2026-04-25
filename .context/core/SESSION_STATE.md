@@ -1,14 +1,27 @@
 # Session State
 
-**Last Updated:** 2026-04-24
-**Session Focus:** D-5 hot-reload MCP + REC-PERF-01/02/05 + slash commands + keybind fixes
+**Last Updated:** 2026-04-25
+**Session Focus:** Phase 5 G-0 — UI tokens en ColorScheme
 
 ## Branch: `master`
 
 ## Estado actual
 
-**Phase 1–3 + 3.5 + A + 3.6 + B + C + D (todas las fases) COMPLETE. v0.1.3 publicado.**
-**Fase 4 (plugins) es la siguiente fase mayor. Deuda técnica: 2 items P3 abiertos (TD-MEM-30, TD-PERF-40).**
+**Phase 1–3 + 3.5 + A + 3.6 + B + C + D (todas las fases) COMPLETE. Phase 5 G-0 COMPLETE.**
+**v0.1.3 publicado. Fase 4 (plugins) y Phase 5 (UX Polish) en paralelo. Deuda técnica: 2 items P3 abiertos (TD-MEM-30, TD-PERF-40).**
+
+---
+
+## Esta sesión (2026-04-25) — Phase 5 G-0: UI tokens
+
+### G-0: Sistema de temas — UI tokens
+- `src/config/schema.rs` — 7 nuevos campos en `ColorScheme`: `ui_accent`, `ui_surface`, `ui_surface_active`, `ui_surface_hover`, `ui_muted`, `ui_success`, `ui_overlay`. Todos con `#[serde(default)]` y sentinel `[0.0;4]`. Método `derive_ui_colors(&mut self)` calcula valores desde colores base cuando no se especifican.
+- `src/config/lua.rs` — `table_to_color_scheme` lee los 7 tokens opcionales y llama `derive_ui_colors()`. `parse_hex_linear` extendido para soportar hex 8-char `#rrggbbaa`.
+- `src/app/renderer.rs` — ~20+ literales hardcodeados reemplazados por `colors.ui_*` en: `build_focus_border`, `build_palette_instances`, `build_context_menu_instances`, `build_tab_bar_instances`, `build_scroll_bar_instances`, `build_search_bar_instances`, `build_status_bar_instances`, `build_workspace_sidebar_instances`, `build_toast_instances`, `build_chat_panel_instances`. Cada función recibió `colors: &ColorScheme`.
+- `src/app/mod.rs` — 9 call sites actualizados para pasar `&self.config.colors`. Separador sidebar: `[0.165, 0.165, 0.184, 1.0]` → `ui_muted`.
+- `assets/themes/` — Los 5 temas bundled actualizados con tokens explícitos coherentes con su paleta.
+- `config/default/ui.lua` — Tokens documentados como campos comentados con descripción.
+- `~/.config/petruterm/themes/` — Sincronizados con los bundled.
 
 ---
 

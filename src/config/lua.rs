@@ -16,7 +16,12 @@ fn parse_hex_linear(s: &str) -> [f32; 4] {
     let r = u8::from_str_radix(&s[0..2], 16).unwrap_or(0) as f32 / 255.0;
     let g = u8::from_str_radix(&s[2..4], 16).unwrap_or(0) as f32 / 255.0;
     let b = u8::from_str_radix(&s[4..6], 16).unwrap_or(0) as f32 / 255.0;
-    [r, g, b, 1.0]
+    let a = if s.len() >= 8 {
+        u8::from_str_radix(&s[6..8], 16).unwrap_or(255) as f32 / 255.0
+    } else {
+        1.0
+    };
+    [r, g, b, a]
 }
 
 /// Stdlib available to user config scripts.
@@ -244,7 +249,13 @@ fn table_to_color_scheme(table: LuaTable) -> LuaResult<ColorScheme> {
         }
         arr
     };
-    Ok(ColorScheme {
+    let get_opt_color = |key: &str| -> [f32; 4] {
+        table
+            .get::<String>(key)
+            .map(|s| parse_hex_linear(&s))
+            .unwrap_or([0.0; 4])
+    };
+    let mut scheme = ColorScheme {
         foreground: get_color("foreground"),
         background: get_color("background"),
         cursor_bg: get_color("cursor_bg"),
@@ -254,7 +265,16 @@ fn table_to_color_scheme(table: LuaTable) -> LuaResult<ColorScheme> {
         selection_fg: get_color("selection_fg"),
         ansi: get_palette("ansi"),
         brights: get_palette("brights"),
-    })
+        ui_accent:         get_opt_color("ui_accent"),
+        ui_surface:        get_opt_color("ui_surface"),
+        ui_surface_active: get_opt_color("ui_surface_active"),
+        ui_surface_hover:  get_opt_color("ui_surface_hover"),
+        ui_muted:          get_opt_color("ui_muted"),
+        ui_success:        get_opt_color("ui_success"),
+        ui_overlay:        get_opt_color("ui_overlay"),
+    };
+    scheme.derive_ui_colors();
+    Ok(scheme)
 }
 
 /// Inject the `petruterm` global table into the Lua VM.
