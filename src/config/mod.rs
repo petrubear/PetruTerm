@@ -8,8 +8,7 @@ use anyhow::Result;
 use std::path::PathBuf;
 
 /// Default config source embedded in the binary.
-const DEFAULT_SYSTEM_PROMPT: &str =
-    include_str!("../../config/default/system/system_prompt.md");
+const DEFAULT_SYSTEM_PROMPT: &str = include_str!("../../config/default/system/system_prompt.md");
 const DEFAULT_CONFIG: &str = include_str!("../../config/default/config.lua");
 const DEFAULT_UI: &str = include_str!("../../config/default/ui.lua");
 const DEFAULT_PERF: &str = include_str!("../../config/default/perf.lua");
@@ -67,7 +66,8 @@ pub fn system_prompt_path() -> PathBuf {
 
 /// Load the system prompt from disk, falling back to the embedded default.
 pub fn load_system_prompt() -> String {
-    std::fs::read_to_string(system_prompt_path()).unwrap_or_else(|_| DEFAULT_SYSTEM_PROMPT.to_string())
+    std::fs::read_to_string(system_prompt_path())
+        .unwrap_or_else(|_| DEFAULT_SYSTEM_PROMPT.to_string())
 }
 
 /// Scan the themes directory and return a sorted list of theme names (stem of each .lua file).
@@ -209,7 +209,10 @@ fn ensure_default_configs(dir: &std::path::Path) -> Result<()> {
     let system_prompt_dest = system_dir.join("system_prompt.md");
     if !system_prompt_dest.exists() {
         std::fs::write(&system_prompt_dest, DEFAULT_SYSTEM_PROMPT)?;
-        log::info!("Created default system prompt: {}", system_prompt_dest.display());
+        log::info!(
+            "Created default system prompt: {}",
+            system_prompt_dest.display()
+        );
     }
 
     // Seed bundled themes into ~/.config/petruterm/themes/ (never overwrite user edits).
