@@ -51,6 +51,7 @@ const FG_DIM: [f32; 4] = [0.420, 0.420, 0.478, 1.0]; // #6b6b7a — muted
 const BG_LEADER_ACTIVE: [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // purple  #9580ff
 const BG_LEADER_RESIZE: [f32; 4] = [0.831, 0.643, 0.298, 1.0]; // amber #d4a44c
 const BG_LEADER_INACTIVE: [f32; 4] = [0.075, 0.075, 0.086, 1.0]; // #131316
+const BG_ZOOM: [f32; 4] = [0.039, 0.235, 0.196, 1.0]; // dark teal #0a3c32
 const BG_CWD: [f32; 4] = [0.039, 0.075, 0.063, 1.0]; // dark teal tint
 const BG_GIT: [f32; 4] = [0.075, 0.055, 0.020, 1.0]; // dark amber tint
 const BG_ERROR: [f32; 4] = [0.60, 0.12, 0.12, 1.0]; // red
@@ -74,6 +75,7 @@ impl StatusBar {
         cwd: Option<&std::path::Path>,
         git_branch: Option<&str>,
         last_exit_code: Option<i32>,
+        pane_zoomed: bool,
         style: StatusBarStyle,
         battery: Option<(u8, bool)>,
     ) -> Self {
@@ -101,6 +103,15 @@ impl StatusBar {
             bg: leader_bg,
             kind: SegmentKind::Leader,
         });
+
+        if pane_zoomed {
+            bar.left.push(StatusBarSegment {
+                text: " ZOOM ".to_string(),
+                fg: FG_DEFAULT,
+                bg: BG_ZOOM,
+                kind: SegmentKind::Leader,
+            });
+        }
 
         // Current working directory (truncated).
         if let Some(path) = cwd {

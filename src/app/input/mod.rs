@@ -408,6 +408,25 @@ impl InputHandler {
                 }
 
                 // ── Single-key leader dispatch ────────────────────────────────
+                // Leader+s → toggle sidebar (alias for Leader+e+e).
+                if s.as_str() == "s" {
+                    self.toggle_sidebar_requested = true;
+                    return;
+                }
+                // Leader+z → toggle zoom on focused pane.
+                if s.as_str() == "z" {
+                    if let Some(rc) = render_ctx.as_mut() {
+                        ui.handle_palette_action(
+                            Action::ZoomPane,
+                            mux,
+                            rc,
+                            config,
+                            window,
+                            wakeup_proxy,
+                        );
+                    }
+                    return;
+                }
                 // Leader+w → new workspace (single key, no sub-prefix).
                 if s.as_str() == "w" {
                     if let Some(rc) = render_ctx.as_mut() {

@@ -77,6 +77,8 @@ pub struct Mux {
     next_workspace_id: usize,
     /// tabs+panes for inactive workspaces; restored on switch.
     inactive_workspaces: Vec<WorkspaceData>,
+    /// Terminal ID of the pane currently zoomed to fill the viewport. None if no zoom.
+    pub zoomed_pane: Option<usize>,
 }
 
 impl Mux {
@@ -95,6 +97,7 @@ impl Mux {
             active_workspace_id: 0,
             next_workspace_id: 1,
             inactive_workspaces: Vec::new(),
+            zoomed_pane: None,
         }
     }
 
@@ -456,6 +459,7 @@ impl Mux {
                 if let Some(pane_mgr) = self.panes.get_mut(active) {
                     pane_mgr.split(dir, new_id);
                 }
+                self.zoomed_pane = None;
                 self.pending_lua_events.push("pane_split");
             }
             Err(e) => log::error!("Failed to create terminal for split: {e}"),
@@ -470,6 +474,7 @@ impl Mux {
                     *slot = None;
                 }
                 self.closed_ids.push(closed_id);
+                self.zoomed_pane = None;
                 self.pending_lua_events.push("pane_closed");
             }
         }
@@ -480,6 +485,15 @@ impl Mux {
         if let Some(pane_mgr) = self.panes.get_mut(active) {
             pane_mgr.focus_dir(dir);
         }
+    }
+
+    pub fn cmd_toggle_zoom_pane(&mut self) {
+        let focused = self.focused_terminal_id();
+        self.zoomed_pane = if self.zoomed_pane == Some(focused) {
+            None
+        } else {
+            Some(focused)
+        };
     }
 
     /// Resize the focused pane by moving its nearest ancestor separator `delta` in `dir`.

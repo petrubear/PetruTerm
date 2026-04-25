@@ -77,6 +77,11 @@ pub struct App {
     /// True once the user presses an arrow key in the sidebar. Only then does
     /// Enter confirm a workspace switch — prevents stealing Enter from the terminal.
     sidebar_kbd_active: bool,
+    /// Active section in the sidebar: 0=Workspaces, 1=MCP, 2=Skills, 3=Steering.
+    info_sidebar_section: u8,
+    mcp_scroll: usize,
+    skills_scroll: usize,
+    steering_scroll: usize,
 
     /// Current battery status. None until the first poll or on desktops with no battery.
     battery_status: Option<crate::platform::battery::BatteryStatus>,
@@ -142,6 +147,10 @@ impl App {
             sidebar_nav_cursor: 0,
             sidebar_rename_input: None,
             sidebar_kbd_active: false,
+            info_sidebar_section: 0,
+            mcp_scroll: 0,
+            skills_scroll: 0,
+            steering_scroll: 0,
             battery_status: None,
             battery_last_poll: std::time::Instant::now(),
             battery_saver_active: false,
@@ -691,29 +700,85 @@ impl App {
         }
 
         match &event.logical_key {
+            // Tab / Shift+Tab: cycle active section.
+            Key::Named(NamedKey::Tab) => {
+                let shift = self.input.modifiers.state().shift_key();
+                self.info_sidebar_section = if shift {
+                    (self.info_sidebar_section + 3) % 4
+                } else {
+                    (self.info_sidebar_section + 1) % 4
+                };
+                self.sidebar_kbd_active = true;
+                true
+            }
+            // ArrowDown / j: move down within the active section.
             Key::Named(NamedKey::ArrowDown) => {
-                let max = self.mux.workspace_count().saturating_sub(1);
-                self.sidebar_nav_cursor = (self.sidebar_nav_cursor + 1).min(max);
-                self.sidebar_kbd_active = true;
-                true
-            }
-            Key::Named(NamedKey::ArrowUp) => {
-                self.sidebar_nav_cursor = self.sidebar_nav_cursor.saturating_sub(1);
-                self.sidebar_kbd_active = true;
-                true
-            }
-            // Enter only confirms when the user has explicitly navigated via arrows,
-            // preventing the sidebar from stealing Enter while the terminal is in use.
-            Key::Named(NamedKey::Enter) if self.sidebar_kbd_active => {
-                if let Some(id) = self.sidebar_selected_workspace_id() {
-                    self.mux.cmd_switch_workspace(id);
-                    self.refresh_status_cache();
+                match self.info_sidebar_section {
+                    0 => {
+                        let max = self.mux.workspace_count().saturating_sub(1);
+                        self.sidebar_nav_cursor = (self.sidebar_nav_cursor + 1).min(max);
+                    }
+                    1 => self.mcp_scroll = self.mcp_scroll.saturating_add(1),
+                    2 => self.skills_scroll = self.skills_scroll.saturating_add(1),
+                    3 => self.steering_scroll = self.steering_scroll.saturating_add(1),
+                    _ => {}
                 }
-                self.sidebar_visible = false;
-                self.sidebar_rename_input = None;
-                self.sidebar_kbd_active = false;
-                self.apply_tab_bar_padding();
-                self.resize_terminals_for_panel();
+                self.sidebar_kbd_active = true;
+                true
+            }
+            // ArrowUp / k: move up within the active section.
+            Key::Named(NamedKey::ArrowUp) => {
+                match self.info_sidebar_section {
+                    0 => self.sidebar_nav_cursor = self.sidebar_nav_cursor.saturating_sub(1),
+                    1 => self.mcp_scroll = self.mcp_scroll.saturating_sub(1),
+                    2 => self.skills_scroll = self.skills_scroll.saturating_sub(1),
+                    3 => self.steering_scroll = self.steering_scroll.saturating_sub(1),
+                    _ => {}
+                }
+                self.sidebar_kbd_active = true;
+                true
+            }
+            Key::Character(s) if s.as_str() == "j" => {
+                match self.info_sidebar_section {
+                    0 => {
+                        let max = self.mux.workspace_count().saturating_sub(1);
+                        self.sidebar_nav_cursor = (self.sidebar_nav_cursor + 1).min(max);
+                    }
+                    1 => self.mcp_scroll = self.mcp_scroll.saturating_add(1),
+                    2 => self.skills_scroll = self.skills_scroll.saturating_add(1),
+                    3 => self.steering_scroll = self.steering_scroll.saturating_add(1),
+                    _ => {}
+                }
+                self.sidebar_kbd_active = true;
+                true
+            }
+            Key::Character(s) if s.as_str() == "k" => {
+                match self.info_sidebar_section {
+                    0 => self.sidebar_nav_cursor = self.sidebar_nav_cursor.saturating_sub(1),
+                    1 => self.mcp_scroll = self.mcp_scroll.saturating_sub(1),
+                    2 => self.skills_scroll = self.skills_scroll.saturating_sub(1),
+                    3 => self.steering_scroll = self.steering_scroll.saturating_sub(1),
+                    _ => {}
+                }
+                self.sidebar_kbd_active = true;
+                true
+            }
+            // Enter: confirm workspace switch (section 0) or placeholder for future overlay.
+            Key::Named(NamedKey::Enter) if self.sidebar_kbd_active => {
+                if self.info_sidebar_section == 0 {
+                    if let Some(id) = self.sidebar_selected_workspace_id() {
+                        self.mux.cmd_switch_workspace(id);
+                        self.refresh_status_cache();
+                    }
+                    self.sidebar_visible = false;
+                    self.sidebar_rename_input = None;
+                    self.sidebar_kbd_active = false;
+                    self.apply_tab_bar_padding();
+                    self.resize_terminals_for_panel();
+                } else {
+                    // G-2-overlay placeholder: log selection for future implementation.
+                    log::debug!("InfoSidebar: Enter in section {}", self.info_sidebar_section);
+                }
                 true
             }
             Key::Character(s) if s == "&" => {
@@ -1081,6 +1146,26 @@ impl ApplicationHandler<()> for App {
                         &mut pane_infos,
                     );
 
+                    // Zoom: if a pane is zoomed, keep only it and expand to fill viewport.
+                    if let Some(zoomed_tid) = self.mux.zoomed_pane {
+                        if let Some(idx) = pane_infos.iter().position(|p| p.terminal_id == zoomed_tid) {
+                            let cols = (viewport.w / cell_w as f32).floor() as usize;
+                            let rows = (viewport.h / cell_h as f32).floor() as usize;
+                            let mut zoomed = pane_infos[idx];
+                            zoomed.col_offset = 0;
+                            zoomed.row_offset = 0;
+                            zoomed.cols = cols;
+                            zoomed.rows = rows;
+                            zoomed.pane_rect = viewport;
+                            zoomed.focused = true;
+                            pane_infos.clear();
+                            pane_infos.push(zoomed);
+                        } else {
+                            // Zoomed pane no longer in active tab — clear zoom.
+                            self.mux.zoomed_pane = None;
+                        }
+                    }
+
                     // ── Build cell instances for every pane ──────────────────────────────
                     let search_arg = if self.ui.search_bar.visible {
                         Some(&self.ui.search_bar)
@@ -1122,9 +1207,11 @@ impl ApplicationHandler<()> for App {
                         );
                     }
 
-                    // Pane separator lines (one RoundedRectInstance per separator).
+                    // Pane separator lines (hidden when a pane is zoomed).
                     let sep_pad_x = self.config.window.padding.left as f32 + sidebar_px_snapshot;
-                    rc.build_pane_separators(&self.separator_snapshot, sep_pad_x, sb_pad_y);
+                    if self.mux.zoomed_pane.is_none() {
+                        rc.build_pane_separators(&self.separator_snapshot, sep_pad_x, sb_pad_y);
+                    }
                     // Focus border — only when there are multiple panes.
                     if pane_infos.len() > 1 {
                         if let Some(focused) = pane_infos.iter().find(|p| p.focused) {
@@ -1344,6 +1431,7 @@ impl ApplicationHandler<()> for App {
                                 self.input.leader_active as u8,
                                 leader_resize_mode as u8,
                                 sb_exit_code_raw as u8,
+                                self.mux.zoomed_pane.is_some() as u8,
                                 self.battery_status
                                     .as_ref()
                                     .map(|s| s.percent)
@@ -1402,6 +1490,7 @@ impl ApplicationHandler<()> for App {
                                 self.cached_cwd.as_deref(),
                                 self.ui.git_branch_cache.as_deref(),
                                 sb_exit_code,
+                                self.mux.zoomed_pane.is_some(),
                                 self.config.status_bar.style.clone(),
                                 battery,
                             );
@@ -1426,6 +1515,14 @@ impl ApplicationHandler<()> for App {
 
                     if self.sidebar_visible {
                         let counts = self.mux.workspace_tab_pane_counts();
+                        let mcp_servers: Vec<(String, Vec<String>)> = {
+                            let mut map: std::collections::BTreeMap<String, Vec<String>> =
+                                Default::default();
+                            for (server, tool) in self.ui.mcp_manager.all_tools() {
+                                map.entry(server).or_default().push(tool.name.clone());
+                            }
+                            map.into_iter().collect()
+                        };
                         rc.build_workspace_sidebar_instances(
                             self.mux.workspaces(),
                             self.mux.active_workspace_id,
@@ -1438,6 +1535,13 @@ impl ApplicationHandler<()> for App {
                             self.config.window.padding.bottom as f32,
                             &scaled_font,
                             &self.config.colors,
+                            self.info_sidebar_section,
+                            &mcp_servers,
+                            self.mcp_scroll,
+                            self.ui.skill_manager.skills(),
+                            self.skills_scroll,
+                            self.ui.steering_manager.files(),
+                            self.steering_scroll,
                         );
                         let sidebar_sep_x = self.config.window.padding.left as f32
                             + SIDEBAR_COLS as f32 * rc.shaper.cell_width;
@@ -1969,6 +2073,7 @@ impl ApplicationHandler<()> for App {
                                     cwd.as_deref(),
                                     git_branch.as_deref(),
                                     None,
+                                    false,
                                     self.config.status_bar.style.clone(),
                                     None,
                                 );

@@ -128,9 +128,11 @@ Leader key: `Ctrl+F` (timeout 1000ms)
 | `Leader W &`           | Close workspace                            |
 | `Leader W ,`           | Rename workspace                           |
 | `Leader W j/k`         | Next/prev workspace                        |
+| `Leader s`             | Open/close sidebar                         |
 | `Leader %`             | Split horizontal                           |
 | `Leader "`             | Split vertical                             |
 | `Leader x`             | Close pane                                 |
+| `Leader z`             | Zoom/unzoom focused pane                   |
 | `Leader h/j/k/l`       | Focus pane (vim-style)                     |
 | `Leader Option+arrows` | Resize pane                                |
 | `Leader a`             | Enter AI sub-leader                        |

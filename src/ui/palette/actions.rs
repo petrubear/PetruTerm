@@ -37,6 +37,7 @@ pub enum Action {
     SplitHorizontal,
     SplitVertical,
     ClosePane,
+    ZoomPane,
     FocusPane(crate::ui::panes::FocusDir),
     // Overlays
     CommandPalette,
@@ -84,6 +85,7 @@ impl std::str::FromStr for Action {
             "SplitHorizontal" => Ok(Action::SplitHorizontal),
             "SplitVertical" => Ok(Action::SplitVertical),
             "ClosePane" => Ok(Action::ClosePane),
+            "ZoomPane" => Ok(Action::ZoomPane),
             "FocusPaneLeft" => Ok(Action::FocusPane(crate::ui::panes::FocusDir::Left)),
             "FocusPaneRight" => Ok(Action::FocusPane(crate::ui::panes::FocusDir::Right)),
             "FocusPaneUp" => Ok(Action::FocusPane(crate::ui::panes::FocusDir::Up)),
@@ -165,6 +167,11 @@ pub fn built_in_actions(config: &Config) -> Vec<PaletteAction> {
             name: t!("palette.close_pane").to_string(),
             action: Action::ClosePane,
             keybind: kb("ClosePane"),
+        },
+        PaletteAction {
+            name: t!("palette.zoom_pane").to_string(),
+            action: Action::ZoomPane,
+            keybind: Some("^F z".into()),
         },
         PaletteAction {
             name: t!("palette.focus_left").to_string(),

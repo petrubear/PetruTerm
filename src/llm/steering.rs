@@ -28,6 +28,10 @@ impl SteeringManager {
         self.files.len()
     }
 
+    pub fn files(&self) -> &[(String, String)] {
+        &self.files
+    }
+
     /// Build a context block to inject into the system prompt.
     /// Returns `None` when no files are loaded.
     pub fn context_block(&self) -> Option<String> {

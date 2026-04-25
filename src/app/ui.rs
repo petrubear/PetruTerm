@@ -1452,6 +1452,7 @@ impl UiManager {
                 );
             }
             Action::ClosePane => mux.cmd_close_pane(),
+            Action::ZoomPane => mux.cmd_toggle_zoom_pane(),
             Action::FocusPane(dir) => mux.cmd_focus_pane_dir(dir),
             Action::ToggleFullscreen => {
                 if let Some(w) = window {

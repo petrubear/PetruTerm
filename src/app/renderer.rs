@@ -130,7 +130,7 @@ pub struct RenderContext {
     pub status_bar_rect_cache: Vec<RoundedRectInstance>,
     pub sidebar_instances_cache: Vec<CellVertex>,
     pub sidebar_rect_cache: Vec<RoundedRectInstance>,
-    pub sidebar_cache_key: Option<(usize, usize, usize, usize)>,
+    pub sidebar_cache_key: Option<u64>,
     /// Reusable per-frame pane layout buffer — avoids a Vec<PaneInfo> alloc every frame (TD-PERF-40).
     pub pane_infos: Vec<crate::ui::PaneInfo>,
 }
@@ -1474,6 +1474,7 @@ impl RenderContext {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     pub fn build_workspace_sidebar_instances(
         &mut self,
         workspaces: &[Workspace],
@@ -1487,6 +1488,13 @@ impl RenderContext {
         sidebar_bottom_pad_px: f32,
         font: &crate::config::schema::FontConfig,
         colors: &crate::config::schema::ColorScheme,
+        active_section: u8,
+        mcp_servers: &[(String, Vec<String>)],
+        mcp_scroll: usize,
+        skills: &[crate::llm::skills::SkillMeta],
+        skills_scroll: usize,
+        steering_files: &[(String, String)],
+        steering_scroll: usize,
     ) {
         if sidebar_cols == 0 {
             return;
@@ -1508,16 +1516,37 @@ impl RenderContext {
         let (_win_w, win_h) = self.renderer.size();
         let visible_h = (win_h as f32 - sidebar_top_px - sidebar_bottom_pad_px).max(0.0);
         let total_rows = (visible_h / ch).floor() as usize;
+
+        // Section height proportions: 40% workspace, 20% each for MCP/Skills/Steering.
+        let ws_rows = (total_rows * 40 / 100).max(4);
+        let mcp_rows = (total_rows * 20 / 100).max(3);
+        let skills_rows = (total_rows * 20 / 100).max(3);
+        let steering_rows = total_rows.saturating_sub(ws_rows + mcp_rows + skills_rows).max(3);
+        let mcp_start = ws_rows;
+        let skills_start = ws_rows + mcp_rows;
+        let steering_start = ws_rows + mcp_rows + skills_rows;
+
         let counts_hash: usize = counts
             .iter()
             .map(|(t, p)| t.wrapping_mul(10_000).wrapping_add(*p))
             .sum();
-        let key = (
-            workspaces.len(),
-            active_workspace_id,
-            nav_cursor,
-            counts_hash,
-        );
+
+        let key: u64 = {
+            use std::hash::{Hash, Hasher};
+            let mut h = rustc_hash::FxHasher::default();
+            workspaces.len().hash(&mut h);
+            active_workspace_id.hash(&mut h);
+            nav_cursor.hash(&mut h);
+            counts_hash.hash(&mut h);
+            active_section.hash(&mut h);
+            mcp_scroll.hash(&mut h);
+            skills_scroll.hash(&mut h);
+            steering_scroll.hash(&mut h);
+            mcp_servers.len().hash(&mut h);
+            skills.len().hash(&mut h);
+            steering_files.len().hash(&mut h);
+            h.finish()
+        };
 
         if rename_input.is_none() && self.sidebar_cache_key == Some(key) {
             self.instances
@@ -1532,9 +1561,9 @@ impl RenderContext {
 
         let radius = 10.0 * self.scale_factor;
         let border = 1.0 * self.scale_factor;
-        // Reduce the physical background width to create visual padding with the terminal
         let visible_sidebar_px = sidebar_px - (8.0 * self.scale_factor);
 
+        // Outer border + background.
         self.rect_instances.push(RoundedRectInstance {
             rect: [
                 sidebar_left_px - border,
@@ -1548,12 +1577,7 @@ impl RenderContext {
             _pad: [0.0; 2],
         });
         self.rect_instances.push(RoundedRectInstance {
-            rect: [
-                sidebar_left_px,
-                sidebar_top_px,
-                visible_sidebar_px,
-                visible_h,
-            ],
+            rect: [sidebar_left_px, sidebar_top_px, visible_sidebar_px, visible_h],
             color: actual_sidebar_bg,
             radius,
             border_width: 0.0,
@@ -1569,33 +1593,44 @@ impl RenderContext {
                 }
             };
 
+        // Helper: push a thin horizontal separator line at the top of a section row.
+        let push_section_sep = |this: &mut Self, row: usize| {
+            let sep_y = sidebar_top_px + row as f32 * ch;
+            this.rect_instances.push(RoundedRectInstance {
+                rect: [sidebar_left_px, sep_y, visible_sidebar_px, 1.0 * this.scale_factor],
+                color: sidebar_sep_fg,
+                radius: 0.0,
+                border_width: 0.0,
+                _pad: [0.0; 2],
+            });
+        };
+
+        // ── Workspace section (rows 0..ws_rows) ──────────────────────────────
+        let ws_header_fg = if active_section == 0 { sidebar_accent } else { sidebar_dim_fg };
         let mut header = " Workspaces".to_string();
         let header_chars = header.chars().count();
         if sidebar_cols > header_chars + 2 {
             header.push_str(&" ".repeat(sidebar_cols - header_chars - 2));
         }
         header.push('+');
-        push_sidebar_row(self, &header, sidebar_accent, SIDEBAR_BG, 0);
-        push_sidebar_row(self, "", sidebar_sep_fg, SIDEBAR_BG, 1);
+        push_sidebar_row(self, &header, ws_header_fg, SIDEBAR_BG, 0);
 
         for (idx, ws) in workspaces.iter().enumerate() {
-            let base_row = 2 + idx * 2;
+            let base_row = 1 + idx * 2;
+            if base_row + 1 >= ws_rows {
+                break;
+            }
             let selected = idx == nav_cursor;
             let active = ws.id == active_workspace_id;
 
             if active || selected {
-                let row_bg = if active {
-                    sidebar_item_active_bg
-                } else {
-                    sidebar_item_hover_bg
-                };
+                let row_bg = if active { sidebar_item_active_bg } else { sidebar_item_hover_bg };
                 let margin_x = 8.0 * self.scale_factor;
                 let margin_y = 2.0 * self.scale_factor;
                 let pill_px = sidebar_left_px + margin_x;
                 let pill_py = sidebar_top_px + (base_row as f32 * ch) + margin_y;
                 let pill_pw = visible_sidebar_px - 2.0 * margin_x;
                 let pill_ph = 2.0 * ch - 2.0 * margin_y;
-
                 self.rect_instances.push(RoundedRectInstance {
                     rect: [pill_px, pill_py, pill_pw, pill_ph],
                     color: row_bg,
@@ -1603,7 +1638,6 @@ impl RenderContext {
                     border_width: 0.0,
                     _pad: [0.0; 2],
                 });
-
                 if active {
                     let accent_w = 3.0 * self.scale_factor;
                     let accent_h = pill_ph - 8.0 * self.scale_factor;
@@ -1619,21 +1653,11 @@ impl RenderContext {
             }
 
             let name = if selected {
-                if let Some(input) = rename_input {
-                    format!("{input}_")
-                } else {
-                    ws.name.clone()
-                }
+                if let Some(input) = rename_input { format!("{input}_") } else { ws.name.clone() }
             } else {
                 ws.name.clone()
             };
-
-            let name_fg = if active {
-                [1.0, 1.0, 1.0, 1.0] // Bright white for active
-            } else {
-                sidebar_fg // Use default sidebar foreground for inactive
-            };
-
+            let name_fg = if active { [1.0, 1.0, 1.0, 1.0] } else { sidebar_fg };
             let trimmed_name: String = name.chars().take(sidebar_cols.saturating_sub(4)).collect();
             let mut line = format!("   {trimmed_name}");
             let line_w = line.chars().count();
@@ -1643,16 +1667,8 @@ impl RenderContext {
             push_sidebar_row(self, &line, name_fg, SIDEBAR_BG, base_row);
 
             let (tabs, panes) = counts.get(idx).copied().unwrap_or((0, 0));
-            let tabs_str = if tabs == 1 {
-                "1 tab".to_string()
-            } else {
-                format!("{tabs} tabs")
-            };
-            let panes_str = if panes == 1 {
-                "1 pane".to_string()
-            } else {
-                format!("{panes} panes")
-            };
+            let tabs_str = if tabs == 1 { "1 tab".to_string() } else { format!("{tabs} tabs") };
+            let panes_str = if panes == 1 { "1 pane".to_string() } else { format!("{panes} panes") };
             let mut subtitle = format!("   {tabs_str} · {panes_str}");
             let sub_w = subtitle.chars().count();
             if sub_w < sidebar_cols {
@@ -1661,17 +1677,67 @@ impl RenderContext {
             push_sidebar_row(self, &subtitle, sidebar_dim_fg, SIDEBAR_BG, base_row + 1);
         }
 
-        if total_rows > 0 {
-            let footer_row = total_rows.saturating_sub(1);
-            let last_item_row = 2 + workspaces.len().saturating_mul(2);
-            if footer_row > last_item_row {
-                push_sidebar_row(
-                    self,
-                    " j/k ↕  Enter ✓  ^Fa +  ^F. ✎",
-                    sidebar_dim_fg,
-                    SIDEBAR_BG,
-                    footer_row,
-                );
+        // ── MCP section (rows mcp_start .. mcp_start+mcp_rows) ───────────────
+        push_section_sep(self, mcp_start);
+        let mcp_header_fg = if active_section == 1 { sidebar_accent } else { sidebar_dim_fg };
+        push_sidebar_row(self, " MCP SERVERS", mcp_header_fg, SIDEBAR_BG, mcp_start);
+        let mcp_items_start = mcp_start + 1;
+        let mcp_available = mcp_rows.saturating_sub(1);
+        if mcp_servers.is_empty() {
+            push_sidebar_row(self, "  no servers connected", sidebar_dim_fg, SIDEBAR_BG, mcp_items_start);
+        } else {
+            let visible = &mcp_servers[mcp_scroll.min(mcp_servers.len())..];
+            for (i, (server, tools)) in visible.iter().enumerate() {
+                if i >= mcp_available {
+                    break;
+                }
+                let row = mcp_items_start + i;
+                let label = format!("  {} ({} tools)", server, tools.len());
+                let trimmed: String = label.chars().take(sidebar_cols).collect();
+                push_sidebar_row(self, &trimmed, sidebar_fg, SIDEBAR_BG, row);
+            }
+        }
+
+        // ── Skills section (rows skills_start .. skills_start+skills_rows) ────
+        push_section_sep(self, skills_start);
+        let skills_header_fg = if active_section == 2 { sidebar_accent } else { sidebar_dim_fg };
+        push_sidebar_row(self, " SKILLS", skills_header_fg, SIDEBAR_BG, skills_start);
+        let skills_items_start = skills_start + 1;
+        let skills_available = skills_rows.saturating_sub(1);
+        if skills.is_empty() {
+            push_sidebar_row(self, "  no skills loaded", sidebar_dim_fg, SIDEBAR_BG, skills_items_start);
+        } else {
+            let visible = &skills[skills_scroll.min(skills.len())..];
+            for (i, skill) in visible.iter().enumerate() {
+                if i >= skills_available {
+                    break;
+                }
+                let row = skills_items_start + i;
+                let label = format!("  {}", skill.name);
+                let trimmed: String = label.chars().take(sidebar_cols).collect();
+                push_sidebar_row(self, &trimmed, sidebar_fg, SIDEBAR_BG, row);
+            }
+        }
+
+        // ── Steering section (rows steering_start .. steering_start+steering_rows)
+        push_section_sep(self, steering_start);
+        let steering_header_fg = if active_section == 3 { sidebar_accent } else { sidebar_dim_fg };
+        push_sidebar_row(self, " STEERING", steering_header_fg, SIDEBAR_BG, steering_start);
+        let steering_items_start = steering_start + 1;
+        let steering_available = steering_rows.saturating_sub(1);
+        if steering_files.is_empty() {
+            push_sidebar_row(self, "  no steering files", sidebar_dim_fg, SIDEBAR_BG, steering_items_start);
+        } else {
+            let visible = &steering_files[steering_scroll.min(steering_files.len())..];
+            for (i, (name, _)) in visible.iter().enumerate() {
+                if i >= steering_available {
+                    break;
+                }
+                let row = steering_items_start + i;
+                let display = name.strip_suffix(".md").unwrap_or(name.as_str());
+                let label = format!("  {display}");
+                let trimmed: String = label.chars().take(sidebar_cols).collect();
+                push_sidebar_row(self, &trimmed, sidebar_fg, SIDEBAR_BG, row);
             }
         }
 
@@ -1681,11 +1747,7 @@ impl RenderContext {
         self.sidebar_rect_cache.clear();
         self.sidebar_rect_cache
             .extend_from_slice(&self.rect_instances[rect_start..]);
-        self.sidebar_cache_key = if rename_input.is_none() {
-            Some(key)
-        } else {
-            None
-        };
+        self.sidebar_cache_key = if rename_input.is_none() { Some(key) } else { None };
     }
 
     #[allow(clippy::too_many_arguments)]
