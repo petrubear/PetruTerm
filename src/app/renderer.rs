@@ -2581,25 +2581,29 @@ impl RenderContext {
             return;
         }
 
-        let bg = [0.11, 0.11, 0.14, 0.92];
-        let fg = [0.878, 0.878, 0.910, 1.0];
-        let border_color = [0.25, 0.25, 0.32, 1.0];
+        let bg = [0.22, 0.20, 0.32, 0.97];
+        let fg = [0.95, 0.95, 1.0, 1.0];
+        let border_color = [0.49, 0.36, 0.87, 1.0];
 
         let cw = self.shaper.cell_width;
         let ch = self.shaper.cell_height;
+        let v_pad = ch * 0.4;
+        let rect_h = ch + v_pad * 2.0;
         let start_col = total_cols - toast_width;
         let px = pad_x + start_col as f32 * cw;
-        let py = pad_y + ch * 0.5; // half-cell gap from top
+        // text renders at text_y; rect is centered around it with v_pad above and below
+        let text_y = pad_y + ch * 0.5;
+        let py = text_y - v_pad;
         let pw = toast_width as f32 * cw;
-        let radius = 8.0 * self.scale_factor;
-        let border = 1.0 * self.scale_factor;
+        let radius = 10.0 * self.scale_factor;
+        let border = 1.5 * self.scale_factor;
 
         self.rect_instances.push(RoundedRectInstance {
             rect: [
                 px - border,
                 py - border,
                 pw + 2.0 * border,
-                ch + 2.0 * border,
+                rect_h + 2.0 * border,
             ],
             color: border_color,
             radius: radius + border,
@@ -2607,7 +2611,7 @@ impl RenderContext {
             _pad: [0.0; 2],
         });
         self.rect_instances.push(RoundedRectInstance {
-            rect: [px, py, pw, ch],
+            rect: [px, py, pw, rect_h],
             color: bg,
             radius,
             border_width: 0.0,
@@ -2615,6 +2619,7 @@ impl RenderContext {
         });
 
         let label = format!("  {msg}  ");
+        // Offset text down by v_pad to center it vertically inside the taller rect.
         self.push_shaped_row(&label, fg, [0.0; 4], 0, start_col, toast_width, font);
     }
 }
