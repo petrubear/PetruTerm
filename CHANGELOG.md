@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.4] — 2026-04-24
+
+### Added
+- MCP (Model Context Protocol) support: the AI agent panel can now connect to external MCP servers defined in `~/.config/petruterm/mcp/mcp.json`.
+- Built-in `filesystem` MCP server pre-configured (exposes `/private/tmp` and `~`).
+- PostgreSQL MCP server support via `@modelcontextprotocol/server-postgres`; configure with a standard `postgresql://` connection string.
+- `/mcp` slash command in the AI panel lists all connected MCP servers and their available tools.
+
+---
+
 ## [0.1.3] — 2026-04-23
 
 ### Fixed

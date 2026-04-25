@@ -20,6 +20,7 @@ A developer-first GPU-accelerated terminal emulator written in Rust. Built for s
 - **LLM tool use** — AI agent can read files, list directories, write files, and run commands (sandboxed to CWD, with confirmation)
 - **Inline AI block** — `Ctrl+Space` for quick NL→shell command without leaving the terminal
 - **Multiple LLM providers** — OpenRouter, Ollama, LM Studio, GitHub Copilot; per-pane independent chat history
+- **MCP (Model Context Protocol)** — connect the AI agent to external tools (databases, APIs, filesystems) via JSON-configured MCP servers; use `/mcp` in the panel to list active servers and tools
 - **Right-click context menu** — Copy, Paste, Clear, and **Ask AI** (sends selection directly to chat panel)
 - **Command palette** — fuzzy-search for all actions (`Leader+o`)
 - **Snippets** — Tab-expandable text templates, configurable in Lua
@@ -480,6 +481,50 @@ The script writes `~/.cache/petruterm/shell-context.json` after each command. Th
 
 ---
 
+## MCP (Model Context Protocol)
+
+PetruTerm's AI agent supports MCP servers, letting it call tools exposed by external processes (databases, file systems, custom APIs).
+
+### Configuration
+
+Servers are declared in `~/.config/petruterm/mcp/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://user:pass@localhost/mydb"],
+      "env": {}
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/private/tmp", "/Users/you"],
+      "env": {}
+    }
+  }
+}
+```
+
+Each key under `mcpServers` is the display name shown in the panel. PetruTerm launches the server process on startup and keeps it alive for the session.
+
+### Using MCP tools in the panel
+
+- Type `/mcp` in the AI panel input to list all connected servers and their available tools.
+- The agent selects and calls MCP tools automatically when they are relevant to your query.
+- Tool invocations appear in the panel as `⟳ mcp:server/tool(…)` while running and `✓ mcp:server/tool(…)` when complete.
+
+### Built-in servers
+
+| Server | Package | Description |
+|--------|---------|-------------|
+| `filesystem` | `@modelcontextprotocol/server-filesystem` | Read/write files in allowed paths |
+| `postgres` | `@modelcontextprotocol/server-postgres` | Query a PostgreSQL database |
+
+> **Requirement:** `npx` must be available in your `PATH` (comes with Node.js).
+
+---
+
 ## AGENTS.md
 
 Place an `AGENTS.md` file in your project root to give the AI panel automatic context about your project. It is attached as the first file every time the panel opens in that directory.
@@ -511,6 +556,8 @@ Place an `AGENTS.md` file in your project root to give the AI panel automatic co
 ├── keybinds.lua          # Leader key and all bindings
 ├── llm.lua               # AI provider and features
 ├── plugins/              # Auto-scanned Lua plugins
+├── mcp/
+│   └── mcp.json          # MCP server definitions (filesystem, postgres, …)
 └── shell-integration.zsh # Optional: source in ~/.zshrc
 ```
 
