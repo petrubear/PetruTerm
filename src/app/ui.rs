@@ -136,6 +136,9 @@ pub struct UiManager {
     /// CWD used for the in-flight branch scan (to build palette items on arrival).
     branch_scan_cwd: Option<std::path::PathBuf>,
 
+    // ── System prompt (loaded from ~/.config/petruterm/system/system_prompt.md) ─
+    system_prompt: String,
+
     // ── Skills (D-4) ─────────────────────────────────────────────────────────
     pub skill_manager: SkillManager,
 
@@ -174,6 +177,7 @@ impl UiManager {
         let mut palette = CommandPalette::new(config);
         palette.rebuild_snippets(&config.snippets);
 
+        let system_prompt = crate::config::load_system_prompt();
         let mut skill_manager = SkillManager::new();
         let mut steering_manager = SteeringManager::new();
         if let Ok(cwd) = std::env::current_dir() {
@@ -235,6 +239,7 @@ impl UiManager {
             pending_paste_rx: None,
             branch_scan_rx: None,
             branch_scan_cwd: None,
+            system_prompt,
             skill_manager,
             steering_manager,
             mcp_manager,
@@ -704,12 +709,7 @@ impl UiManager {
             return;
         };
 
-        let mut system_text = String::from(
-            "You are a helpful AI assistant embedded in PetruTerm, a terminal emulator. \
-             You can answer any question the user has — general knowledge, coding, writing, or anything else. \
-             You also have tools to read files, list directories, write files, and run commands within the working directory. \
-             Use those tools when the user asks about code or files in their project."
-        );
+        let mut system_text = self.system_prompt.clone();
 
         // Steering files: global/project Markdown rules always active.
         if let Some(block) = self.steering_manager.context_block() {
@@ -1180,6 +1180,7 @@ impl UiManager {
             (None, None)
         };
         self.panel_width_cols = config.llm.ui.width_cols;
+        self.system_prompt = crate::config::load_system_prompt();
         if let Ok(cwd) = std::env::current_dir() {
             self.skill_manager.load(&cwd);
             self.steering_manager.load(&cwd);
@@ -1663,6 +1664,7 @@ mod tests {
             pending_paste_rx: None,
             branch_scan_rx: None,
             branch_scan_cwd: None,
+            system_prompt: String::new(),
             skill_manager: SkillManager::new(),
             steering_manager: SteeringManager::new(),
             mcp_manager: std::sync::Arc::new(McpManager::new()),
@@ -1733,6 +1735,7 @@ mod tests {
             pending_paste_rx: None,
             branch_scan_rx: None,
             branch_scan_cwd: None,
+            system_prompt: String::new(),
             skill_manager: SkillManager::new(),
             steering_manager: SteeringManager::new(),
             mcp_manager: std::sync::Arc::new(McpManager::new()),
