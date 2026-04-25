@@ -353,7 +353,7 @@ impl InputHandler {
                     // 'a' prefix → AI actions.
                     Some('a') => {
                         let action = match s.as_str() {
-                            "a" => Some(Action::FocusAiPanel),
+                            "a" => Some(Action::ToggleAiPanel),
                             "e" => Some(Action::ExplainLastOutput),
                             "f" => Some(Action::FixLastError),
                             "z" => Some(Action::UndoLastWrite),

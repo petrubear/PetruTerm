@@ -22,6 +22,7 @@ const COLS: usize = 80;
 const SCREEN_ROWS: usize = 40;
 const SCROLLBACK: usize = 10_000;
 const TOTAL_ROWS: usize = SCREEN_ROWS + SCROLLBACK;
+const MAX_SEARCH_MATCHES: usize = 10_000;
 
 #[derive(Clone, Copy, Debug)]
 struct SearchMatch {
@@ -29,6 +30,23 @@ struct SearchMatch {
     col: usize,
     #[allow(dead_code)]
     len: usize,
+}
+
+fn push_search_match(
+    matches: &mut Vec<SearchMatch>,
+    grid_line: i32,
+    col: usize,
+    len: usize,
+) -> bool {
+    if matches.len() >= MAX_SEARCH_MATCHES {
+        return true;
+    }
+    matches.push(SearchMatch {
+        grid_line,
+        col,
+        len,
+    });
+    false
 }
 
 /// Deterministic pseudo-random grid seeded from a fixed string corpus. Uses a
@@ -76,11 +94,9 @@ fn search_grid(grid: &[Vec<char>], history: i32, query: &str) -> Vec<SearchMatch
         }
         for col in 0..=row_lower.len() - query_len {
             if row_lower[col..col + query_len] == query_chars[..] {
-                matches.push(SearchMatch {
-                    grid_line: grid_row,
-                    col,
-                    len: query_len,
-                });
+                if push_search_match(&mut matches, grid_row, col, query_len) {
+                    return matches;
+                }
             }
         }
     }

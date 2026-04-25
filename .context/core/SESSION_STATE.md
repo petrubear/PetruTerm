@@ -1,14 +1,33 @@
 # Session State
 
 **Last Updated:** 2026-04-25
-**Session Focus:** Phase 5 G-0 — UI tokens en ColorScheme
+**Session Focus:** Phase 5 UX Polish — chat UX + keybind/docs sync
 
 ## Branch: `master`
 
 ## Estado actual
 
 **Phase 1–3 + 3.5 + A + 3.6 + B + C + D (todas las fases) COMPLETE. Phase 5 G-0 COMPLETE.**
-**v0.1.3 publicado. Fase 4 (plugins) y Phase 5 (UX Polish) en paralelo. Deuda técnica: 2 items P3 abiertos (TD-MEM-30, TD-PERF-40).**
+**v0.1.3 publicado. Fase 4 (plugins) y Phase 5 (UX Polish) en paralelo. Deuda técnica abierta actual: TD-UX-04 + diferidos TD-PERF-03 / TD-PERF-05 / TD-PERF-29.**
+
+---
+
+## Esta sesión (2026-04-25) — UX polish + deuda técnica
+
+### Auditoría runtime + fixes
+- `src/app/mod.rs` — idle detection separada entre AI visible e invisible. Streaming del chat en background ya no mantiene vivo el blink timer ni evita `ControlFlow::WaitUntil` cuando el panel no está enfocado.
+- `src/app/mux.rs`, `src/ui/search_bar.rs`, `benches/search.rs` — búsqueda del terminal ahora limita matches a `MAX_SEARCH_MATCHES = 10_000`; la UI muestra `N+` cuando el set quedó truncado y el incremental filter se desactiva sobre resultados truncados para no reutilizar un subconjunto incompleto.
+- `src/app/mod.rs`, `src/app/renderer.rs` — removido el `force_rebuild` continuo del panel durante `Loading/Streaming`; el contenido del chat se recompone solo con `dirty` real o cambios de layout. La línea de loading quedó estática (`⟳ thinking`) para no invalidar el historial cada frame.
+
+### Chat UX / keybinds / docs
+- `src/app/input/mod.rs` — `Leader+a+a` ahora dispara `ToggleAiPanel` (toggle real abrir/cerrar). Añadido `Leader+A` como binding por defecto para `FocusAiPanel` (reenfocar chat sin cerrar).
+- `src/app/mod.rs`, `src/app/renderer.rs` — el botón superior del chat limpia foco al cerrar y su estado activo ya invalida correctamente el cache del titlebar (`tab_bar_inputs` ahora incluye `sidebar_visible` + `panel_visible`).
+- `src/app/renderer.rs` — hints del panel actualizados: `Leader+a a` para cerrar, `Leader+A` para reenfocar. `Esc` queda documentado y mantenido como “volver foco a terminal” o dismiss del error.
+- `README.md` — tabla de keybinds y referencias de AI actualizadas al mapa real (`Leader+a+a`, `Leader+a+e/f/z`, `Leader+A`, `Leader+e+e`, `Leader+W+*`, `Cmd+K`, `Cmd+F`, `F12`, `Ctrl+Space`). Nota añadida: `a`, `e`, `W` son prefijos reservados del input layer, no bindings simples de `config.keys`.
+- `src/llm/mcp/config.rs` — test `missing_file_returns_empty` aislado del entorno real con `load_from_paths(...)`; ya no depende de `dirs::config_dir()` / `home_dir()` del usuario.
+
+### Config del usuario verificada
+- `~/.config/petruterm/keybinds.lua` estaba desactualizado (bindings simples `Leader+a`, `Leader+e`, `Leader+f`). Se alineó con el dispatcher actual: `Leader+A` explícito y secuencias `Leader+a+*` documentadas como built-in.
 
 ---
 

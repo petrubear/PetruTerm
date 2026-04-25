@@ -1,12 +1,12 @@
 # Active Context
 
-**Current Focus:** Phase 5 UX Polish — G-0 DONE, próximo G-1/G-2/G-3
+**Current Focus:** Phase 5 UX Polish — chat UX, keybinds y deuda residual
 **Last Active:** 2026-04-25
 
 ## Estado actual del proyecto
 
 **Phase 1–3 COMPLETE. Phase 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Fase B COMPLETE. Fase C COMPLETE. Fase D (D-1/D-2/D-3/D-4/D-5) COMPLETE. REC-PERF-01/02/05 COMPLETE. Phase 5 G-0 COMPLETE.**
-**v0.1.3 publicado. Build limpio. CI verde. Deuda P3 abierta: TD-MEM-30, TD-PERF-40.**
+**v0.1.3 publicado. Build limpio. CI verde. Deuda abierta actual: TD-UX-04; diferidos: TD-PERF-03, TD-PERF-05, TD-PERF-29.**
 
 ## Roadmap acordado (en orden)
 
@@ -26,6 +26,25 @@
 14. **Phase 5 G-2** — Sidebar MCP/Steering/Skills tabs
 15. **Phase 5 G-3** — Markdown en chat
 16. **Fase 4** — Plugin ecosystem (Lua, lazy.nvim-style)
+
+## Cambios recientes a preservar
+
+**Chat panel toggle/focus split:**
+- `Leader+a+a` = `ToggleAiPanel` (abrir/cerrar).
+- `Leader+A` = `FocusAiPanel` (mover foco terminal ↔ chat sin cerrar).
+- `Esc` dentro del chat NO cierra el panel: devuelve foco a terminal, excepto en `Error` (`dismiss_error`) y `AwaitingConfirm` (`confirm_no`).
+
+**Titlebar cache inputs:**
+- `RenderContext.tab_bar_inputs` ahora incluye `(active_index, total_cols, sidebar_visible, panel_visible)`.
+- Si se quitan `sidebar_visible` / `panel_visible` de la clave, los botones superiores del sidebar/chat dejan de reflejar el estado toggle activo.
+
+**Search memory guard:**
+- `MAX_SEARCH_MATCHES = 10_000` en `src/app/mux.rs`.
+- `SearchBar.matches_truncated` evita reutilizar el incremental filter sobre resultados capados.
+
+**Background AI idle policy:**
+- `about_to_wait` distingue AI activity visible vs background. Solo panel enfocado / block visible pueden impedir idle.
+- Mantener esta separación para no reintroducir wakeups periódicos durante streaming en background.
 
 ## Invariantes arquitectonicos clave (no romper)
 

@@ -39,6 +39,24 @@ const SEARCH_CURRENT_BG: AnsiColor = AnsiColor::Spec(Rgb {
     g: 184,
     b: 108,
 }); // Dracula orange
+const MAX_SEARCH_MATCHES: usize = 10_000;
+
+fn push_search_match(
+    matches: &mut Vec<SearchMatch>,
+    grid_line: i32,
+    col: usize,
+    len: usize,
+) -> bool {
+    if matches.len() >= MAX_SEARCH_MATCHES {
+        return true;
+    }
+    matches.push(SearchMatch {
+        grid_line,
+        col,
+        len,
+    });
+    false
+}
 
 /// Manages multiple terminal instances, tabs, panes, and workspaces.
 pub struct Mux {
@@ -651,52 +669,56 @@ impl Mux {
     /// Incremental filter: given matches from a previous (shorter) query, verify each one
     /// against the new (longer) query. O(prev_matches × query_len) instead of O(rows × cols).
     /// Only valid when `new_query.starts_with(prev_query)` — caller is responsible for this check.
-    pub fn filter_matches(&self, prev: &[SearchMatch], new_query: &str) -> Vec<SearchMatch> {
+    pub fn filter_matches(
+        &self,
+        prev: &[SearchMatch],
+        new_query: &str,
+    ) -> (Vec<SearchMatch>, bool) {
         use alacritty_terminal::index::{Column, Line};
         if new_query.is_empty() || prev.is_empty() {
-            return Vec::new();
+            return (Vec::new(), false);
         }
         let q_lower = new_query.to_lowercase();
         let q_chars: Vec<char> = q_lower.chars().collect();
         let q_len = q_chars.len();
         let Some(terminal) = self.active_terminal() else {
-            return Vec::new();
+            return (Vec::new(), false);
         };
         terminal.with_term(|term| {
             let cols = term.columns();
-            prev.iter()
-                .filter_map(|m| {
-                    if m.col + q_len > cols {
-                        return None;
+            let mut matches = Vec::with_capacity(prev.len().min(MAX_SEARCH_MATCHES));
+            for m in prev {
+                if m.col + q_len > cols {
+                    continue;
+                }
+                let line = Line(m.grid_line);
+                let mut matched = true;
+                for (i, &qc) in q_chars.iter().enumerate() {
+                    let c = term.grid()[line][Column(m.col + i)].c;
+                    let c = if c == '\0' { ' ' } else { c };
+                    if c.to_lowercase().next().unwrap_or(c) != qc {
+                        matched = false;
+                        break;
                     }
-                    let line = Line(m.grid_line);
-                    for (i, &qc) in q_chars.iter().enumerate() {
-                        let c = term.grid()[line][Column(m.col + i)].c;
-                        let c = if c == '\0' { ' ' } else { c };
-                        if c.to_lowercase().next().unwrap_or(c) != qc {
-                            return None;
-                        }
-                    }
-                    Some(SearchMatch {
-                        grid_line: m.grid_line,
-                        col: m.col,
-                        len: q_len,
-                    })
-                })
-                .collect()
+                }
+                if matched && push_search_match(&mut matches, m.grid_line, m.col, q_len) {
+                    return (matches, true);
+                }
+            }
+            (matches, false)
         })
     }
 
     /// Search all visible rows and scrollback history for `query` (case-insensitive).
     /// Returns matches sorted from oldest history to current screen.
-    pub fn search_active_terminal(&self, query: &str) -> Vec<SearchMatch> {
+    pub fn search_active_terminal(&self, query: &str) -> (Vec<SearchMatch>, bool) {
         if query.is_empty() {
-            return Vec::new();
+            return (Vec::new(), false);
         }
         let query_lower = query.to_lowercase();
         let query_len = query.chars().count();
         let Some(terminal) = self.active_terminal() else {
-            return Vec::new();
+            return (Vec::new(), false);
         };
 
         terminal.with_term(|term| {
@@ -722,15 +744,13 @@ impl Mux {
                 // Each index is a terminal column — no byte-offset ambiguity.
                 for col in 0..row_chars.len().saturating_sub(query_chars.len() - 1) {
                     if row_chars[col..col + query_chars.len()] == query_chars[..] {
-                        matches.push(SearchMatch {
-                            grid_line: grid_row,
-                            col,
-                            len: query_len,
-                        });
+                        if push_search_match(&mut matches, grid_row, col, query_len) {
+                            return (matches, true);
+                        }
                     }
                 }
             }
-            matches
+            (matches, false)
         })
     }
 
@@ -871,6 +891,22 @@ impl Mux {
         for terminal in self.terminals.iter_mut().flatten() {
             terminal.pty.shutdown();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{push_search_match, SearchMatch, MAX_SEARCH_MATCHES};
+
+    #[test]
+    fn push_search_match_truncates_only_after_limit_is_exceeded() {
+        let mut matches: Vec<SearchMatch> = Vec::new();
+        for col in 0..MAX_SEARCH_MATCHES {
+            assert!(!push_search_match(&mut matches, 0, col, 1));
+        }
+        assert_eq!(matches.len(), MAX_SEARCH_MATCHES);
+        assert!(push_search_match(&mut matches, 0, MAX_SEARCH_MATCHES, 1));
+        assert_eq!(matches.len(), MAX_SEARCH_MATCHES);
     }
 }
 

@@ -38,35 +38,39 @@ struct McpFile {
 ///
 /// Missing files are silently skipped. Malformed JSON returns `Err`.
 pub fn load(cwd: &Path) -> Result<McpConfig> {
-    let mut config = McpConfig::new();
-
     // 1. Platform config dir (~/Library/Application Support on macOS, ~/.config on Linux)
     let platform_path = dirs::config_dir().map(|d| d.join("petruterm/mcp/mcp.json"));
-    if let Some(ref p) = platform_path {
-        if p.exists() {
-            let servers =
-                parse_file(p).with_context(|| format!("Failed to parse {}", p.display()))?;
-            config.extend(servers);
-        }
-    }
 
     // 2. XDG fallback: ~/.config/petruterm/mcp/mcp.json
     //    On macOS, dirs::config_dir() returns ~/Library/Application Support, so
     //    ~/.config is a separate location that many users expect to work.
-    if let Some(home) = dirs::home_dir() {
-        let xdg_path = home.join(".config/petruterm/mcp/mcp.json");
-        let already_loaded = platform_path.as_ref() == Some(&xdg_path);
-        if !already_loaded && xdg_path.exists() {
-            let servers = parse_file(&xdg_path)
-                .with_context(|| format!("Failed to parse {}", xdg_path.display()))?;
-            config.extend(servers);
-        }
-    }
+    let xdg_path = dirs::home_dir().map(|home| home.join(".config/petruterm/mcp/mcp.json"));
 
     // 3. Project-local config (overrides global on name conflict)
     let local_path = cwd.join(".petruterm/mcp.json");
+    load_from_paths(platform_path.as_deref(), xdg_path.as_deref(), &local_path)
+}
+
+fn load_from_paths(
+    platform_path: Option<&Path>,
+    xdg_path: Option<&Path>,
+    local_path: &Path,
+) -> Result<McpConfig> {
+    let mut config = McpConfig::new();
+
+    if let Some(p) = platform_path.filter(|p| p.exists()) {
+        let servers = parse_file(p).with_context(|| format!("Failed to parse {}", p.display()))?;
+        config.extend(servers);
+    }
+
+    let already_loaded_xdg = matches!((platform_path, xdg_path), (Some(p), Some(x)) if p == x);
+    if let Some(p) = xdg_path.filter(|p| !already_loaded_xdg && p.exists()) {
+        let servers = parse_file(p).with_context(|| format!("Failed to parse {}", p.display()))?;
+        config.extend(servers);
+    }
+
     if local_path.exists() {
-        let servers = parse_file(&local_path)
+        let servers = parse_file(local_path)
             .with_context(|| format!("Failed to parse {}", local_path.display()))?;
         config.extend(servers);
     }
@@ -113,8 +117,10 @@ mod tests {
     #[test]
     fn missing_file_returns_empty() {
         let dir = TempDir::new().unwrap();
-        // load() with no files on disk → empty config, no error
-        let config = load(dir.path()).unwrap();
+        let local = dir.path().join(".petruterm/mcp.json");
+        let platform = dir.path().join("platform/petruterm/mcp/mcp.json");
+        let xdg = dir.path().join(".config/petruterm/mcp/mcp.json");
+        let config = load_from_paths(Some(&platform), Some(&xdg), &local).unwrap();
         assert!(config.is_empty());
     }
 

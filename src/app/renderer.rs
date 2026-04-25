@@ -121,7 +121,7 @@ pub struct RenderContext {
     // Tab bar: HarfBuzz per tab name. Cached inputs checked directly (no hash) (TD-PERF-16).
     pub tab_bar_instances_cache: Vec<CellVertex>,
     pub tab_bar_rects_cache: Vec<RoundedRectInstance>,
-    pub tab_bar_inputs: Option<(usize, usize)>, // (active_index, total_cols)
+    pub tab_bar_inputs: Option<(usize, usize, bool, bool)>, // (active_index, total_cols, sidebar_visible, panel_visible)
     pub tab_bar_titles: Vec<String>,
     pub tab_bar_rename_input: Option<String>,
     // Status bar: HarfBuzz per segment. Keyed by hash of all segment inputs.
@@ -744,9 +744,6 @@ impl RenderContext {
         let pick_sel = config.colors.ui_accent;
         const PICK_FG: [f32; 4] = [0.80, 0.80, 0.90, 1.0]; // soft white — picker items
 
-        const SPIN: [&str; 8] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"];
-        let spin = SPIN[(self.frame_counter / 4) as usize % 8];
-
         let co = term_cols; // grid column where panel begins
 
         // ── Background Rect ──────────────────────────────────────────────────
@@ -1121,10 +1118,7 @@ impl RenderContext {
             if matches!(panel.state, PanelState::Loading) {
                 let mut buf = std::mem::take(&mut self.fmt_buf);
                 buf.clear();
-                let _ = std::fmt::write(
-                    &mut buf,
-                    format_args!("    {}  {}", spin, t!("ai.thinking")),
-                );
+                let _ = std::fmt::write(&mut buf, format_args!("    ⟳  {}", t!("ai.thinking")));
                 push_line!("", buf.as_str(), STREAM_FG, Some(asst_accent));
                 self.fmt_buf = buf;
             }
@@ -1313,14 +1307,14 @@ impl RenderContext {
         let hints: String = if file_picker_focused {
             format!("  ↑↓ navigate   Enter: attach   Tab: close  Tokens: {tokens}")
         } else if !panel_focused {
-            format!("  <Leader>a: focus   Esc: close   Tokens: {tokens}")
+            format!("  <Leader>A: focus   <Leader>a a: close   Tokens: {tokens}")
         } else {
             let base = match &panel.state {
                 PanelState::Idle if !panel.input.trim().is_empty() => {
-                    "  Enter: send   Tab: files   Esc: close"
+                    "  Enter: send   Tab: files   Leader+a a: close"
                 }
                 PanelState::Idle if has_assistant => "  Enter: run \u{23ce}   Tab: files",
-                PanelState::Idle => "  Enter: send   Tab: files   Esc: close",
+                PanelState::Idle => "  Enter: send   Tab: files   Leader+a a: close",
                 PanelState::Loading | PanelState::Streaming => "  streaming\u{2026}",
                 PanelState::Error(_) => "  Esc: dismiss",
                 PanelState::AwaitingConfirm => "  y/Enter: confirm   n/Esc: reject",

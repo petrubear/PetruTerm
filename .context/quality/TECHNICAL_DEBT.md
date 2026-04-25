@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-04-24
-**Open Items:** 0
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0 open, 3 deferred
+**Last Updated:** 2026-04-25
+**Open Items:** 1
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 1 | **P3:** 0 open, 2 deferred
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -31,7 +31,7 @@ _Ninguno abierto._
 
 ## P2 — Prioridad media
 
-_Ninguno abierto._
+**TD-UX-04** — `~/.config/petruterm/notifications.lua` define notificaciones para abrir tab y para respuesta de IA. La de abrir tab funciona, pero la de `airesponse` no dispara la notificacion esperada.
 
 **TD-PERF-05** — DIFERIDO a Phase 2 (cross-platform). Atlas de glifos 64 MB de VRAM desde arranque. En Apple Silicon (unified memory) no es medible. Fix requiere textura dinámica — pospuesto para GPUs discretas.
 

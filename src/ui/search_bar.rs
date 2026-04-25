@@ -12,6 +12,7 @@ pub struct SearchMatch {
 pub struct SearchBar {
     pub query: String,
     pub matches: Vec<SearchMatch>,
+    pub matches_truncated: bool,
     /// Index of the currently highlighted match.
     pub current: usize,
     pub visible: bool,
@@ -36,6 +37,7 @@ impl SearchBar {
         self.query.clear();
         self.last_query.clear();
         self.matches.clear();
+        self.matches_truncated = false;
         self.current = 0;
         self.dirty = true;
         self.scroll_needed = false;
@@ -53,9 +55,10 @@ impl SearchBar {
     }
 
     /// Replace match list after a search run. Resets to first match.
-    pub fn set_matches(&mut self, matches: Vec<SearchMatch>) {
+    pub fn set_matches(&mut self, matches: Vec<SearchMatch>, truncated: bool) {
         self.current = 0;
         self.matches = matches;
+        self.matches_truncated = truncated;
         self.scroll_needed = !self.matches.is_empty();
     }
 
@@ -86,8 +89,30 @@ impl SearchBar {
             String::new()
         } else if self.matches.is_empty() {
             "no results".to_string()
+        } else if self.matches_truncated {
+            format!("{} / {}+", self.current + 1, self.matches.len())
         } else {
             format!("{} / {}", self.current + 1, self.matches.len())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SearchBar, SearchMatch};
+
+    #[test]
+    fn truncated_count_label_shows_plus_suffix() {
+        let mut search = SearchBar::default();
+        search.query = "err".to_string();
+        search.set_matches(
+            vec![SearchMatch {
+                grid_line: 0,
+                col: 4,
+                len: 3,
+            }],
+            true,
+        );
+        assert_eq!(search.count_label(), "1 / 1+");
     }
 }

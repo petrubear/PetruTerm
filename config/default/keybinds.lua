@@ -26,8 +26,10 @@ function module.apply_to_config(config)
     -- ── Overlays ──────────────────────────────────────────────────────────
     { mods = "LEADER", key = "o",  action = petruterm.action.CommandPalette },
 
-    -- ── AI sub-leader (leader+a+*) ────────────────────────────────────────
-    -- leader+a+a : AI panel (open / toggle focus)
+    -- ── AI controls ────────────────────────────────────────────────────────
+    -- leader+A   : focus AI panel / return focus to terminal
+    { mods = "LEADER", key = "A",  action = petruterm.action.FocusAiPanel },
+    -- leader+a+a : toggle AI panel open / close
     -- leader+a+e : Explain last output
     -- leader+a+f : Fix last error
     -- leader+a+z : Undo last write

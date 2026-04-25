@@ -1030,21 +1030,21 @@ impl ApplicationHandler<()> for App {
                     if self.ui.search_bar.visible && self.ui.search_bar.dirty {
                         let query = self.ui.search_bar.query.clone();
                         if query.is_empty() {
-                            self.ui.search_bar.matches.clear();
-                            self.ui.search_bar.current = 0;
+                            self.ui.search_bar.set_matches(Vec::new(), false);
                         } else {
                             // Incremental path: when the new query extends the previous one,
                             // filter existing matches instead of scanning the full grid (TD-PERF-11).
                             let prev_query = self.ui.search_bar.last_query.clone();
                             let can_filter = !self.ui.search_bar.matches.is_empty()
+                                && !self.ui.search_bar.matches_truncated
                                 && query.starts_with(prev_query.as_str())
                                 && !prev_query.is_empty();
-                            let matches = if can_filter {
+                            let (matches, truncated) = if can_filter {
                                 self.mux.filter_matches(&self.ui.search_bar.matches, &query)
                             } else {
                                 self.mux.search_active_terminal(&query)
                             };
-                            self.ui.search_bar.set_matches(matches);
+                            self.ui.search_bar.set_matches(matches, truncated);
                         }
                         self.ui.search_bar.last_query = query;
                         self.ui.search_bar.dirty = false;
@@ -1140,14 +1140,21 @@ impl ApplicationHandler<()> for App {
                         let active_idx = self.mux.tabs.active_index();
 
                         // Fast comparison: check copiable inputs before hashing (TD-PERF-16).
-                        let inputs_match =
-                            if let Some((cached_idx, cached_cols)) = rc.tab_bar_inputs {
-                                cached_idx == active_idx
-                                    && cached_cols == tab_total_cols
-                                    && rc.tab_bar_rename_input.as_deref() == rename_input
-                            } else {
-                                false
-                            };
+                        let inputs_match = if let Some((
+                            cached_idx,
+                            cached_cols,
+                            cached_sidebar_visible,
+                            cached_panel_visible,
+                        )) = rc.tab_bar_inputs
+                        {
+                            cached_idx == active_idx
+                                && cached_cols == tab_total_cols
+                                && cached_sidebar_visible == self.sidebar_visible
+                                && cached_panel_visible == self.ui.is_panel_visible()
+                                && rc.tab_bar_rename_input.as_deref() == rename_input
+                        } else {
+                            false
+                        };
 
                         let titles_match = {
                             let current_titles: Vec<String> = self
@@ -1194,7 +1201,12 @@ impl ApplicationHandler<()> for App {
                                 .extend_from_slice(&rc.rect_instances[rect_start..]);
 
                             // Cache the inputs for next frame comparison (TD-PERF-16).
-                            rc.tab_bar_inputs = Some((active_idx, tab_total_cols));
+                            rc.tab_bar_inputs = Some((
+                                active_idx,
+                                tab_total_cols,
+                                self.sidebar_visible,
+                                self.ui.is_panel_visible(),
+                            ));
                             rc.tab_bar_titles = self
                                 .mux
                                 .tabs
@@ -1238,14 +1250,9 @@ impl ApplicationHandler<()> for App {
                         let panel_focused = self.ui.panel_focused;
                         let file_picker_focused = self.ui.file_picker_focused;
                         let blink = self.input.cursor_blink_on;
-                        let force_rebuild = matches!(
-                            self.ui.panel().state,
-                            crate::llm::chat_panel::PanelState::Loading
-                                | crate::llm::chat_panel::PanelState::Streaming
-                        );
                         // If window was resized, term_cols changed — invalidate panel cache.
                         let panel_cols_changed = rc.panel_cache_term_cols != total_cols;
-                        if panel_dirty || force_rebuild || panel_cols_changed {
+                        if panel_dirty || panel_cols_changed {
                             let panel_start = rc.instances.len();
                             let rect_start = rc.rect_instances.len();
                             self.ui.panel_mut().dirty = false;
@@ -1863,6 +1870,8 @@ impl ApplicationHandler<()> for App {
                                 let terminal_id = self.mux.focused_terminal_id();
                                 if self.ui.is_panel_visible() {
                                     self.ui.panel_mut().close();
+                                    self.ui.panel_focused = false;
+                                    self.ui.file_picker_focused = false;
                                 } else {
                                     let cwd = self
                                         .mux
@@ -2239,7 +2248,9 @@ impl ApplicationHandler<()> for App {
             }
         }
 
-        let had_ai = self.ui.poll_ai_events() || self.ui.poll_ai_block_events();
+        let had_panel_ai = self.ui.poll_ai_events();
+        let had_ai_block = self.ui.poll_ai_block_events();
+        let had_ai = had_panel_ai || had_ai_block;
         let scan_ready = self.ui.poll_file_scan();
         if had_ai || scan_ready {
             if let Some(w) = &self.window {
@@ -2328,19 +2339,25 @@ impl ApplicationHandler<()> for App {
         // entirely (many terminals do this) and use ControlFlow::Wait so the OS
         // keeps the event loop dormant until a real event arrives.
         //
-        // The AI panel alone does NOT prevent idle when it is in the background
-        // (terminal focused, nothing streaming). The panel cursor goes solid and the
-        // thread parks — same energy profile as a plain terminal. Blink resumes as
-        // soon as the user focuses the panel or LLM output starts arriving
-        // (had_ai = true from poll_ai_events).
-        let any_overlay = (self.ui.is_panel_visible() && self.ui.panel_focused)
+        // Background AI activity should not keep the app "active" by itself.
+        // Only visible, interactive AI surfaces prevent idle; hidden/background
+        // streaming still requests redraws on token arrival, but it does not keep
+        // the blink timer alive between events.
+        let panel_overlay_active = self.ui.is_panel_visible() && self.ui.panel_focused;
+        let block_overlay_active = self.ui.is_block_visible();
+        let visible_ai_activity =
+            (had_panel_ai && panel_overlay_active) || (had_ai_block && block_overlay_active);
+        let any_overlay = panel_overlay_active
             || self.ui.palette.visible
             || self.ui.context_menu.visible
             || self.ui.search_bar.visible
-            || self.ui.is_block_visible();
+            || block_overlay_active;
         let any_drag = self.input.dragging_separator.is_some() || self.input.mouse_left_pressed;
-        let idle =
-            !had_pty_data && !had_ai && !self.pending_pty_redraw && !any_overlay && !any_drag;
+        let idle = !had_pty_data
+            && !visible_ai_activity
+            && !self.pending_pty_redraw
+            && !any_overlay
+            && !any_drag;
 
         // Blink only when focused, not idle, and not in battery-saver mode.
         // On battery the cursor stays solid — eliminates the 530 ms periodic GPU wakeup.

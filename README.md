@@ -230,19 +230,29 @@ Press `Ctrl+F`, release, then press the bound key within `timeout_ms` millisecon
 | `Cmd+C` | Copy selection to clipboard |
 | `Cmd+V` | Paste from clipboard |
 | `Cmd+Q` | Quit |
+| `Cmd+K` | Clear screen and scrollback |
+| `Cmd+F` | Toggle text search |
 | `Cmd+1–9` | Switch to tab N |
 | `Ctrl+Space` | Toggle inline AI block |
+| `F12` | Toggle debug HUD |
 
 #### Default leader bindings
 
 | Binding | Action |
 |---------|--------|
 | `Leader+o` | Open command palette |
-| `Leader+a` | Open / close AI panel |
+| `Leader+a+a` | Open / close AI panel |
 | `Leader+A` | Move focus between terminal and AI panel (without closing) |
-| `Leader+e` | Explain last terminal output |
-| `Leader+f` | Fix last error |
-| `Leader+z` | Undo last AI file write |
+| `Leader+a+e` | Explain last terminal output |
+| `Leader+a+f` | Fix last error |
+| `Leader+a+z` | Undo last AI file write |
+| `Leader+e+e` | Toggle workspace sidebar |
+| `Leader+w` | New workspace |
+| `Leader+W+n` | New workspace |
+| `Leader+W+&` | Close workspace |
+| `Leader+W+,` | Rename workspace |
+| `Leader+W+j` | Next workspace |
+| `Leader+W+k` | Previous workspace |
 | `Leader+c` | New tab |
 | `Leader+&` | Close tab |
 | `Leader+n` | Next tab |
@@ -251,13 +261,14 @@ Press `Ctrl+F`, release, then press the bound key within `timeout_ms` millisecon
 | `Leader+"` | Split pane vertically (top / bottom) |
 | `Leader+x` | Close active pane |
 | `Leader+h/j/k/l` | Focus pane left / down / up / right (vim-style) |
+| `Leader+Option+Arrow` | Resize active pane |
 
 #### Custom bindings
 
 ```lua
 config.keys = {
-    { mods = "LEADER", key = "a",  action = petruterm.action.ToggleAiPanel },
     { mods = "LEADER", key = "A",  action = petruterm.action.FocusAiPanel },
+    { mods = "LEADER", key = "o",  action = petruterm.action.CommandPalette },
     { mods = "LEADER", key = "c",  action = petruterm.action.NewTab },
     { mods = "LEADER", key = "n",  action = petruterm.action.NextTab },
     { mods = "LEADER", key = "%",  action = petruterm.action.SplitHorizontal },
@@ -265,6 +276,8 @@ config.keys = {
     { mods = "LEADER", key = "x",  action = petruterm.action.ClosePane },
 }
 ```
+
+`Leader+a+*`, `Leader+e+e`, `Leader+w`, `Leader+W+*`, `Ctrl+Space`, `Cmd+F`, `Cmd+K`, `Cmd+1-9`, and `F12` are handled by the built-in input layer rather than `config.keys`. The single-key leader prefixes `a`, `e`, and `W` are reserved for those built-in sequences.
 
 #### Available actions
 
@@ -342,8 +355,8 @@ config.llm = {
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `nl_to_command` | bool | `true` | Natural language → shell command via inline AI block (`Ctrl+Space`). |
-| `explain_output` | bool | `true` | Explain last terminal output (`Leader+e`). |
-| `fix_last_error` | bool | `true` | Suggest a fix for the last failed command (`Leader+f`). |
+| `explain_output` | bool | `true` | Explain last terminal output (`Leader+a+e`). |
+| `fix_last_error` | bool | `true` | Suggest a fix for the last failed command (`Leader+a+f`). |
 | `context_chat` | bool | `true` | Multi-turn chat panel with CWD, exit code, and last command context. |
 
 #### Local provider examples
@@ -387,7 +400,7 @@ security add-generic-password \
 The `copilot` provider uses **device-flow OAuth** — no token needs to be created or copied manually. You need an active GitHub Copilot subscription.
 
 1. In `llm.lua`, set `provider = "copilot"` and omit `api_key`.
-2. Open the AI panel (`Leader+a`). On first use, PetruTerm starts the authorization flow automatically:
+2. Open the AI panel (`Leader+a+a`). On first use, PetruTerm starts the authorization flow automatically:
    - A browser window opens at `github.com/login/device`.
    - The activation code is shown in the chat panel.
    - Enter the code in the browser and click **Authorize**.
@@ -411,7 +424,7 @@ security find-generic-password -s PetruTerm -a GITHUB_COPILOT_OAUTH_TOKEN -w
 
 ## AI Agent Panel
 
-Open with `Leader+a`. Press again to close. Use `Leader+A` to move focus between the terminal and the panel without closing it.
+Open with `Leader+a+a`. Press again to close. Use `Leader+A` to move focus between the terminal and the panel without closing it.
 
 ### File context
 
@@ -451,7 +464,7 @@ When the LLM needs additional context it can autonomously call built-in tools (u
 | `WriteFile` | **Yes** | Overwrite a file with a diff preview before writing |
 | `RunCommand` | **Yes** | Execute a shell command in the active PTY |
 
-Write and run tools show a `[y] Apply  [n] Reject` prompt. Use `Leader+z` to undo the last file write.
+Write and run tools show a `[y] Apply  [n] Reject` prompt. Use `Leader+a+z` to undo the last file write.
 
 While a tool is running the panel shows `⟳ tool(path)`; after completion it shows `✓ tool(path)`.
 
