@@ -99,6 +99,8 @@ pub struct ChatPanel {
     pub messages: Vec<ChatMessage>,
     /// Current user input being typed.
     pub input: String,
+    /// Cursor position in `input` as a char index (0 = before first char).
+    pub input_cursor: usize,
     /// Accumulated tokens for the in-flight response.
     pub streaming_buf: String,
     /// Lines scrolled back from the bottom (0 = latest visible).
@@ -108,6 +110,14 @@ pub struct ChatPanel {
     /// Marks panel content as changed — renderer uses this to skip re-shaping
     /// unchanged frames (avoids HarfBuzz calls on every redraw).
     pub dirty: bool,
+
+    // ── Prompt history (TD-UI-03) ─────────────────────────────────────────────
+    /// Submitted prompts, most recent last.
+    pub prompt_history: Vec<String>,
+    /// Current index into prompt_history while navigating (None = live draft).
+    history_idx: Option<usize>,
+    /// Draft saved when history navigation begins; restored on arrow-down past end.
+    history_draft: String,
 
     /// Pre-wrapped lines for each message (index-parallel to `messages`).
     /// Keyed by `wrapped_cache_width`; rebuilt lazily when width changes.
@@ -164,10 +174,14 @@ impl ChatPanel {
             state: PanelState::Hidden,
             messages: Vec::new(),
             input: String::new(),
+            input_cursor: 0,
             streaming_buf: String::new(),
             scroll_offset: 0,
             width_cols: PANEL_COLS,
             dirty: true,
+            prompt_history: Vec::new(),
+            history_idx: None,
+            history_draft: String::new(),
             attached_files: Vec::new(),
             attached_file_chars: Vec::new(),
             confirm_display: None,
@@ -233,6 +247,7 @@ impl ChatPanel {
         if matches!(self.state, PanelState::Hidden) {
             self.state = PanelState::Idle;
             self.input.clear();
+            self.input_cursor = 0;
             self.dirty = true;
         }
     }
@@ -247,7 +262,15 @@ impl ChatPanel {
 
     pub fn type_char(&mut self, c: char) {
         if self.is_idle() {
-            self.input.push(c);
+            self.history_idx = None;
+            let bp = self
+                .input
+                .char_indices()
+                .nth(self.input_cursor)
+                .map(|(b, _)| b)
+                .unwrap_or(self.input.len());
+            self.input.insert(bp, c);
+            self.input_cursor += 1;
             self.dirty = true;
         }
     }
@@ -255,16 +278,183 @@ impl ChatPanel {
     /// Replace the current input with `text` (e.g. from context menu "Ask AI").
     pub fn set_input(&mut self, text: String) {
         if self.is_idle() {
+            self.input_cursor = text.chars().count();
             self.input = text;
+            self.history_idx = None;
             self.dirty = true;
         }
     }
 
     pub fn backspace(&mut self) {
-        if self.is_idle() {
-            self.input.pop();
+        if self.is_idle() && self.input_cursor > 0 {
+            self.history_idx = None;
+            let bp = self
+                .input
+                .char_indices()
+                .nth(self.input_cursor - 1)
+                .map(|(b, _)| b)
+                .unwrap_or(self.input.len());
+            self.input.remove(bp);
+            self.input_cursor -= 1;
             self.dirty = true;
         }
+    }
+
+    pub fn move_cursor_left(&mut self) {
+        if self.input_cursor > 0 {
+            self.input_cursor -= 1;
+        }
+    }
+
+    pub fn move_cursor_right(&mut self) {
+        if self.input_cursor < self.input.chars().count() {
+            self.input_cursor += 1;
+        }
+    }
+
+    pub fn move_cursor_home(&mut self) {
+        self.input_cursor = 0;
+    }
+
+    pub fn move_cursor_end(&mut self) {
+        self.input_cursor = self.input.chars().count();
+    }
+
+    pub fn clear_input(&mut self) {
+        if self.is_idle() {
+            self.input.clear();
+            self.input_cursor = 0;
+            self.history_idx = None;
+            self.dirty = true;
+        }
+    }
+
+    pub fn history_up(&mut self) {
+        if !self.is_idle() || self.prompt_history.is_empty() {
+            return;
+        }
+        match self.history_idx {
+            None => {
+                self.history_draft = self.input.clone();
+                self.history_idx = Some(self.prompt_history.len() - 1);
+            }
+            Some(0) => return,
+            Some(i) => self.history_idx = Some(i - 1),
+        }
+        let idx = self.history_idx.unwrap();
+        self.input = self.prompt_history[idx].clone();
+        self.input_cursor = self.input.chars().count();
+        self.dirty = true;
+    }
+
+    pub fn history_down(&mut self) {
+        let Some(idx) = self.history_idx else { return };
+        if idx + 1 < self.prompt_history.len() {
+            self.history_idx = Some(idx + 1);
+            self.input = self.prompt_history[idx + 1].clone();
+        } else {
+            self.history_idx = None;
+            self.input = self.history_draft.clone();
+        }
+        self.input_cursor = self.input.chars().count();
+        self.dirty = true;
+    }
+
+    /// Returns the (visual_line, visual_col) of `input_cursor` in the wrapped layout.
+    /// `wrap_width` is the number of chars per soft-wrap line (same value the renderer uses).
+    pub fn cursor_visual_pos(&self, wrap_width: usize) -> (usize, usize) {
+        let ww = wrap_width.max(1);
+        let mut vline = 0usize;
+        let mut char_pos = 0usize;
+        for segment in self.input.split('\n') {
+            let seg_len = segment.chars().count();
+            let seg_end = char_pos + seg_len;
+            if self.input_cursor <= seg_end {
+                let offset = self.input_cursor - char_pos;
+                let sl = offset / ww;
+                let sc = offset % ww;
+                // Cursor at end of segment on exact wrap boundary: stay on last line.
+                if sc == 0 && sl > 0 && offset == seg_len {
+                    return (vline + sl - 1, ww);
+                }
+                return (vline + sl, sc);
+            }
+            vline += if seg_len == 0 {
+                1
+            } else {
+                seg_len.div_ceil(ww)
+            };
+            char_pos = seg_end + 1;
+        }
+        (vline.saturating_sub(1), 0)
+    }
+
+    fn visual_pos_to_cursor(
+        &self,
+        target_vline: usize,
+        target_vcol: usize,
+        wrap_width: usize,
+    ) -> usize {
+        let ww = wrap_width.max(1);
+        let mut vline = 0usize;
+        let mut char_pos = 0usize;
+        for segment in self.input.split('\n') {
+            let seg_len = segment.chars().count();
+            let seg_vlines = if seg_len == 0 {
+                1
+            } else {
+                seg_len.div_ceil(ww)
+            };
+            if target_vline < vline + seg_vlines {
+                let sl = target_vline - vline;
+                let line_start = sl * ww;
+                let line_end = ((sl + 1) * ww).min(seg_len);
+                let line_len = line_end.saturating_sub(line_start);
+                return char_pos + line_start + target_vcol.min(line_len);
+            }
+            vline += seg_vlines;
+            char_pos += seg_len + 1;
+        }
+        self.input.chars().count()
+    }
+
+    /// Move cursor up one visual line. Returns false if already on the first line
+    /// (caller should fall back to history_up).
+    pub fn cursor_up(&mut self) -> bool {
+        let ww = (self.width_cols as usize).saturating_sub(5).max(1);
+        let (vline, vcol) = self.cursor_visual_pos(ww);
+        if vline == 0 {
+            return false;
+        }
+        self.input_cursor = self.visual_pos_to_cursor(vline - 1, vcol, ww);
+        self.dirty = true;
+        true
+    }
+
+    /// Move cursor down one visual line. Returns false if already on the last line
+    /// (caller should fall back to history_down).
+    pub fn cursor_down(&mut self) -> bool {
+        let ww = (self.width_cols as usize).saturating_sub(5).max(1);
+        let (vline, vcol) = self.cursor_visual_pos(ww);
+        let total: usize = self
+            .input
+            .split('\n')
+            .map(|s| {
+                let n = s.chars().count();
+                if n == 0 {
+                    1
+                } else {
+                    n.div_ceil(ww)
+                }
+            })
+            .sum::<usize>()
+            .max(1);
+        if vline + 1 >= total {
+            return false;
+        }
+        self.input_cursor = self.visual_pos_to_cursor(vline + 1, vcol, ww);
+        self.dirty = true;
+        true
     }
 
     /// Append a file path to the current input (from drag-and-drop).
@@ -272,8 +462,10 @@ impl ChatPanel {
         if self.is_idle() {
             if !self.input.is_empty() && !self.input.ends_with(' ') {
                 self.input.push(' ');
+                self.input_cursor += 1;
             }
             self.input.push_str(path);
+            self.input_cursor = self.input.chars().count();
             self.dirty = true;
         }
     }
@@ -285,8 +477,14 @@ impl ChatPanel {
         if content.is_empty() {
             return None;
         }
+        if self.prompt_history.last().map(|s| s.as_str()) != Some(&content) {
+            self.prompt_history.push(content.clone());
+        }
         self.messages.push(ChatMessage::user(&content));
         self.input.clear();
+        self.input_cursor = 0;
+        self.history_idx = None;
+        self.history_draft.clear();
         self.state = PanelState::Loading;
         self.streaming_buf.clear();
         self.dirty = true;

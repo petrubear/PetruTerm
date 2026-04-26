@@ -543,6 +543,10 @@ impl InputHandler {
                         }
                         return;
                     }
+                    "a" => {
+                        ui.panel_mut().clear_input();
+                        return;
+                    }
                     _ => {}
                 }
             }
@@ -643,6 +647,18 @@ impl InputHandler {
                 }
                 Key::Named(NamedKey::Backspace) => ui.panel_mut().backspace(),
                 Key::Named(NamedKey::Space) => ui.panel_mut().type_char(' '),
+                Key::Named(NamedKey::ArrowLeft) => ui.panel_mut().move_cursor_left(),
+                Key::Named(NamedKey::ArrowRight) => ui.panel_mut().move_cursor_right(),
+                Key::Named(NamedKey::Home) => ui.panel_mut().move_cursor_home(),
+                Key::Named(NamedKey::End) => ui.panel_mut().move_cursor_end(),
+                Key::Named(NamedKey::ArrowUp) if !ui.panel_mut().cursor_up() => {
+                    ui.panel_mut().history_up();
+                }
+                Key::Named(NamedKey::ArrowUp) => {}
+                Key::Named(NamedKey::ArrowDown) if !ui.panel_mut().cursor_down() => {
+                    ui.panel_mut().history_down();
+                }
+                Key::Named(NamedKey::ArrowDown) => {}
                 Key::Character(s)
                     if ctrl
                         && s.as_str() == "s"

@@ -85,7 +85,13 @@ pub struct RenderContext {
     gap_buf: String,
     /// Reusable line buffer for `build_chat_panel_instances` — avoids Vec realloc per rebuild.
     /// Strings inside are reused across frames when capacity permits (TD-PERF-13).
-    pub scratch_lines: Vec<(String, [f32; 4], Option<[f32; 4]>, Vec<(usize, usize, [f32; 4])>)>,
+    #[allow(clippy::type_complexity)]
+    pub scratch_lines: Vec<(
+        String,
+        [f32; 4],
+        Option<[f32; 4]>,
+        Vec<(usize, usize, [f32; 4])>,
+    )>,
     pub panel_rect_cache: Vec<RoundedRectInstance>,
     /// Incremented each rendered frame; used for spinner animation to avoid O(n) chars().count().
     pub frame_counter: u64,
@@ -789,7 +795,7 @@ impl RenderContext {
         use crate::llm::ChatRole;
 
         let panel_cols = panel.width_cols as usize;
-        if panel_cols == 0 || screen_rows < 6 {
+        if panel_cols == 0 || screen_rows < 8 {
             return;
         }
 
@@ -802,13 +808,13 @@ impl RenderContext {
         let input_fg = config.llm.ui.input_fg;
 
         let border_fg = config.colors.ui_accent;
-        const STREAM_FG: [f32; 4] = [0.95, 0.98, 0.55, 1.0]; // yellow
-        const ERR_FG: [f32; 4] = [1.00, 0.33, 0.33, 1.0]; // red
+        let stream_fg = config.colors.ansi[3];
+        let err_fg = config.colors.ansi[1];
         let sep_fg = config.colors.ui_muted;
         let dim_fg = config.colors.ui_muted;
-const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached files
+        let file_fg = config.colors.brights[2];
         let pick_sel = config.colors.ui_accent;
-        const PICK_FG: [f32; 4] = [0.80, 0.80, 0.90, 1.0]; // soft white — picker items
+        let pick_fg = config.colors.foreground;
 
         let co = term_cols; // grid column where panel begins
 
@@ -840,8 +846,8 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
             });
 
         // ── Fixed bottom rows (always present) ───────────────────────────────
-        // input_row1/2 and hints_row are rendered by build_chat_panel_input_rows (TD-PERF-10).
-        let sep_row = screen_rows - 4;
+        // input_row1..4 and hints_row are rendered by build_chat_panel_input_rows (TD-PERF-10).
+        let sep_row = screen_rows - 6;
 
         // ── File section height (0 when no files attached) ───────────────────
         // header row ("│ Selected (N files)") + one row per file, capped at MAX_FILE_ROWS
@@ -927,7 +933,7 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
                     let (text, fg) = if i == panel.file_picker_cursor {
                         (format!("  ▸ {}{}", marker, trimmed), pick_sel)
                     } else {
-                        (format!("    {}{}", marker, trimmed), PICK_FG)
+                        (format!("    {}{}", marker, trimmed), pick_fg)
                     };
                     self.push_shaped_row(&text, fg, panel_bg, row, co, panel_cols, font);
                 } else {
@@ -936,9 +942,9 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
             }
         } else if matches!(panel.state, PanelState::AwaitingConfirm) {
             // ── Confirmation view: diff preview + [y]/[n] ────────────────────
-            const ADD_FG: [f32; 4] = [0.50, 0.98, 0.60, 1.0]; // green
-            const REM_FG: [f32; 4] = [1.00, 0.47, 0.47, 1.0]; // red
-            const CTX_FG2: [f32; 4] = [0.60, 0.60, 0.70, 1.0]; // dimmed context
+            let add_fg = config.colors.ui_success;
+            let rem_fg = config.colors.ansi[1];
+            let ctx_fg2 = dim(config.colors.foreground, 0.25);
 
             match panel.confirm_display.as_ref() {
                 Some(ConfirmDisplay::Write {
@@ -970,9 +976,9 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
                         let row = 2 + i;
                         if let Some(dl) = diff.get(i) {
                             let (prefix, fg) = match dl.kind {
-                                DiffKind::Added => ("  + ", ADD_FG),
-                                DiffKind::Removed => ("  - ", REM_FG),
-                                DiffKind::Context => ("    ", CTX_FG2),
+                                DiffKind::Added => ("  + ", add_fg),
+                                DiffKind::Removed => ("  - ", rem_fg),
+                                DiffKind::Context => ("    ", ctx_fg2),
                             };
                             let max_w = panel_cols.saturating_sub(prefix.chars().count());
                             let text: String = dl.text.chars().take(max_w).collect();
@@ -984,8 +990,8 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
                     }
                 }
                 Some(ConfirmDisplay::Run { cmd }) => {
-                    const WARN_FG: [f32; 4] = [1.00, 0.72, 0.20, 1.0]; // amber
-                                                                       // Detect potentially destructive patterns (TD-034).
+                    let warn_fg = config.colors.ansi[3];
+                    // Detect potentially destructive patterns (TD-034).
                     let is_risky = [
                         "rm ",
                         "rm\t",
@@ -1003,7 +1009,7 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
                     .iter()
                     .any(|p| cmd.contains(p));
                     let (run_title, title_fg) = if is_risky {
-                        (t!("ai.run_command_destructive"), WARN_FG)
+                        (t!("ai.run_command_destructive"), warn_fg)
                     } else {
                         (t!("ai.run_command"), border_fg)
                     };
@@ -1017,7 +1023,7 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
                         .map(|(i, _)| &cmd[..i])
                         .unwrap_or(cmd);
                     let cmd_line = format!("    {}", cmd_trunc);
-                    self.push_shaped_row(&cmd_line, ADD_FG, panel_bg, 2, co, panel_cols, font);
+                    self.push_shaped_row(&cmd_line, add_fg, panel_bg, 2, co, panel_cols, font);
                     // Rest: empty
                     for row in 3..sep_row {
                         self.push_shaped_row("", sep_fg, panel_bg, row, co, panel_cols, font);
@@ -1041,7 +1047,7 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
                     suffix = if file_count == 1 { "" } else { "s" }
                 )
                 .to_string();
-                self.push_shaped_row(&fhdr, FILE_FG, panel_bg, 1, co, panel_cols, font);
+                self.push_shaped_row(&fhdr, file_fg, panel_bg, 1, co, panel_cols, font);
                 // File list
                 for (i, path) in panel.attached_files.iter().take(MAX_FILE_ROWS).enumerate() {
                     let name = path
@@ -1131,7 +1137,11 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
                         .spans
                         .iter()
                         .map(|&(s, e, ref sk)| {
-                            (s + prefix_len, e + prefix_len, resolve_span_fg(sk, line_fg, &config.colors))
+                            (
+                                s + prefix_len,
+                                e + prefix_len,
+                                resolve_span_fg(sk, line_fg, &config.colors),
+                            )
                         })
                         .collect();
                     push_line!(p, ann.display.as_str(), line_fg, accent, resolved_spans);
@@ -1183,21 +1193,35 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
                 for (i, ann) in self.streaming_stable_lines.iter().enumerate() {
                     let p = if i == 0 { "    AI  " } else { "        " };
                     let prefix_len = p.chars().count();
-                    let line_fg = resolve_line_fg(&ann.kind, STREAM_FG, &config.colors);
+                    let line_fg = resolve_line_fg(&ann.kind, stream_fg, &config.colors);
                     let resolved_spans: Vec<(usize, usize, [f32; 4])> = ann
                         .spans
                         .iter()
                         .map(|&(s, e, ref sk)| {
-                            (s + prefix_len, e + prefix_len, resolve_span_fg(sk, line_fg, &config.colors))
+                            (
+                                s + prefix_len,
+                                e + prefix_len,
+                                resolve_span_fg(sk, line_fg, &config.colors),
+                            )
                         })
                         .collect();
-                    push_line!(p, ann.display.as_str(), line_fg, Some(asst_accent), resolved_spans);
+                    push_line!(
+                        p,
+                        ann.display.as_str(),
+                        line_fg,
+                        Some(asst_accent),
+                        resolved_spans
+                    );
                 }
                 // Partial plain-text lines (no newline yet — not parsed through markdown)
                 let stable_count = self.streaming_stable_lines.len();
                 for (j, line) in partial_lines.iter().enumerate() {
-                    let p = if stable_count + j == 0 { "    AI  " } else { "        " };
-                    push_line!(p, line.as_str(), STREAM_FG, Some(asst_accent), vec![]);
+                    let p = if stable_count + j == 0 {
+                        "    AI  "
+                    } else {
+                        "        "
+                    };
+                    push_line!(p, line.as_str(), stream_fg, Some(asst_accent), vec![]);
                 }
             }
 
@@ -1205,7 +1229,7 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
                 let mut buf = std::mem::take(&mut self.fmt_buf);
                 buf.clear();
                 let _ = std::fmt::write(&mut buf, format_args!("    ⟳  {}", t!("ai.thinking")));
-                push_line!("", buf.as_str(), STREAM_FG, Some(asst_accent), vec![]);
+                push_line!("", buf.as_str(), stream_fg, Some(asst_accent), vec![]);
                 self.fmt_buf = buf;
             }
 
@@ -1217,10 +1241,9 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
                     } else {
                         "        "
                     };
-                    push_line!(p, line.as_str(), ERR_FG, None, vec![]);
+                    push_line!(p, line.as_str(), err_fg, None, vec![]);
                 }
             }
-
 
             let total_lines = line_idx;
             // Shrink logical length without dropping capacity.
@@ -1292,7 +1315,7 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
         use crate::llm::ChatRole;
 
         let panel_cols = panel.width_cols as usize;
-        if panel_cols == 0 || screen_rows < 6 {
+        if panel_cols == 0 || screen_rows < 8 {
             return;
         }
 
@@ -1304,8 +1327,10 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
 
         let co = term_cols;
         let hints_row = screen_rows - 1;
-        let input_row2 = screen_rows - 2;
-        let input_row1 = screen_rows - 3;
+        let input_row4 = screen_rows - 2;
+        let input_row3 = screen_rows - 3;
+        let input_row2 = screen_rows - 4;
+        let input_row1 = screen_rows - 5;
 
         // ── Input field (or confirmation prompt) ─────────────────────────────
         if matches!(panel.state, PanelState::AwaitingConfirm) {
@@ -1318,47 +1343,84 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
             } else {
                 ("[y] Apply", "[n] Reject")
             };
-            const CONFIRM_YES: [f32; 4] = [0.50, 0.98, 0.60, 1.0];
-            const CONFIRM_NO: [f32; 4] = [1.00, 0.47, 0.47, 1.0];
-            let yes_line = format!("   {yes_label}");
-            let no_line = format!("   {no_label}");
+            let confirm_yes = config.colors.ui_success;
+            let confirm_no = config.colors.ansi[1];
             self.push_shaped_row(
-                &yes_line,
-                CONFIRM_YES,
+                &format!("   {yes_label}"),
+                confirm_yes,
                 panel_bg,
-                input_row1,
+                input_row2,
                 co,
                 panel_cols,
                 font,
             );
             self.push_shaped_row(
-                &no_line, CONFIRM_NO, panel_bg, input_row2, co, panel_cols, font,
+                &format!("   {no_label}"),
+                confirm_no,
+                panel_bg,
+                input_row3,
+                co,
+                panel_cols,
+                font,
             );
         } else {
             let input_inner_w = panel_cols.saturating_sub(5);
+            let show_cursor =
+                panel_focused && !file_picker_focused && cursor_blink_on && panel.is_idle();
+            let cursor_chars = panel.input.chars().count().min(panel.input_cursor);
+
             let mut input_display = panel.input.clone();
-            if panel_focused && !file_picker_focused && cursor_blink_on && panel.is_idle() {
-                input_display.push('\u{258b}');
+            if show_cursor {
+                let bp = input_display
+                    .char_indices()
+                    .nth(cursor_chars)
+                    .map(|(b, _)| b)
+                    .unwrap_or(input_display.len());
+                input_display.insert(bp, '\u{258b}');
             }
+
             let input_lines = wrap_input(&input_display, input_inner_w);
+            let n = input_lines.len();
+
             let inp_fg = if panel_focused && !file_picker_focused {
                 input_fg
             } else {
                 dim_fg
             };
-            let n = input_lines.len();
-            let (vis1, vis2) = if n >= 2 {
-                (input_lines[n - 2].clone(), input_lines[n - 1].clone())
+
+            // cursor_visual_pos gives the exact (line, col) using wrap_width-aware logic.
+            let cursor_line = if show_cursor {
+                input_lines
+                    .iter()
+                    .position(|l| l.contains('\u{258b}'))
+                    .unwrap_or(n.saturating_sub(1))
+            } else if panel_focused && !file_picker_focused && panel.is_idle() {
+                panel.cursor_visual_pos(input_inner_w).0
             } else {
-                (
-                    input_lines.first().cloned().unwrap_or_default(),
-                    String::new(),
-                )
+                n.saturating_sub(1)
             };
-            let line1 = format!("  \u{25b8}  {}", vis1);
-            let line2 = format!("     {}", vis2);
-            self.push_shaped_row(&line1, inp_fg, panel_bg, input_row1, co, panel_cols, font);
-            self.push_shaped_row(&line2, inp_fg, panel_bg, input_row2, co, panel_cols, font);
+
+            // 4-line viewport: cursor stays at the bottom when scrolled past row 3.
+            let vis_start = cursor_line.saturating_sub(3);
+            let vis = [
+                input_lines.get(vis_start).cloned().unwrap_or_default(),
+                input_lines.get(vis_start + 1).cloned().unwrap_or_default(),
+                input_lines.get(vis_start + 2).cloned().unwrap_or_default(),
+                input_lines.get(vis_start + 3).cloned().unwrap_or_default(),
+            ];
+            let rows = [input_row1, input_row2, input_row3, input_row4];
+            for (i, (line, row)) in vis.iter().zip(rows.iter()).enumerate() {
+                let prefix = if i == 0 { "  \u{25b8}  " } else { "     " };
+                self.push_shaped_row(
+                    &format!("{prefix}{line}"),
+                    inp_fg,
+                    panel_bg,
+                    *row,
+                    co,
+                    panel_cols,
+                    font,
+                );
+            }
         }
 
         // ── Key hints + token count ───────────────────────────────────────────
@@ -1405,6 +1467,7 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
         font: &crate::config::schema::FontConfig,
         term_cols: usize,
         screen_rows: usize,
+        colors: &crate::config::schema::ColorScheme,
     ) {
         use crate::llm::chat_panel::word_wrap;
 
@@ -1418,13 +1481,13 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
         let resp_row = screen_rows - AI_BLOCK_ROWS + 2;
         let hint_row = screen_rows - AI_BLOCK_ROWS + 3;
 
-        const BLOCK_BG: [f32; 4] = [0.055, 0.055, 0.063, 1.0]; // #0e0e10 deep bg
-        const AI_BORDER_FG: [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // purple
-        const INPUT_FG: [f32; 4] = [0.95, 0.95, 0.95, 1.0]; // white
-        const RESP_FG: [f32; 4] = [0.50, 0.98, 0.60, 1.0]; // green
-        const STREAM_FG: [f32; 4] = [0.95, 0.98, 0.55, 1.0]; // yellow
-        const AI_HINT_FG: [f32; 4] = [0.38, 0.44, 0.64, 1.0]; // dim gray
-        const ERR_FG: [f32; 4] = [1.00, 0.33, 0.33, 1.0]; // red
+        let block_bg = colors.background;
+        let ai_border_fg = colors.ui_accent;
+        let input_fg = colors.foreground;
+        let resp_fg = colors.ui_success;
+        let stream_fg = colors.ansi[3];
+        let ai_hint_fg = colors.ui_muted;
+        let err_fg = colors.ansi[1];
 
         const SPIN: [&str; 8] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"];
         let spin = SPIN[(self.frame_counter / 4) as usize % 8];
@@ -1438,7 +1501,7 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
             title,
             "─".repeat(w.saturating_sub(side + title.chars().count()))
         );
-        self.push_shaped_row(&sep, AI_BORDER_FG, BLOCK_BG, sep_row, 0, w, font);
+        self.push_shaped_row(&sep, ai_border_fg, block_bg, sep_row, 0, w, font);
 
         // Input row: "⚡ > <query>[cursor]"
         let cursor = if matches!(block.state, AiState::Typing) {
@@ -1447,16 +1510,16 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
             ""
         };
         let query_row = format!("⚡ > {}{}", block.query, cursor);
-        self.push_shaped_row(&query_row, INPUT_FG, BLOCK_BG, input_row, 0, w, font);
+        self.push_shaped_row(&query_row, input_fg, block_bg, input_row, 0, w, font);
 
         // Response + hint rows
         match &block.state {
             AiState::Typing => {
-                self.push_shaped_row("", BLOCK_BG, BLOCK_BG, resp_row, 0, w, font);
+                self.push_shaped_row("", block_bg, block_bg, resp_row, 0, w, font);
                 self.push_shaped_row(
                     "  Enter: send   Esc: cancel",
-                    AI_HINT_FG,
-                    BLOCK_BG,
+                    ai_hint_fg,
+                    block_bg,
                     hint_row,
                     0,
                     w,
@@ -1466,23 +1529,23 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
             AiState::Loading => {
                 self.push_shaped_row(
                     &format!("  {} thinking\u{2026}", spin),
-                    STREAM_FG,
-                    BLOCK_BG,
+                    stream_fg,
+                    block_bg,
                     resp_row,
                     0,
                     w,
                     font,
                 );
-                self.push_shaped_row("  Esc: cancel", AI_HINT_FG, BLOCK_BG, hint_row, 0, w, font);
+                self.push_shaped_row("  Esc: cancel", ai_hint_fg, block_bg, hint_row, 0, w, font);
             }
             AiState::Streaming => {
                 let lines = word_wrap(&block.response, w.saturating_sub(4));
                 let line = format!("  \u{2192} {}", lines.first().cloned().unwrap_or_default()); // →
-                self.push_shaped_row(&line, STREAM_FG, BLOCK_BG, resp_row, 0, w, font);
+                self.push_shaped_row(&line, stream_fg, block_bg, resp_row, 0, w, font);
                 self.push_shaped_row(
                     &format!("  {} streaming\u{2026}   Esc: cancel", spin),
-                    AI_HINT_FG,
-                    BLOCK_BG,
+                    ai_hint_fg,
+                    block_bg,
                     hint_row,
                     0,
                     w,
@@ -1504,8 +1567,8 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
                     };
                     self.push_shaped_row(
                         &format!("  \u{2192} {}", display),
-                        RESP_FG,
-                        BLOCK_BG,
+                        resp_fg,
+                        block_bg,
                         resp_row,
                         0,
                         w,
@@ -1514,12 +1577,12 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
                 } else {
                     let lines = word_wrap(&block.response, w.saturating_sub(4));
                     let line = format!("  {}", lines.first().cloned().unwrap_or_default());
-                    self.push_shaped_row(&line, RESP_FG, BLOCK_BG, resp_row, 0, w, font);
+                    self.push_shaped_row(&line, resp_fg, block_bg, resp_row, 0, w, font);
                 }
                 self.push_shaped_row(
                     "  Enter: run \u{23ce}   Esc: dismiss",
-                    AI_HINT_FG,
-                    BLOCK_BG,
+                    ai_hint_fg,
+                    block_bg,
                     hint_row,
                     0,
                     w,
@@ -1529,8 +1592,8 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
             AiState::Error(err) => {
                 let lines = word_wrap(err, w.saturating_sub(4));
                 let line = format!("  \u{2717} {}", lines.first().cloned().unwrap_or_default()); // ✗
-                self.push_shaped_row(&line, ERR_FG, BLOCK_BG, resp_row, 0, w, font);
-                self.push_shaped_row("  Esc: dismiss", AI_HINT_FG, BLOCK_BG, hint_row, 0, w, font);
+                self.push_shaped_row(&line, err_fg, block_bg, resp_row, 0, w, font);
+                self.push_shaped_row("  Esc: dismiss", ai_hint_fg, block_bg, hint_row, 0, w, font);
             }
             AiState::Hidden => {}
         }
@@ -1584,7 +1647,9 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
         let ws_rows = (total_rows * 40 / 100).max(4);
         let mcp_rows = (total_rows * 20 / 100).max(3);
         let skills_rows = (total_rows * 20 / 100).max(3);
-        let steering_rows = total_rows.saturating_sub(ws_rows + mcp_rows + skills_rows).max(3);
+        let steering_rows = total_rows
+            .saturating_sub(ws_rows + mcp_rows + skills_rows)
+            .max(3);
         let mcp_start = ws_rows;
         let skills_start = ws_rows + mcp_rows;
         let steering_start = ws_rows + mcp_rows + skills_rows;
@@ -1640,7 +1705,12 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
             _pad: [0.0; 2],
         });
         self.rect_instances.push(RoundedRectInstance {
-            rect: [sidebar_left_px, sidebar_top_px, visible_sidebar_px, visible_h],
+            rect: [
+                sidebar_left_px,
+                sidebar_top_px,
+                visible_sidebar_px,
+                visible_h,
+            ],
             color: actual_sidebar_bg,
             radius,
             border_width: 0.0,
@@ -1660,7 +1730,12 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
         let push_section_sep = |this: &mut Self, row: usize| {
             let sep_y = sidebar_top_px + row as f32 * ch;
             this.rect_instances.push(RoundedRectInstance {
-                rect: [sidebar_left_px, sep_y, visible_sidebar_px, 1.0 * this.scale_factor],
+                rect: [
+                    sidebar_left_px,
+                    sep_y,
+                    visible_sidebar_px,
+                    1.0 * this.scale_factor,
+                ],
                 color: sidebar_sep_fg,
                 radius: 0.0,
                 border_width: 0.0,
@@ -1669,7 +1744,11 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
         };
 
         // ── Workspace section (rows 0..ws_rows) ──────────────────────────────
-        let ws_header_fg = if active_section == 0 { sidebar_accent } else { sidebar_dim_fg };
+        let ws_header_fg = if active_section == 0 {
+            sidebar_accent
+        } else {
+            sidebar_dim_fg
+        };
         let mut header = " Workspaces".to_string();
         let header_chars = header.chars().count();
         if sidebar_cols > header_chars + 2 {
@@ -1687,7 +1766,11 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
             let active = ws.id == active_workspace_id;
 
             if active || selected {
-                let row_bg = if active { sidebar_item_active_bg } else { sidebar_item_hover_bg };
+                let row_bg = if active {
+                    sidebar_item_active_bg
+                } else {
+                    sidebar_item_hover_bg
+                };
                 let margin_x = 8.0 * self.scale_factor;
                 let margin_y = 2.0 * self.scale_factor;
                 let pill_px = sidebar_left_px + margin_x;
@@ -1716,11 +1799,19 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
             }
 
             let name = if selected {
-                if let Some(input) = rename_input { format!("{input}_") } else { ws.name.clone() }
+                if let Some(input) = rename_input {
+                    format!("{input}_")
+                } else {
+                    ws.name.clone()
+                }
             } else {
                 ws.name.clone()
             };
-            let name_fg = if active { [1.0, 1.0, 1.0, 1.0] } else { sidebar_fg };
+            let name_fg = if active {
+                [1.0, 1.0, 1.0, 1.0]
+            } else {
+                sidebar_fg
+            };
             let trimmed_name: String = name.chars().take(sidebar_cols.saturating_sub(4)).collect();
             let mut line = format!("   {trimmed_name}");
             let line_w = line.chars().count();
@@ -1730,8 +1821,16 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
             push_sidebar_row(self, &line, name_fg, SIDEBAR_BG, base_row);
 
             let (tabs, panes) = counts.get(idx).copied().unwrap_or((0, 0));
-            let tabs_str = if tabs == 1 { "1 tab".to_string() } else { format!("{tabs} tabs") };
-            let panes_str = if panes == 1 { "1 pane".to_string() } else { format!("{panes} panes") };
+            let tabs_str = if tabs == 1 {
+                "1 tab".to_string()
+            } else {
+                format!("{tabs} tabs")
+            };
+            let panes_str = if panes == 1 {
+                "1 pane".to_string()
+            } else {
+                format!("{panes} panes")
+            };
             let mut subtitle = format!("   {tabs_str} · {panes_str}");
             let sub_w = subtitle.chars().count();
             if sub_w < sidebar_cols {
@@ -1742,12 +1841,22 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
 
         // ── MCP section (rows mcp_start .. mcp_start+mcp_rows) ───────────────
         push_section_sep(self, mcp_start);
-        let mcp_header_fg = if active_section == 1 { sidebar_accent } else { sidebar_dim_fg };
+        let mcp_header_fg = if active_section == 1 {
+            sidebar_accent
+        } else {
+            sidebar_dim_fg
+        };
         push_sidebar_row(self, " MCP SERVERS", mcp_header_fg, SIDEBAR_BG, mcp_start);
         let mcp_items_start = mcp_start + 1;
         let mcp_available = mcp_rows.saturating_sub(1);
         if mcp_servers.is_empty() {
-            push_sidebar_row(self, "  no servers connected", sidebar_dim_fg, SIDEBAR_BG, mcp_items_start);
+            push_sidebar_row(
+                self,
+                "  no servers connected",
+                sidebar_dim_fg,
+                SIDEBAR_BG,
+                mcp_items_start,
+            );
         } else {
             let visible = &mcp_servers[mcp_scroll.min(mcp_servers.len())..];
             for (i, (server, tools)) in visible.iter().enumerate() {
@@ -1763,12 +1872,22 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
 
         // ── Skills section (rows skills_start .. skills_start+skills_rows) ────
         push_section_sep(self, skills_start);
-        let skills_header_fg = if active_section == 2 { sidebar_accent } else { sidebar_dim_fg };
+        let skills_header_fg = if active_section == 2 {
+            sidebar_accent
+        } else {
+            sidebar_dim_fg
+        };
         push_sidebar_row(self, " SKILLS", skills_header_fg, SIDEBAR_BG, skills_start);
         let skills_items_start = skills_start + 1;
         let skills_available = skills_rows.saturating_sub(1);
         if skills.is_empty() {
-            push_sidebar_row(self, "  no skills loaded", sidebar_dim_fg, SIDEBAR_BG, skills_items_start);
+            push_sidebar_row(
+                self,
+                "  no skills loaded",
+                sidebar_dim_fg,
+                SIDEBAR_BG,
+                skills_items_start,
+            );
         } else {
             let visible = &skills[skills_scroll.min(skills.len())..];
             for (i, skill) in visible.iter().enumerate() {
@@ -1784,12 +1903,28 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
 
         // ── Steering section (rows steering_start .. steering_start+steering_rows)
         push_section_sep(self, steering_start);
-        let steering_header_fg = if active_section == 3 { sidebar_accent } else { sidebar_dim_fg };
-        push_sidebar_row(self, " STEERING", steering_header_fg, SIDEBAR_BG, steering_start);
+        let steering_header_fg = if active_section == 3 {
+            sidebar_accent
+        } else {
+            sidebar_dim_fg
+        };
+        push_sidebar_row(
+            self,
+            " STEERING",
+            steering_header_fg,
+            SIDEBAR_BG,
+            steering_start,
+        );
         let steering_items_start = steering_start + 1;
         let steering_available = steering_rows.saturating_sub(1);
         if steering_files.is_empty() {
-            push_sidebar_row(self, "  no steering files", sidebar_dim_fg, SIDEBAR_BG, steering_items_start);
+            push_sidebar_row(
+                self,
+                "  no steering files",
+                sidebar_dim_fg,
+                SIDEBAR_BG,
+                steering_items_start,
+            );
         } else {
             let visible = &steering_files[steering_scroll.min(steering_files.len())..];
             for (i, (name, _)) in visible.iter().enumerate() {
@@ -1810,7 +1945,11 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
         self.sidebar_rect_cache.clear();
         self.sidebar_rect_cache
             .extend_from_slice(&self.rect_instances[rect_start..]);
-        self.sidebar_cache_key = if rename_input.is_none() { Some(key) } else { None };
+        self.sidebar_cache_key = if rename_input.is_none() {
+            Some(key)
+        } else {
+            None
+        };
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1984,7 +2123,7 @@ const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached f
 
         let sep_fg = colors.ui_muted;
 
-        let label_fg: [f32; 4] = [0.65, 0.65, 0.80, 1.0]; // dim, non-interactive
+        let label_fg = colors.ui_muted;
 
         for (i, item) in menu.items.iter().enumerate() {
             let row = menu.row + i;
@@ -2466,10 +2605,10 @@ fn resolve_span_fg(
         SpanKind::Bold => brighten(line_fg, 0.2),
         SpanKind::Italic => dim(line_fg, 0.15),
         SpanKind::Code => colors.ansi[2],
-        SpanKind::Syntax(TokenKind::Keyword) => colors.ansi[5],   // magenta/purple
+        SpanKind::Syntax(TokenKind::Keyword) => colors.ansi[5], // magenta/purple
         SpanKind::Syntax(TokenKind::StringLit) => colors.ansi[3], // yellow
         SpanKind::Syntax(TokenKind::Comment) => colors.ui_muted,
-        SpanKind::Syntax(TokenKind::Number) => colors.ansi[6],    // cyan
+        SpanKind::Syntax(TokenKind::Number) => colors.ansi[6], // cyan
         SpanKind::Syntax(TokenKind::Operator) => dim(line_fg, 0.1),
         SpanKind::Syntax(TokenKind::Default) => line_fg,
     }
@@ -2630,15 +2769,19 @@ impl RenderContext {
     /// Shows frame time statistics, shape cache hit/miss ratio, instance count,
     /// and atlas fill percentage. Uses `push_shaped_row` so it shares the same
     /// overlay render pass as the palette and search bar.
-    pub fn build_debug_hud_instances(&mut self, font: &crate::config::schema::FontConfig) {
+    pub fn build_debug_hud_instances(
+        &mut self,
+        font: &crate::config::schema::FontConfig,
+        colors: &crate::config::schema::ColorScheme,
+    ) {
         if !self.hud_visible {
             return;
         }
 
-        const HUD_BG: [f32; 4] = [0.039, 0.039, 0.047, 0.95]; // #0a0a0c deep
-        const TITLE_FG: [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // Dracula purple
-        const VALUE_FG: [f32; 4] = [0.95, 0.98, 0.55, 1.0]; // Dracula yellow
-        const WARN_FG: [f32; 4] = [1.00, 0.47, 0.47, 1.0]; // red for high frame times
+        let hud_bg = colors.ui_overlay;
+        let title_fg = colors.ui_accent;
+        let value_fg = colors.ansi[3];
+        let warn_fg = colors.ansi[1];
 
         let hud_width = 56usize;
 
@@ -2683,13 +2826,13 @@ impl RenderContext {
         let upload_kb = self.last_gpu_upload_bytes as f32 / 1024.0;
 
         // ── Build HUD text lines ─────────────────────────────────────────────
-        let frame_fg = if avg_ms > 16.67 { WARN_FG } else { VALUE_FG };
+        let frame_fg = if avg_ms > 16.67 { warn_fg } else { value_fg };
 
-        let lat_fg = if lat_p99 > 8.0 { WARN_FG } else { VALUE_FG };
+        let lat_fg = if lat_p99 > 8.0 { warn_fg } else { value_fg };
         let n_samples = self.latency_samples.len();
 
         let hud_lines: Vec<(String, [f32; 4])> = vec![
-            (" F12 HUD".to_string(), TITLE_FG),
+            (" F12 HUD".to_string(), title_fg),
             (
                 format!(
                     " {:10} {:.1}ms  p50:{:.1}ms  p95:{:.1}ms",
@@ -2709,18 +2852,18 @@ impl RenderContext {
                     " {:10} hits={} miss={} ({}%)",
                     "shape", shape_hits, shape_misses, hit_pct
                 ),
-                VALUE_FG,
+                value_fg,
             ),
-            (format!(" {:10} {}", "instances", instance_count), VALUE_FG),
-            (format!(" {:10} {:.1}%", "atlas", atlas_pct), VALUE_FG),
+            (format!(" {:10} {}", "instances", instance_count), value_fg),
+            (format!(" {:10} {:.1}%", "atlas", atlas_pct), value_fg),
             (
                 format!(" {:10} {:.1} KB/frame", "upload", upload_kb),
-                VALUE_FG,
+                value_fg,
             ),
         ];
 
         for (row, (text, fg)) in hud_lines.iter().enumerate() {
-            self.push_shaped_row(text, *fg, HUD_BG, row, 0, hud_width, font);
+            self.push_shaped_row(text, *fg, hud_bg, row, 0, hud_width, font);
         }
     }
 

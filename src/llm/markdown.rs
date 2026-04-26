@@ -5,8 +5,14 @@ use crate::llm::chat_panel::word_wrap;
 pub enum BlockKind {
     Normal,
     Heading(u8),
-    CodeBlock { lang: String },
-    ListItem { indent: u8, ordered: bool, number: u32 },
+    CodeBlock {
+        lang: String,
+    },
+    ListItem {
+        indent: u8,
+        ordered: bool,
+        number: u32,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -57,7 +63,9 @@ pub fn parse_markdown(
                 let spans = highlight_code(&state.fence_lang, &display);
                 out.push(AnnotatedLine {
                     display,
-                    kind: BlockKind::CodeBlock { lang: state.fence_lang.clone() },
+                    kind: BlockKind::CodeBlock {
+                        lang: state.fence_lang.clone(),
+                    },
                     spans,
                 });
             }
@@ -66,7 +74,7 @@ pub fn parse_markdown(
 
         // fence open
         if line.starts_with("```") {
-            let lang = line[3..].trim().to_string();
+            let lang = line.strip_prefix("```").unwrap_or("").trim().to_string();
             state.in_fence = true;
             state.fence_lang = lang;
             continue;
@@ -75,22 +83,37 @@ pub fn parse_markdown(
         // headings
         if let Some(rest) = line.strip_prefix("### ") {
             let (display, spans) = parse_inline(rest);
-            out.push(AnnotatedLine { display, kind: BlockKind::Heading(3), spans });
+            out.push(AnnotatedLine {
+                display,
+                kind: BlockKind::Heading(3),
+                spans,
+            });
             continue;
         }
         if let Some(rest) = line.strip_prefix("## ") {
             let (display, spans) = parse_inline(rest);
-            out.push(AnnotatedLine { display, kind: BlockKind::Heading(2), spans });
+            out.push(AnnotatedLine {
+                display,
+                kind: BlockKind::Heading(2),
+                spans,
+            });
             continue;
         }
         if let Some(rest) = line.strip_prefix("# ") {
             let (display, spans) = parse_inline(rest);
-            out.push(AnnotatedLine { display, kind: BlockKind::Heading(1), spans });
+            out.push(AnnotatedLine {
+                display,
+                kind: BlockKind::Heading(1),
+                spans,
+            });
             continue;
         }
 
         // unordered list — indented first
-        if let Some(rest) = line.strip_prefix("  - ").or_else(|| line.strip_prefix("  * ")) {
+        if let Some(rest) = line
+            .strip_prefix("  - ")
+            .or_else(|| line.strip_prefix("  * "))
+        {
             emit_list_item(&mut out, rest, 1, false, 0, width);
             continue;
         }
@@ -125,7 +148,11 @@ pub fn parse_markdown(
         let wrapped = word_wrap(line, width);
         for sub in wrapped {
             let (display, spans) = parse_inline(&sub);
-            out.push(AnnotatedLine { display, kind: BlockKind::Normal, spans });
+            out.push(AnnotatedLine {
+                display,
+                kind: BlockKind::Normal,
+                spans,
+            });
         }
     }
 
@@ -156,14 +183,22 @@ fn emit_list_item(
         let cont = " ".repeat(prefix.len());
         (prefix, cont)
     } else {
-        let prefix = if indent == 0 { "• ".to_string() } else { "  • ".to_string() };
+        let prefix = if indent == 0 {
+            "• ".to_string()
+        } else {
+            "  • ".to_string()
+        };
         let cont = " ".repeat(prefix.chars().count());
         (prefix, cont)
     };
 
     let bullet_chars = bullet.chars().count();
     let inner_width = width.saturating_sub(bullet_chars);
-    let wrapped = if inner_width > 0 { word_wrap(body, inner_width) } else { vec![body.to_string()] };
+    let wrapped = if inner_width > 0 {
+        word_wrap(body, inner_width)
+    } else {
+        vec![body.to_string()]
+    };
 
     for (i, sub) in wrapped.into_iter().enumerate() {
         let raw_with_prefix = if i == 0 {
@@ -174,7 +209,11 @@ fn emit_list_item(
         let (display, spans) = parse_inline(&raw_with_prefix);
         out.push(AnnotatedLine {
             display,
-            kind: BlockKind::ListItem { indent, ordered, number },
+            kind: BlockKind::ListItem {
+                indent,
+                ordered,
+                number,
+            },
             spans,
         });
     }
@@ -285,27 +324,52 @@ pub fn highlight_code(lang: &str, line: &str) -> Vec<(usize, usize, SpanKind)> {
     };
     let keywords: &[&str] = match lang {
         "rs" => &[
-            "fn", "let", "mut", "pub", "use", "struct", "enum", "impl", "trait", "type",
-            "where", "if", "else", "match", "return", "for", "while", "loop", "break",
-            "continue", "async", "await", "move", "unsafe", "extern", "crate", "mod",
-            "self", "super", "true", "false",
+            "fn", "let", "mut", "pub", "use", "struct", "enum", "impl", "trait", "type", "where",
+            "if", "else", "match", "return", "for", "while", "loop", "break", "continue", "async",
+            "await", "move", "unsafe", "extern", "crate", "mod", "self", "super", "true", "false",
         ],
         "py" => &[
-            "def", "class", "if", "elif", "else", "for", "while", "return", "import",
-            "from", "as", "with", "try", "except", "finally", "raise", "lambda", "yield",
-            "pass", "break", "continue", "True", "False", "None", "and", "or", "not",
-            "in", "is",
+            "def", "class", "if", "elif", "else", "for", "while", "return", "import", "from", "as",
+            "with", "try", "except", "finally", "raise", "lambda", "yield", "pass", "break",
+            "continue", "True", "False", "None", "and", "or", "not", "in", "is",
         ],
         "js" | "ts" => &[
-            "function", "const", "let", "var", "return", "if", "else", "for", "while",
-            "class", "import", "export", "default", "async", "await", "new", "this",
-            "typeof", "instanceof", "void", "null", "undefined", "true", "false",
+            "function",
+            "const",
+            "let",
+            "var",
+            "return",
+            "if",
+            "else",
+            "for",
+            "while",
+            "class",
+            "import",
+            "export",
+            "default",
+            "async",
+            "await",
+            "new",
+            "this",
+            "typeof",
+            "instanceof",
+            "void",
+            "null",
+            "undefined",
+            "true",
+            "false",
             // ts extras
-            "interface", "type", "enum", "readonly", "namespace", "declare", "abstract",
+            "interface",
+            "type",
+            "enum",
+            "readonly",
+            "namespace",
+            "declare",
+            "abstract",
         ],
         "sh" => &[
-            "if", "then", "else", "elif", "fi", "for", "while", "do", "done", "case",
-            "esac", "function", "export", "local", "echo", "return", "cd",
+            "if", "then", "else", "elif", "fi", "for", "while", "do", "done", "case", "esac",
+            "function", "export", "local", "echo", "return", "cd",
         ],
         "json" => &["true", "false", "null"],
         _ => &[],
@@ -318,8 +382,8 @@ pub fn highlight_code(lang: &str, line: &str) -> Vec<(usize, usize, SpanKind)> {
     };
 
     let operator_chars: &[char] = &[
-        '{', '}', '(', ')', '[', ']', ',', ';', ':', '=', '<', '>', '+', '-', '*', '/',
-        '!', '&', '|', '^', '~', '%', '.',
+        '{', '}', '(', ')', '[', ']', ',', ';', ':', '=', '<', '>', '+', '-', '*', '/', '!', '&',
+        '|', '^', '~', '%', '.',
     ];
 
     let chars: Vec<char> = line.chars().collect();
@@ -441,13 +505,21 @@ mod tests {
     fn code_fence_syntax_highlight() {
         let md = "```rust\nfn main() {\n    let x = 42;\n}\n```";
         let lines = parse(md);
-        assert!(lines.iter().all(|l| matches!(l.kind, BlockKind::CodeBlock { .. })));
+        assert!(lines
+            .iter()
+            .all(|l| matches!(l.kind, BlockKind::CodeBlock { .. })));
         // "fn" and "let" should produce Keyword spans
         let kw_line = lines.iter().find(|l| l.display.contains("fn")).unwrap();
-        assert!(kw_line.spans.iter().any(|(_, _, k)| matches!(k, SpanKind::Syntax(TokenKind::Keyword))));
+        assert!(kw_line
+            .spans
+            .iter()
+            .any(|(_, _, k)| matches!(k, SpanKind::Syntax(TokenKind::Keyword))));
         // 42 should produce a Number span
         let num_line = lines.iter().find(|l| l.display.contains("42")).unwrap();
-        assert!(num_line.spans.iter().any(|(_, _, k)| matches!(k, SpanKind::Syntax(TokenKind::Number))));
+        assert!(num_line
+            .spans
+            .iter()
+            .any(|(_, _, k)| matches!(k, SpanKind::Syntax(TokenKind::Number))));
     }
 
     #[test]
@@ -462,7 +534,9 @@ mod tests {
         // Simulate streaming: first call opens fence, second closes it
         let (lines1, state1) = parse_markdown("```rs\nfn foo()", 80, ParseState::default());
         assert!(state1.in_fence);
-        assert!(lines1.iter().all(|l| matches!(l.kind, BlockKind::CodeBlock { .. })));
+        assert!(lines1
+            .iter()
+            .all(|l| matches!(l.kind, BlockKind::CodeBlock { .. })));
         let (lines2, state2) = parse_markdown("{\n}\n```", 80, state1);
         assert!(!state2.in_fence);
         assert!(lines2.iter().any(|l| l.display.contains('}')));

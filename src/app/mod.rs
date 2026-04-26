@@ -777,7 +777,10 @@ impl App {
                     self.resize_terminals_for_panel();
                 } else {
                     // G-2-overlay placeholder: log selection for future implementation.
-                    log::debug!("InfoSidebar: Enter in section {}", self.info_sidebar_section);
+                    log::debug!(
+                        "InfoSidebar: Enter in section {}",
+                        self.info_sidebar_section
+                    );
                 }
                 true
             }
@@ -1148,7 +1151,9 @@ impl ApplicationHandler<()> for App {
 
                     // Zoom: if a pane is zoomed, keep only it and expand to fill viewport.
                     if let Some(zoomed_tid) = self.mux.zoomed_pane {
-                        if let Some(idx) = pane_infos.iter().position(|p| p.terminal_id == zoomed_tid) {
+                        if let Some(idx) =
+                            pane_infos.iter().position(|p| p.terminal_id == zoomed_tid)
+                        {
                             let cols = (viewport.w / cell_w as f32).floor() as usize;
                             let rows = (viewport.h / cell_h as f32).floor() as usize;
                             let mut zoomed = pane_infos[idx];
@@ -1405,6 +1410,7 @@ impl ApplicationHandler<()> for App {
                             &scaled_font,
                             total_cols,
                             total_rows,
+                            &self.config.colors,
                         );
                     }
 
@@ -1624,7 +1630,7 @@ impl ApplicationHandler<()> for App {
 
                     // ── Debug HUD (F12) — rendered last so it appears above all overlays ─
                     if rc.hud_visible {
-                        rc.build_debug_hud_instances(&scaled_font);
+                        rc.build_debug_hud_instances(&scaled_font, &self.config.colors);
                     }
 
                     // ── GPU upload ──────────────────────────────────────────────────────

@@ -1,12 +1,12 @@
 # Active Context
 
-**Current Focus:** Phase 5 UX Polish — estabilidad runtime y cierre de deuda UX
-**Last Active:** 2026-04-25
+**Current Focus:** Phase 4 — Plugin Ecosystem
+**Last Active:** 2026-04-26
 
 ## Estado actual del proyecto
 
-**Phase 1–3 COMPLETE. Phase 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Fase B COMPLETE. Fase C COMPLETE. Fase D (D-1/D-2/D-3/D-4/D-5) COMPLETE. REC-PERF-01/02/05 COMPLETE. Phase 5 G-0 COMPLETE.**
-**v0.1.3 publicado. Build limpio. CI verde. Sin deuda abierta activa; diferidos: TD-PERF-03, TD-PERF-05, TD-PERF-29.**
+**Phase 1–3 COMPLETE. Phase 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Fase B COMPLETE. Fase C COMPLETE. Fase D (D-1/D-2/D-3/D-4/D-5) COMPLETE. REC-PERF-01/02/05 COMPLETE. Phase 5 G-0/G-1/G-2/G-3 COMPLETE. Chat input UX COMPLETE.**
+**Build limpio. CI verde. Sin deuda abierta activa; diferidos: TD-PERF-03, TD-PERF-05, TD-PERF-29.**
 
 ## Roadmap acordado (en orden)
 
@@ -22,10 +22,11 @@
 10. ~~**UI polish**~~ COMPLETO — /skills color, /mcp command, Leader+w workspace
 11. ~~**REC-PERF-01/02/05**~~ COMPLETO — ASCII warmup, parking_lot, frame budget doc
 12. ~~**Phase 5 G-0**~~ COMPLETO — UI tokens en ColorScheme
-13. **Phase 5 G-1** — Zoom pane (`Leader z`)
-14. **Phase 5 G-2** — Sidebar MCP/Steering/Skills tabs
-15. **Phase 5 G-3** — Markdown en chat
-16. **Fase 4** — Plugin ecosystem (Lua, lazy.nvim-style)
+13. ~~**Phase 5 G-1**~~ COMPLETO — Zoom pane (`Leader z`)
+14. ~~**Phase 5 G-2**~~ COMPLETO — Sidebar MCP/Steering/Skills tabs
+15. ~~**Phase 5 G-3**~~ COMPLETO — Markdown en chat
+16. ~~**Chat input UX**~~ COMPLETO — cursor, historial, vertical scroll, 4-line input
+17. **Fase 4** — Plugin ecosystem (Lua, lazy.nvim-style)
 
 ## Cambios recientes a preservar
 

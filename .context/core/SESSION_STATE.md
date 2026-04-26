@@ -1,20 +1,49 @@
 # Session State
 
 **Last Updated:** 2026-04-26
-**Session Focus:** Phase 5 UX Polish — G-3 Markdown en chat
+**Session Focus:** Chat input UX — cursor, historial, scroll vertical, 4-line input
 
 ## Branch: `master`
 
 ## Estado actual
 
 **Phase 1–3 + 3.5 + A + 3.6 + B + C + D + Phase 5 G-0/G-1/G-2/G-3 COMPLETE.**
-**Phase 5 (UX Polish) COMPLETA. Sin deuda técnica abierta. Diferidos: TD-PERF-03/05/29.**
+**Chat input UX COMPLETA. Sin deuda técnica abierta. Diferidos: TD-PERF-03/05/29.**
 
 **Pendiente en Phase 5:** G-2-overlay (Enter en sidebar abre contenido MCP/Skill/Steering).
 
 ---
 
-## Esta sesión (2026-04-26) — Phase 5 G-3
+## Esta sesión (2026-04-26) — Chat input UX
+
+### TD-UI-01/02/03 + vertical scroll + 4-line input
+
+**`src/llm/chat_panel.rs`:**
+- `input_cursor: usize` — posición del cursor (char index)
+- `prompt_history: Vec<String>`, `history_idx: Option<usize>`, `history_draft: String`
+- `type_char`: inserta en cursor y avanza; `backspace`: borra antes del cursor
+- `move_cursor_left/right/home/end`, `clear_input` (Cmd+A)
+- `history_up/down`: navegación bash-style; guarda draft al entrar, restaura al salir
+- `cursor_visual_pos(wrap_width)`: mapea char index → (vline, vcol) con soft-wrap y \n hard-breaks
+- `visual_pos_to_cursor(vline, vcol, wrap_width)`: inverso
+- `cursor_up/down`: mueven cursor una visual-line; retornan false en boundary → history fallback
+
+**`src/app/input/mod.rs`:**
+- ArrowLeft/Right/Home/End → cursor movement
+- ArrowUp: `cursor_up()` primero; si false → `history_up()`
+- ArrowDown: `cursor_down()` primero; si false → `history_down()`
+- Cmd+A → `clear_input()`
+
+**`src/app/renderer.rs`:**
+- `sep_row = screen_rows - 6` (era - 4) — libera 2 filas para input de 4 líneas
+- `build_chat_panel_input_rows`: 4 filas de input (input_row1..4); viewport de 4 líneas sigue al cursor (`vis_start = cursor_line.saturating_sub(3)`)
+- Blink-off cursor_line ahora usa `panel.cursor_visual_pos()` (era heurística buggy con \n)
+- Guard mínimo: `screen_rows < 8` (era < 6)
+
+**Fixes clippy/fmt pre-existentes (G-3):**
+- `div_ceil`, `strip_prefix`, `type_complexity`, `collapsible_match`, `rustfmt`
+
+---
 
 ### G-3: Markdown en chat
 
