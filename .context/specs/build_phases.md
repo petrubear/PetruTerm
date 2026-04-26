@@ -69,8 +69,8 @@ Scroll independiente por sección cuando los items no caben. Sección vacía mue
 - Steering → contenido del archivo steering seleccionado
 
 ### G-3: Markdown en chat
-- [ ] Parser Markdown inline: `**bold**`, `*italic*`, `` `code` ``, `# headings`
-- [ ] Bloques de código con resaltado de sintaxis (al menos: rs, py, js, ts, sh, json)
-- [ ] Listas (`-`, `1.`) con indentación correcta
-- [ ] Render en GPU: mapear spans a colores del tema activo
-- [ ] Ancho de wrap respeta el ancho del panel (`PANEL_COLS`)
+- [x] Parser Markdown inline: `**bold**`, `*italic*`, `` `code` ``, `# headings`
+- [x] Bloques de código con resaltado de sintaxis (al menos: rs, py, js, ts, sh, json)
+- [x] Listas (`-`, `1.`) con indentación correcta
+- [x] Render en GPU: mapear spans a colores del tema activo
+- [x] Ancho de wrap respeta el ancho del panel (`PANEL_COLS`)

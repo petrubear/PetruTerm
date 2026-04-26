@@ -9,6 +9,7 @@ use crate::config::Config;
 use crate::font::{build_font_system, TextShaper};
 use crate::llm::ai_block::{AiBlock, AiState, AI_BLOCK_ROWS};
 use crate::llm::chat_panel::ChatPanel;
+use crate::llm::markdown::{AnnotatedLine, BlockKind, ParseState, SpanKind, TokenKind};
 use crate::renderer::cell::{CellVertex, FLAG_COLOR_GLYPH, FLAG_CURSOR, FLAG_LCD};
 use crate::renderer::rounded_rect::RoundedRectInstance;
 use crate::renderer::GpuRenderer;
@@ -70,7 +71,9 @@ pub struct RenderContext {
     /// Per-pane color resolve scratch — avoids Vec alloc per pane per frame (TD-PERF-32).
     pub colors_scratch: Vec<([f32; 4], [f32; 4])>,
     /// Incremental streaming wrap cache — avoids re-wrapping the full buf each token (TD-PERF-37).
-    streaming_stable_lines: Vec<String>,
+    streaming_stable_lines: Vec<AnnotatedLine>,
+    /// ParseState carried across stable-line boundaries for streaming markdown.
+    streaming_fence_state: ParseState,
     /// Byte offset in streaming_buf up to which streaming_stable_lines is valid.
     streaming_stable_end: usize,
     /// Panel id and width used for the current streaming cache entry.
@@ -82,7 +85,7 @@ pub struct RenderContext {
     gap_buf: String,
     /// Reusable line buffer for `build_chat_panel_instances` — avoids Vec realloc per rebuild.
     /// Strings inside are reused across frames when capacity permits (TD-PERF-13).
-    pub scratch_lines: Vec<(String, [f32; 4], Option<[f32; 4]>)>,
+    pub scratch_lines: Vec<(String, [f32; 4], Option<[f32; 4]>, Vec<(usize, usize, [f32; 4])>)>,
     pub panel_rect_cache: Vec<RoundedRectInstance>,
     /// Incremented each rendered frame; used for spinner animation to avoid O(n) chars().count().
     pub frame_counter: u64,
@@ -192,6 +195,7 @@ impl RenderContext {
             scratch_colors: Vec::new(),
             colors_scratch: Vec::new(),
             streaming_stable_lines: Vec::new(),
+            streaming_fence_state: ParseState::default(),
             streaming_stable_end: 0,
             streaming_cache_key: None,
             fmt_buf: String::new(),
@@ -703,6 +707,69 @@ impl RenderContext {
     }
 
     #[allow(clippy::too_many_arguments)]
+    pub fn push_md_line(
+        &mut self,
+        text: &str,
+        base_fg: [f32; 4],
+        spans: &[(usize, usize, [f32; 4])],
+        bg: [f32; 4],
+        row: usize,
+        col_offset: usize,
+        width: usize,
+        font: &crate::config::schema::FontConfig,
+    ) {
+        if spans.is_empty() {
+            self.push_shaped_row(text, base_fg, bg, row, col_offset, width, font);
+            return;
+        }
+        let chars: Vec<char> = text.chars().collect();
+        let total_chars = chars.len();
+
+        // Build segment boundaries from span edges
+        let mut boundaries: Vec<usize> = vec![0];
+        for &(s, e, _) in spans {
+            if s > 0 && !boundaries.contains(&s) {
+                boundaries.push(s);
+            }
+            if e < total_chars && !boundaries.contains(&e) {
+                boundaries.push(e);
+            }
+        }
+        boundaries.push(total_chars);
+        boundaries.sort_unstable();
+        boundaries.dedup();
+
+        let mut col = col_offset;
+        for window in boundaries.windows(2) {
+            let seg_start = window[0];
+            let seg_end = window[1];
+            if seg_start >= seg_end {
+                continue;
+            }
+            let seg_text: String = chars[seg_start..seg_end].iter().collect();
+            let seg_len = seg_end - seg_start;
+
+            let seg_fg = spans
+                .iter()
+                .find(|&&(s, e, _)| s <= seg_start && e >= seg_end)
+                .map(|&(_, _, fg)| fg)
+                .unwrap_or(base_fg);
+
+            let available = (col_offset + width).saturating_sub(col);
+            if available == 0 {
+                break;
+            }
+            let seg_w = seg_len.min(available);
+
+            self.push_shaped_row(&seg_text, seg_fg, bg, row, col, seg_w, font);
+            col += seg_len;
+            if col >= col_offset + width {
+                break;
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub fn build_chat_panel_instances(
         &mut self,
         panel: &ChatPanel,
@@ -739,8 +806,7 @@ impl RenderContext {
         const ERR_FG: [f32; 4] = [1.00, 0.33, 0.33, 1.0]; // red
         let sep_fg = config.colors.ui_muted;
         let dim_fg = config.colors.ui_muted;
-        const RUN_FG: [f32; 4] = [0.50, 0.98, 0.60, 1.0]; // green — run bar
-        const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached files
+const FILE_FG: [f32; 4] = [0.78, 0.92, 0.65, 1.0]; // light green — attached files
         let pick_sel = config.colors.ui_accent;
         const PICK_FG: [f32; 4] = [0.80, 0.80, 0.90, 1.0]; // soft white — picker items
 
@@ -1024,21 +1090,22 @@ impl RenderContext {
 
             // Helper: write `prefix + content` into all_lines[line_idx], reusing String capacity.
             macro_rules! push_line {
-                ($prefix:expr, $content:expr, $color:expr, $accent:expr) => {{
+                ($prefix:expr, $content:expr, $color:expr, $accent:expr, $spans:expr) => {{
                     let p: &str = $prefix;
                     let c: &str = $content;
                     if line_idx < all_lines.len() {
-                        let (s, col, acc) = &mut all_lines[line_idx];
+                        let (s, col, acc, sp) = &mut all_lines[line_idx];
                         s.clear();
                         s.push_str(p);
                         s.push_str(c);
                         *col = $color;
                         *acc = $accent;
+                        *sp = $spans;
                     } else {
                         let mut s = String::with_capacity(p.len() + c.len());
                         s.push_str(p);
                         s.push_str(c);
-                        all_lines.push((s, $color, $accent));
+                        all_lines.push((s, $color, $accent, $spans));
                     }
                     line_idx += 1;
                 }};
@@ -1056,17 +1123,20 @@ impl RenderContext {
                     ChatRole::System => continue,
                     ChatRole::Tool(_) => continue,
                 };
-                let is_assistant = matches!(msg.role, ChatRole::Assistant);
-                for (i, line) in panel.wrapped_message(msg_idx).iter().enumerate() {
+                for (i, ann) in panel.wrapped_message(msg_idx).iter().enumerate() {
                     let p = if i == 0 { first_p } else { cont_p };
-                    if is_assistant {
-                        let (md_fg, md_text) = md_style_line(line.as_str(), fg);
-                        push_line!(p, md_text.as_ref(), md_fg, accent);
-                    } else {
-                        push_line!(p, line.as_str(), fg, accent);
-                    }
+                    let prefix_len = p.chars().count();
+                    let line_fg = resolve_line_fg(&ann.kind, fg, &config.colors);
+                    let resolved_spans: Vec<(usize, usize, [f32; 4])> = ann
+                        .spans
+                        .iter()
+                        .map(|&(s, e, ref sk)| {
+                            (s + prefix_len, e + prefix_len, resolve_span_fg(sk, line_fg, &config.colors))
+                        })
+                        .collect();
+                    push_line!(p, ann.display.as_str(), line_fg, accent, resolved_spans);
                 }
-                push_line!("", "", sep_fg, None);
+                push_line!("", "", sep_fg, None, vec![]);
             }
 
             if panel.is_streaming() && !panel.streaming_buf.is_empty() {
@@ -1078,6 +1148,7 @@ impl RenderContext {
                     || self.streaming_stable_end > buf.len()
                 {
                     self.streaming_stable_lines.clear();
+                    self.streaming_fence_state = ParseState::default();
                     self.streaming_stable_end = 0;
                     self.streaming_cache_key = Some(cache_key);
                 }
@@ -1090,8 +1161,13 @@ impl RenderContext {
 
                 if new_stable_end > self.streaming_stable_end {
                     let seg = &buf[self.streaming_stable_end..new_stable_end];
-                    self.streaming_stable_lines
-                        .extend(word_wrap(seg, msg_inner_w));
+                    let (new_lines, new_state) = crate::llm::markdown::parse_markdown(
+                        seg,
+                        msg_inner_w,
+                        self.streaming_fence_state.clone(),
+                    );
+                    self.streaming_stable_lines.extend(new_lines);
+                    self.streaming_fence_state = new_state;
                     self.streaming_stable_end = new_stable_end;
                 }
 
@@ -1103,15 +1179,25 @@ impl RenderContext {
                     word_wrap(partial, msg_inner_w)
                 };
 
-                let all_lines = self
-                    .streaming_stable_lines
-                    .iter()
-                    .map(|s| s.as_str())
-                    .chain(partial_lines.iter().map(|s| s.as_str()));
-                for (i, line) in all_lines.enumerate() {
+                // Stable annotated lines
+                for (i, ann) in self.streaming_stable_lines.iter().enumerate() {
                     let p = if i == 0 { "    AI  " } else { "        " };
-                    let (md_fg, md_text) = md_style_line(line, STREAM_FG);
-                    push_line!(p, md_text.as_ref(), md_fg, Some(asst_accent));
+                    let prefix_len = p.chars().count();
+                    let line_fg = resolve_line_fg(&ann.kind, STREAM_FG, &config.colors);
+                    let resolved_spans: Vec<(usize, usize, [f32; 4])> = ann
+                        .spans
+                        .iter()
+                        .map(|&(s, e, ref sk)| {
+                            (s + prefix_len, e + prefix_len, resolve_span_fg(sk, line_fg, &config.colors))
+                        })
+                        .collect();
+                    push_line!(p, ann.display.as_str(), line_fg, Some(asst_accent), resolved_spans);
+                }
+                // Partial plain-text lines (no newline yet — not parsed through markdown)
+                let stable_count = self.streaming_stable_lines.len();
+                for (j, line) in partial_lines.iter().enumerate() {
+                    let p = if stable_count + j == 0 { "    AI  " } else { "        " };
+                    push_line!(p, line.as_str(), STREAM_FG, Some(asst_accent), vec![]);
                 }
             }
 
@@ -1119,7 +1205,7 @@ impl RenderContext {
                 let mut buf = std::mem::take(&mut self.fmt_buf);
                 buf.clear();
                 let _ = std::fmt::write(&mut buf, format_args!("    ⟳  {}", t!("ai.thinking")));
-                push_line!("", buf.as_str(), STREAM_FG, Some(asst_accent));
+                push_line!("", buf.as_str(), STREAM_FG, Some(asst_accent), vec![]);
                 self.fmt_buf = buf;
             }
 
@@ -1131,33 +1217,10 @@ impl RenderContext {
                     } else {
                         "        "
                     };
-                    push_line!(p, line.as_str(), ERR_FG, None);
+                    push_line!(p, line.as_str(), ERR_FG, None, vec![]);
                 }
             }
 
-            if panel.is_idle() {
-                if let Some(cmd) = panel.last_assistant_command() {
-                    let max_cmd_w = panel_cols.saturating_sub(5);
-                    push_line!("", "", sep_fg, None);
-                    let mut buf = std::mem::take(&mut self.fmt_buf);
-                    buf.clear();
-                    buf.push_str("  \u{23ce}  ");
-                    let cmd_chars: usize = cmd.chars().count();
-                    if cmd_chars > max_cmd_w {
-                        let end = cmd
-                            .char_indices()
-                            .nth(max_cmd_w.saturating_sub(1))
-                            .map(|(i, _)| i)
-                            .unwrap_or(cmd.len());
-                        buf.push_str(&cmd[..end]);
-                        buf.push('…');
-                    } else {
-                        buf.push_str(&cmd);
-                    }
-                    push_line!("", buf.as_str(), RUN_FG, None);
-                    self.fmt_buf = buf;
-                }
-            }
 
             let total_lines = line_idx;
             // Shrink logical length without dropping capacity.
@@ -1169,11 +1232,11 @@ impl RenderContext {
 
             for i in 0..history_rows {
                 let row = history_start_row + i;
-                let (text, fg, accent) = all_lines
+                let (text, fg, accent, spans_ref) = all_lines
                     .get(visible_start + i)
-                    .map(|(t, f, a)| (t.as_str(), *f, *a))
-                    .unwrap_or(("", sep_fg, None));
-                self.push_shaped_row(text, fg, panel_bg, row, co, panel_cols, font);
+                    .map(|(t, f, a, sp)| (t.as_str(), *f, *a, sp.as_slice()))
+                    .unwrap_or(("", sep_fg, None, &[][..]));
+                self.push_md_line(text, fg, spans_ref, panel_bg, row, co, panel_cols, font);
 
                 if let Some(color) = accent {
                     self.rect_instances.push(RoundedRectInstance {
@@ -2380,37 +2443,58 @@ impl RenderContext {
     }
 }
 
-/// Pack an `[f32; 4]` RGBA color into a `u32` by quantizing each channel to 8 bits.
-/// Used by `calculate_row_hash` to avoid hashing raw float bytes (which can differ
-/// Apply basic markdown visual styling to a single line from an AI response.
-/// Returns `(fg_color, display_text)`. The display text strips syntactic markers
-/// so the panel shows clean prose, not raw markdown syntax.
-fn md_style_line<'a>(line: &'a str, base_fg: [f32; 4]) -> ([f32; 4], std::borrow::Cow<'a, str>) {
-    const H1_FG: [f32; 4] = [0.74, 0.58, 0.98, 1.0]; // purple
-    const H2_FG: [f32; 4] = [0.306, 0.788, 0.690, 1.0]; // teal
-    const H3_FG: [f32; 4] = [0.831, 0.643, 0.298, 1.0]; // amber
-    const CODE_FG: [f32; 4] = [0.50, 0.98, 0.60, 1.0]; // green
-
-    if let Some(rest) = line.strip_prefix("### ") {
-        (H3_FG, std::borrow::Cow::Borrowed(rest))
-    } else if let Some(rest) = line.strip_prefix("## ") {
-        (H2_FG, std::borrow::Cow::Borrowed(rest))
-    } else if let Some(rest) = line.strip_prefix("# ") {
-        (H1_FG, std::borrow::Cow::Borrowed(rest))
-    } else if line.starts_with("```") || line.starts_with("    ") {
-        (CODE_FG, std::borrow::Cow::Borrowed(line))
-    } else if let Some(rest) = line.strip_prefix("- ").or_else(|| line.strip_prefix("* ")) {
-        (base_fg, std::borrow::Cow::Owned(format!("• {rest}")))
-    } else if let Some(rest) = line
-        .strip_prefix("  - ")
-        .or_else(|| line.strip_prefix("  * "))
-    {
-        (base_fg, std::borrow::Cow::Owned(format!("  • {rest}")))
-    } else {
-        (base_fg, std::borrow::Cow::Borrowed(line))
+fn resolve_line_fg(
+    kind: &BlockKind,
+    base_fg: [f32; 4],
+    colors: &crate::config::schema::ColorScheme,
+) -> [f32; 4] {
+    match kind {
+        BlockKind::Heading(1) => colors.ui_accent,
+        BlockKind::Heading(2) => colors.ansi[6], // cyan
+        BlockKind::Heading(_) => colors.ansi[3], // yellow
+        BlockKind::CodeBlock { .. } => colors.ansi[2], // green
+        _ => base_fg,
     }
 }
 
+fn resolve_span_fg(
+    span_kind: &SpanKind,
+    line_fg: [f32; 4],
+    colors: &crate::config::schema::ColorScheme,
+) -> [f32; 4] {
+    match span_kind {
+        SpanKind::Bold => brighten(line_fg, 0.2),
+        SpanKind::Italic => dim(line_fg, 0.15),
+        SpanKind::Code => colors.ansi[2],
+        SpanKind::Syntax(TokenKind::Keyword) => colors.ansi[5],   // magenta/purple
+        SpanKind::Syntax(TokenKind::StringLit) => colors.ansi[3], // yellow
+        SpanKind::Syntax(TokenKind::Comment) => colors.ui_muted,
+        SpanKind::Syntax(TokenKind::Number) => colors.ansi[6],    // cyan
+        SpanKind::Syntax(TokenKind::Operator) => dim(line_fg, 0.1),
+        SpanKind::Syntax(TokenKind::Default) => line_fg,
+    }
+}
+
+fn brighten(c: [f32; 4], amount: f32) -> [f32; 4] {
+    [
+        (c[0] + amount).min(1.0),
+        (c[1] + amount).min(1.0),
+        (c[2] + amount).min(1.0),
+        c[3],
+    ]
+}
+
+fn dim(c: [f32; 4], amount: f32) -> [f32; 4] {
+    [
+        (c[0] - amount).max(0.0),
+        (c[1] - amount).max(0.0),
+        (c[2] - amount).max(0.0),
+        c[3],
+    ]
+}
+
+/// Pack an `[f32; 4]` RGBA color into a `u32` by quantizing each channel to 8 bits.
+/// Used by `calculate_row_hash` to avoid hashing raw float bytes (which can differ
 /// for semantically identical colors due to NaN/subnormal representations).
 #[inline]
 fn pack_color(c: [f32; 4]) -> u32 {

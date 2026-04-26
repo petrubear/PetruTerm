@@ -2,6 +2,7 @@ pub mod ai_block;
 pub mod chat_panel;
 pub mod copilot;
 pub mod diff;
+pub mod markdown;
 pub mod mcp;
 pub mod openai_compat;
 pub mod openrouter;

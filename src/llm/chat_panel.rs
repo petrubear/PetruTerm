@@ -1,4 +1,5 @@
 use crate::llm::diff::{compress_diff, diff_lines, DiffLine};
+use crate::llm::markdown::{parse_markdown, AnnotatedLine, ParseState};
 use crate::llm::{ChatMessage, ChatRole};
 use fuzzy_matcher::skim::SkimMatcherV2;
 use std::path::{Path, PathBuf};
@@ -111,7 +112,7 @@ pub struct ChatPanel {
     /// Pre-wrapped lines for each message (index-parallel to `messages`).
     /// Keyed by `wrapped_cache_width`; rebuilt lazily when width changes.
     /// Avoids calling word_wrap() on every dirty rebuild (TD-PERF-05).
-    wrapped_cache: Vec<Vec<String>>,
+    wrapped_cache: Vec<Vec<AnnotatedLine>>,
     /// The `msg_inner_w` value used to build `wrapped_cache`.
     wrapped_cache_width: usize,
 
@@ -201,14 +202,15 @@ impl ChatPanel {
         // Lazily wrap any messages added since the last call.
         while self.wrapped_cache.len() < self.messages.len() {
             let idx = self.wrapped_cache.len();
-            self.wrapped_cache
-                .push(word_wrap(&self.messages[idx].content, width));
+            let (lines, _) =
+                parse_markdown(&self.messages[idx].content, width, ParseState::default());
+            self.wrapped_cache.push(lines);
         }
     }
 
     /// Return the pre-wrapped lines for message `idx`.
     /// Panics if `ensure_wrap_cache` was not called first for the current width.
-    pub fn wrapped_message(&self, idx: usize) -> &[String] {
+    pub fn wrapped_message(&self, idx: usize) -> &[AnnotatedLine] {
         self.wrapped_cache
             .get(idx)
             .map(|v| v.as_slice())
