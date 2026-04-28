@@ -1,11 +1,11 @@
 # Active Context
 
-**Current Focus:** Phase 4 — Plugin Ecosystem
+**Current Focus:** Sin fases activas — proyecto en estado estable
 **Last Active:** 2026-04-28
 
 ## Estado actual del proyecto
 
-**Phase 1–3 COMPLETE. Phase 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Fase B COMPLETE. Fase C COMPLETE. Fase D (D-1/D-2/D-3/D-4/D-5) COMPLETE. REC-PERF-01/02/05 COMPLETE. Phase 5 G-0/G-1/G-2/G-3/G-2-overlay COMPLETE. Chat input UX COMPLETE.**
+**Todas las fases completadas. Phase 4 (Plugin Ecosystem) CANCELADA.**
 **Build limpio. CI verde. Sin deuda abierta activa; diferidos: TD-PERF-03, TD-PERF-05, TD-PERF-29.**
 
 ## Roadmap acordado (en orden)
@@ -27,7 +27,7 @@
 15. ~~**Phase 5 G-3**~~ COMPLETO — Markdown en chat
 16. ~~**Chat input UX**~~ COMPLETO — cursor, historial, vertical scroll, 4-line input
 17. ~~**Phase 5 G-2-overlay**~~ COMPLETO — Info overlay para sidebar MCP/Skills/Steering
-18. **Fase 4** — Plugin ecosystem (Lua, lazy.nvim-style)
+18. ~~**Fase 4**~~ CANCELADA — Plugin ecosystem descartado (2026-04-28)
 
 ## Cambios recientes a preservar
 

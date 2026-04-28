@@ -10,7 +10,7 @@
 **Phase 1–3 + 3.5 + A + 3.6 + B + C + D + Phase 5 G-0/G-1/G-2/G-3 + G-2-overlay COMPLETE.**
 **Sin deuda técnica abierta. Diferidos: TD-PERF-03/05/29.**
 
-**Phase 5 COMPLETA. Next: Phase 4 — Plugin Ecosystem.**
+**Phase 5 COMPLETA. Phase 4 (plugins) CANCELADA. Proyecto en estado estable — sin fases pendientes.**
 
 ## Esta sesión (2026-04-28) — G-2-overlay
 

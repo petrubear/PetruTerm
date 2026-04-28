@@ -1,6 +1,7 @@
 # PetruTerm — Build Phases
 
 > Fases 0.5–3.6 + A–E + D-1/D-2/D-3/D-4/D-5 + Phase 4 archivadas en [`build_phases_archive.md`](./build_phases_archive.md).
+> **Phase 4 (Plugin Ecosystem) — CANCELADA** (2026-04-28). Decisión: los plugins no son necesarios de momento.
 
 ---
 
