@@ -15,6 +15,7 @@ use crate::renderer::rounded_rect::RoundedRectInstance;
 use crate::renderer::GpuRenderer;
 use crate::term::color::resolve_color;
 use crate::term::{CursorInfo, CursorShape};
+use crate::ui::info_overlay::InfoOverlay;
 use crate::ui::search_bar::SearchBar;
 use crate::ui::{CommandPalette, PaneSeparator, Tab};
 use alacritty_terminal::vte::ansi::Color as AnsiColor;
@@ -1866,6 +1867,22 @@ impl RenderContext {
                 let row = mcp_items_start + i;
                 let label = format!("  {} ({} tools)", server, tools.len());
                 let trimmed: String = label.chars().take(sidebar_cols).collect();
+                let is_cursor = active_section == 1 && i == 0;
+                if is_cursor {
+                    let margin = 4.0 * self.scale_factor;
+                    self.rect_instances.push(RoundedRectInstance {
+                        rect: [
+                            sidebar_left_px + margin,
+                            sidebar_top_px + row as f32 * ch + margin * 0.5,
+                            visible_sidebar_px - 2.0 * margin,
+                            ch - margin,
+                        ],
+                        color: sidebar_item_active_bg,
+                        radius: 4.0 * self.scale_factor,
+                        border_width: 0.0,
+                        _pad: [0.0; 2],
+                    });
+                }
                 push_sidebar_row(self, &trimmed, sidebar_fg, SIDEBAR_BG, row);
             }
         }
@@ -1897,6 +1914,22 @@ impl RenderContext {
                 let row = skills_items_start + i;
                 let label = format!("  {}", skill.name);
                 let trimmed: String = label.chars().take(sidebar_cols).collect();
+                let is_cursor = active_section == 2 && i == 0;
+                if is_cursor {
+                    let margin = 4.0 * self.scale_factor;
+                    self.rect_instances.push(RoundedRectInstance {
+                        rect: [
+                            sidebar_left_px + margin,
+                            sidebar_top_px + row as f32 * ch + margin * 0.5,
+                            visible_sidebar_px - 2.0 * margin,
+                            ch - margin,
+                        ],
+                        color: sidebar_item_active_bg,
+                        radius: 4.0 * self.scale_factor,
+                        border_width: 0.0,
+                        _pad: [0.0; 2],
+                    });
+                }
                 push_sidebar_row(self, &trimmed, sidebar_fg, SIDEBAR_BG, row);
             }
         }
@@ -1935,6 +1968,22 @@ impl RenderContext {
                 let display = name.strip_suffix(".md").unwrap_or(name.as_str());
                 let label = format!("  {display}");
                 let trimmed: String = label.chars().take(sidebar_cols).collect();
+                let is_cursor = active_section == 3 && i == 0;
+                if is_cursor {
+                    let margin = 4.0 * self.scale_factor;
+                    self.rect_instances.push(RoundedRectInstance {
+                        rect: [
+                            sidebar_left_px + margin,
+                            sidebar_top_px + row as f32 * ch + margin * 0.5,
+                            visible_sidebar_px - 2.0 * margin,
+                            ch - margin,
+                        ],
+                        color: sidebar_item_active_bg,
+                        radius: 4.0 * self.scale_factor,
+                        border_width: 0.0,
+                        _pad: [0.0; 2],
+                    });
+                }
                 push_sidebar_row(self, &trimmed, sidebar_fg, SIDEBAR_BG, row);
             }
         }
@@ -2092,6 +2141,130 @@ impl RenderContext {
                 self.push_shaped_row("", fg, transparent, row, start_col, palette_width, font);
             }
         }
+    }
+
+    /// Render the info overlay for sidebar items (MCP / Skills / Steering).
+    /// Displays markdown content with the same syntax highlighting as the chat panel.
+    #[allow(clippy::too_many_arguments)]
+    pub fn build_info_overlay_instances(
+        &mut self,
+        overlay: &InfoOverlay,
+        font: &crate::config::schema::FontConfig,
+        total_cols: usize,
+        total_rows: usize,
+        pad_x: f32,
+        pad_y: f32,
+        colors: &crate::config::schema::ColorScheme,
+    ) {
+        let ow = (total_cols.min(80)).max(30);
+        let oh = (total_rows.saturating_sub(4)).min(36).max(8);
+        if total_cols < ow || total_rows < oh {
+            return;
+        }
+
+        let start_col = (total_cols.saturating_sub(ow)) / 2;
+        let start_row = (total_rows.saturating_sub(oh)) / 2;
+
+        let bg = {
+            let [r, g, b, _] = colors.ui_overlay;
+            [r, g, b, 0.97]
+        };
+        let transparent = [0.0f32; 4];
+        let fg = colors.foreground;
+        let border_color = colors.ui_muted;
+        let accent = colors.ui_accent;
+
+        let cw = self.shaper.cell_width;
+        let ch = self.shaper.cell_height;
+        let px = pad_x + start_col as f32 * cw;
+        let py = pad_y + start_row as f32 * ch;
+        let pw = ow as f32 * cw;
+        let ph = oh as f32 * ch;
+        let radius = 12.0 * self.scale_factor;
+        let border = 1.0 * self.scale_factor;
+
+        // Border + background
+        self.rect_instances.push(RoundedRectInstance {
+            rect: [px - border, py - border, pw + 2.0 * border, ph + 2.0 * border],
+            color: border_color,
+            radius: radius + border,
+            border_width: 0.0,
+            _pad: [0.0; 2],
+        });
+        self.rect_instances.push(RoundedRectInstance {
+            rect: [px, py, pw, ph],
+            color: bg,
+            radius,
+            border_width: 0.0,
+            _pad: [0.0; 2],
+        });
+
+        // Title bar separator
+        self.rect_instances.push(RoundedRectInstance {
+            rect: [px + 4.0 * self.scale_factor, py + ch, pw - 8.0 * self.scale_factor, 1.0 * self.scale_factor],
+            color: border_color,
+            radius: 0.0,
+            border_width: 0.0,
+            _pad: [0.0; 2],
+        });
+
+        // Title row
+        let title = format!("  {}", overlay.title);
+        self.push_shaped_row(&title, accent, transparent, start_row, start_col, ow, font);
+
+        // Content area: rows start_row+1 .. start_row+oh-1 (last row = footer hint)
+        let content_rows = oh.saturating_sub(2); // -1 title, -1 footer
+        let scroll = overlay.scroll;
+        let content_col = start_col + 1;
+        let content_width = ow.saturating_sub(2);
+
+        for i in 0..content_rows {
+            let line_idx = scroll + i;
+            let row = start_row + 1 + i;
+            if let Some(line) = overlay.lines.get(line_idx) {
+                let line_fg = resolve_line_fg(&line.kind, fg, colors);
+                // Resolve spans to (start, end, color) tuples
+                let resolved: Vec<(usize, usize, [f32; 4])> = line
+                    .spans
+                    .iter()
+                    .map(|(s, e, kind)| (*s, *e, resolve_span_fg(kind, line_fg, colors)))
+                    .collect();
+                self.push_md_line(
+                    &line.display,
+                    line_fg,
+                    &resolved,
+                    transparent,
+                    row,
+                    content_col,
+                    content_width,
+                    font,
+                );
+            } else {
+                self.push_shaped_row("", fg, transparent, row, content_col, content_width, font);
+            }
+        }
+
+        // Footer: scroll hint + Esc to close
+        let footer_row = start_row + oh - 1;
+        let can_scroll_down = scroll + content_rows < overlay.lines.len();
+        let can_scroll_up = scroll > 0;
+        let scroll_hint = match (can_scroll_up, can_scroll_down) {
+            (true, true) => "j/k scroll",
+            (true, false) => "k scroll up",
+            (false, true) => "j scroll down",
+            (false, false) => "",
+        };
+        let footer = if scroll_hint.is_empty() {
+            format!("{:width$}Esc close  ", "", width = ow.saturating_sub(10))
+        } else {
+            format!(
+                "{:width$}{}  Esc close  ",
+                "",
+                scroll_hint,
+                width = ow.saturating_sub(scroll_hint.len() + 12)
+            )
+        };
+        self.push_shaped_row(&footer, border_color, transparent, footer_row, start_col, ow, font);
     }
 
     /// Render the right-click context menu as a floating popup at `menu.col/row`.

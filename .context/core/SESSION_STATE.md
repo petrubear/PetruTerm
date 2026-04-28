@@ -1,16 +1,28 @@
 # Session State
 
-**Last Updated:** 2026-04-26
-**Session Focus:** Chat input UX — cursor, historial, scroll vertical, 4-line input
+**Last Updated:** 2026-04-28
+**Session Focus:** G-2-overlay — info overlay para sidebar MCP/Skills/Steering
 
 ## Branch: `master`
 
 ## Estado actual
 
-**Phase 1–3 + 3.5 + A + 3.6 + B + C + D + Phase 5 G-0/G-1/G-2/G-3 COMPLETE.**
-**Chat input UX COMPLETA. Sin deuda técnica abierta. Diferidos: TD-PERF-03/05/29.**
+**Phase 1–3 + 3.5 + A + 3.6 + B + C + D + Phase 5 G-0/G-1/G-2/G-3 + G-2-overlay COMPLETE.**
+**Sin deuda técnica abierta. Diferidos: TD-PERF-03/05/29.**
 
-**Pendiente en Phase 5:** G-2-overlay (Enter en sidebar abre contenido MCP/Skill/Steering).
+**Phase 5 COMPLETA. Next: Phase 4 — Plugin Ecosystem.**
+
+## Esta sesión (2026-04-28) — G-2-overlay
+
+**Archivos:**
+- `src/ui/info_overlay.rs` (nuevo) — `InfoOverlay` struct
+- `src/ui/mod.rs` — exporta `InfoOverlay`
+- `src/llm/mcp/manager.rs` — `tools_for_server()`
+- `src/app/ui.rs` — `mcp_overlay_content()`
+- `src/app/mod.rs` — campo `info_overlay`, `open_sidebar_info_overlay()`, `close_sidebar()`, handlers Esc/j/k, render call
+- `src/app/renderer.rs` — `build_info_overlay_instances()`, cursor highlight en sidebar MCP/Skills/Steering
+
+**Bug fix posterior:** Esc en overlay dejaba `sidebar_kbd_active = true` → Enter interceptado. Fix: Esc en overlay resetea `sidebar_kbd_active = false` (no cierra sidebar). Esc en sidebar sin overlay → `close_sidebar()`.
 
 ---
 

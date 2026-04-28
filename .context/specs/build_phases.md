@@ -63,10 +63,11 @@ Scroll independiente por sección cuando los items no caben. Sección vacía mue
 - [x] Enter en secciones 1-3 → `log::debug!` placeholder (G-2-overlay pendiente)
 - [x] `Leader s` como alias alternativo para abrir/cerrar (además de `Leader e e`)
 
-**G-2-overlay (futuro):** Enter en item seleccionado abre overlay tipo paleta mostrando:
-- MCP → contenido del `mcp.json` de ese servidor
-- Skill → contenido del `SKILL.md` (sin assets)
-- Steering → contenido del archivo steering seleccionado
+**G-2-overlay (COMPLETO 2026-04-28):** Enter en item seleccionado abre overlay centrado mostrando:
+- MCP → tools con descripcion + JSON schema (markdown con syntax highlight)
+- Skill → body del SKILL.md (markdown con syntax highlight)
+- Steering → contenido del archivo (markdown con syntax highlight)
+- j/k scroll, Esc cierra. Cursor highlight en item seleccionado del sidebar.
 
 ### G-3: Markdown en chat
 - [x] Parser Markdown inline: `**bold**`, `*italic*`, `` `code` ``, `# headings`

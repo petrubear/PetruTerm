@@ -111,6 +111,9 @@ pub struct App {
     lua: Option<mlua::Lua>,
     /// Active toast notification: (message, expiry). Rendered as an overlay until expiry.
     toast: Option<(String, std::time::Instant)>,
+
+    /// Sidebar item detail overlay (G-2-overlay).
+    info_overlay: crate::ui::InfoOverlay,
 }
 
 impl App {
@@ -161,6 +164,7 @@ impl App {
             separator_snapshot: Vec::new(),
             lua,
             toast: None,
+            info_overlay: crate::ui::InfoOverlay::new(),
         }
     }
 
@@ -609,10 +613,89 @@ impl App {
             .map(|w| w.id)
     }
 
+    fn close_sidebar(&mut self) {
+        self.sidebar_visible = false;
+        self.sidebar_rename_input = None;
+        self.sidebar_kbd_active = false;
+        self.info_overlay.close();
+        self.apply_tab_bar_padding();
+        self.resize_terminals_for_panel();
+    }
+
+    fn open_sidebar_info_overlay(&mut self) {
+        const CONTENT_WIDTH: usize = 72;
+        match self.info_sidebar_section {
+            1 => {
+                // MCP: collect servers in sorted order (mirrors sidebar render)
+                let servers: Vec<String> = {
+                    let mut map: std::collections::BTreeMap<String, ()> = Default::default();
+                    for (server, _) in self.ui.mcp_manager.all_tools() {
+                        map.insert(server, ());
+                    }
+                    map.into_keys().collect()
+                };
+                if let Some(name) = servers.get(self.mcp_scroll) {
+                    let content = self.ui.mcp_overlay_content(name);
+                    self.info_overlay.open(name.clone(), &content, CONTENT_WIDTH);
+                }
+            }
+            2 => {
+                // Skills
+                if let Some(skill) = self.ui.skill_manager.skills().get(self.skills_scroll) {
+                    let title = skill.name.clone();
+                    let content = self
+                        .ui
+                        .skill_manager
+                        .read_body(skill)
+                        .unwrap_or_else(|e| format!("Error reading skill: {e}"));
+                    self.info_overlay.open(title, &content, CONTENT_WIDTH);
+                }
+            }
+            3 => {
+                // Steering
+                if let Some((name, content)) =
+                    self.ui.steering_manager.files().get(self.steering_scroll)
+                {
+                    let display = name.strip_suffix(".md").unwrap_or(name).to_string();
+                    self.info_overlay.open(display, content, CONTENT_WIDTH);
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn handle_sidebar_key(&mut self, event: &winit::event::KeyEvent) -> bool {
         if event.state != ElementState::Pressed || !self.sidebar_visible {
+            if !self.sidebar_visible {
+                self.info_overlay.close();
+            }
             return false;
         }
+
+        // Info overlay intercepts all keys when visible.
+        if self.info_overlay.visible {
+            match &event.logical_key {
+                Key::Named(NamedKey::Escape) => {
+                    self.info_overlay.close();
+                    self.sidebar_kbd_active = false;
+                }
+                Key::Named(NamedKey::ArrowDown) => {
+                    self.info_overlay.scroll_down();
+                }
+                Key::Named(NamedKey::ArrowUp) => {
+                    self.info_overlay.scroll_up();
+                }
+                Key::Character(s) if s.as_str() == "j" => {
+                    self.info_overlay.scroll_down();
+                }
+                Key::Character(s) if s.as_str() == "k" => {
+                    self.info_overlay.scroll_up();
+                }
+                _ => {}
+            }
+            return true;
+        }
+
         // When leader is active, only intercept sidebar-specific final keys.
         // Prefix keys (a, e, W) and all others pass through to normal leader dispatch.
         if self.input.leader_active {
@@ -700,6 +783,11 @@ impl App {
         }
 
         match &event.logical_key {
+            // Escape: close sidebar.
+            Key::Named(NamedKey::Escape) => {
+                self.close_sidebar();
+                true
+            }
             // Tab / Shift+Tab: cycle active section.
             Key::Named(NamedKey::Tab) => {
                 let shift = self.input.modifiers.state().shift_key();
@@ -770,17 +858,9 @@ impl App {
                         self.mux.cmd_switch_workspace(id);
                         self.refresh_status_cache();
                     }
-                    self.sidebar_visible = false;
-                    self.sidebar_rename_input = None;
-                    self.sidebar_kbd_active = false;
-                    self.apply_tab_bar_padding();
-                    self.resize_terminals_for_panel();
+                    self.close_sidebar();
                 } else {
-                    // G-2-overlay placeholder: log selection for future implementation.
-                    log::debug!(
-                        "InfoSidebar: Enter in section {}",
-                        self.info_sidebar_section
-                    );
+                    self.open_sidebar_info_overlay();
                 }
                 true
             }
@@ -1605,6 +1685,17 @@ impl ApplicationHandler<()> for App {
                             &self.config.colors,
                         );
                     }
+                    if self.info_overlay.visible {
+                        rc.build_info_overlay_instances(
+                            &self.info_overlay,
+                            &scaled_font,
+                            total_cols,
+                            total_rows,
+                            self.config.window.padding.left as f32 + sidebar_px_snapshot,
+                            sb_pad_y,
+                            &self.config.colors,
+                        );
+                    }
 
                     // ── Toast notification ──────────────────────────────────────────────
                     let toast_active = self
@@ -1875,9 +1966,7 @@ impl ApplicationHandler<()> for App {
                                                 self.mux.cmd_switch_workspace(id);
                                                 self.refresh_status_cache();
                                             }
-                                            self.sidebar_visible = false;
-                                            self.apply_tab_bar_padding();
-                                            self.resize_terminals_for_panel();
+                                            self.close_sidebar();
                                         }
                                     }
                                 }

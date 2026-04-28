@@ -119,4 +119,12 @@ impl McpManager {
     pub fn server_names(&self) -> Vec<&str> {
         self.clients.keys().map(String::as_str).collect()
     }
+
+    /// Tools exposed by a specific server. Returns empty slice if not connected.
+    pub fn tools_for_server(&self, server_name: &str) -> &[McpTool] {
+        self.clients
+            .get(server_name)
+            .map(|c| c.tools.as_slice())
+            .unwrap_or(&[])
+    }
 }

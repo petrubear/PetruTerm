@@ -1,11 +1,11 @@
 # Active Context
 
 **Current Focus:** Phase 4 — Plugin Ecosystem
-**Last Active:** 2026-04-26
+**Last Active:** 2026-04-28
 
 ## Estado actual del proyecto
 
-**Phase 1–3 COMPLETE. Phase 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Fase B COMPLETE. Fase C COMPLETE. Fase D (D-1/D-2/D-3/D-4/D-5) COMPLETE. REC-PERF-01/02/05 COMPLETE. Phase 5 G-0/G-1/G-2/G-3 COMPLETE. Chat input UX COMPLETE.**
+**Phase 1–3 COMPLETE. Phase 3.5 COMPLETE. Fase A COMPLETE. Fase 3.6 COMPLETE. Fase B COMPLETE. Fase C COMPLETE. Fase D (D-1/D-2/D-3/D-4/D-5) COMPLETE. REC-PERF-01/02/05 COMPLETE. Phase 5 G-0/G-1/G-2/G-3/G-2-overlay COMPLETE. Chat input UX COMPLETE.**
 **Build limpio. CI verde. Sin deuda abierta activa; diferidos: TD-PERF-03, TD-PERF-05, TD-PERF-29.**
 
 ## Roadmap acordado (en orden)
@@ -26,9 +26,22 @@
 14. ~~**Phase 5 G-2**~~ COMPLETO — Sidebar MCP/Steering/Skills tabs
 15. ~~**Phase 5 G-3**~~ COMPLETO — Markdown en chat
 16. ~~**Chat input UX**~~ COMPLETO — cursor, historial, vertical scroll, 4-line input
-17. **Fase 4** — Plugin ecosystem (Lua, lazy.nvim-style)
+17. ~~**Phase 5 G-2-overlay**~~ COMPLETO — Info overlay para sidebar MCP/Skills/Steering
+18. **Fase 4** — Plugin ecosystem (Lua, lazy.nvim-style)
 
 ## Cambios recientes a preservar
+
+**G-2-overlay — info overlay sidebar:**
+- `InfoOverlay` en `src/ui/info_overlay.rs`: `open(title, content, width)` parsea con `parse_markdown`, `close()` limpia, `scroll_down/up()` navegan.
+- Enter en sección MCP/Skills/Steering del sidebar → `open_sidebar_info_overlay()` construye contenido y abre overlay.
+- MCP: formatea tools + JSON schemas via `UiManager::mcp_overlay_content()` + `McpManager::tools_for_server()`.
+- Skills: `SkillManager::read_body(skill)` — body completo del SKILL.md.
+- Steering: contenido ya en memoria via `SteeringManager::files()`.
+- Renderer: `build_info_overlay_instances()` reutiliza `push_md_line` + `resolve_line_fg/span_fg` — mismo pipeline de color que el chat panel.
+- Sidebar: cursor highlight (pill rect) en el item seleccionado de cada sección (i == 0 de la vista scrolleada).
+- `close_sidebar()` método centralizado que resetea visible/kbd_active/rename_input + cierra overlay + layout.
+- Esc en overlay → cierra overlay + resetea `sidebar_kbd_active = false` (sidebar queda visible, Enter ya no interceptado).
+- Esc en sidebar sin overlay → `close_sidebar()` completo.
 
 **Chat panel toggle/focus split:**
 - `Leader+a+a` = `ToggleAiPanel` (abrir/cerrar).

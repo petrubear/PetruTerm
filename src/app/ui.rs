@@ -1565,6 +1565,33 @@ impl UiManager {
             Action::Noop => {}
         }
     }
+
+    /// Build markdown content for the info overlay when the user opens an MCP server.
+    /// Shows a tool list with descriptions and JSON input schemas.
+    pub fn mcp_overlay_content(&self, server_name: &str) -> String {
+        let tools = self.mcp_manager.tools_for_server(server_name);
+        let mut out = format!("# {server_name}\n\n");
+        if tools.is_empty() {
+            out.push_str("*No tools registered (server not connected or no tools).*\n");
+            return out;
+        }
+        let n = tools.len();
+        out.push_str(&format!(
+            "## Tools ({})\n\n",
+            n
+        ));
+        for tool in tools {
+            out.push_str(&format!("### {}\n", tool.name));
+            if !tool.description.is_empty() {
+                out.push_str(&format!("{}\n\n", tool.description));
+            }
+            let schema = serde_json::to_string_pretty(&tool.input_schema).unwrap_or_default();
+            if schema != "null" && !schema.is_empty() {
+                out.push_str(&format!("```json\n{schema}\n```\n\n"));
+            }
+        }
+        out
+    }
 }
 
 /// Async helper: fetch the current git branch for `cwd`.
