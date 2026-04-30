@@ -794,6 +794,7 @@ impl RenderContext {
     ) {
         use crate::llm::chat_panel::{word_wrap, ConfirmDisplay, PanelState, MAX_FILE_ROWS};
         use crate::llm::diff::DiffKind;
+        use crate::llm::markdown::BlockKind;
         use crate::llm::ChatRole;
 
         let panel_cols = panel.width_cols as usize;
@@ -1140,6 +1141,11 @@ impl RenderContext {
                 1.0,
             ]);
 
+            // W-3: track code block spans (start, end) in all_lines index space.
+            let mut code_spans: Vec<(usize, usize)> = Vec::new();
+            let mut in_code = false;
+            let mut code_start = 0usize;
+
             for (msg_idx, msg) in panel.messages.iter().enumerate() {
                 let (fg, accent, msg_bg) = match msg.role {
                     ChatRole::User => (user_fg, Some(user_accent), user_bg),
@@ -1150,6 +1156,14 @@ impl RenderContext {
                 let prefix = "        "; // 8 spaces — keeps msg_inner_w (sub 8) correct
                 let prefix_len = 8usize;
                 for ann in panel.wrapped_message(msg_idx).iter() {
+                    let is_code = matches!(ann.kind, BlockKind::CodeBlock { .. });
+                    if is_code && !in_code {
+                        in_code = true;
+                        code_start = line_idx;
+                    } else if !is_code && in_code {
+                        code_spans.push((code_start, line_idx));
+                        in_code = false;
+                    }
                     let line_fg = resolve_line_fg(&ann.kind, fg, &config.colors);
                     let resolved_spans: Vec<(usize, usize, [f32; 4])> = ann
                         .spans
@@ -1163,6 +1177,10 @@ impl RenderContext {
                         })
                         .collect();
                     push_line!(prefix, ann.display.as_str(), line_fg, accent, resolved_spans, msg_bg);
+                }
+                if in_code {
+                    code_spans.push((code_start, line_idx));
+                    in_code = false;
                 }
                 push_line!("", "", sep_fg, None, vec![], None);
             }
@@ -1212,6 +1230,14 @@ impl RenderContext {
 
                 // Stable annotated lines
                 for ann in self.streaming_stable_lines.iter() {
+                    let is_code = matches!(ann.kind, BlockKind::CodeBlock { .. });
+                    if is_code && !in_code {
+                        in_code = true;
+                        code_start = line_idx;
+                    } else if !is_code && in_code {
+                        code_spans.push((code_start, line_idx));
+                        in_code = false;
+                    }
                     let line_fg = resolve_line_fg(&ann.kind, stream_fg, &config.colors);
                     let resolved_spans: Vec<(usize, usize, [f32; 4])> = ann
                         .spans
@@ -1236,6 +1262,9 @@ impl RenderContext {
                 // Partial plain-text lines (no newline yet — not parsed through markdown)
                 for line in partial_lines.iter() {
                     push_line!(stream_prefix, line.as_str(), stream_fg, Some(asst_accent), vec![], asst_bg);
+                }
+                if in_code {
+                    code_spans.push((code_start, line_idx));
                 }
             }
 
@@ -1264,8 +1293,41 @@ impl RenderContext {
             all_lines.truncate(total_lines);
 
             let visible_start = total_lines.saturating_sub(history_rows + panel.scroll_offset);
+            let visible_end = visible_start + history_rows;
 
             let accent_x = pad_x + co as f32 * cw + 2.0 * self.scale_factor;
+
+            // W-3: code block bg rects and left accent stripes.
+            {
+                let code_bg = config.colors.ui_surface_active;
+                let mut code_stripe = config.colors.ui_accent;
+                code_stripe[3] = 0.8;
+                for &(cs, ce) in &code_spans {
+                    let vis_cs = cs.max(visible_start);
+                    let vis_ce = ce.min(visible_end);
+                    if vis_cs >= vis_ce {
+                        continue;
+                    }
+                    let row_s = history_start_row + (vis_cs - visible_start);
+                    let row_e = history_start_row + (vis_ce - visible_start);
+                    let ry = pad_y + row_s as f32 * ch;
+                    let rh = (row_e - row_s) as f32 * ch;
+                    self.rect_instances.push(RoundedRectInstance {
+                        rect: [px, ry, pw, rh],
+                        color: code_bg,
+                        radius: 3.0 * self.scale_factor,
+                        border_width: 0.0,
+                        _pad: [0.0; 2],
+                    });
+                    self.rect_instances.push(RoundedRectInstance {
+                        rect: [accent_x - self.scale_factor, ry, 2.0 * self.scale_factor, rh],
+                        color: code_stripe,
+                        radius: self.scale_factor,
+                        border_width: 0.0,
+                        _pad: [0.0; 2],
+                    });
+                }
+            }
 
             for i in 0..history_rows {
                 let row = history_start_row + i;
