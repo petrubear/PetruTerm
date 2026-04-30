@@ -85,35 +85,35 @@ Scroll independiente por sección cuando los items no caben. Sección vacía mue
 > Fuente de inspiración: código fuente de Warp (`app/src/ai_assistant/`, `workspace/view/left_panel.rs`).
 
 ### W-1: Full-width message background tinting
-- [ ] User message rows → warm tint rect (flat `RoundedRectInstance`, radius 0, alpha ~8% blend toward `user_fg`)
-- [ ] Assistant message rows → base `ui_surface` bg (or cool 5% tint toward `ui_accent`)
-- [ ] Rects pushed before glyph vertices (painter's order)
-- [ ] Text prefixes `"   You  "` / `"    AI  "` simplificados o eliminados (bg distingue el rol)
+- [x] User message rows → warm tint rect (flat `RoundedRectInstance`, radius 0, alpha ~8% blend toward `user_fg`)
+- [x] Assistant message rows → base `ui_surface` bg (or cool 5% tint toward `ui_accent`)
+- [x] Rects pushed before glyph vertices (painter's order)
+- [x] Text prefixes `"   You  "` / `"    AI  "` simplificados o eliminados (bg distingue el rol)
 
 ### W-2: Input box as a bordered card
-- [ ] `RoundedRectInstance` detrás de filas de input (`sep_row+1` a `screen_rows-2`), radius 4px, bg = `ui_surface` + 10% más claro, border 1px `ui_muted`
-- [ ] Separador `sep_row` se vuelve más fino/tenue (1px, `ui_muted` 50% alpha)
-- [ ] Fila de hint (`screen_rows-1`) permanece fuera del card
+- [x] `RoundedRectInstance` detrás de filas de input (`sep_row+1` a `screen_rows-2`), radius 4px, bg = `ui_surface` + 10% más claro, border 1px `ui_muted`
+- [x] Separador `sep_row` se vuelve más fino/tenue (1px, `ui_muted` 50% alpha)
+- [x] Fila de hint (`screen_rows-1`) permanece fuera del card
 
 ### W-3: Code block background + left accent bar
-- [ ] Detectar spans de código en wrap cache (`ParseState::CodeBlock`)
-- [ ] Rect de fondo `ui_surface_active` por bloque de código, radius 3px
-- [ ] Barra vertical de 2px en borde izquierdo del bloque, color `ui_accent` 80% alpha
-- [ ] Hint `[c]` al final del último renglón del bloque (color `ui_muted`)
+- [x] Detectar spans de código en wrap cache (`ParseState::CodeBlock`)
+- [x] Rect de fondo `ui_surface_active` por bloque de código, radius 3px
+- [x] Barra vertical de 2px en borde izquierdo del bloque, color `ui_accent` 80% alpha
+- [x] Hint `[c]` al final del último renglón del bloque (color `ui_muted`)
 
 ### W-4: Sidebar active/inactive color contrast
-- [ ] Headers de sección activa → color `foreground` (full brightness)
-- [ ] Headers de sección inactiva → `ui_muted` (foreground 35% alpha)
-- [ ] Items de sección activa → `foreground`; sección inactiva → `ui_muted`
-- [ ] Punto de acento (`sidebar_dot_active`) solo en el item activo, no en headers
+- [x] Headers de sección activa → color `foreground` (full brightness)
+- [x] Headers de sección inactiva → `ui_muted` (foreground 35% alpha)
+- [x] Items de sección activa → `foreground`; sección inactiva → `ui_muted`
+- [x] Punto de acento (`sidebar_dot_active`) solo en el item activo, no en headers
 
 ### W-5: Zero state — empty panel
-- [ ] Cuando `messages.is_empty() && state == Idle`: renderizar estado vacío centrado
-- [ ] Fila centro-2: `"  ✦  "` en `ui_accent` (carácter icono grande, centrado en ancho de panel)
-- [ ] Fila centro-1: `"  Ask a question below  "` en `ui_muted`, centrado
-- [ ] Fila centro+1/+2: pills `"[ fix last error ]"` y `"[ explain command ]"` clicables, bg `ui_surface_hover`, radius 4px
-- [ ] Estado `zero_state_hover: Option<u8>` en `ChatPanel` para hover visual
-- [ ] Click en pill → pre-fill input (+ submit opcional)
+- [x] Cuando `messages.is_empty() && state == Idle`: renderizar estado vacío centrado
+- [x] Fila centro-2: `"  ✦  "` en `ui_accent` (carácter icono grande, centrado en ancho de panel)
+- [x] Fila centro-1: `"  Ask a question below  "` en `ui_muted`, centrado
+- [x] Fila centro+1/+2: pills `"[ fix last error ]"` y `"[ explain command ]"` clicables, bg `ui_surface_hover`, radius 4px
+- [x] Estado `zero_state_hover: Option<u8>` en `ChatPanel` para hover visual
+- [x] Click en pill → pre-fill input (+ submit)
 
 ### W-6: Header — icon anchor + right-aligned action buttons
 - [ ] Zona izquierda (~10 cols): glyph `✦` + model short-name en `ui_accent`

@@ -179,6 +179,10 @@ pub struct ChatPanel {
     pub file_picker_cursor: usize,
     /// Reusable fuzzy matcher — avoids re-init on every filtered_picker_items call (TD-MEM-11).
     matcher: SkimMatcherV2,
+
+    // ── W-5: Zero state ───────────────────────────────────────────────────────
+    /// Which suggestion pill is currently hovered (0 = first, 1 = second, None = neither).
+    pub zero_state_hover: Option<u8>,
 }
 
 impl ChatPanel {
@@ -206,6 +210,7 @@ impl ChatPanel {
             file_picker_items: Vec::new(),
             file_picker_cursor: 0,
             matcher: SkimMatcherV2::default(),
+            zero_state_hover: None,
             wrapped_cache: Vec::new(),
             wrapped_cache_width: 0,
             separator_cache: String::new(),

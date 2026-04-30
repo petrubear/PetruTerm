@@ -1090,6 +1090,76 @@ impl RenderContext {
                 0
             };
             let history_rows = sep_row.saturating_sub(history_start_row);
+
+            // W-5: Zero state — empty panel, idle
+            if panel.messages.is_empty() && matches!(panel.state, PanelState::Idle) {
+                // Layout: icon gets extra breathing room above and below.
+                let center = (history_start_row + sep_row) / 2;
+                let icon_row = center.saturating_sub(3); // ✦ with 1 empty row below it
+                let text_row = center.saturating_sub(1); // subtitle
+                // center row = empty gap between subtitle and pills
+                let pill1_row = center + 2;
+                let pill2_row = center + 3;
+
+                let pill_margin = 8.0 * cw;
+                let pill_radius = 4.0 * self.scale_factor;
+                let pill_border = 1.0 * self.scale_factor;
+
+                for r in history_start_row..sep_row {
+                    if r == icon_row {
+                        let pad = panel_cols.saturating_sub(1) / 2;
+                        let mut row_text = " ".repeat(pad);
+                        row_text.push('✦');
+                        self.push_shaped_row(&row_text, config.colors.ui_accent, panel_bg, r, co, panel_cols, font);
+                    } else if r == text_row {
+                        let msg = "Ask a question below";
+                        let msg_w = msg.chars().count();
+                        let pad = panel_cols.saturating_sub(msg_w) / 2;
+                        let row_text = format!("{}{}", " ".repeat(pad), msg);
+                        self.push_shaped_row(&row_text, config.colors.ui_muted, panel_bg, r, co, panel_cols, font);
+                    } else if r == pill1_row || r == pill2_row {
+                        let (label, hover_idx) = if r == pill1_row {
+                            ("[ Fix last error ]", 0u8)
+                        } else {
+                            ("[ Explain command ]", 1u8)
+                        };
+                        let label_w = label.chars().count();
+                        let pad = panel_cols.saturating_sub(label_w) / 2;
+                        let row_text = format!("{}{}", " ".repeat(pad), label);
+
+                        let is_hovered = panel.zero_state_hover == Some(hover_idx);
+                        // Two-rect pill: border outer + fill inner (same pattern as W-2 card).
+                        let (border_color, fill_color, text_fg) = if is_hovered {
+                            (config.colors.ui_accent, config.colors.ui_surface_active, config.colors.foreground)
+                        } else {
+                            (config.colors.ui_muted, config.colors.ui_surface, dim(config.colors.foreground, 0.15))
+                        };
+                        let pill_x = px + pill_margin;
+                        let pill_y = pad_y + r as f32 * ch;
+                        let pill_w = pw - 2.0 * pill_margin;
+                        // Border rect (slightly larger).
+                        self.rect_instances.push(RoundedRectInstance {
+                            rect: [pill_x - pill_border, pill_y - pill_border, pill_w + 2.0 * pill_border, ch + 2.0 * pill_border],
+                            color: border_color,
+                            radius: pill_radius + pill_border,
+                            border_width: 0.0,
+                            _pad: [0.0; 2],
+                        });
+                        // Fill rect.
+                        self.rect_instances.push(RoundedRectInstance {
+                            rect: [pill_x, pill_y, pill_w, ch],
+                            color: fill_color,
+                            radius: pill_radius,
+                            border_width: 0.0,
+                            _pad: [0.0; 2],
+                        });
+                        self.push_shaped_row(&row_text, text_fg, panel_bg, r, co, panel_cols, font);
+                    } else {
+                        self.push_shaped_row("", sep_fg, panel_bg, r, co, panel_cols, font);
+                    }
+                }
+            } else {
+
             let msg_inner_w = panel_cols.saturating_sub(8);
 
             // Reuse scratch_lines across frames — Vec capacity is kept, String capacity reused
@@ -1366,20 +1436,12 @@ impl RenderContext {
             }
 
             self.scratch_lines = all_lines;
+            } // end W-5 else (normal message view)
         }
 
-        // ── Separator — dimmed (W-2: visual gap above the input card) ──────
-        let mut dim_sep_fg = sep_fg;
-        dim_sep_fg[3] *= 0.5;
-        self.push_shaped_row(
-            &panel.separator_cache,
-            dim_sep_fg,
-            panel_bg,
-            sep_row,
-            co,
-            panel_cols,
-            font,
-        );
+        // Separator row is intentionally empty — the card's rounded top edge
+        // provides the visual break. Rendering the │────… characters looks ugly.
+        self.push_shaped_row("", sep_fg, panel_bg, sep_row, co, panel_cols, font);
     }
 
     /// Build only the input field and key-hint row for the chat panel.
@@ -1433,9 +1495,9 @@ impl RenderContext {
             let radius = 4.0 * self.scale_factor;
             let border = 1.0 * self.scale_factor;
 
-            // ui_surface_active is designed to be visually distinct from the panel bg.
-            let card_bg = config.colors.ui_surface_active;
-            // Full-opacity ui_muted border.
+            // Subtle card: slightly lighter than the panel bg, not the purple selection color.
+            let b = config.llm.ui.background;
+            let card_bg = [(b[0] + 0.06).min(1.0), (b[1] + 0.06).min(1.0), (b[2] + 0.06).min(1.0), 1.0];
             let border_color = config.colors.ui_muted;
 
             // Border rect (slightly larger, drawn first).

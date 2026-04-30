@@ -534,6 +534,41 @@ impl App {
         }
     }
 
+    /// Given a panel-relative row index, return which zero-state pill (0 or 1) that row maps to,
+    /// or None if it's not on a pill.
+    fn zero_state_hover_for_row(&self, panel_row: usize) -> Option<u8> {
+        let (_, cell_h) = self.cell_dims();
+        let screen_rows = if let Some(rc) = &self.render_ctx {
+            let (_, h) = rc.renderer.size();
+            let pad_top = self.config.window.padding.top as f32;
+            let pad_bottom = self.config.window.padding.bottom as f32;
+            let tab_h = self.tab_bar_height_px();
+            let sb_h = self.status_bar_height_px();
+            ((h as f32 - pad_top - pad_bottom - tab_h - sb_h) / cell_h as f32).floor() as usize
+        } else {
+            return None;
+        };
+        let panel = self.ui.panel();
+        let sep_row = screen_rows.saturating_sub(6);
+        let file_count = panel.attached_files.len();
+        let file_section_rows = if file_count == 0 {
+            0
+        } else {
+            1 + file_count.min(crate::llm::chat_panel::MAX_FILE_ROWS)
+        };
+        let history_start_row = 1 + if file_section_rows > 0 { file_section_rows + 1 } else { 0 };
+        let center = (history_start_row + sep_row) / 2;
+        let pill1_row = center + 2;
+        let pill2_row = center + 3;
+        if panel_row == pill1_row {
+            Some(0)
+        } else if panel_row == pill2_row {
+            Some(1)
+        } else {
+            None
+        }
+    }
+
     fn mouse_in_panel(&self) -> bool {
         if !self.ui.is_panel_visible() {
             return false;
@@ -1859,6 +1894,34 @@ impl ApplicationHandler<()> for App {
                         w.request_redraw();
                     }
                 }
+                // W-5: zero state pill hover tracking.
+                if self.mouse_in_panel() {
+                    let panel = self.ui.panel();
+                    if panel.messages.is_empty()
+                        && matches!(panel.state, crate::llm::chat_panel::PanelState::Idle)
+                    {
+                        let (_, cell_h) = self.cell_dims();
+                        let pad_top = self.config.window.padding.top as f64;
+                        let tab_h = self.tab_bar_height_px() as f64;
+                        let panel_row = ((position.y - pad_top - tab_h) / cell_h as f64)
+                            .floor()
+                            .max(0.0) as usize;
+                        let new_hover = self.zero_state_hover_for_row(panel_row);
+                        if panel.zero_state_hover != new_hover {
+                            self.ui.panel_mut().zero_state_hover = new_hover;
+                            self.ui.panel_mut().dirty = true;
+                            if let Some(w) = &self.window {
+                                w.request_redraw();
+                            }
+                        }
+                    } else if self.ui.panel().zero_state_hover.is_some() {
+                        self.ui.panel_mut().zero_state_hover = None;
+                        self.ui.panel_mut().dirty = true;
+                    }
+                } else if self.ui.panel().zero_state_hover.is_some() {
+                    self.ui.panel_mut().zero_state_hover = None;
+                    self.ui.panel_mut().dirty = true;
+                }
                 // Separator drag — update ratio live.
                 if let Some(drag) = &self.input.dragging_separator {
                     let node_id = drag.node_id;
@@ -2225,6 +2288,46 @@ impl ApplicationHandler<()> for App {
                         }
 
                         if in_panel {
+                            // W-5: zero state pill click — pre-fill and submit.
+                            {
+                                let panel = self.ui.panel();
+                                if panel.messages.is_empty()
+                                    && matches!(panel.state, crate::llm::chat_panel::PanelState::Idle)
+                                {
+                                    let (_, cell_h) = self.cell_dims();
+                                    let pad_top = self.config.window.padding.top as f64;
+                                    let tab_h = self.tab_bar_height_px() as f64;
+                                    let panel_row =
+                                        ((self.input.mouse_pos.1 - pad_top - tab_h) / cell_h as f64)
+                                            .floor()
+                                            .max(0.0) as usize;
+                                    let pill_hit = self.zero_state_hover_for_row(panel_row);
+                                    if let Some(idx) = pill_hit {
+                                        let text = if idx == 0 {
+                                            "fix last error"
+                                        } else {
+                                            "explain command"
+                                        };
+                                        self.ui.panel_mut().input = text.to_string();
+                                        self.ui.panel_mut().input_cursor =
+                                            text.chars().count();
+                                        let cwd = self
+                                            .mux
+                                            .active_cwd()
+                                            .or_else(|| std::env::current_dir().ok())
+                                            .unwrap_or_default();
+                                        self.ui.submit_ai_query(
+                                            self.wakeup_proxy.clone(),
+                                            cwd,
+                                        );
+                                        self.ui.panel_focused = true;
+                                        if let Some(w) = &self.window {
+                                            w.request_redraw();
+                                        }
+                                        return;
+                                    }
+                                }
+                            }
                             self.ui.panel_focused = true;
                         } else {
                             if self.ui.is_panel_visible() {
