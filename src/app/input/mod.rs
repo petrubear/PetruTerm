@@ -354,6 +354,7 @@ impl InputHandler {
                     Some('a') => {
                         let action = match s.as_str() {
                             "a" => Some(Action::ToggleAiPanel),
+                            "c" => Some(Action::ClearAiContext),
                             "e" => Some(Action::ExplainLastOutput),
                             "f" => Some(Action::FixLastError),
                             "z" => Some(Action::UndoLastWrite),

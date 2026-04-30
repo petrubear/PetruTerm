@@ -22,6 +22,62 @@ use std::sync::Arc;
 use crate::config::schema::LlmConfig;
 use tools::{AgentStepResult, ToolCall};
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct UsageStats {
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
+}
+
+/// Extract token usage from an OpenAI-compatible API response.
+pub fn parse_usage(resp: &Value) -> Option<UsageStats> {
+    let usage = resp.get("usage")?;
+    let prompt_tokens = usage.get("prompt_tokens")?.as_u64()? as u32;
+    let completion_tokens = usage.get("completion_tokens")?.as_u64()? as u32;
+    Some(UsageStats {
+        prompt_tokens,
+        completion_tokens,
+    })
+}
+
+/// Infer context window size from a well-known model name substring.
+pub fn infer_context_window(model: &str) -> Option<u32> {
+    let m = model.to_ascii_lowercase();
+    if m.contains("o1") || m.contains("o3") {
+        return Some(200_000);
+    }
+    if m.contains("gpt-4o") || m.contains("gpt-4-turbo") {
+        return Some(128_000);
+    }
+    if m.contains("gpt-4") {
+        return Some(8_192);
+    }
+    if m.contains("gpt-3.5") {
+        return Some(16_385);
+    }
+    if m.contains("claude-3") {
+        return Some(200_000);
+    }
+    if m.contains("llama-3") {
+        return Some(128_000);
+    }
+    if m.contains("llama-2") {
+        return Some(4_096);
+    }
+    if m.contains("mistral") || m.contains("mixtral") {
+        return Some(32_768);
+    }
+    if m.contains("gemini-1.5") || m.contains("gemini-2") {
+        return Some(1_000_000);
+    }
+    if m.contains("gemini") {
+        return Some(32_768);
+    }
+    if m.contains("deepseek") {
+        return Some(128_000);
+    }
+    None
+}
+
 /// A single message in a chat conversation.
 #[derive(Debug, Clone)]
 pub struct ChatMessage {
@@ -113,12 +169,17 @@ pub trait LlmProvider: Send + Sync {
     /// this allows mixing regular messages, tool-call assistant turns, and
     /// tool-result turns without a complex enum hierarchy.
     ///
-    /// Returns either the assistant's text response or tool calls to execute.
+    /// Returns the step result plus usage stats when available.
     async fn agent_step(
         &self,
         api_messages: &[Value],
         tool_specs: &[Value],
-    ) -> Result<AgentStepResult>;
+    ) -> Result<(AgentStepResult, Option<UsageStats>)>;
+
+    /// Return the model's context window size, if known.
+    fn context_window(&self) -> Option<u32> {
+        None
+    }
 }
 
 // ── Shared SSE / agent-response parsing ──────────────────────────────────────

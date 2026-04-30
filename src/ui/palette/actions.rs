@@ -54,6 +54,7 @@ pub enum Action {
     ExplainLastOutput,
     FixLastError,
     UndoLastWrite,
+    ClearAiContext,
     ToggleStatusBar,
     RenameTab,
     GitCheckout(String),

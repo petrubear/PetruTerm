@@ -12,7 +12,10 @@ use serde_json::Value;
 use std::time::Duration;
 
 use super::tools::AgentStepResult;
-use super::{parse_agent_response, parse_sse_chunk, ChatMessage, LlmProvider, TokenStream};
+use super::{
+    infer_context_window, parse_agent_response, parse_sse_chunk, parse_usage, ChatMessage,
+    LlmProvider, TokenStream, UsageStats,
+};
 use crate::config::schema::LlmConfig;
 
 pub struct OpenAICompatProvider {
@@ -139,7 +142,7 @@ impl LlmProvider for OpenAICompatProvider {
         &self,
         api_messages: &[Value],
         tool_specs: &[Value],
-    ) -> Result<AgentStepResult> {
+    ) -> Result<(AgentStepResult, Option<UsageStats>)> {
         let url = format!("{}/chat/completions", self.base_url);
         let mut req = self.client.post(&url);
         if let Some(key) = &self.api_key {
@@ -163,6 +166,12 @@ impl LlmProvider for OpenAICompatProvider {
             .await
             .context("Failed to parse agent step response")?;
 
-        parse_agent_response(resp_json)
+        let usage = parse_usage(&resp_json);
+        let result = parse_agent_response(resp_json)?;
+        Ok((result, usage))
+    }
+
+    fn context_window(&self) -> Option<u32> {
+        infer_context_window(&self.model)
     }
 }

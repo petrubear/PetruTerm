@@ -304,6 +304,13 @@ impl UiManager {
                     log::error!("LLM error: {e}");
                     panel.mark_error(classify_llm_error(&e));
                 }
+                AiEvent::Usage {
+                    prompt_tokens,
+                    completion_tokens,
+                } => {
+                    panel.last_prompt_tokens = prompt_tokens;
+                    panel.last_completion_tokens = completion_tokens;
+                }
                 AiEvent::ToolStatus { tool, path, done } => {
                     panel.set_tool_status(&tool, &path, done);
                 }
@@ -345,7 +352,8 @@ impl UiManager {
                 AiEvent::ToolStatus { .. }
                 | AiEvent::ConfirmWrite { .. }
                 | AiEvent::ConfirmRun { .. }
-                | AiEvent::UndoState { .. } => {} // AI block doesn't handle these
+                | AiEvent::UndoState { .. }
+                | AiEvent::Usage { .. } => {} // AI block doesn't handle these
             }
         }
         result
@@ -721,6 +729,8 @@ impl UiManager {
             return;
         };
 
+        self.panel_mut().context_window = provider.context_window();
+
         let mut system_text = self.system_prompt.clone();
 
         // Steering files: global/project Markdown rules always active.
@@ -831,19 +841,31 @@ impl UiManager {
                         let _ = wakeup_proxy.send_event(());
                         return;
                     }
-                    Ok(AgentStepResult::Text(text)) => {
+                    Ok((AgentStepResult::Text(text), usage)) => {
                         // No tool calls — stream the final response normally by
                         // building a fresh stream from the completed messages.
                         // For simplicity, send the text as a single token.
+                        if let Some(u) = usage {
+                            let _ = tx.send((
+                                panel_id,
+                                AiEvent::Usage {
+                                    prompt_tokens: u.prompt_tokens,
+                                    completion_tokens: u.completion_tokens,
+                                },
+                            ));
+                        }
                         let _ = tx.send((panel_id, AiEvent::Token(text)));
                         let _ = tx.send((panel_id, AiEvent::Done));
                         let _ = wakeup_proxy.send_event(());
                         return;
                     }
-                    Ok(AgentStepResult::ToolCalls {
-                        assistant_msg,
-                        calls,
-                    }) => {
+                    Ok((
+                        AgentStepResult::ToolCalls {
+                            assistant_msg,
+                            calls,
+                        },
+                        _usage,
+                    )) => {
                         // Add assistant's tool_calls message to history.
                         api_msgs.push(assistant_msg);
 
@@ -1220,6 +1242,10 @@ impl UiManager {
                 self.file_picker_focused = false;
                 true
             }
+            "clear" | "reset" => {
+                self.panel_mut().clear_messages();
+                true
+            }
             "skills" => {
                 let msg = {
                     let skills = self.skill_manager.skills();
@@ -1294,7 +1320,7 @@ impl UiManager {
                 true
             }
             _ => {
-                let msg = format!("Unknown command: /{cmd}. Try /skills, /mcp or /quit.");
+                let msg = format!("Unknown command: /{cmd}. Try /clear, /skills, /mcp or /quit.");
                 self.panel_mut()
                     .messages
                     .push(crate::llm::ChatMessage::assistant(msg));
@@ -1516,6 +1542,7 @@ impl UiManager {
             Action::ExplainLastOutput => self.explain_last_output(mux, wakeup_proxy),
             Action::FixLastError => self.fix_last_error(mux, wakeup_proxy),
             Action::UndoLastWrite => self.cmd_undo_last_write(),
+            Action::ClearAiContext => self.panel_mut().clear_messages(),
             Action::ToggleStatusBar => {
                 config.status_bar.enabled = !config.status_bar.enabled;
             }

@@ -10,7 +10,10 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use super::tools::AgentStepResult;
-use super::{parse_agent_response, parse_sse_chunk, ChatMessage, LlmProvider, TokenStream};
+use super::{
+    infer_context_window, parse_agent_response, parse_sse_chunk, parse_usage, ChatMessage,
+    LlmProvider, TokenStream, UsageStats,
+};
 use crate::config::schema::LlmConfig;
 
 const CHAT_URL: &str = "https://api.githubcopilot.com/chat/completions";
@@ -339,7 +342,7 @@ impl LlmProvider for CopilotProvider {
         &self,
         api_messages: &[Value],
         tool_specs: &[Value],
-    ) -> Result<AgentStepResult> {
+    ) -> Result<(AgentStepResult, Option<UsageStats>)> {
         let jwt = self.jwt().await?;
         let body = serde_json::json!({
             "model": self.model,
@@ -367,6 +370,12 @@ impl LlmProvider for CopilotProvider {
             .await
             .context("Failed to parse Copilot agent_step response")?;
 
-        parse_agent_response(resp_json)
+        let usage = parse_usage(&resp_json);
+        let result = parse_agent_response(resp_json)?;
+        Ok((result, usage))
+    }
+
+    fn context_window(&self) -> Option<u32> {
+        infer_context_window(&self.model)
     }
 }

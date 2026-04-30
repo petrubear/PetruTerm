@@ -16,6 +16,11 @@ pub enum AiEvent {
     Token(String),
     Done,
     Error(String),
+    /// Actual token counts from the API response.
+    Usage {
+        prompt_tokens: u32,
+        completion_tokens: u32,
+    },
     /// Agent called a tool. `done=false` = started, `done=true` = finished.
     ToolStatus {
         tool: String,
@@ -155,6 +160,14 @@ pub struct ChatPanel {
     /// Total number of available skills.
     pub skill_count: usize,
 
+    // ── Token usage ───────────────────────────────────────────────────────────
+    /// Actual prompt token count from the last completed API response.
+    pub last_prompt_tokens: u32,
+    /// Actual completion token count from the last completed API response.
+    pub last_completion_tokens: u32,
+    /// Context window size for the active model (set when a query starts).
+    pub context_window: Option<u32>,
+
     // ── File picker ───────────────────────────────────────────────────────────
     /// Whether the file picker overlay is open.
     pub file_picker_open: bool,
@@ -198,6 +211,9 @@ impl ChatPanel {
             separator_cache: String::new(),
             separator_width: 0,
             thin_separator_cache: String::new(),
+            last_prompt_tokens: 0,
+            last_completion_tokens: 0,
+            context_window: None,
         }
     }
 
@@ -544,6 +560,21 @@ impl ChatPanel {
             self.state = PanelState::Idle;
             self.dirty = true;
         }
+    }
+
+    /// Clear all conversation history and reset usage counters.
+    pub fn clear_messages(&mut self) {
+        self.messages.clear();
+        self.wrapped_cache.clear();
+        self.wrapped_cache_width = 0;
+        self.streaming_buf.clear();
+        self.last_prompt_tokens = 0;
+        self.last_completion_tokens = 0;
+        self.scroll_offset = 0;
+        if !matches!(self.state, PanelState::Hidden) {
+            self.state = PanelState::Idle;
+        }
+        self.dirty = true;
     }
 
     /// Transition to confirmation mode with the given display data.

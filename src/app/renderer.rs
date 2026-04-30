@@ -1424,16 +1424,16 @@ impl RenderContext {
             }
         }
 
-        // ── Key hints + token count ───────────────────────────────────────────
-        let tokens = panel.estimated_tokens();
+        // ── Key hints + context usage bar ────────────────────────────────────
+        let usage_hint = build_usage_hint(panel);
         let has_assistant = panel
             .messages
             .iter()
             .any(|m| matches!(m.role, ChatRole::Assistant));
         let hints: String = if file_picker_focused {
-            format!("  ↑↓ navigate   Enter: attach   Tab: close  Tokens: {tokens}")
+            format!("  ↑↓ navigate   Enter: attach   Tab: close  {usage_hint}")
         } else if !panel_focused {
-            format!("  <Leader>A: focus   <Leader>a a: close   Tokens: {tokens}")
+            format!("  <Leader>A: focus   <Leader>a c: clear   {usage_hint}")
         } else {
             let base = match &panel.state {
                 PanelState::Idle if !panel.input.trim().is_empty() => {
@@ -1446,7 +1446,7 @@ impl RenderContext {
                 PanelState::AwaitingConfirm => "  y/Enter: confirm   n/Esc: reject",
                 PanelState::Hidden => " ",
             };
-            format!("{base}   Tokens: {tokens}")
+            format!("{base}   {usage_hint}")
         };
         let hints_display: String = hints.chars().take(panel_cols).collect();
         self.push_shaped_row(
@@ -3095,5 +3095,32 @@ impl RenderContext {
         let label = format!("  {msg}  ");
         // Offset text down by v_pad to center it vertically inside the taller rect.
         self.push_shaped_row(&label, fg, [0.0; 4], 0, start_col, toast_width, font);
+    }
+}
+
+/// Build the token usage hint string for the chat panel hint row.
+///
+/// Shows actual API token counts (prompt/completion) and a progress bar when
+/// context window size is known. Falls back to char-based estimation otherwise.
+fn build_usage_hint(panel: &ChatPanel) -> String {
+    let prompt = panel.last_prompt_tokens;
+    let completion = panel.last_completion_tokens;
+
+    if prompt > 0 || completion > 0 {
+        if let Some(window) = panel.context_window {
+            let total = prompt + completion;
+            let pct = ((total as f32 / window as f32) * 100.0).min(100.0) as u32;
+            let filled = ((total as f32 / window as f32) * 8.0).min(8.0) as usize;
+            let bar: String = (0..8)
+                .map(|i| if i < filled { '\u{2588}' } else { '\u{2591}' })
+                .collect();
+            let window_k = window / 1_000;
+            format!("[{bar}]{pct}%  \u{2191}{prompt} \u{2193}{completion} ({window_k}k)")
+        } else {
+            format!("\u{2191}{prompt} \u{2193}{completion}")
+        }
+    } else {
+        let estimated = panel.estimated_tokens();
+        format!("~{estimated} tks")
     }
 }
