@@ -1763,7 +1763,6 @@ impl RenderContext {
         let sidebar_item_hover_bg = colors.ui_surface_hover;
         let sidebar_fg = colors.foreground;
         let sidebar_dim_fg = colors.ui_muted;
-        let sidebar_accent = colors.ui_accent;
         let sidebar_dot_active = colors.ui_accent;
         let sidebar_sep_fg = colors.ui_muted;
 
@@ -1875,8 +1874,9 @@ impl RenderContext {
         };
 
         // ── Workspace section (rows 0..ws_rows) ──────────────────────────────
-        let ws_header_fg = if active_section == 0 {
-            sidebar_accent
+        let ws_section_active = active_section == 0;
+        let ws_header_fg = if ws_section_active {
+            sidebar_fg
         } else {
             sidebar_dim_fg
         };
@@ -1938,7 +1938,9 @@ impl RenderContext {
             } else {
                 ws.name.clone()
             };
-            let name_fg = if active {
+            let name_fg = if !ws_section_active {
+                sidebar_dim_fg
+            } else if active {
                 [1.0, 1.0, 1.0, 1.0]
             } else {
                 sidebar_fg
@@ -1972,11 +1974,9 @@ impl RenderContext {
 
         // ── MCP section (rows mcp_start .. mcp_start+mcp_rows) ───────────────
         push_section_sep(self, mcp_start);
-        let mcp_header_fg = if active_section == 1 {
-            sidebar_accent
-        } else {
-            sidebar_dim_fg
-        };
+        let mcp_section_active = active_section == 1;
+        let mcp_header_fg = if mcp_section_active { sidebar_fg } else { sidebar_dim_fg };
+        let mcp_item_fg = if mcp_section_active { sidebar_fg } else { sidebar_dim_fg };
         push_sidebar_row(self, " MCP SERVERS", mcp_header_fg, SIDEBAR_BG, mcp_start);
         let mcp_items_start = mcp_start + 1;
         let mcp_available = mcp_rows.saturating_sub(1);
@@ -2013,17 +2013,15 @@ impl RenderContext {
                         _pad: [0.0; 2],
                     });
                 }
-                push_sidebar_row(self, &trimmed, sidebar_fg, SIDEBAR_BG, row);
+                push_sidebar_row(self, &trimmed, mcp_item_fg, SIDEBAR_BG, row);
             }
         }
 
         // ── Skills section (rows skills_start .. skills_start+skills_rows) ────
         push_section_sep(self, skills_start);
-        let skills_header_fg = if active_section == 2 {
-            sidebar_accent
-        } else {
-            sidebar_dim_fg
-        };
+        let skills_section_active = active_section == 2;
+        let skills_header_fg = if skills_section_active { sidebar_fg } else { sidebar_dim_fg };
+        let skills_item_fg = if skills_section_active { sidebar_fg } else { sidebar_dim_fg };
         push_sidebar_row(self, " SKILLS", skills_header_fg, SIDEBAR_BG, skills_start);
         let skills_items_start = skills_start + 1;
         let skills_available = skills_rows.saturating_sub(1);
@@ -2060,17 +2058,15 @@ impl RenderContext {
                         _pad: [0.0; 2],
                     });
                 }
-                push_sidebar_row(self, &trimmed, sidebar_fg, SIDEBAR_BG, row);
+                push_sidebar_row(self, &trimmed, skills_item_fg, SIDEBAR_BG, row);
             }
         }
 
         // ── Steering section (rows steering_start .. steering_start+steering_rows)
         push_section_sep(self, steering_start);
-        let steering_header_fg = if active_section == 3 {
-            sidebar_accent
-        } else {
-            sidebar_dim_fg
-        };
+        let steering_section_active = active_section == 3;
+        let steering_header_fg = if steering_section_active { sidebar_fg } else { sidebar_dim_fg };
+        let steering_item_fg = if steering_section_active { sidebar_fg } else { sidebar_dim_fg };
         push_sidebar_row(
             self,
             " STEERING",
@@ -2114,7 +2110,7 @@ impl RenderContext {
                         _pad: [0.0; 2],
                     });
                 }
-                push_sidebar_row(self, &trimmed, sidebar_fg, SIDEBAR_BG, row);
+                push_sidebar_row(self, &trimmed, steering_item_fg, SIDEBAR_BG, row);
             }
         }
 
