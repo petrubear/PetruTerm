@@ -92,6 +92,7 @@ pub struct RenderContext {
         [f32; 4],
         Option<[f32; 4]>,
         Vec<(usize, usize, [f32; 4])>,
+        Option<[f32; 4]>, // full-width message background tint (W-1)
     )>,
     pub panel_rect_cache: Vec<RoundedRectInstance>,
     /// Incremented each rendered frame; used for spinner animation to avoid O(n) chars().count().
@@ -1097,22 +1098,23 @@ impl RenderContext {
 
             // Helper: write `prefix + content` into all_lines[line_idx], reusing String capacity.
             macro_rules! push_line {
-                ($prefix:expr, $content:expr, $color:expr, $accent:expr, $spans:expr) => {{
+                ($prefix:expr, $content:expr, $color:expr, $accent:expr, $spans:expr, $bg:expr) => {{
                     let p: &str = $prefix;
                     let c: &str = $content;
                     if line_idx < all_lines.len() {
-                        let (s, col, acc, sp) = &mut all_lines[line_idx];
+                        let (s, col, acc, sp, bg) = &mut all_lines[line_idx];
                         s.clear();
                         s.push_str(p);
                         s.push_str(c);
                         *col = $color;
                         *acc = $accent;
                         *sp = $spans;
+                        *bg = $bg;
                     } else {
                         let mut s = String::with_capacity(p.len() + c.len());
                         s.push_str(p);
                         s.push_str(c);
-                        all_lines.push((s, $color, $accent, $spans));
+                        all_lines.push((s, $color, $accent, $spans, $bg));
                     }
                     line_idx += 1;
                 }};
@@ -1123,16 +1125,31 @@ impl RenderContext {
             let user_accent = [0.20, 0.60, 0.98, 1.0]; // Blue accent for user
             let asst_accent = [0.306, 0.788, 0.690, 1.0]; // Teal/green accent for AI
 
+            // W-1: full-width message background tints (8% warm for user, 5% cool for assistant).
+            let b = actual_panel_bg;
+            let user_bg: Option<[f32; 4]> = Some([
+                b[0] * 0.92 + user_fg[0] * 0.08,
+                b[1] * 0.92 + user_fg[1] * 0.08,
+                b[2] * 0.92 + user_fg[2] * 0.08,
+                1.0,
+            ]);
+            let asst_bg: Option<[f32; 4]> = Some([
+                b[0] * 0.95 + asst_accent[0] * 0.05,
+                b[1] * 0.95 + asst_accent[1] * 0.05,
+                b[2] * 0.95 + asst_accent[2] * 0.05,
+                1.0,
+            ]);
+
             for (msg_idx, msg) in panel.messages.iter().enumerate() {
-                let (first_p, cont_p, fg, accent) = match msg.role {
-                    ChatRole::User => ("   You  ", "        ", user_fg, Some(user_accent)),
-                    ChatRole::Assistant => ("    AI  ", "        ", asst_fg, Some(asst_accent)),
+                let (fg, accent, msg_bg) = match msg.role {
+                    ChatRole::User => (user_fg, Some(user_accent), user_bg),
+                    ChatRole::Assistant => (asst_fg, Some(asst_accent), asst_bg),
                     ChatRole::System => continue,
                     ChatRole::Tool(_) => continue,
                 };
-                for (i, ann) in panel.wrapped_message(msg_idx).iter().enumerate() {
-                    let p = if i == 0 { first_p } else { cont_p };
-                    let prefix_len = p.chars().count();
+                let prefix = "        "; // 8 spaces — keeps msg_inner_w (sub 8) correct
+                let prefix_len = 8usize;
+                for ann in panel.wrapped_message(msg_idx).iter() {
                     let line_fg = resolve_line_fg(&ann.kind, fg, &config.colors);
                     let resolved_spans: Vec<(usize, usize, [f32; 4])> = ann
                         .spans
@@ -1145,9 +1162,9 @@ impl RenderContext {
                             )
                         })
                         .collect();
-                    push_line!(p, ann.display.as_str(), line_fg, accent, resolved_spans);
+                    push_line!(prefix, ann.display.as_str(), line_fg, accent, resolved_spans, msg_bg);
                 }
-                push_line!("", "", sep_fg, None, vec![]);
+                push_line!("", "", sep_fg, None, vec![], None);
             }
 
             if panel.is_streaming() && !panel.streaming_buf.is_empty() {
@@ -1190,47 +1207,43 @@ impl RenderContext {
                     word_wrap(partial, msg_inner_w)
                 };
 
+                let stream_prefix = "        ";
+                let stream_prefix_len = 8usize;
+
                 // Stable annotated lines
-                for (i, ann) in self.streaming_stable_lines.iter().enumerate() {
-                    let p = if i == 0 { "    AI  " } else { "        " };
-                    let prefix_len = p.chars().count();
+                for ann in self.streaming_stable_lines.iter() {
                     let line_fg = resolve_line_fg(&ann.kind, stream_fg, &config.colors);
                     let resolved_spans: Vec<(usize, usize, [f32; 4])> = ann
                         .spans
                         .iter()
                         .map(|&(s, e, ref sk)| {
                             (
-                                s + prefix_len,
-                                e + prefix_len,
+                                s + stream_prefix_len,
+                                e + stream_prefix_len,
                                 resolve_span_fg(sk, line_fg, &config.colors),
                             )
                         })
                         .collect();
                     push_line!(
-                        p,
+                        stream_prefix,
                         ann.display.as_str(),
                         line_fg,
                         Some(asst_accent),
-                        resolved_spans
+                        resolved_spans,
+                        asst_bg
                     );
                 }
                 // Partial plain-text lines (no newline yet — not parsed through markdown)
-                let stable_count = self.streaming_stable_lines.len();
-                for (j, line) in partial_lines.iter().enumerate() {
-                    let p = if stable_count + j == 0 {
-                        "    AI  "
-                    } else {
-                        "        "
-                    };
-                    push_line!(p, line.as_str(), stream_fg, Some(asst_accent), vec![]);
+                for line in partial_lines.iter() {
+                    push_line!(stream_prefix, line.as_str(), stream_fg, Some(asst_accent), vec![], asst_bg);
                 }
             }
 
             if matches!(panel.state, PanelState::Loading) {
                 let mut buf = std::mem::take(&mut self.fmt_buf);
                 buf.clear();
-                let _ = std::fmt::write(&mut buf, format_args!("    ⟳  {}", t!("ai.thinking")));
-                push_line!("", buf.as_str(), stream_fg, Some(asst_accent), vec![]);
+                let _ = std::fmt::write(&mut buf, format_args!("        ⟳  {}", t!("ai.thinking")));
+                push_line!("", buf.as_str(), stream_fg, Some(asst_accent), vec![], asst_bg);
                 self.fmt_buf = buf;
             }
 
@@ -1242,7 +1255,7 @@ impl RenderContext {
                     } else {
                         "        "
                     };
-                    push_line!(p, line.as_str(), err_fg, None, vec![]);
+                    push_line!(p, line.as_str(), err_fg, None, vec![], None);
                 }
             }
 
@@ -1256,10 +1269,22 @@ impl RenderContext {
 
             for i in 0..history_rows {
                 let row = history_start_row + i;
-                let (text, fg, accent, spans_ref) = all_lines
+                let (text, fg, accent, spans_ref, msg_bg) = all_lines
                     .get(visible_start + i)
-                    .map(|(t, f, a, sp)| (t.as_str(), *f, *a, sp.as_slice()))
-                    .unwrap_or(("", sep_fg, None, &[][..]));
+                    .map(|(t, f, a, sp, bg)| (t.as_str(), *f, *a, sp.as_slice(), *bg))
+                    .unwrap_or(("", sep_fg, None, &[][..], None));
+
+                // W-1: full-width message background tint (painter's order — before glyphs).
+                if let Some(bg) = msg_bg {
+                    self.rect_instances.push(RoundedRectInstance {
+                        rect: [px, pad_y + row as f32 * ch, pw, ch],
+                        color: bg,
+                        radius: 0.0,
+                        border_width: 0.0,
+                        _pad: [0.0; 2],
+                    });
+                }
+
                 self.push_md_line(text, fg, spans_ref, panel_bg, row, co, panel_cols, font);
 
                 if let Some(color) = accent {
