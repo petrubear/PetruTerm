@@ -1126,18 +1126,18 @@ impl RenderContext {
             let user_accent = [0.20, 0.60, 0.98, 1.0]; // Blue accent for user
             let asst_accent = [0.306, 0.788, 0.690, 1.0]; // Teal/green accent for AI
 
-            // W-1: full-width message background tints (8% warm for user, 5% cool for assistant).
+            // W-1: full-width message background tints (15% warm for user, 10% cool for assistant).
             let b = actual_panel_bg;
             let user_bg: Option<[f32; 4]> = Some([
-                b[0] * 0.92 + user_fg[0] * 0.08,
-                b[1] * 0.92 + user_fg[1] * 0.08,
-                b[2] * 0.92 + user_fg[2] * 0.08,
+                b[0] * 0.85 + user_fg[0] * 0.15,
+                b[1] * 0.85 + user_fg[1] * 0.15,
+                b[2] * 0.85 + user_fg[2] * 0.15,
                 1.0,
             ]);
             let asst_bg: Option<[f32; 4]> = Some([
-                b[0] * 0.95 + asst_accent[0] * 0.05,
-                b[1] * 0.95 + asst_accent[1] * 0.05,
-                b[2] * 0.95 + asst_accent[2] * 0.05,
+                b[0] * 0.90 + asst_accent[0] * 0.10,
+                b[1] * 0.90 + asst_accent[1] * 0.10,
+                b[2] * 0.90 + asst_accent[2] * 0.10,
                 1.0,
             ]);
 
@@ -1433,17 +1433,10 @@ impl RenderContext {
             let radius = 4.0 * self.scale_factor;
             let border = 1.0 * self.scale_factor;
 
-            // Lighten panel bg by ~10% toward white for the card bg.
-            let b = config.llm.ui.background;
-            let card_bg = [
-                (b[0] + 0.10).min(1.0),
-                (b[1] + 0.10).min(1.0),
-                (b[2] + 0.10).min(1.0),
-                1.0,
-            ];
-            // Muted border at 50% alpha.
-            let mut border_color = config.colors.ui_muted;
-            border_color[3] *= 0.5;
+            // ui_surface_active is designed to be visually distinct from the panel bg.
+            let card_bg = config.colors.ui_surface_active;
+            // Full-opacity ui_muted border.
+            let border_color = config.colors.ui_muted;
 
             // Border rect (slightly larger, drawn first).
             self.rect_instances.push(RoundedRectInstance {
