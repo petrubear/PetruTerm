@@ -711,6 +711,28 @@ impl UiManager {
         self.panel_mut().init_default_files(&cwd);
     }
 
+    pub fn close_panel(&mut self) {
+        self.panel_mut().close();
+        self.panel_focused = false;
+        self.file_picker_focused = false;
+    }
+
+    pub fn restart_chat_panel(&mut self) {
+        if self.panel().file_picker_open {
+            self.panel_mut().close_file_picker();
+        }
+        self.panel_mut().clear_messages();
+    }
+
+    pub fn copy_chat_panel_transcript(&self) {
+        let Some(text) = self.panel().transcript_text() else {
+            return;
+        };
+        std::thread::spawn(move || {
+            let _ = arboard::Clipboard::new().and_then(|mut cb| cb.set_text(text));
+        });
+    }
+
     /// Submit the current panel input. `cwd` is used for tool sandboxing.
     pub fn submit_ai_query(&mut self, wakeup_proxy: EventLoopProxy<()>, cwd: PathBuf) {
         // Canonicalize once — on macOS /var is a symlink to /private/var; without this
@@ -1106,8 +1128,7 @@ impl UiManager {
             if let Some(terminal) = mux.active_terminal() {
                 terminal.write_input(&data);
             }
-            self.panel_mut().close();
-            self.panel_focused = false;
+            self.close_panel();
         }
     }
 
@@ -1237,13 +1258,11 @@ impl UiManager {
 
         match cmd {
             "q" | "quit" => {
-                self.panel_mut().close();
-                self.panel_focused = false;
-                self.file_picker_focused = false;
+                self.close_panel();
                 true
             }
             "clear" | "reset" => {
-                self.panel_mut().clear_messages();
+                self.restart_chat_panel();
                 true
             }
             "skills" => {
@@ -1498,9 +1517,7 @@ impl UiManager {
             Action::ToggleAiPanel | Action::ToggleAiMode => {
                 let terminal_id = mux.focused_terminal_id();
                 if self.panel().is_visible() {
-                    self.panel_mut().close();
-                    self.panel_focused = false;
-                    self.file_picker_focused = false;
+                    self.close_panel();
                 } else {
                     let cwd = mux
                         .active_cwd()
@@ -1535,14 +1552,12 @@ impl UiManager {
                 self.open_panel_with_context(terminal_id, cwd);
             }
             Action::DisableAiFeatures => {
-                self.panel_mut().close();
-                self.panel_focused = false;
-                self.file_picker_focused = false;
+                self.close_panel();
             }
             Action::ExplainLastOutput => self.explain_last_output(mux, wakeup_proxy),
             Action::FixLastError => self.fix_last_error(mux, wakeup_proxy),
             Action::UndoLastWrite => self.cmd_undo_last_write(),
-            Action::ClearAiContext => self.panel_mut().clear_messages(),
+            Action::ClearAiContext => self.restart_chat_panel(),
             Action::ToggleStatusBar => {
                 config.status_bar.enabled = !config.status_bar.enabled;
             }
@@ -1603,10 +1618,7 @@ impl UiManager {
             return out;
         }
         let n = tools.len();
-        out.push_str(&format!(
-            "## Tools ({})\n\n",
-            n
-        ));
+        out.push_str(&format!("## Tools ({})\n\n", n));
         for tool in tools {
             out.push_str(&format!("### {}\n", tool.name));
             if !tool.description.is_empty() {

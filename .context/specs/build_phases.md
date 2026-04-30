@@ -116,22 +116,20 @@ Scroll independiente por sección cuando los items no caben. Sección vacía mue
 - [x] Click en pill → pre-fill input (+ submit)
 
 ### W-6: Header — icon anchor + right-aligned action buttons
-- [ ] Zona izquierda (~10 cols): glyph `✦` + model short-name en `ui_accent`
-- [ ] Zona central: `provider:model` en `ui_muted`
-- [ ] Zona derecha (~15 cols, solo cuando hay mensajes): `[↺]` restart, `[⎘]` copy, `[✕]` close — cada uno clicable
-- [ ] Mapear clicks de zona derecha a acciones existentes en `UiManager`
+- [x] Zona izquierda (~10 cols): glyph `✦` + model short-name en `ui_accent`
+- [x] Zona central: `provider:model` en `ui_muted`
+- [x] Zona derecha (~15 cols, solo cuando hay mensajes): `[↺]` restart, `[⎘]` copy, `[✕]` close — cada uno clicable
+- [x] Mapear clicks de zona derecha a acciones existentes en `UiManager`
 
 ### W-7: Prepared response pill buttons
-- [ ] Campo `show_suggestions: bool` en `ChatPanel`, activado en transición `Streaming → Idle`
-- [ ] Cuando `show_suggestions`: 2 filas pill después del último mensaje asistente: `"[ Fix last error ]"` y `"[ Explain more ]"`
-- [ ] Click en pill → fill input + submit; cualquier otro input → `show_suggestions = false`
-- [ ] Descontar 2 filas del área de mensajes cuando `show_suggestions == true`
+- [x] Campo `show_suggestions: bool` en `ChatPanel`, activado en transición `Streaming → Idle`
+- [x] Cuando `show_suggestions`: 2 filas pill antes de sep_row: `"[ Fix last error ]"` y `"[ Explain more ]"`
+- [x] Click en pill → fill input + submit; cualquier otro input → `show_suggestions = false`
+- [x] Descontar 2 filas del área de mensajes cuando `show_suggestions == true`
 
 ### W-8: Resizable panel width via mouse drag
-- [ ] `panel_cols: u16` en `ChatPanel` (reemplaza constante `PANEL_COLS = 55`, default 55, clamp 30–90)
-- [ ] `panel_resize_drag: bool` en `UiManager`
-- [ ] Detectar mouse en borde izquierdo del panel (±1 celda): render borde en `ui_accent`
-- [ ] `MouseButton::Left` press en borde → `panel_resize_drag = true`
-- [ ] `CursorMoved` con drag activo → `panel.panel_cols = (screen_cols - cursor_col).clamp(30, 90)`, mark dirty
-- [ ] `MouseButton::Left` release → `panel_resize_drag = false`
-- [ ] Reemplazar todas las referencias a `PANEL_COLS` con `panel.panel_cols`
+- [x] `panel_resize_drag: bool` y `panel_resize_hover: bool` en `App`
+- [x] Detectar mouse en borde izquierdo del panel (±1 celda): render línea 2px en `ui_accent`
+- [x] `MouseButton::Left` press en borde → `panel_resize_drag = true`
+- [x] `CursorMoved` con drag activo → `panel.width_cols = clamp(30..90)`, mark dirty, resize terminals
+- [x] `MouseButton::Left` release → `panel_resize_drag = false`

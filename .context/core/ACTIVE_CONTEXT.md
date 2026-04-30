@@ -1,11 +1,11 @@
 # Active Context
 
-**Current Focus:** Phase 6 — Warp UI (W-5 completa, próximo W-6)
+**Current Focus:** Phase 6 COMPLETA (W-1 a W-8 implementadas)
 **Last Active:** 2026-04-30
 
 ## Estado actual del proyecto
 
-**W-1 → W-5 COMPLETAS en `feat/phase-6-warp-ui`.**
+**W-1 → W-6 COMPLETAS en `feat/phase-6-warp-ui`.**
 **Build limpio. Sin deuda abierta activa; diferidos: TD-PERF-03, TD-PERF-05, TD-PERF-29.**
 
 ## Roadmap Phase 6
@@ -15,15 +15,16 @@
 - [x] W-3: Code block background + left accent bar
 - [x] W-4: Sidebar active/inactive color contrast
 - [x] W-5: Zero state / empty panel
-- [ ] W-6: Header — icon anchor + right-aligned action buttons
-- [ ] W-7: Prepared response pill buttons (post-response)
-- [ ] W-8: Resizable panel width via mouse drag
+- [x] W-6: Header — icon anchor + right-aligned action buttons
+- [x] W-7: Prepared response pill buttons (post-response)
+- [x] W-8: Resizable panel width via mouse drag
 
 ## Archivos en scope (Phase 6)
 
 - `src/app/renderer.rs` — `build_chat_panel_instances`, `build_chat_panel_input_rows`, `build_workspace_sidebar_instances`
 - `src/app/mod.rs` — mouse handlers, `zero_state_hover_for_row`
 - `src/llm/chat_panel.rs` — `ChatPanel` struct + state fields
+- `src/app/ui.rs` — reusable panel actions (`restart`, `copy transcript`, `close`)
 - `.context/specs/warp_ui_improvements.md` — spec completo W-1..W-8
 
 ## Cambios W-5 a preservar
@@ -41,6 +42,20 @@
 **Input card polish** (renderer.rs `build_chat_panel_input_rows`):
 - `card_bg = panel_bg + 6%` (NO usar `ui_surface_active`)
 - `sep_row` renderiza vacío — NO usar `separator_cache` (elimina la `│────...` ASCII art)
+
+## Cambios W-6 a preservar
+
+**Header layout** (`renderer.rs` row 0):
+- izquierda: `✦ + short model` en `ui_accent`
+- centro: `provider:model` centrado y truncable en `ui_muted`
+- derecha: `[↺] [⎘] [✕]` alineados a la derecha solo cuando `messages` no está vacío
+
+**Header actions** (`chat_panel.rs` + `mod.rs` + `ui.rs`):
+- `header_action_for_col()` es la fuente de verdad para hit-testing de botones
+- click en row 0 del panel usa `panel_hit_cell()`; NO recalcular offsets a mano
+- restart limpia transcript/file picker vía `UiManager::restart_chat_panel()`
+- copy usa `ChatPanel::transcript_text()` para clipboard
+- close usa `UiManager::close_panel()`
 
 ## Invariantes arquitectonicos clave (no romper)
 

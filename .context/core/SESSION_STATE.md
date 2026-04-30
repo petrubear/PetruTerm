@@ -1,17 +1,72 @@
 # Session State
 
 **Last Updated:** 2026-04-30
-**Session Focus:** Phase 6 — Warp-inspired Chat & Sidebar UI (W-1 → W-5)
+**Session Focus:** Phase 6 — Warp-inspired Chat & Sidebar UI (W-1 → W-8) COMPLETA
 
 ## Branch: `feat/phase-6-warp-ui`
 
 ## Estado actual
 
 **Phase 1–3 + 3.5 + A + 3.6 + B + C + D + Phase 5 G-0/G-1/G-2/G-3 + G-2-overlay COMPLETE.**
-**Phase 6 Warp UI: W-1 W-2 W-3 W-4 W-5 COMPLETAS.**
+**Phase 6 Warp UI: W-1 W-2 W-3 W-4 W-5 W-6 W-7 W-8 COMPLETAS. Phase 6 COMPLETA.**
 **Sin deuda técnica abierta. Diferidos: TD-PERF-03/05/29.**
 
-## Esta sesión (2026-04-30) — Phase 6 W-5 + input card polish
+## Esta sesión (2026-04-30) — Phase 6 W-7 + W-8
+
+### W-7: Prepared response pill buttons
+
+**`src/llm/chat_panel.rs`:**
+- Campos `show_suggestions: bool` y `suggestion_hover: Option<u8>` en `ChatPanel`
+- `mark_done()` activa `show_suggestions = true` al completar streaming
+- `submit_input()`, `type_char()`, `backspace()`, `close()`, `clear_messages()` resetean `show_suggestions`
+
+**`src/app/renderer.rs` — `build_chat_panel_instances`:**
+- `suggestion_rows = 2` cuando `show_suggestions && !messages.is_empty() && Idle`
+- `effective_history_rows = history_rows - suggestion_rows` — reduce el área de mensajes
+- Pills fijas en `sep_row-2` y `sep_row-1`: "[ Fix last error ]" y "[ Explain more ]"
+- Mismo patrón visual que W-5 (border outer + fill inner, hover en `ui_accent`/`ui_surface_active`)
+
+**`src/app/mod.rs`:**
+- `suggestion_hover_for_row(panel_row)` — hits `sep_row-2` y `sep_row-1`
+- `CursorMoved`: tracking hover de suggestion pills, marca dirty si cambia
+- `MouseInput Left Pressed`: click en pill → pre-fill input + submit, `show_suggestions = false`
+
+### W-8: Resizable panel width via mouse drag
+
+**`src/app/mod.rs`:**
+- Campos `panel_resize_drag: bool` y `panel_resize_hover: bool` en `App`
+- `near_panel_left_edge(x)` — true cuando x está dentro de 1 celda del borde izquierdo del panel
+- `CursorMoved`: si `panel_resize_drag` → `panel.width_cols = ((right_edge - x) / cell_w).clamp(30, 90)` + `resize_terminals_for_panel()`; si no, actualiza hover
+- `MouseInput Left Pressed`: si near edge → `panel_resize_drag = true` y return (antes del separator hit-test)
+- `MouseInput Left Released`: si `panel_resize_drag` → reset + `resize_terminals_for_panel()`
+- Render: línea 2px en `ui_accent` (50% alpha hover, 100% drag) en borde del panel, fuera del cache
+
+## Esta sesión (2026-04-30) — Phase 6 W-6
+
+### W-6: Header — icon anchor + right-aligned action buttons
+
+**`src/app/renderer.rs` — `build_chat_panel_instances`:**
+- Header row reworked into 3 zones: left `✦ + short model` in `ui_accent`, centered `provider:model` in `ui_muted`, right-aligned `[↺] [⎘] [✕]`
+- Right-side actions only render when the transcript is non-empty
+- Header text now uses span colors instead of a single concatenated label
+
+**`src/app/mod.rs`:**
+- `panel_hit_cell(x, y) -> Option<(col, row)>` centraliza hit-testing real del panel usando `viewport_rect()`
+- Click en row 0 del panel mapea `[↺]` → restart, `[⎘]` → copy transcript, `[✕]` → close panel
+- `mouse_in_panel()` ahora reutiliza `panel_hit_cell`, evitando drift entre render y mouse hit-testing
+
+**`src/app/ui.rs`:**
+- Nuevos helpers: `close_panel()`, `restart_chat_panel()`, `copy_chat_panel_transcript()`
+- Call sites existentes (`/q`, toggle panel, disable AI, run command) reutilizan `close_panel()`
+- `ClearAiContext` y `/clear` reutilizan `restart_chat_panel()`
+
+**`src/llm/chat_panel.rs`:**
+- `HeaderAction` + `header_action_for_col()` comparten el layout clicable del header entre renderer/input
+- `transcript_text()` genera texto portable para clipboard
+- `clear_messages()` ahora limpia `confirm_display`, `matched_skill` y `zero_state_hover`
+- Tests nuevos para transcript copy + header hit-testing
+
+## Sesión anterior (2026-04-30) — Phase 6 W-5 + input card polish
 
 ### W-5: Zero state — empty panel
 
