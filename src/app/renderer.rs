@@ -1306,10 +1306,12 @@ impl RenderContext {
             self.scratch_lines = all_lines;
         }
 
-        // ── Separator (use pre-built cache from ChatPanel — TD-PERF-13) ─────
+        // ── Separator — dimmed (W-2: visual gap above the input card) ──────
+        let mut dim_sep_fg = sep_fg;
+        dim_sep_fg[3] *= 0.5;
         self.push_shaped_row(
             &panel.separator_cache,
-            sep_fg,
+            dim_sep_fg,
             panel_bg,
             sep_row,
             co,
@@ -1334,8 +1336,8 @@ impl RenderContext {
         term_cols: usize,
         screen_rows: usize,
         cursor_blink_on: bool,
-        _pad_x: f32,
-        _pad_y: f32,
+        pad_x: f32,
+        pad_y: f32,
     ) {
         use crate::llm::chat_panel::{wrap_input, ConfirmDisplay, PanelState};
         use crate::llm::ChatRole;
@@ -1357,6 +1359,47 @@ impl RenderContext {
         let input_row3 = screen_rows - 3;
         let input_row2 = screen_rows - 4;
         let input_row1 = screen_rows - 5;
+
+        // ── W-2: Input card background + border ──────────────────────────────
+        {
+            let cw = self.shaper.cell_width;
+            let ch = self.shaper.cell_height;
+            let px = pad_x + co as f32 * cw;
+            let card_y = pad_y + input_row1 as f32 * ch;
+            let pw = panel_cols as f32 * cw;
+            let card_h = 4.0 * ch;
+            let radius = 4.0 * self.scale_factor;
+            let border = 1.0 * self.scale_factor;
+
+            // Lighten panel bg by ~10% toward white for the card bg.
+            let b = config.llm.ui.background;
+            let card_bg = [
+                (b[0] + 0.10).min(1.0),
+                (b[1] + 0.10).min(1.0),
+                (b[2] + 0.10).min(1.0),
+                1.0,
+            ];
+            // Muted border at 50% alpha.
+            let mut border_color = config.colors.ui_muted;
+            border_color[3] *= 0.5;
+
+            // Border rect (slightly larger, drawn first).
+            self.rect_instances.push(RoundedRectInstance {
+                rect: [px - border, card_y - border, pw + 2.0 * border, card_h + 2.0 * border],
+                color: border_color,
+                radius: radius + border,
+                border_width: 0.0,
+                _pad: [0.0; 2],
+            });
+            // Card background.
+            self.rect_instances.push(RoundedRectInstance {
+                rect: [px, card_y, pw, card_h],
+                color: card_bg,
+                radius,
+                border_width: 0.0,
+                _pad: [0.0; 2],
+            });
+        }
 
         // ── Input field (or confirmation prompt) ─────────────────────────────
         if matches!(panel.state, PanelState::AwaitingConfirm) {
