@@ -1,7 +1,7 @@
 # Session State
 
-**Last Updated:** 2026-04-30
-**Session Focus:** Phase 6 — Warp-inspired Chat & Sidebar UI (W-1 → W-8) COMPLETA
+**Last Updated:** 2026-05-04
+**Session Focus:** Notificaciones nativas + bug fix config loader
 
 ## Branch: `feat/phase-6-warp-ui`
 
@@ -10,6 +10,38 @@
 **Phase 1–3 + 3.5 + A + 3.6 + B + C + D + Phase 5 G-0/G-1/G-2/G-3 + G-2-overlay COMPLETE.**
 **Phase 6 Warp UI: W-1 W-2 W-3 W-4 W-5 W-6 W-7 W-8 COMPLETAS. Phase 6 COMPLETA.**
 **Sin deuda técnica abierta. Diferidos: TD-PERF-03/05/29.**
+
+## Esta sesión (2026-05-04) — Notificaciones nativas + bug fix
+
+### Notificaciones nativas (TD-UX-01)
+
+**`Cargo.toml`:** dependencias `objc2-user-notifications 0.2` + `block2 0.5`.
+
+**`src/platform/notifications.rs`** (nuevo):
+- `send(body)` — entrega notificacion via `UNUserNotificationCenter` en macOS; no-op en otras plataformas.
+- Solicita permiso (alert + sound) en el primer envio; sin-op si ya fue decidido.
+- Identificador fijo `"petruterm.toast"` — notificaciones rapidas se reemplazan entre si.
+
+**`src/platform/mod.rs`:** expone `pub mod notifications`.
+
+**`src/config/schema.rs`:**
+- `NotificationStyle` enum: `Toast` (default) | `Native`.
+- `NotificationsConfig { style }` + `Config.notifications`.
+
+**`config/default/notifications.lua`** (nuevo): modulo default con `style = "toast"`.
+
+**`config/default/config.lua`:** agrega `require("notifications")` + `notifications.apply_to_config(config)`.
+
+**`src/app/mod.rs`:** `dispatch_notification(msg, ms)` — despacha a `platform::notifications::send` si `style == Native`, o al toast GPU si `style == Toast`.
+
+### Bug fix: config loader crasheaba por notifications.lua faltante
+
+**Causa raiz:** `notifications.lua` no estaba en `EMBEDDED_MODULES` ni en `ensure_default_configs`. El loader Lua fallaba al hacer `require("notifications")` → `load()` retornaba `Err` → fallback a `Config::default()` con font `"JetBrainsMono Nerd Font Mono"` → crash porque esa fuente no esta instalada.
+
+**`src/config/mod.rs`:**
+- `DEFAULT_NOTIFICATIONS` embedded via `include_str!`.
+- Agregado a `EMBEDDED_MODULES` para el fallback sin filesystem.
+- Agregado a `ensure_default_configs` para que se escriba en `~/.config/petruterm/` en instalaciones nuevas.
 
 ## Esta sesión (2026-04-30) — Phase 6 W-7 + W-8
 
