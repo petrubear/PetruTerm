@@ -15,6 +15,7 @@ const DEFAULT_PERF: &str = include_str!("../../config/default/perf.lua");
 const DEFAULT_KEYBINDS: &str = include_str!("../../config/default/keybinds.lua");
 const DEFAULT_LLM: &str = include_str!("../../config/default/llm.lua");
 const DEFAULT_SNIPPETS: &str = include_str!("../../config/default/snippets.lua");
+const DEFAULT_NOTIFICATIONS: &str = include_str!("../../config/default/notifications.lua");
 const SHELL_INTEGRATION_ZSH: &str = include_str!("../../scripts/shell-integration.zsh");
 
 // Bundled theme files — seeded into ~/.config/petruterm/themes/ on first launch.
@@ -31,6 +32,7 @@ pub const EMBEDDED_MODULES: &[(&str, &str)] = &[
     ("keybinds", DEFAULT_KEYBINDS),
     ("llm", DEFAULT_LLM),
     ("snippets", DEFAULT_SNIPPETS),
+    ("notifications", DEFAULT_NOTIFICATIONS),
 ];
 
 /// Resolve the user config directory: ~/.config/petruterm/
@@ -191,6 +193,7 @@ fn ensure_default_configs(dir: &std::path::Path) -> Result<()> {
         ),
         ("llm.lua", include_str!("../../config/default/llm.lua")),
         ("snippets.lua", DEFAULT_SNIPPETS),
+        ("notifications.lua", DEFAULT_NOTIFICATIONS),
     ];
 
     for (name, content) in files {

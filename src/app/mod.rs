@@ -185,11 +185,7 @@ impl App {
                 crate::config::lua::fire_lua_event(lua, event);
             }
             if let Some((msg, ms)) = crate::config::lua::drain_lua_toast(lua) {
-                let deadline = std::time::Instant::now() + std::time::Duration::from_millis(ms);
-                self.toast = Some((msg, deadline));
-                if let Some(w) = &self.window {
-                    w.request_redraw();
-                }
+                self.dispatch_notification(msg, ms);
             }
         }
     }
@@ -199,7 +195,20 @@ impl App {
         if let Some(lua) = &self.lua {
             crate::config::lua::fire_lua_event(lua, event);
             if let Some((msg, ms)) = crate::config::lua::drain_lua_toast(lua) {
-                let deadline = std::time::Instant::now() + std::time::Duration::from_millis(ms);
+                self.dispatch_notification(msg, ms);
+            }
+        }
+    }
+
+    fn dispatch_notification(&mut self, msg: String, ms: u64) {
+        use crate::config::schema::NotificationStyle;
+        match self.config.notifications.style {
+            NotificationStyle::Native => {
+                crate::platform::notifications::send(&msg);
+            }
+            NotificationStyle::Toast => {
+                let deadline =
+                    std::time::Instant::now() + std::time::Duration::from_millis(ms);
                 self.toast = Some((msg, deadline));
                 if let Some(w) = &self.window {
                     w.request_redraw();

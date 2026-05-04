@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-04-30
-**Open Items:** 1
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 1 open, 3 deferred
+**Open Items:** 0
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0 open, 3 deferred
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -37,7 +37,7 @@ _Ninguno abierto._
 
 ## P3 — Prioridad baja / Backlog
 
-**TD-UX-01** — Replace in-panel AI response notifications with macOS native notifications (`NSUserNotification` / `UNUserNotificationCenter`). Current behaviour shows a status indicator inside the chat panel only — users miss responses when the panel is closed or focus is on another app. Native notifications allow the OS to surface completions in Notification Center, on locked screen, and via Focus filters.
+**TD-UX-01** — RESUELTO (2026-04-30). `config.notifications.style = "toast" | "native"`. Implementación en `src/platform/notifications.rs` via `UNUserNotificationCenter` (`objc2-user-notifications`). Despacho en `App::dispatch_notification`. Nota: requiere `NSUserNotificationUsageDescription` en `Info.plist` del bundle `.app` para que el OS muestre la solicitud de permiso.
 
 **TD-PERF-03** — DIFERIDO a Phase 2+. `write_buffer` es memcpy en Apple Silicon unified memory — no medible. Dirty-rect tracking aplica solo con GPUs discretas.
 
