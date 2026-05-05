@@ -15,7 +15,7 @@ A developer-first GPU-accelerated terminal emulator written in Rust. Built for s
 - **Font ligatures** — HarfBuzz shaping with `calt`, `liga`, `dlig` OpenType features; per-word shape cache
 - **Emoji & color glyphs** — full RGBA emoji rendering via Apple Color Emoji (and any color font)
 - **Tabs & split panes** — tmux-style keybinds, binary-tree layout; each pane has an independent PTY; exiting a shell closes only that pane
-- **Status bar** — Powerline-style bottom bar with leader mode, CWD, git branch, exit code, and time
+- **Status bar** — configurable plain or powerline bottom bar with leader mode, CWD, git branch, exit code, and time
 - **AI agent panel** — context-aware chat with file attachment, NL→command, explain output, fix errors, write files
 - **LLM tool use** — AI agent can read files, list directories, write files, and run commands (sandboxed to CWD, with confirmation)
 - **Inline AI block** — `Ctrl+Space` for quick NL→shell command without leaving the terminal
@@ -72,19 +72,31 @@ If this file does not exist, the compiled-in defaults are used. You can create t
 mkdir -p ~/.config/petruterm
 ```
 
-The config is organized into four modules. Each can be overridden independently.
+On first launch, PetruTerm creates `~/.config/petruterm/` and seeds:
+
+- `config.lua`, `ui.lua`, `perf.lua`, `keybinds.lua`, `llm.lua`
+- `snippets.lua`, `notifications.lua`
+- `system/system_prompt.md`
+- bundled themes in `themes/`
+- `shell-integration.zsh`
+
+Existing user files are preserved; only managed assets such as `keybinds.lua` and `shell-integration.zsh` may be updated when their bundled version changes.
+
+The config is organized into six Lua modules plus system assets.
 
 ---
 
 ### `config.lua` — Entry point
 
-Composes the four modules. You can `require` and override any of them.
+Composes the six Lua modules. You can `require` and override any of them.
 
 ```lua
-local ui       = require("ui")
-local perf     = require("perf")
-local keybinds = require("keybinds")
-local llm      = require("llm")
+local ui            = require("ui")
+local perf          = require("perf")
+local keybinds      = require("keybinds")
+local llm           = require("llm")
+local snippets      = require("snippets")
+local notifications = require("notifications")
 
 local config = {}
 
@@ -92,6 +104,8 @@ ui.apply_to_config(config)
 perf.apply_to_config(config)
 keybinds.apply_to_config(config)
 llm.apply_to_config(config)
+snippets.apply_to_config(config)
+notifications.apply_to_config(config)
 
 return config
 ```
@@ -104,9 +118,12 @@ return config
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `config.font` | string | `"JetBrainsMono Nerd Font Mono"` | Font family name. Use `petruterm.font("A, B, C")` to resolve the first installed family from a comma-separated list. |
+| `config.font` | string | `"JetBrainsMono Nerd Font Mono, Monolisa Nerd Font, Fira Code, Menlo"` | Font family name. Use `petruterm.font("A, B, C")` to resolve the first installed family from a comma-separated list. |
 | `config.font_size` | number | `16` | Font size in points. |
+| `config.font_line_height` | number | `1.2` | Line-height multiplier. |
 | `config.font_features` | string[] | `{"calt=1","liga=1","dlig=1"}` | HarfBuzz OpenType feature tags. |
+| `config.font_fallbacks` | string[] | `{"Apple Color Emoji","Noto Color Emoji"}` | Fallback fonts for missing glyphs and emoji. |
+| `config.lcd_antialiasing` | bool | `false` | Enable LCD subpixel antialiasing where supported. |
 
 ```lua
 config.font         = petruterm.font("Monolisa Nerd Font, JetBrainsMono Nerd Font Mono")
@@ -120,15 +137,22 @@ config.font_features = { "calt=1", "liga=1", "dlig=0" }
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `foreground` | `"#f8f8f2"` | Default text color |
-| `background` | `"#22212c"` | Terminal background |
+| `foreground` | `"#e0e0e8"` | Default text color |
+| `background` | `"#0e0e10"` | Terminal background |
 | `cursor_bg` | `"#9580ff"` | Cursor fill color |
-| `cursor_fg` | `"#f8f8f2"` | Text under cursor |
+| `cursor_fg` | `"#e0e0e8"` | Text under cursor |
 | `cursor_border` | `"#9580ff"` | Cursor outline |
-| `selection_bg` | `"#454158"` | Selection background |
-| `selection_fg` | `"#c6c6c2"` | Selected text color |
+| `selection_bg` | `"#2a2a3a"` | Selection background |
+| `selection_fg` | `"#e0e0e8"` | Selected text color |
 | `ansi` | Dracula Pro | Array of 8 normal ANSI colors (indices 0–7) |
 | `brights` | Dracula Pro | Array of 8 bright ANSI colors (indices 8–15) |
+| `ui_accent` | derived | Optional semantic accent color for UI highlights |
+| `ui_surface` | derived | Optional semantic panel / sidebar background |
+| `ui_surface_active` | derived | Optional semantic selected-item background |
+| `ui_surface_hover` | derived | Optional semantic hover background |
+| `ui_muted` | derived | Optional semantic muted text / separator color |
+| `ui_success` | derived | Optional semantic success color |
+| `ui_overlay` | derived | Optional semantic overlay background |
 
 ```lua
 config.colors = {
@@ -184,6 +208,7 @@ config.window = {
 |-----|------|---------|-------------|
 | `config.status_bar.enabled` | bool | `true` | Show the status bar. Also togglable via command palette. |
 | `config.status_bar.position` | string | `"bottom"` | `"bottom"` or `"top"`. |
+| `config.status_bar.style` | string | `"plain"` | `"plain"` text separators or `"powerline"` Nerd Font arrows. |
 
 The status bar shows (left to right): **leader mode indicator** (turns purple when active), **current directory**, **git branch** (with `*` if dirty), and on the right: **last exit code** (only when non-zero, in red) and **date/time**.
 
@@ -200,15 +225,21 @@ config.status_bar = {
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `config.scrollback_lines` | number | `10000` | Maximum scrollback buffer depth per pane. |
+| `config.scrollback_lines` | number | `5000` | Maximum scrollback buffer depth per pane. |
 | `config.enable_scroll_bar` | bool | `true` | Show the 6 px scroll bar on the right edge when scrollback is active. |
 | `config.max_fps` | number | `60` | Target render frame rate. |
+| `config.animation_fps` | number | `1` | Animation frame rate for lightweight UI motion. |
+| `config.gpu_preference` | string | `"low_power"` | GPU selection preference: `"high_performance"`, `"low_power"`, or `"none"`. |
+| `config.status_bar.git_dirty_check` | bool | `false` | Poll `git status --porcelain` for a dirty marker in the status bar. |
+| `config.battery_saver` | string | `"auto"` | Battery saver policy: `"auto"`, `"always"`, or `"never"`. |
 | `config.shell_integration` | bool | `true` | Enable shell integration hooks (writes CWD/exit-code context for the AI panel). See [Shell Integration](#shell-integration). |
 
 ```lua
 config.scrollback_lines  = 50000
 config.enable_scroll_bar = true
 config.max_fps           = 120
+config.gpu_preference    = "high_performance"
+config.battery_saver     = "never"
 ```
 
 ---
@@ -312,10 +343,10 @@ config.keys = {
 
 ```lua
 config.llm = {
-    enabled  = true,
+    enabled  = false,
 
     provider = "openrouter",
-    model    = "anthropic/claude-3.5-haiku",
+    model    = "meta-llama/llama-3.1-8b-instruct:free",
     api_key  = os.getenv("OPENROUTER_API_KEY"),
     base_url = nil,   -- nil = provider default
 
@@ -372,7 +403,7 @@ model    = "lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"
 
 -- GitHub Copilot (requires active Copilot subscription)
 provider = "copilot"
-model    = "gpt-4o"   -- also: gpt-4o-mini, claude-3.5-sonnet, o1-mini
+model    = "gpt-4o-mini"   -- also: gpt-4o, claude-3.5-sonnet, claude-3.7-sonnet, o3-mini, o1-mini
 ```
 
 ---
@@ -490,7 +521,7 @@ source ~/.config/petruterm/shell-integration.zsh
 
 > **Note:** Shell integration is optional. PetruTerm reads the terminal process's real CWD directly via OS APIs (`proc_pidinfo` on macOS) and does not require the integration script for the file picker or `AGENTS.md` auto-attach to work.
 
-The script writes `~/.cache/petruterm/shell-context.json` after each command. This JSON is read by the AI panel to include CWD, last command, and exit code in every query.
+The script writes one JSON file per shell process under `~/.cache/petruterm/` after each command, for example `shell-context-12345.json`. This is read by the AI panel to include CWD, last command, and exit code in every query without panes overwriting each other's context.
 
 ---
 

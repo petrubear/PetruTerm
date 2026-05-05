@@ -46,11 +46,7 @@ pub struct ParseState {
     pub fence_lang: String,
 }
 
-pub fn parse_markdown(
-    content: &str,
-    width: usize,
-    mut state: ParseState,
-) -> (Vec<AnnotatedLine>, ParseState) {
+pub fn parse_markdown(content: &str, width: usize, state: &mut ParseState) -> Vec<AnnotatedLine> {
     let mut out: Vec<AnnotatedLine> = Vec::new();
 
     for line in content.lines() {
@@ -156,7 +152,7 @@ pub fn parse_markdown(
         }
     }
 
-    (out, state)
+    out
 }
 
 // Returns (number, body_str) if line starts with "<digits>. "
@@ -479,7 +475,7 @@ mod tests {
     use super::*;
 
     fn parse(s: &str) -> Vec<AnnotatedLine> {
-        parse_markdown(s, 80, ParseState::default()).0
+        parse_markdown(s, 80, &mut ParseState::default())
     }
 
     #[test]
@@ -531,14 +527,14 @@ mod tests {
 
     #[test]
     fn fence_state_carries_across_calls() {
-        // Simulate streaming: first call opens fence, second closes it
-        let (lines1, state1) = parse_markdown("```rs\nfn foo()", 80, ParseState::default());
-        assert!(state1.in_fence);
+        let mut state = ParseState::default();
+        let lines1 = parse_markdown("```rs\nfn foo()", 80, &mut state);
+        assert!(state.in_fence);
         assert!(lines1
             .iter()
             .all(|l| matches!(l.kind, BlockKind::CodeBlock { .. })));
-        let (lines2, state2) = parse_markdown("{\n}\n```", 80, state1);
-        assert!(!state2.in_fence);
+        let lines2 = parse_markdown("{\n}\n```", 80, &mut state);
+        assert!(!state.in_fence);
         assert!(lines2.iter().any(|l| l.display.contains('}')));
     }
 

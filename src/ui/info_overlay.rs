@@ -18,7 +18,7 @@ impl InfoOverlay {
     }
 
     pub fn open(&mut self, title: String, content: &str, content_width: usize) {
-        let (lines, _) = parse_markdown(content, content_width.max(20), ParseState::default());
+        let lines = parse_markdown(content, content_width.max(20), &mut ParseState::default());
         self.title = title;
         self.lines = lines;
         self.scroll = 0;

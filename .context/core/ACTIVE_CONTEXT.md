@@ -1,6 +1,6 @@
 # Active Context
 
-**Current Focus:** Auditoría de código — refactoring, rendimiento, memoria, energía
+**Current Focus:** Auditoría de código — Waves 1–4 completas
 **Last Active:** 2026-05-05
 
 ## Estado actual del proyecto
@@ -29,6 +29,18 @@ Objetivo: auditoría sistemática del codebase completo buscando:
 - Consumo de energía (trabajo innecesario en idle, polling)
 - Aplicación de patrones de diseño donde corresponda
 - Simplificación de código complejo
+
+## Progreso de auditoría
+
+**Wave 1 COMPLETA (2026-05-05):** AUDIT-PERF-01, AUDIT-PERF-04, AUDIT-REFAC-04, AUDIT-CLEAN-01
+**Wave 2 COMPLETA (2026-05-05):** AUDIT-PERF-05, AUDIT-PERF-03, AUDIT-MEM-01, AUDIT-MEM-02, AUDIT-MEM-03
+
+**Wave 3 COMPLETA (2026-05-05):** AUDIT-PERF-02, AUDIT-ENERGY-01
+
+**Wave 4 COMPLETA (2026-05-05):** AUDIT-REFAC-02, AUDIT-REFAC-03, AUDIT-REFAC-01
+
+**Watch / sin cambio necesario:**
+- AUDIT-CLEAN-02: `ContextAction` sigue por debajo del umbral; no amerita dispatch table todavía
 
 ## Invariantes arquitectónicos clave (no romper)
 

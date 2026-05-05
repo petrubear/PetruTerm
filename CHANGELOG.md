@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.5] — 2026-05-05
+
+### Changed
+- Reduced hot-path chat panel allocations by reusing the render formatting buffer instead of rebuilding strings with repeated `format!()` calls.
+- Deduplicated redraw scheduling so the app issues at most one `window.request_redraw()` per event-loop cycle.
+- Grouped sidebar UI state into `SidebarState` and split large chat-panel and window-event handlers into smaller private helpers without changing behaviour.
+- Shell integration now writes per-pane context files (`shell-context-$$.json`) so multiple panes do not overwrite each other's AI context.
+
+### Documentation
+- Synced the README with the current first-launch config seeding flow, the six-module config layout, current UI/perf defaults, and the per-pane shell integration behaviour.
+
+---
+
 ## [0.1.4] — 2026-04-24
 
 ### Added

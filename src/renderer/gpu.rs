@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+// No global dead_code allow — unused methods removed.
 use anyhow::{Context, Result};
 use std::cell::RefCell;
 use std::mem;
@@ -549,17 +549,6 @@ impl GpuRenderer {
         self.lcd_instance_count = count;
     }
 
-    /// Returns true if LCD subpixel AA is enabled.
-    pub fn has_lcd(&self) -> bool {
-        self.lcd_pipeline.is_some()
-    }
-
-    /// Take the LCD atlas out of the renderer, transferring it to TextShaper.
-    /// Called during initialization to share the atlas with the rasterizer.
-    pub fn take_lcd_atlas(&mut self) -> Option<Rc<RefCell<LcdGlyphAtlas>>> {
-        self.lcd_atlas.take()
-    }
-
     /// Returns a clone of the LCD atlas Rc for sharing with TextShaper.
     pub fn get_lcd_atlas(&self) -> Option<Rc<RefCell<LcdGlyphAtlas>>> {
         self.lcd_atlas.as_ref().map(Rc::clone)
@@ -567,14 +556,6 @@ impl GpuRenderer {
 
     pub fn device(&self) -> wgpu::Device {
         self.device.clone()
-    }
-
-    pub fn queue(&self) -> &wgpu::Queue {
-        &self.queue
-    }
-
-    pub fn surface_format(&self) -> wgpu::TextureFormat {
-        self.surface_config.format
     }
 
     pub fn size(&self) -> (u32, u32) {
@@ -618,11 +599,6 @@ impl GpuRenderer {
 
         self.lcd_atlas = Some(atlas);
         self.lcd_ready = true;
-    }
-
-    /// Returns true if LCD subpixel AA is ready (atlas has been set).
-    pub fn is_lcd_ready(&self) -> bool {
-        self.lcd_ready
     }
 
     /// Rebuild all atlas bind groups after atlas.clear() or lcd_atlas.clear().

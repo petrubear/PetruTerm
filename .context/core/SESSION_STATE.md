@@ -1,9 +1,9 @@
 # Session State
 
 **Last Updated:** 2026-05-05
-**Session Focus:** Limpieza de deuda + bug fix clippy
+**Session Focus:** Auditoría Waves 3 y 4 completadas
 
-## Branch: `feat/phase-6-warp-ui`
+## Branch: `audit/code-review`
 
 ## Estado actual
 
@@ -11,6 +11,34 @@
 **Phase 6 Warp UI: W-1 W-2 W-3 W-4 W-5 W-6 W-7 W-8 COMPLETAS. Phase 6 COMPLETA.**
 **Sin deuda técnica abierta. Diferidos: TD-PERF-03/05 (solo GPUs discretas).**
 **Todos los benches criterion funcionan. Nota "benches bloqueados" era incorrecta.**
+
+## Esta sesión (2026-05-05) — Wave 4 de auditoría
+
+### AUDIT-REFAC-03 — estado del sidebar agrupado
+- Nuevo `src/ui/sidebar.rs` con `SidebarState`.
+- `App` ahora concentra `visible`, `nav_cursor`, `panel_resize_drag`, `panel_resize_hover`, `rename_input`, `keyboard_active`, `active_section`, `mcp_scroll`, `skills_scroll`, `steering_scroll` bajo `self.sidebar`.
+
+### AUDIT-REFAC-02 — split de `build_chat_panel_instances`
+- `src/app/renderer.rs`: extraídos `build_panel_header()`, `build_panel_file_section()` y `build_panel_messages()`.
+- `build_chat_panel_input_rows()` quedó separado como antes; se preservó `fmt_buf` reutilizable del Wave 3.
+
+### AUDIT-REFAC-01 — split de `window_event()`
+- `src/app/mod.rs`: extraídos `handle_redraw()`, `handle_keyboard()`, `handle_mouse_motion()`, `handle_mouse_button()` y `handle_scroll()`.
+- `window_event()` ahora delega sin cambiar orden de eventos ni comportamiento.
+
+### AUDIT-CLEAN-02 — evaluado, sin cambio
+- `ContextAction` sigue con un número bajo de variantes; no se justificó introducir un dispatch table.
+
+## Esta sesión (2026-05-05) — Wave 3 de auditoría
+
+### AUDIT-PERF-02 — `build_chat_panel_instances` sin `format!()` hot-path
+- `src/app/renderer.rs`: composición de strings calientes movida a `fmt_buf` reutilizable.
+- Header, file picker, previews, zero-state, suggestion pills y filas de input/hints dejaron de crear `String` temporales por frame mediante `format!()`.
+
+### AUDIT-ENERGY-01 — redraw deduplicado por ciclo
+- `src/app/mod.rs`: nuevo flag `needs_redraw: bool` en `App`.
+- `request_redraw()` ahora solo marca el flag; `flush_redraw_request()` emite `window.request_redraw()` una sola vez en `about_to_wait()`.
+- Se preserva el coalescing de PTY y el redraw continuo de toast/blink, pero con un solo request por iteración del loop.
 
 ## Esta sesión (2026-05-05) — Clippy fixes + deuda cerrada
 
