@@ -1,14 +1,15 @@
 # Active Context
 
-**Current Focus:** Phase 6 COMPLETA (W-1 a W-8 implementadas)
-**Last Active:** 2026-04-30
+**Current Focus:** Auditoría de código — refactoring, rendimiento, memoria, energía
+**Last Active:** 2026-05-05
 
 ## Estado actual del proyecto
 
-**W-1 → W-6 COMPLETAS en `feat/phase-6-warp-ui`.**
-**Build limpio. Sin deuda abierta activa; diferidos: TD-PERF-03, TD-PERF-05, TD-PERF-29.**
+**Phases 1–6 COMPLETAS en `feat/phase-6-warp-ui`** → mergeado a master.
+**Sin deuda técnica abierta. Diferidos: TD-PERF-03, TD-PERF-05 (solo GPUs discretas).**
+**Todos los benches criterion funcionan. mimalloc activo como global allocator.**
 
-## Roadmap Phase 6
+## Completado en Phase 6
 
 - [x] W-1: Full-width message background tinting
 - [x] W-2: Input box as a bordered card
@@ -19,45 +20,17 @@
 - [x] W-7: Prepared response pill buttons (post-response)
 - [x] W-8: Resizable panel width via mouse drag
 
-## Archivos en scope (Phase 6)
+## Rama activa: `audit/code-review`
 
-- `src/app/renderer.rs` — `build_chat_panel_instances`, `build_chat_panel_input_rows`, `build_workspace_sidebar_instances`
-- `src/app/mod.rs` — mouse handlers, `zero_state_hover_for_row`
-- `src/llm/chat_panel.rs` — `ChatPanel` struct + state fields
-- `src/app/ui.rs` — reusable panel actions (`restart`, `copy transcript`, `close`)
-- `.context/specs/warp_ui_improvements.md` — spec completo W-1..W-8
+Objetivo: auditoría sistemática del codebase completo buscando:
+- Código repetido o candidato a refactor
+- Optimizaciones de rendimiento (hot paths, asignaciones innecesarias)
+- Optimizaciones de memoria (retención innecesaria, buffers sobredimensionados)
+- Consumo de energía (trabajo innecesario en idle, polling)
+- Aplicación de patrones de diseño donde corresponda
+- Simplificación de código complejo
 
-## Cambios W-5 a preservar
-
-**Zero state layout** (renderer.rs ~línea 1094):
-- `center = (history_start_row + sep_row) / 2`
-- icon en `center-3` (`✦` ui_accent), subtitle en `center-1` ("Ask a question below" ui_muted)
-- pills en `center+2` y `center+3` con patrón dos-rect (border + fill)
-- `pill1_row = center+2`, `pill2_row = center+3` — debe mantenerse sincronizado con `zero_state_hover_for_row` en mod.rs
-
-**Hover + click** (mod.rs):
-- `zero_state_hover_for_row`: misma fórmula que renderer (center+2, center+3)
-- Click en pill → pre-fill input + `submit_ai_query`
-
-**Input card polish** (renderer.rs `build_chat_panel_input_rows`):
-- `card_bg = panel_bg + 6%` (NO usar `ui_surface_active`)
-- `sep_row` renderiza vacío — NO usar `separator_cache` (elimina la `│────...` ASCII art)
-
-## Cambios W-6 a preservar
-
-**Header layout** (`renderer.rs` row 0):
-- izquierda: `✦ + short model` en `ui_accent`
-- centro: `provider:model` centrado y truncable en `ui_muted`
-- derecha: `[↺] [⎘] [✕]` alineados a la derecha solo cuando `messages` no está vacío
-
-**Header actions** (`chat_panel.rs` + `mod.rs` + `ui.rs`):
-- `header_action_for_col()` es la fuente de verdad para hit-testing de botones
-- click en row 0 del panel usa `panel_hit_cell()`; NO recalcular offsets a mano
-- restart limpia transcript/file picker vía `UiManager::restart_chat_panel()`
-- copy usa `ChatPanel::transcript_text()` para clipboard
-- close usa `UiManager::close_panel()`
-
-## Invariantes arquitectonicos clave (no romper)
+## Invariantes arquitectónicos clave (no romper)
 
 **Shaper drops space cells (TD-RENDER-01):**
 Pre-pass bg-only en `build_instances` OBLIGATORIO. Sin él, celdas-espacio con bg != default_bg
@@ -85,6 +58,3 @@ Divisor: `cell_height / scale_factor`.
 **JetBrains Mono ligatures:** bearing_x puede ser NEGATIVO — no clampar a 0.
 
 **alacritty_terminal 1-cell selection:** limpiar con `clear_selection()` en click sin drag.
-
-**Copilot OAuth:**
-Token almacenado en Keychain: `PetruTerm` / `GITHUB_COPILOT_OAUTH_TOKEN`.
