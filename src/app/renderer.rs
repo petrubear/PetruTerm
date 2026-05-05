@@ -2511,8 +2511,8 @@ impl RenderContext {
         pad_y: f32,
         colors: &crate::config::schema::ColorScheme,
     ) {
-        let ow = (total_cols.min(80)).max(30);
-        let oh = (total_rows.saturating_sub(4)).min(36).max(8);
+        let ow = total_cols.clamp(30, 80);
+        let oh = (total_rows.saturating_sub(4)).clamp(8, 36);
         if total_cols < ow || total_rows < oh {
             return;
         }

@@ -34,7 +34,7 @@ mod macos {
             // Reuse a fixed identifier so rapid notifications replace each other.
             let req = UNNotificationRequest::requestWithIdentifier_content_trigger(
                 &NSString::from_str("petruterm.toast"),
-                &**content,
+                &content,
                 None,
             );
             center.addNotificationRequest_withCompletionHandler(&req, None);

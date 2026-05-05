@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-04-30
+**Last Updated:** 2026-05-05
 **Open Items:** 0
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0 open, 3 deferred
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0 open, 2 deferred
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -37,11 +37,11 @@ _Ninguno abierto._
 
 ## P3 — Prioridad baja / Backlog
 
-**TD-UX-01** — RESUELTO (2026-04-30). `config.notifications.style = "toast" | "native"`. Implementación en `src/platform/notifications.rs` via `UNUserNotificationCenter` (`objc2-user-notifications`). Despacho en `App::dispatch_notification`. Nota: requiere `NSUserNotificationUsageDescription` en `Info.plist` del bundle `.app` para que el OS muestre la solicitud de permiso.
+**TD-UX-01** — RESUELTO (2026-04-30). `config.notifications.style = "toast" | "native"`. Implementación en `src/platform/notifications.rs` via `UNUserNotificationCenter` (`objc2-user-notifications`). Despacho en `App::dispatch_notification`. `NSUserNotificationUsageDescription` agregado al Info.plist en `scripts/bundle.sh` (2026-05-05).
 
 **TD-PERF-03** — DIFERIDO a Phase 2+. `write_buffer` es memcpy en Apple Silicon unified memory — no medible. Dirty-rect tracking aplica solo con GPUs discretas.
 
-**TD-PERF-29** — DIFERIDO (requiere baseline criterion). `mimalloc` requiere profiling previo para validar ganancia real.
+**TD-PERF-29** — RESUELTO (2026-05-05). `mimalloc` ya estaba implementado (`Cargo.toml:108`, `main.rs:13-15`). Benches criterion corren correctamente: `build_frame_miss` 32µs, `rasterize_line_ascii` 31µs, `shape_line_unicode` 5.2µs. La nota "diferido" era incorrecta.
 
 ---
 

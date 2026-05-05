@@ -1,7 +1,7 @@
 # Session State
 
-**Last Updated:** 2026-05-04
-**Session Focus:** Notificaciones nativas + bug fix config loader
+**Last Updated:** 2026-05-05
+**Session Focus:** Limpieza de deuda + bug fix clippy
 
 ## Branch: `feat/phase-6-warp-ui`
 
@@ -9,7 +9,23 @@
 
 **Phase 1–3 + 3.5 + A + 3.6 + B + C + D + Phase 5 G-0/G-1/G-2/G-3 + G-2-overlay COMPLETE.**
 **Phase 6 Warp UI: W-1 W-2 W-3 W-4 W-5 W-6 W-7 W-8 COMPLETAS. Phase 6 COMPLETA.**
-**Sin deuda técnica abierta. Diferidos: TD-PERF-03/05/29.**
+**Sin deuda técnica abierta. Diferidos: TD-PERF-03/05 (solo GPUs discretas).**
+**Todos los benches criterion funcionan. Nota "benches bloqueados" era incorrecta.**
+
+## Esta sesión (2026-05-05) — Clippy fixes + deuda cerrada
+
+### Clippy (3 errores)
+- `renderer.rs:2514-2515`: `(x.min(a)).max(b)` → `x.clamp(b, a)` (dos instancias)
+- `notifications.rs:37`: `&**content` → `&content` (explicit_auto_deref)
+
+### bundle.sh — NSUserNotificationUsageDescription
+- Agregada clave `NSUserNotificationUsageDescription` al Info.plist generado por `scripts/bundle.sh`.
+  Sin esta clave el OS ignora la solicitud de permiso de `UNUserNotificationCenter` → las notificaciones nativas nunca aparecen. Cierra definitivamente TD-UX-01.
+
+### TECHNICAL_DEBT.md
+- TD-PERF-29 marcado RESUELTO: mimalloc ya estaba implementado en `main.rs:13-15` + `Cargo.toml:108`. La nota "diferido" era incorrecta.
+- TD-UX-01 actualizado con el fix de bundle.sh.
+- Nota "benches bloqueados" corregida: todos los benches corren. `build_frame_miss` 32µs, `rasterize_line_ascii` 31µs, `shape_line_unicode` 5.2µs.
 
 ## Esta sesión (2026-05-04) — Notificaciones nativas + bug fix
 
