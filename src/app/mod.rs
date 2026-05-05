@@ -214,8 +214,7 @@ impl App {
                 crate::platform::notifications::send(&msg);
             }
             NotificationStyle::Toast => {
-                let deadline =
-                    std::time::Instant::now() + std::time::Duration::from_millis(ms);
+                let deadline = std::time::Instant::now() + std::time::Duration::from_millis(ms);
                 self.toast = Some((msg, deadline));
                 if let Some(w) = &self.window {
                     w.request_redraw();
@@ -2072,8 +2071,7 @@ impl ApplicationHandler<()> for App {
                 if self.panel_resize_drag {
                     if let Some(rc) = &self.render_ctx {
                         let (win_w, _) = rc.renderer.size();
-                        let right_edge =
-                            win_w as f32 - self.config.window.padding.right as f32;
+                        let right_edge = win_w as f32 - self.config.window.padding.right as f32;
                         let cell_w = self.cell_dims().0 as f32;
                         let new_cols =
                             ((right_edge - position.x as f32) / cell_w).clamp(30.0, 90.0) as u16;
@@ -2106,7 +2104,10 @@ impl ApplicationHandler<()> for App {
                     if let Some(w) = &self.window {
                         w.request_redraw();
                     }
-                } else if self.input.mouse_left_pressed && !self.mouse_in_panel() && !self.panel_resize_drag {
+                } else if self.input.mouse_left_pressed
+                    && !self.mouse_in_panel()
+                    && !self.panel_resize_drag
+                {
                     let dx = position.x - self.input.mouse_press_pos.0;
                     let dy = position.y - self.input.mouse_press_pos.1;
                     // Only treat as a drag once the cursor moves at least 4 physical pixels.

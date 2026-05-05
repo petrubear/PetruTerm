@@ -251,7 +251,7 @@ impl RenderContext {
     pub fn begin_frame(&mut self) {
         // Periodic capacity shrink — every 300 frames, reclaim memory if a capacity spike
         // (e.g. large terminal or chat message) left buffers bloated (AUDIT-MEM-02, MEM-03).
-        if self.frame_counter % 300 == 0 {
+        if self.frame_counter.is_multiple_of(300) {
             fn shrink_vec<T>(v: &mut Vec<T>) {
                 if !v.is_empty() && v.capacity() > v.len() * 3 {
                     v.shrink_to(v.len() * 2);
@@ -765,8 +765,12 @@ impl RenderContext {
         boundary_set.insert(0);
         boundary_set.insert(total_chars);
         for &(s, e, _) in spans {
-            if s > 0 { boundary_set.insert(s); }
-            if e < total_chars { boundary_set.insert(e); }
+            if s > 0 {
+                boundary_set.insert(s);
+            }
+            if e < total_chars {
+                boundary_set.insert(e);
+            }
         }
         let mut boundaries: Vec<usize> = boundary_set.into_iter().collect();
         boundaries.sort_unstable();
@@ -1592,7 +1596,9 @@ impl RenderContext {
                             border_width: 0.0,
                             _pad: [0.0; 2],
                         });
-                        self.push_shaped_row(&row_text, text_fg, fill_color, r, co, panel_cols, font);
+                        self.push_shaped_row(
+                            &row_text, text_fg, fill_color, r, co, panel_cols, font,
+                        );
                     }
                 }
 
@@ -1728,7 +1734,12 @@ impl RenderContext {
 
             let cursor_storage: String;
             let input_display: &str = if show_cursor {
-                let bp = panel.input.char_indices().nth(cursor_chars).map(|(b, _)| b).unwrap_or(panel.input.len());
+                let bp = panel
+                    .input
+                    .char_indices()
+                    .nth(cursor_chars)
+                    .map(|(b, _)| b)
+                    .unwrap_or(panel.input.len());
                 let mut s = panel.input.clone();
                 s.insert(bp, '\u{258b}');
                 cursor_storage = s;

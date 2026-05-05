@@ -46,11 +46,7 @@ pub struct ParseState {
     pub fence_lang: String,
 }
 
-pub fn parse_markdown(
-    content: &str,
-    width: usize,
-    state: &mut ParseState,
-) -> Vec<AnnotatedLine> {
+pub fn parse_markdown(content: &str, width: usize, state: &mut ParseState) -> Vec<AnnotatedLine> {
     let mut out: Vec<AnnotatedLine> = Vec::new();
 
     for line in content.lines() {

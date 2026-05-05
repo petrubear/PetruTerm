@@ -292,8 +292,11 @@ impl ChatPanel {
         // Lazily wrap any messages added since the last call.
         while self.wrapped_cache.len() < self.messages.len() {
             let idx = self.wrapped_cache.len();
-            let lines =
-                parse_markdown(&self.messages[idx].content, width, &mut ParseState::default());
+            let lines = parse_markdown(
+                &self.messages[idx].content,
+                width,
+                &mut ParseState::default(),
+            );
             self.wrapped_cache.push(lines);
         }
     }
