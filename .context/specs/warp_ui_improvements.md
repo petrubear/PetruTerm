@@ -127,7 +127,7 @@ Key files: `app/src/ai_assistant/transcript.rs`, `panel.rs`, `workspace/view/lef
   - [x] Center zone (flexible): `provider:model` in `ui_muted` (dims after you know what it is).
   - [x] Right zone (~15 cols): when messages exist, show `[↺]` (restart), `[⎘]` (copy), `[✕]` (close) as separately colored cells. Each is mouse-clickable via existing hit-testing.
 - [x] Map clicks in the right zone to existing `UiManager` actions (clear_history, copy_transcript, toggle_panel).
-- [ ] Nerd Font: use `\u{e00b}` (AI/sparkle) or `\u{f4bc}` (robot) as the icon glyph if available in Monolisa.
+- [x] Nerd Font: `✦` (U+2736) elegido como icono final — funciona en todas las fuentes sin requerir NF patch.
 
 ---
 
