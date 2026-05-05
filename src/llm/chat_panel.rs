@@ -98,6 +98,60 @@ pub enum PanelState {
     AwaitingConfirm,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HeaderAction {
+    Restart,
+    Copy,
+    Close,
+}
+
+pub fn header_action_label(action: HeaderAction) -> &'static str {
+    match action {
+        HeaderAction::Restart => "[↺]",
+        HeaderAction::Copy => "[⎘]",
+        HeaderAction::Close => "[✕]",
+    }
+}
+
+pub fn header_actions_start_col(panel_cols: usize, has_messages: bool) -> Option<usize> {
+    if !has_messages {
+        return None;
+    }
+    let actions = [
+        HeaderAction::Restart,
+        HeaderAction::Copy,
+        HeaderAction::Close,
+    ];
+    let labels_width = actions
+        .iter()
+        .map(|action| header_action_label(*action).chars().count())
+        .sum::<usize>();
+    let actions_width = labels_width + actions.len().saturating_sub(1);
+    Some(panel_cols.saturating_sub(actions_width + 1))
+}
+
+pub fn header_action_for_col(
+    panel_cols: usize,
+    panel_col: usize,
+    has_messages: bool,
+) -> Option<HeaderAction> {
+    let actions = [
+        HeaderAction::Restart,
+        HeaderAction::Copy,
+        HeaderAction::Close,
+    ];
+    let start_col = header_actions_start_col(panel_cols, has_messages)?;
+    let mut col = start_col;
+    for action in actions {
+        let width = header_action_label(action).chars().count();
+        if panel_col >= col && panel_col < col + width {
+            return Some(action);
+        }
+        col += width + 1;
+    }
+    None
+}
+
 pub struct ChatPanel {
     pub state: PanelState,
     /// Full conversation history (User + Assistant turns).
@@ -179,6 +233,16 @@ pub struct ChatPanel {
     pub file_picker_cursor: usize,
     /// Reusable fuzzy matcher — avoids re-init on every filtered_picker_items call (TD-MEM-11).
     matcher: SkimMatcherV2,
+
+    // ── W-5: Zero state ───────────────────────────────────────────────────────
+    /// Which suggestion pill is currently hovered (0 = first, 1 = second, None = neither).
+    pub zero_state_hover: Option<u8>,
+
+    // ── W-7: Post-response suggestion pills ───────────────────────────────────
+    /// Show suggestion pills after the last assistant response.
+    pub show_suggestions: bool,
+    /// Which suggestion pill is currently hovered (0 = first, 1 = second, None = neither).
+    pub suggestion_hover: Option<u8>,
 }
 
 impl ChatPanel {
@@ -206,6 +270,9 @@ impl ChatPanel {
             file_picker_items: Vec::new(),
             file_picker_cursor: 0,
             matcher: SkimMatcherV2::default(),
+            zero_state_hover: None,
+            show_suggestions: false,
+            suggestion_hover: None,
             wrapped_cache: Vec::new(),
             wrapped_cache_width: 0,
             separator_cache: String::new(),
@@ -273,11 +340,16 @@ impl ChatPanel {
         self.streaming_buf.clear();
         self.separator_cache.clear();
         self.thin_separator_cache.clear();
+        self.zero_state_hover = None;
+        self.show_suggestions = false;
+        self.suggestion_hover = None;
         self.dirty = true;
     }
 
     pub fn type_char(&mut self, c: char) {
         if self.is_idle() {
+            self.show_suggestions = false;
+            self.suggestion_hover = None;
             self.history_idx = None;
             let bp = self
                 .input
@@ -303,6 +375,8 @@ impl ChatPanel {
 
     pub fn backspace(&mut self) {
         if self.is_idle() && self.input_cursor > 0 {
+            self.show_suggestions = false;
+            self.suggestion_hover = None;
             self.history_idx = None;
             let bp = self
                 .input
@@ -501,6 +575,8 @@ impl ChatPanel {
         self.input_cursor = 0;
         self.history_idx = None;
         self.history_draft.clear();
+        self.show_suggestions = false;
+        self.suggestion_hover = None;
         self.state = PanelState::Loading;
         self.streaming_buf.clear();
         self.dirty = true;
@@ -546,6 +622,8 @@ impl ChatPanel {
         }
         self.state = PanelState::Idle;
         self.scroll_offset = 0; // snap to bottom
+        self.show_suggestions = true;
+        self.suggestion_hover = None;
         self.dirty = true;
     }
 
@@ -568,9 +646,14 @@ impl ChatPanel {
         self.wrapped_cache.clear();
         self.wrapped_cache_width = 0;
         self.streaming_buf.clear();
+        self.confirm_display = None;
+        self.matched_skill = None;
         self.last_prompt_tokens = 0;
         self.last_completion_tokens = 0;
         self.scroll_offset = 0;
+        self.zero_state_hover = None;
+        self.show_suggestions = false;
+        self.suggestion_hover = None;
         if !matches!(self.state, PanelState::Hidden) {
             self.state = PanelState::Idle;
         }
@@ -640,6 +723,31 @@ impl ChatPanel {
             None
         } else {
             Some(cmd.to_string())
+        }
+    }
+
+    pub fn transcript_text(&self) -> Option<String> {
+        let mut chunks = Vec::new();
+        for msg in &self.messages {
+            let label = match &msg.role {
+                ChatRole::User => "You",
+                ChatRole::Assistant => "AI",
+                ChatRole::System => continue,
+                ChatRole::Tool(_) => continue,
+            };
+            let body = msg.content.trim();
+            if !body.is_empty() {
+                chunks.push(format!("{label}:\n{body}"));
+            }
+        }
+        let streaming = self.streaming_buf.trim();
+        if !streaming.is_empty() {
+            chunks.push(format!("AI:\n{streaming}"));
+        }
+        if chunks.is_empty() {
+            None
+        } else {
+            Some(chunks.join("\n\n"))
         }
     }
 
@@ -996,5 +1104,51 @@ mod tests {
     fn command_returns_none_on_empty_panel() {
         let p = ChatPanel::new();
         assert_eq!(p.last_assistant_command(), None);
+    }
+
+    #[test]
+    fn transcript_text_formats_user_and_assistant_messages() {
+        let mut p = ChatPanel::new();
+        p.messages.push(ChatMessage::user("How do I reset HEAD?"));
+        p.messages
+            .push(ChatMessage::assistant("Use `git reset --soft HEAD~1`."));
+        assert_eq!(
+            p.transcript_text(),
+            Some("You:\nHow do I reset HEAD?\n\nAI:\nUse `git reset --soft HEAD~1`.".to_string())
+        );
+    }
+
+    #[test]
+    fn transcript_text_includes_streaming_reply() {
+        let mut p = ChatPanel::new();
+        p.messages.push(ChatMessage::user("Explain cargo check"));
+        p.streaming_buf = "It type-checks without producing a binary.".to_string();
+        assert_eq!(
+            p.transcript_text(),
+            Some(
+                "You:\nExplain cargo check\n\nAI:\nIt type-checks without producing a binary."
+                    .to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn header_action_hit_testing_matches_right_aligned_buttons() {
+        assert_eq!(
+            header_action_for_col(30, 20, true),
+            Some(HeaderAction::Restart)
+        );
+        assert_eq!(
+            header_action_for_col(30, 24, true),
+            Some(HeaderAction::Copy)
+        );
+        assert_eq!(
+            header_action_for_col(30, 28, true),
+            Some(HeaderAction::Close)
+        );
+        assert_eq!(header_action_for_col(30, 5, true), None);
+        assert_eq!(header_action_for_col(30, 28, false), None);
+        assert_eq!(header_actions_start_col(30, true), Some(18));
+        assert_eq!(header_actions_start_col(30, false), None);
     }
 }

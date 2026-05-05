@@ -73,6 +73,10 @@ pub struct App {
 
     sidebar_visible: bool,
     sidebar_nav_cursor: usize,
+    /// W-8: dragging the panel left edge to resize it.
+    panel_resize_drag: bool,
+    /// W-8: mouse is hovering over the panel left-edge resize handle.
+    panel_resize_hover: bool,
     sidebar_rename_input: Option<String>,
     /// True once the user presses an arrow key in the sidebar. Only then does
     /// Enter confirm a workspace switch — prevents stealing Enter from the terminal.
@@ -148,6 +152,8 @@ impl App {
             cached_cwd: None,
             sidebar_visible: false,
             sidebar_nav_cursor: 0,
+            panel_resize_drag: false,
+            panel_resize_hover: false,
             sidebar_rename_input: None,
             sidebar_kbd_active: false,
             info_sidebar_section: 0,
@@ -179,11 +185,7 @@ impl App {
                 crate::config::lua::fire_lua_event(lua, event);
             }
             if let Some((msg, ms)) = crate::config::lua::drain_lua_toast(lua) {
-                let deadline = std::time::Instant::now() + std::time::Duration::from_millis(ms);
-                self.toast = Some((msg, deadline));
-                if let Some(w) = &self.window {
-                    w.request_redraw();
-                }
+                self.dispatch_notification(msg, ms);
             }
         }
     }
@@ -193,7 +195,20 @@ impl App {
         if let Some(lua) = &self.lua {
             crate::config::lua::fire_lua_event(lua, event);
             if let Some((msg, ms)) = crate::config::lua::drain_lua_toast(lua) {
-                let deadline = std::time::Instant::now() + std::time::Duration::from_millis(ms);
+                self.dispatch_notification(msg, ms);
+            }
+        }
+    }
+
+    fn dispatch_notification(&mut self, msg: String, ms: u64) {
+        use crate::config::schema::NotificationStyle;
+        match self.config.notifications.style {
+            NotificationStyle::Native => {
+                crate::platform::notifications::send(&msg);
+            }
+            NotificationStyle::Toast => {
+                let deadline =
+                    std::time::Instant::now() + std::time::Duration::from_millis(ms);
                 self.toast = Some((msg, deadline));
                 if let Some(w) = &self.window {
                     w.request_redraw();
@@ -534,15 +549,116 @@ impl App {
         }
     }
 
+    /// Given a panel-relative row index, return which zero-state pill (0 or 1) that row maps to,
+    /// or None if it's not on a pill.
+    fn zero_state_hover_for_row(&self, panel_row: usize) -> Option<u8> {
+        let (_, cell_h) = self.cell_dims();
+        let screen_rows = if let Some(rc) = &self.render_ctx {
+            let (_, h) = rc.renderer.size();
+            let pad_top = self.config.window.padding.top as f32;
+            let pad_bottom = self.config.window.padding.bottom as f32;
+            let tab_h = self.tab_bar_height_px();
+            let sb_h = self.status_bar_height_px();
+            ((h as f32 - pad_top - pad_bottom - tab_h - sb_h) / cell_h as f32).floor() as usize
+        } else {
+            return None;
+        };
+        let panel = self.ui.panel();
+        let sep_row = screen_rows.saturating_sub(6);
+        let file_count = panel.attached_files.len();
+        let file_section_rows = if file_count == 0 {
+            0
+        } else {
+            1 + file_count.min(crate::llm::chat_panel::MAX_FILE_ROWS)
+        };
+        let history_start_row = 1 + if file_section_rows > 0 {
+            file_section_rows + 1
+        } else {
+            0
+        };
+        let center = (history_start_row + sep_row) / 2;
+        let pill1_row = center + 2;
+        let pill2_row = center + 3;
+        if panel_row == pill1_row {
+            Some(0)
+        } else if panel_row == pill2_row {
+            Some(1)
+        } else {
+            None
+        }
+    }
+
+    /// Return which W-7 suggestion pill (0 or 1) a panel-relative row maps to, or None.
+    fn suggestion_hover_for_row(&self, panel_row: usize) -> Option<u8> {
+        let (_, cell_h) = self.cell_dims();
+        let screen_rows = if let Some(rc) = &self.render_ctx {
+            let (_, h) = rc.renderer.size();
+            let pad_top = self.config.window.padding.top as f32;
+            let pad_bottom = self.config.window.padding.bottom as f32;
+            let tab_h = self.tab_bar_height_px();
+            let sb_h = self.status_bar_height_px();
+            ((h as f32 - pad_top - pad_bottom - tab_h - sb_h) / cell_h as f32).floor() as usize
+        } else {
+            return None;
+        };
+        let sep_row = screen_rows.saturating_sub(6);
+        // Pills sit at sep_row-2 and sep_row-1.
+        if sep_row < 2 {
+            return None;
+        }
+        let pill1_row = sep_row - 2;
+        let pill2_row = sep_row - 1;
+        if panel_row == pill1_row {
+            Some(0)
+        } else if panel_row == pill2_row {
+            Some(1)
+        } else {
+            None
+        }
+    }
+
+    /// True when `x` is within 1 cell-width of the panel's left edge (resize handle zone).
+    fn near_panel_left_edge(&self, x: f64) -> bool {
+        if !self.ui.is_panel_visible() {
+            return false;
+        }
+        let viewport = self.viewport_rect();
+        let panel_left = (viewport.x + viewport.w) as f64;
+        let cell_w = self.cell_dims().0 as f64;
+        x >= panel_left - cell_w && x < panel_left + cell_w
+    }
+
     fn mouse_in_panel(&self) -> bool {
         if !self.ui.is_panel_visible() {
             return false;
         }
-        let (cw, _) = self.cell_dims();
-        let term_right_px = self.config.window.padding.left as f64
-            + self.sidebar_width_px() as f64
-            + self.mux.active_terminal_size().0 as f64 * cw as f64;
-        self.input.mouse_pos.0 >= term_right_px
+        self.panel_hit_cell(self.input.mouse_pos.0, self.input.mouse_pos.1)
+            .is_some()
+    }
+
+    fn panel_hit_cell(&self, x: f64, y: f64) -> Option<(usize, usize)> {
+        if !self.ui.is_panel_visible() {
+            return None;
+        }
+        let (cell_w, cell_h) = self.cell_dims();
+        let viewport = self.viewport_rect();
+        let panel_left = viewport.x as f64 + viewport.w as f64;
+        let panel_top = viewport.y as f64;
+        let panel_width = self.chat_panel_width_px() as f64;
+        let panel_height = viewport.h as f64;
+        if x < panel_left
+            || x >= panel_left + panel_width
+            || y < panel_top
+            || y >= panel_top + panel_height
+        {
+            return None;
+        }
+        let panel_col = ((x - panel_left) / cell_w as f64).floor().max(0.0) as usize;
+        let panel_row = ((y - panel_top) / cell_h as f64).floor().max(0.0) as usize;
+        if panel_col >= self.ui.panel().width_cols as usize {
+            return None;
+        }
+        Some((panel_col, panel_row))
     }
 
     fn pixel_to_cell(&self, x: f64, y: f64) -> (usize, usize) {
@@ -636,7 +752,8 @@ impl App {
                 };
                 if let Some(name) = servers.get(self.mcp_scroll) {
                     let content = self.ui.mcp_overlay_content(name);
-                    self.info_overlay.open(name.clone(), &content, CONTENT_WIDTH);
+                    self.info_overlay
+                        .open(name.clone(), &content, CONTENT_WIDTH);
                 }
             }
             2 => {
@@ -1479,6 +1596,28 @@ impl ApplicationHandler<()> for App {
                             self.config.window.padding.left as f32 + sidebar_px_snapshot,
                             sb_pad_y,
                         );
+                        // W-8: resize handle — thin accent line on panel left edge when
+                        // hovering or dragging. Not cached; redrawn every frame (cheap).
+                        let show_resize_handle = self.panel_resize_hover || self.panel_resize_drag;
+                        let resize_dragging = self.panel_resize_drag;
+                        if show_resize_handle {
+                            let mut accent = self.config.colors.ui_accent;
+                            accent[3] = if resize_dragging { 1.0 } else { 0.5 };
+                            rc.rect_instances.push(
+                                crate::renderer::rounded_rect::RoundedRectInstance {
+                                    rect: [
+                                        viewport.x + viewport.w,
+                                        viewport.y,
+                                        2.0 * rc.scale_factor,
+                                        viewport.h,
+                                    ],
+                                    color: accent,
+                                    radius: 0.0,
+                                    border_width: 0.0,
+                                    _pad: [0.0; 2],
+                                },
+                            );
+                        }
                     }
 
                     // ── Inline AI block (overlays bottom rows) ──────────────────────────
@@ -1859,6 +1998,80 @@ impl ApplicationHandler<()> for App {
                         w.request_redraw();
                     }
                 }
+                // W-5: zero state pill hover tracking.
+                if let Some((_, panel_row)) = self.panel_hit_cell(position.x, position.y) {
+                    let panel = self.ui.panel();
+                    if panel.messages.is_empty()
+                        && matches!(panel.state, crate::llm::chat_panel::PanelState::Idle)
+                    {
+                        let new_hover = self.zero_state_hover_for_row(panel_row);
+                        if panel.zero_state_hover != new_hover {
+                            self.ui.panel_mut().zero_state_hover = new_hover;
+                            self.ui.panel_mut().dirty = true;
+                            if let Some(w) = &self.window {
+                                w.request_redraw();
+                            }
+                        }
+                    } else if self.ui.panel().zero_state_hover.is_some() {
+                        self.ui.panel_mut().zero_state_hover = None;
+                        self.ui.panel_mut().dirty = true;
+                    }
+                } else if self.ui.panel().zero_state_hover.is_some() {
+                    self.ui.panel_mut().zero_state_hover = None;
+                    self.ui.panel_mut().dirty = true;
+                }
+                // W-7: suggestion pill hover tracking.
+                if let Some((_, panel_row)) = self.panel_hit_cell(position.x, position.y) {
+                    let panel = self.ui.panel();
+                    if panel.show_suggestions
+                        && !panel.messages.is_empty()
+                        && matches!(panel.state, crate::llm::chat_panel::PanelState::Idle)
+                    {
+                        let new_hover = self.suggestion_hover_for_row(panel_row);
+                        if panel.suggestion_hover != new_hover {
+                            self.ui.panel_mut().suggestion_hover = new_hover;
+                            self.ui.panel_mut().dirty = true;
+                            if let Some(w) = &self.window {
+                                w.request_redraw();
+                            }
+                        }
+                    } else if self.ui.panel().suggestion_hover.is_some() {
+                        self.ui.panel_mut().suggestion_hover = None;
+                        self.ui.panel_mut().dirty = true;
+                    }
+                } else if self.ui.panel().suggestion_hover.is_some() {
+                    self.ui.panel_mut().suggestion_hover = None;
+                    self.ui.panel_mut().dirty = true;
+                }
+                // W-8: panel resize drag — update width live.
+                if self.panel_resize_drag {
+                    if let Some(rc) = &self.render_ctx {
+                        let (win_w, _) = rc.renderer.size();
+                        let right_edge =
+                            win_w as f32 - self.config.window.padding.right as f32;
+                        let cell_w = self.cell_dims().0 as f32;
+                        let new_cols =
+                            ((right_edge - position.x as f32) / cell_w).clamp(30.0, 90.0) as u16;
+                        if self.ui.panel().width_cols != new_cols {
+                            self.ui.panel_mut().width_cols = new_cols;
+                            self.ui.panel_mut().dirty = true;
+                            self.resize_terminals_for_panel();
+                            if let Some(w) = &self.window {
+                                w.request_redraw();
+                            }
+                        }
+                    }
+                }
+                // W-8: hover over panel left-edge resize handle.
+                {
+                    let near = self.near_panel_left_edge(position.x);
+                    if near != self.panel_resize_hover {
+                        self.panel_resize_hover = near;
+                        if let Some(w) = &self.window {
+                            w.request_redraw();
+                        }
+                    }
+                }
                 // Separator drag — update ratio live.
                 if let Some(drag) = &self.input.dragging_separator {
                     let node_id = drag.node_id;
@@ -1868,7 +2081,7 @@ impl ApplicationHandler<()> for App {
                     if let Some(w) = &self.window {
                         w.request_redraw();
                     }
-                } else if self.input.mouse_left_pressed && !self.mouse_in_panel() {
+                } else if self.input.mouse_left_pressed && !self.mouse_in_panel() && !self.panel_resize_drag {
                     let dx = position.x - self.input.mouse_press_pos.0;
                     let dy = position.y - self.input.mouse_press_pos.1;
                     // Only treat as a drag once the cursor moves at least 4 physical pixels.
@@ -2207,6 +2420,14 @@ impl ApplicationHandler<()> for App {
                             }
                         }
 
+                        // W-8: panel left-edge resize drag.
+                        if self.near_panel_left_edge(self.input.mouse_pos.0) {
+                            self.panel_resize_drag = true;
+                            if let Some(w) = &self.window {
+                                w.request_redraw();
+                            }
+                            return;
+                        }
                         // Separator drag: if click is within ±3px of a separator, start drag.
                         let sep_hit = if !in_panel {
                             self.separator_at_pixel(
@@ -2225,6 +2446,115 @@ impl ApplicationHandler<()> for App {
                         }
 
                         if in_panel {
+                            if let Some((panel_col, panel_row)) =
+                                self.panel_hit_cell(self.input.mouse_pos.0, self.input.mouse_pos.1)
+                            {
+                                if panel_row == 0 {
+                                    let action = crate::llm::chat_panel::header_action_for_col(
+                                        self.ui.panel().width_cols as usize,
+                                        panel_col,
+                                        !self.ui.panel().messages.is_empty(),
+                                    );
+                                    if let Some(action) = action {
+                                        match action {
+                                            crate::llm::chat_panel::HeaderAction::Restart => {
+                                                self.ui.restart_chat_panel();
+                                                self.ui.panel_focused = true;
+                                            }
+                                            crate::llm::chat_panel::HeaderAction::Copy => {
+                                                self.ui.copy_chat_panel_transcript();
+                                                self.ui.panel_focused = true;
+                                            }
+                                            crate::llm::chat_panel::HeaderAction::Close => {
+                                                self.ui.close_panel();
+                                            }
+                                        }
+                                        if let Some(w) = &self.window {
+                                            w.request_redraw();
+                                        }
+                                        return;
+                                    }
+                                }
+                            }
+                            // W-5: zero state pill click — pre-fill and submit.
+                            {
+                                let panel = self.ui.panel();
+                                if panel.messages.is_empty()
+                                    && matches!(
+                                        panel.state,
+                                        crate::llm::chat_panel::PanelState::Idle
+                                    )
+                                {
+                                    let panel_row = self
+                                        .panel_hit_cell(
+                                            self.input.mouse_pos.0,
+                                            self.input.mouse_pos.1,
+                                        )
+                                        .map(|(_, row)| row)
+                                        .unwrap_or(0);
+                                    let pill_hit = self.zero_state_hover_for_row(panel_row);
+                                    if let Some(idx) = pill_hit {
+                                        let text = if idx == 0 {
+                                            "fix last error"
+                                        } else {
+                                            "explain command"
+                                        };
+                                        self.ui.panel_mut().input = text.to_string();
+                                        self.ui.panel_mut().input_cursor = text.chars().count();
+                                        let cwd = self
+                                            .mux
+                                            .active_cwd()
+                                            .or_else(|| std::env::current_dir().ok())
+                                            .unwrap_or_default();
+                                        self.ui.submit_ai_query(self.wakeup_proxy.clone(), cwd);
+                                        self.ui.panel_focused = true;
+                                        if let Some(w) = &self.window {
+                                            w.request_redraw();
+                                        }
+                                        return;
+                                    }
+                                }
+                            }
+                            // W-7: suggestion pill click — pre-fill and submit.
+                            {
+                                let panel = self.ui.panel();
+                                if panel.show_suggestions
+                                    && !panel.messages.is_empty()
+                                    && matches!(
+                                        panel.state,
+                                        crate::llm::chat_panel::PanelState::Idle
+                                    )
+                                {
+                                    let panel_row = self
+                                        .panel_hit_cell(
+                                            self.input.mouse_pos.0,
+                                            self.input.mouse_pos.1,
+                                        )
+                                        .map(|(_, row)| row)
+                                        .unwrap_or(0);
+                                    let pill_hit = self.suggestion_hover_for_row(panel_row);
+                                    if let Some(idx) = pill_hit {
+                                        let text = if idx == 0 {
+                                            "fix last error"
+                                        } else {
+                                            "explain more"
+                                        };
+                                        self.ui.panel_mut().input = text.to_string();
+                                        self.ui.panel_mut().input_cursor = text.chars().count();
+                                        let cwd = self
+                                            .mux
+                                            .active_cwd()
+                                            .or_else(|| std::env::current_dir().ok())
+                                            .unwrap_or_default();
+                                        self.ui.submit_ai_query(self.wakeup_proxy.clone(), cwd);
+                                        self.ui.panel_focused = true;
+                                        if let Some(w) = &self.window {
+                                            w.request_redraw();
+                                        }
+                                        return;
+                                    }
+                                }
+                            }
                             self.ui.panel_focused = true;
                         } else {
                             if self.ui.is_panel_visible() {
@@ -2268,6 +2598,14 @@ impl ApplicationHandler<()> for App {
                     }
                     (MouseButton::Left, ElementState::Released) => {
                         self.input.mouse_left_pressed = false;
+                        // W-8: panel resize drag end.
+                        if self.panel_resize_drag {
+                            self.panel_resize_drag = false;
+                            self.resize_terminals_for_panel();
+                            if let Some(w) = &self.window {
+                                w.request_redraw();
+                            }
+                        }
                         if self.input.dragging_separator.take().is_some() {
                             // Separator drag ended — resize terminals to new pane dimensions.
                             self.resize_terminals_for_panel();

@@ -114,6 +114,14 @@ muda = "0.18"
 objc2 = "0.5"
 objc2-app-kit = { version = "0.2", features = ["NSWindow", "NSView", "NSApplication"] }
 objc2-foundation = "0.2"
+objc2-user-notifications = { version = "0.2", features = [
+    "UNNotificationContent",
+    "UNNotificationRequest",
+    "UNNotificationTrigger",
+    "UNUserNotificationCenter",
+    "block2",
+] }
+block2 = "0.5"
 libc = "0.2"
 
 [profile.release]

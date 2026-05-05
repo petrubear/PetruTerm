@@ -1,83 +1,47 @@
 # Active Context
 
-**Current Focus:** Sin fases activas — proyecto en estado estable
-**Last Active:** 2026-04-28
+**Current Focus:** Auditoría de código — refactoring, rendimiento, memoria, energía
+**Last Active:** 2026-05-05
 
 ## Estado actual del proyecto
 
-**Todas las fases completadas. Phase 4 (Plugin Ecosystem) CANCELADA.**
-**Build limpio. CI verde. Sin deuda abierta activa; diferidos: TD-PERF-03, TD-PERF-05, TD-PERF-29.**
+**Phases 1–6 COMPLETAS en `feat/phase-6-warp-ui`** → mergeado a master.
+**Sin deuda técnica abierta. Diferidos: TD-PERF-03, TD-PERF-05 (solo GPUs discretas).**
+**Todos los benches criterion funcionan. mimalloc activo como global allocator.**
 
-## Roadmap acordado (en orden)
+## Completado en Phase 6
 
-1. ~~**Sprint cierre 3.5**~~ COMPLETO
-2. ~~**Fase A**~~ COMPLETO — Versionado semántico + i18n (v0.1.0)
-3. ~~**Fase 3.6**~~ COMPLETO — GitHub Copilot provider (v0.1.1)
-4. ~~**Fase B**~~ COMPLETO — Menu bar nativo macOS (crate `muda`)
-5. ~~**Fase C**~~ COMPLETO — Titlebar custom (NSWindow híbrido) + Workspaces
-6. ~~**Fase D-1/D-2/D-3**~~ COMPLETO — MCP integration (config, client, chat wiring)
-7. ~~**Fase D-4**~~ COMPLETO — AI Chat Skills (agentskills.io format)
-8. ~~**Fase D-5**~~ COMPLETO — MCP hot-reload (notify + debounce + reload_mcp)
-9. ~~**Bug fixes**~~ COMPLETO — Focus border (v0.1.2), left-edge overlap (v0.1.3), Leader+a sidebar hijack
-10. ~~**UI polish**~~ COMPLETO — /skills color, /mcp command, Leader+w workspace
-11. ~~**REC-PERF-01/02/05**~~ COMPLETO — ASCII warmup, parking_lot, frame budget doc
-12. ~~**Phase 5 G-0**~~ COMPLETO — UI tokens en ColorScheme
-13. ~~**Phase 5 G-1**~~ COMPLETO — Zoom pane (`Leader z`)
-14. ~~**Phase 5 G-2**~~ COMPLETO — Sidebar MCP/Steering/Skills tabs
-15. ~~**Phase 5 G-3**~~ COMPLETO — Markdown en chat
-16. ~~**Chat input UX**~~ COMPLETO — cursor, historial, vertical scroll, 4-line input
-17. ~~**Phase 5 G-2-overlay**~~ COMPLETO — Info overlay para sidebar MCP/Skills/Steering
-18. ~~**Fase 4**~~ CANCELADA — Plugin ecosystem descartado (2026-04-28)
+- [x] W-1: Full-width message background tinting
+- [x] W-2: Input box as a bordered card
+- [x] W-3: Code block background + left accent bar
+- [x] W-4: Sidebar active/inactive color contrast
+- [x] W-5: Zero state / empty panel
+- [x] W-6: Header — icon anchor + right-aligned action buttons
+- [x] W-7: Prepared response pill buttons (post-response)
+- [x] W-8: Resizable panel width via mouse drag
 
-## Cambios recientes a preservar
+## Rama activa: `audit/code-review`
 
-**G-2-overlay — info overlay sidebar:**
-- `InfoOverlay` en `src/ui/info_overlay.rs`: `open(title, content, width)` parsea con `parse_markdown`, `close()` limpia, `scroll_down/up()` navegan.
-- Enter en sección MCP/Skills/Steering del sidebar → `open_sidebar_info_overlay()` construye contenido y abre overlay.
-- MCP: formatea tools + JSON schemas via `UiManager::mcp_overlay_content()` + `McpManager::tools_for_server()`.
-- Skills: `SkillManager::read_body(skill)` — body completo del SKILL.md.
-- Steering: contenido ya en memoria via `SteeringManager::files()`.
-- Renderer: `build_info_overlay_instances()` reutiliza `push_md_line` + `resolve_line_fg/span_fg` — mismo pipeline de color que el chat panel.
-- Sidebar: cursor highlight (pill rect) en el item seleccionado de cada sección (i == 0 de la vista scrolleada).
-- `close_sidebar()` método centralizado que resetea visible/kbd_active/rename_input + cierra overlay + layout.
-- Esc en overlay → cierra overlay + resetea `sidebar_kbd_active = false` (sidebar queda visible, Enter ya no interceptado).
-- Esc en sidebar sin overlay → `close_sidebar()` completo.
+Objetivo: auditoría sistemática del codebase completo buscando:
+- Código repetido o candidato a refactor
+- Optimizaciones de rendimiento (hot paths, asignaciones innecesarias)
+- Optimizaciones de memoria (retención innecesaria, buffers sobredimensionados)
+- Consumo de energía (trabajo innecesario en idle, polling)
+- Aplicación de patrones de diseño donde corresponda
+- Simplificación de código complejo
 
-**Chat panel toggle/focus split:**
-- `Leader+a+a` = `ToggleAiPanel` (abrir/cerrar).
-- `Leader+A` = `FocusAiPanel` (mover foco terminal ↔ chat sin cerrar).
-- `Esc` dentro del chat NO cierra el panel: devuelve foco a terminal, excepto en `Error` (`dismiss_error`) y `AwaitingConfirm` (`confirm_no`).
-
-**Titlebar cache inputs:**
-- `RenderContext.tab_bar_inputs` ahora incluye `(active_index, total_cols, sidebar_visible, panel_visible)`.
-- Si se quitan `sidebar_visible` / `panel_visible` de la clave, los botones superiores del sidebar/chat dejan de reflejar el estado toggle activo.
-
-**Search memory guard:**
-- `MAX_SEARCH_MATCHES = 10_000` en `src/app/mux.rs`.
-- `SearchBar.matches_truncated` evita reutilizar el incremental filter sobre resultados capados.
-
-**Background AI idle policy:**
-- `about_to_wait` distingue AI activity visible vs background. Solo panel enfocado / block visible pueden impedir idle.
-- Mantener esta separación para no reintroducir wakeups periódicos durante streaming en background.
-
-**AI completion notifications:**
-- `UiManager::poll_ai_events()` y `poll_ai_block_events()` devuelven `AiPollResult { changed, completed }`.
-- `ai_response` debe dispararse desde cualquier sitio que drene el canal AI cuando `completed == true`; no depender solo de `RedrawRequested`, porque `about_to_wait` puede consumir `AiEvent::Done` antes.
-
-## Invariantes arquitectonicos clave (no romper)
+## Invariantes arquitectónicos clave (no romper)
 
 **Shaper drops space cells (TD-RENDER-01):**
-Pre-pass bg-only en `build_instances` OBLIGATORIO. Sin el, celdas-espacio con bg != default_bg
-no generan vertices → GPU clear color → franjas horizontales.
+Pre-pass bg-only en `build_instances` OBLIGATORIO. Sin él, celdas-espacio con bg != default_bg
+no generan vértices → GPU clear color → franjas horizontales.
 
 **damage-skip scratch buffer:**
-`cell_data_scratch` es per-terminal. Siempre limpiar cuando cambia `terminal_id`
-(`build_all_pane_instances` en `src/app/mod.rs`). Si se quita, TUI app vuelve a sangrar.
+`cell_data_scratch` es per-terminal. Siempre limpiar cuando cambia `terminal_id`.
 
 **Blink fast path:**
 `last_instance_count` + `last_overlay_start` en `RenderContext` OBLIGATORIOS.
-Vertex cursor transparente (bg.a=0) para blink-off — no reducir cell_count.
-Si se revierte, status bar desaparece en cada blink.
+Vértice cursor transparente (bg.a=0) para blink-off — no reducir cell_count.
 
 **alacritty_terminal grid scrollback:**
 `grid()[Line(row)]` NO cuenta `display_offset`. Usar `Line(row as i32 - display_offset)`.
@@ -94,8 +58,3 @@ Divisor: `cell_height / scale_factor`.
 **JetBrains Mono ligatures:** bearing_x puede ser NEGATIVO — no clampar a 0.
 
 **alacritty_terminal 1-cell selection:** limpiar con `clear_selection()` en click sin drag.
-
-**Copilot OAuth:**
-El endpoint `/copilot_internal/v2/token` solo acepta tokens de OAuth apps registradas para Copilot.
-PAT classic y `gh auth token` dan 404. Requiere device flow con `client_id = Iv1.b507a08c87ecfe98`.
-Token almacenado en Keychain: `PetruTerm` / `GITHUB_COPILOT_OAUTH_TOKEN`.

@@ -92,6 +92,9 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <array>
         <string>MacOSX</string>
     </array>
+    <!-- Required by UNUserNotificationCenter: OS won't show permission dialog without it -->
+    <key>NSUserNotificationUsageDescription</key>
+    <string>PetruTerm uses notifications to alert you when long-running commands finish.</string>
     <!-- Icon — place AppIcon.icns in Resources/ to override -->
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>

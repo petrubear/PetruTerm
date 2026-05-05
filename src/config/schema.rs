@@ -23,6 +23,7 @@ pub struct Config {
     /// `"high_performance"` prefers the discrete GPU; `"low_power"` prefers the
     /// integrated GPU. Has no effect at runtime — requires a restart to apply.
     pub gpu_preference: GpuPreference,
+    pub notifications: NotificationsConfig,
 }
 
 /// Keyboard behaviour options.
@@ -93,6 +94,7 @@ impl Default for Config {
             keyboard: KeyboardConfig::default(),
             battery_saver: BatterySaverMode::default(),
             gpu_preference: GpuPreference::default(),
+            notifications: NotificationsConfig::default(),
         }
     }
 }
@@ -121,6 +123,29 @@ pub enum GpuPreference {
     HighPerformance,
     /// Let wgpu choose without any preference hint.
     None,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum NotificationStyle {
+    /// Render a GPU overlay toast inside the terminal window (default).
+    #[default]
+    Toast,
+    /// Deliver via macOS Notification Center (requires notification permission).
+    Native,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NotificationsConfig {
+    pub style: NotificationStyle,
+}
+
+impl Default for NotificationsConfig {
+    fn default() -> Self {
+        Self {
+            style: NotificationStyle::Toast,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
