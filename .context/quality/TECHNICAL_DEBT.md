@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-05-05
-**Open Items:** 10
-**Critical (P0):** 0 | **P1:** 4 | **P2:** 4 | **P3:** 2 | **Deferred:** 2 | **Resueltos (Wave 1):** 4
+**Open Items:** 5
+**Critical (P0):** 0 | **P1:** 2 | **P2:** 0 | **P3:** 2 | **Deferred:** 2 | **Resueltos (Wave 1):** 4 | **Resueltos (Wave 2):** 5
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -69,11 +69,7 @@ _Ninguno abierto._
 - **Wave:** 3 — hacer ANTES de `AUDIT-REFAC-02` (split de función).
 - **Bloquea:** `AUDIT-REFAC-02`.
 
-**AUDIT-PERF-03** — `BTreeMap` allocado y destruido cada frame para lista de MCP servers.
-- **Archivo:** `src/app/mod.rs:1743–1750`
-- **Problema:** `BTreeMap<String, Vec<String>>` se construye en `window_event(RedrawRequested)` cada frame si el sidebar es visible. Allocation + tree rebalancing + conversión a Vec = trabajo innecesario.
-- **Fix:** Cachear resultado en `App` o `UiManager` como `mcp_tools_cache: Vec<(String, Vec<String>)>` e invalidar solo cuando MCP tools cambian.
-- **Wave:** 2 — independiente, añadir campo de cache.
+**AUDIT-PERF-03** — RESUELTO (2026-05-05). `mcp_tools_cache: Vec<(String, Vec<String>)>` en `App`. Rebuilt lazily before `render_ctx` borrow; invalidated after `reload_mcp`. Zero-cost on sidebar frames (no BTreeMap, no alloc).
 
 **AUDIT-ENERGY-01** — 34 llamadas a `request_redraw()` sin deduplicación.
 - **Archivo:** `src/app/mod.rs` — líneas 214, 1047, 1065, 1916, 1932, 1989, 1998, 2012, 2035, 2060, 2071, 2082, 2099, 2157, 2187, 2247, 2254, 2283, 2304 y más.
@@ -88,29 +84,13 @@ _Ninguno abierto._
 
 **AUDIT-PERF-04** — RESUELTO (2026-05-05). `const HEADER_ACTIONS_COLS: usize = 12` en `chat_panel.rs`. Eliminado el `.map().sum()` por frame.
 
-**AUDIT-PERF-05** — Clone de `ParseState` y `panel.input` en el render loop.
-- **Archivo:** `src/app/renderer.rs:1339, 1708`
-- **Problema:** `self.streaming_fence_state.clone()` y `panel.input.clone()` (String) se ejecutan cada frame cuando el panel es visible.
-- **Fix:** Pasar `&self.streaming_fence_state` por referencia. Cambiar `input_display` a borrow `&panel.input` en las llamadas que no modifican.
-- **Wave:** 2 — independiente, refactor de firmas.
+**AUDIT-PERF-05** — RESUELTO (2026-05-05). `parse_markdown` signature changed to `&mut ParseState` → `Vec<AnnotatedLine>`, eliminating the `streaming_fence_state.clone()`. `panel.input.clone()` deferred to cursor-on path only via `cursor_storage: String` + `&str` borrow.
 
-**AUDIT-MEM-01** — `terminal_shell_ctxs` HashMap crece sin límite.
-- **Archivo:** `src/app/mod.rs:106`
-- **Problema:** Cada terminal abierto agrega una entrada. El cleanup en `close_terminal` funciona, pero si el proceso del shell muere sin pasar por `close_terminal`, la entrada queda viva. Sin upper bound en sesiones largas.
-- **Fix:** Agregar cap de 256 entradas: antes de insertar, si `len() >= 256` eliminar la entrada con `mtime` más antigua.
-- **Wave:** 2 — independiente, ~8 líneas.
+**AUDIT-MEM-01** — RESUELTO (2026-05-05). Cap de 256 entradas en `terminal_shell_ctxs`: antes de insertar, evicts la entrada con `mtime` más antigua si `len() >= 256`.
 
-**AUDIT-MEM-02** — Vecs de instancias GPU nunca hacen `shrink_to_fit()`.
-- **Archivo:** `src/app/renderer.rs:52–56, 100–103`
-- **Problema:** `instances`, `lcd_instances`, `panel_instances_cache`, `rect_instances` y otros Vecs se `.clear()` cada frame pero nunca reducen su capacity. Ventanas grandes o picos de contenido dejan Mb de capacity sin usar.
-- **Fix:** En `RenderContext`, agregar `shrink_counter: u64`. Cada 300 frames, si `capacity > len * 3`, hacer `shrink_to(len * 2)` en cada Vec de instancias.
-- **Wave:** 2 — independiente.
+**AUDIT-MEM-02** — RESUELTO (2026-05-05). `begin_frame()` runs shrink every 300 frames: `instances`, `lcd_instances`, `panel_instances_cache`, `rect_instances` → `shrink_to(len*2)` when `capacity > len*3`.
 
-**AUDIT-MEM-03** — Scratch buffers sin límite de capacity.
-- **Archivo:** `src/app/renderer.rs:71–98`
-- **Problema:** `scratch_chars`, `scratch_str`, `scratch_colors`, `fmt_buf` se `.clear()` pero nunca encogen. Una línea de 10k chars deja esa capacity permanentemente.
-- **Fix:** Mismo patrón que AUDIT-MEM-02 — shrink periódico si `capacity > TYPICAL_COLS * 4` (TYPICAL_COLS = 220).
-- **Wave:** 2 — puede hacerse en el mismo commit que AUDIT-MEM-02.
+**AUDIT-MEM-03** — RESUELTO (2026-05-05). Same 300-frame pass in `begin_frame()`: `scratch_chars`, `scratch_colors`, `colors_scratch` use len*3 threshold; `scratch_str`, `fmt_buf` cap at 880 bytes (TYPICAL_COLS*4).
 
 ---
 

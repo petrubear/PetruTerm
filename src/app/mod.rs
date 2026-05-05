@@ -118,6 +118,11 @@ pub struct App {
 
     /// Sidebar item detail overlay (G-2-overlay).
     info_overlay: crate::ui::InfoOverlay,
+
+    /// Cached sorted list of (server_name, [tool_names]) for sidebar render (AUDIT-PERF-03).
+    /// Rebuilt lazily on first sidebar frame and after each MCP reload.
+    mcp_tools_cache: Vec<(String, Vec<String>)>,
+    mcp_tools_dirty: bool,
 }
 
 impl App {
@@ -171,6 +176,8 @@ impl App {
             lua,
             toast: None,
             info_overlay: crate::ui::InfoOverlay::new(),
+            mcp_tools_cache: Vec::new(),
+            mcp_tools_dirty: true,
         }
     }
 
@@ -243,9 +250,30 @@ impl App {
                 }
             }
             if let Some(ctx) = crate::llm::shell_context::ShellContext::load_for_pid(pid) {
+                if self.terminal_shell_ctxs.len() >= 256 {
+                    // Evict the stale entry (smallest mtime) to keep the map bounded.
+                    if let Some(oldest) = self
+                        .terminal_shell_ctxs
+                        .iter()
+                        .min_by_key(|(_, (_, t))| *t)
+                        .map(|(id, _)| *id)
+                    {
+                        self.terminal_shell_ctxs.remove(&oldest);
+                    }
+                }
                 self.terminal_shell_ctxs.insert(terminal_id, (ctx, mtime));
             }
         }
+    }
+
+    /// Rebuild the sorted MCP tools cache from the live manager state (AUDIT-PERF-03).
+    fn rebuild_mcp_cache(&mut self) {
+        let mut map: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+        for (server, tool) in self.ui.mcp_manager.all_tools() {
+            map.entry(server).or_default().push(tool.name.clone());
+        }
+        self.mcp_tools_cache = map.into_iter().collect();
+        self.mcp_tools_dirty = false;
     }
 
     /// Shell context for the currently active pane, if any.
@@ -546,6 +574,7 @@ impl App {
                 .or_else(|| std::env::current_dir().ok())
                 .unwrap_or_default();
             self.ui.reload_mcp(&cwd);
+            self.mcp_tools_dirty = true;
         }
     }
 
@@ -1249,6 +1278,10 @@ impl ApplicationHandler<()> for App {
                     .unwrap_or(0);
                 // Focused pane dimensions (scroll bar, AI block anchor).
                 let (term_cols, term_rows) = self.mux.active_terminal_size();
+                // Rebuild MCP tools cache before the render_ctx borrow if dirty (AUDIT-PERF-03).
+                if self.mcp_tools_dirty {
+                    self.rebuild_mcp_cache();
+                }
 
                 if let Some(rc) = &mut self.render_ctx {
                     // Advance epoch once per frame so LRU eviction can age unused entries.
@@ -1740,14 +1773,6 @@ impl ApplicationHandler<()> for App {
 
                     if self.sidebar_visible {
                         let counts = self.mux.workspace_tab_pane_counts();
-                        let mcp_servers: Vec<(String, Vec<String>)> = {
-                            let mut map: std::collections::BTreeMap<String, Vec<String>> =
-                                Default::default();
-                            for (server, tool) in self.ui.mcp_manager.all_tools() {
-                                map.entry(server).or_default().push(tool.name.clone());
-                            }
-                            map.into_iter().collect()
-                        };
                         rc.build_workspace_sidebar_instances(
                             self.mux.workspaces(),
                             self.mux.active_workspace_id,
@@ -1761,7 +1786,7 @@ impl ApplicationHandler<()> for App {
                             &scaled_font,
                             &self.config.colors,
                             self.info_sidebar_section,
-                            &mcp_servers,
+                            &self.mcp_tools_cache,
                             self.mcp_scroll,
                             self.ui.skill_manager.skills(),
                             self.skills_scroll,

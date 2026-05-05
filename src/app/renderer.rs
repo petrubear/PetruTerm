@@ -249,6 +249,30 @@ impl RenderContext {
 
     /// Clear per-frame instance buffers. Call once before rendering all panes.
     pub fn begin_frame(&mut self) {
+        // Periodic capacity shrink — every 300 frames, reclaim memory if a capacity spike
+        // (e.g. large terminal or chat message) left buffers bloated (AUDIT-MEM-02, MEM-03).
+        if self.frame_counter % 300 == 0 {
+            fn shrink_vec<T>(v: &mut Vec<T>) {
+                if !v.is_empty() && v.capacity() > v.len() * 3 {
+                    v.shrink_to(v.len() * 2);
+                }
+            }
+            fn shrink_str(s: &mut String) {
+                const MAX: usize = 880; // TYPICAL_COLS * 4
+                if s.capacity() > MAX * 2 {
+                    s.shrink_to(MAX);
+                }
+            }
+            shrink_vec(&mut self.instances);
+            shrink_vec(&mut self.lcd_instances);
+            shrink_vec(&mut self.panel_instances_cache);
+            shrink_vec(&mut self.rect_instances);
+            shrink_vec(&mut self.scratch_chars);
+            shrink_vec(&mut self.scratch_colors);
+            shrink_vec(&mut self.colors_scratch);
+            shrink_str(&mut self.scratch_str);
+            shrink_str(&mut self.fmt_buf);
+        }
         self.instances.clear();
         self.lcd_instances.clear();
         self.rect_instances.clear();
@@ -1331,13 +1355,12 @@ impl RenderContext {
 
                     if new_stable_end > self.streaming_stable_end {
                         let seg = &buf[self.streaming_stable_end..new_stable_end];
-                        let (new_lines, new_state) = crate::llm::markdown::parse_markdown(
+                        let new_lines = crate::llm::markdown::parse_markdown(
                             seg,
                             msg_inner_w,
-                            self.streaming_fence_state.clone(),
+                            &mut self.streaming_fence_state,
                         );
                         self.streaming_stable_lines.extend(new_lines);
-                        self.streaming_fence_state = new_state;
                         self.streaming_stable_end = new_stable_end;
                     }
 
@@ -1703,17 +1726,18 @@ impl RenderContext {
                 panel_focused && !file_picker_focused && cursor_blink_on && panel.is_idle();
             let cursor_chars = panel.input.chars().count().min(panel.input_cursor);
 
-            let mut input_display = panel.input.clone();
-            if show_cursor {
-                let bp = input_display
-                    .char_indices()
-                    .nth(cursor_chars)
-                    .map(|(b, _)| b)
-                    .unwrap_or(input_display.len());
-                input_display.insert(bp, '\u{258b}');
-            }
+            let cursor_storage: String;
+            let input_display: &str = if show_cursor {
+                let bp = panel.input.char_indices().nth(cursor_chars).map(|(b, _)| b).unwrap_or(panel.input.len());
+                let mut s = panel.input.clone();
+                s.insert(bp, '\u{258b}');
+                cursor_storage = s;
+                &cursor_storage
+            } else {
+                &panel.input
+            };
 
-            let input_lines = wrap_input(&input_display, input_inner_w);
+            let input_lines = wrap_input(input_display, input_inner_w);
             let n = input_lines.len();
 
             let inp_fg = if panel_focused && !file_picker_focused {
