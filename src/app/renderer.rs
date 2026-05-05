@@ -735,19 +735,17 @@ impl RenderContext {
         let chars: Vec<char> = text.chars().collect();
         let total_chars = chars.len();
 
-        // Build segment boundaries from span edges
-        let mut boundaries: Vec<usize> = vec![0];
+        // Build segment boundaries from span edges. Use a HashSet for O(1) dedup
+        // instead of Vec::contains (O(n) per insert → O(n²) total).
+        let mut boundary_set: rustc_hash::FxHashSet<usize> = rustc_hash::FxHashSet::default();
+        boundary_set.insert(0);
+        boundary_set.insert(total_chars);
         for &(s, e, _) in spans {
-            if s > 0 && !boundaries.contains(&s) {
-                boundaries.push(s);
-            }
-            if e < total_chars && !boundaries.contains(&e) {
-                boundaries.push(e);
-            }
+            if s > 0 { boundary_set.insert(s); }
+            if e < total_chars { boundary_set.insert(e); }
         }
-        boundaries.push(total_chars);
+        let mut boundaries: Vec<usize> = boundary_set.into_iter().collect();
         boundaries.sort_unstable();
-        boundaries.dedup();
 
         let mut col = col_offset;
         for window in boundaries.windows(2) {
@@ -1739,10 +1737,10 @@ impl RenderContext {
             // 4-line viewport: cursor stays at the bottom when scrolled past row 3.
             let vis_start = cursor_line.saturating_sub(3);
             let vis = [
-                input_lines.get(vis_start).cloned().unwrap_or_default(),
-                input_lines.get(vis_start + 1).cloned().unwrap_or_default(),
-                input_lines.get(vis_start + 2).cloned().unwrap_or_default(),
-                input_lines.get(vis_start + 3).cloned().unwrap_or_default(),
+                idx_or_default(&input_lines, vis_start),
+                idx_or_default(&input_lines, vis_start + 1),
+                idx_or_default(&input_lines, vis_start + 2),
+                idx_or_default(&input_lines, vis_start + 3),
             ];
             let rows = [input_row1, input_row2, input_row3, input_row4];
             for (i, (line, row)) in vis.iter().zip(rows.iter()).enumerate() {
@@ -1876,7 +1874,7 @@ impl RenderContext {
             }
             AiState::Streaming => {
                 let lines = word_wrap(&block.response, w.saturating_sub(4));
-                let line = format!("  \u{2192} {}", lines.first().cloned().unwrap_or_default()); // →
+                let line = format!("  \u{2192} {}", idx_or_default(&lines, 0)); // →
                 self.push_shaped_row(&line, stream_fg, block_bg, resp_row, 0, w, font);
                 self.push_shaped_row(
                     &format!("  {} streaming\u{2026}   Esc: cancel", spin),
@@ -1912,7 +1910,7 @@ impl RenderContext {
                     );
                 } else {
                     let lines = word_wrap(&block.response, w.saturating_sub(4));
-                    let line = format!("  {}", lines.first().cloned().unwrap_or_default());
+                    let line = format!("  {}", idx_or_default(&lines, 0));
                     self.push_shaped_row(&line, resp_fg, block_bg, resp_row, 0, w, font);
                 }
                 self.push_shaped_row(
@@ -1927,7 +1925,7 @@ impl RenderContext {
             }
             AiState::Error(err) => {
                 let lines = word_wrap(err, w.saturating_sub(4));
-                let line = format!("  \u{2717} {}", lines.first().cloned().unwrap_or_default()); // ✗
+                let line = format!("  \u{2717} {}", idx_or_default(&lines, 0)); // ✗
                 self.push_shaped_row(&line, err_fg, block_bg, resp_row, 0, w, font);
                 self.push_shaped_row("  Esc: dismiss", ai_hint_fg, block_bg, hint_row, 0, w, font);
             }
@@ -3126,6 +3124,10 @@ impl RenderContext {
             _pad: 0,
         });
     }
+}
+
+fn idx_or_default<T: Clone + Default>(slice: &[T], i: usize) -> T {
+    slice.get(i).cloned().unwrap_or_default()
 }
 
 fn resolve_line_fg(

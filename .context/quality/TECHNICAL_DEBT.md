@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-05-05
-**Open Items:** 14
-**Critical (P0):** 0 | **P1:** 4 | **P2:** 4 | **P3:** 6 | **Deferred:** 2
+**Open Items:** 10
+**Critical (P0):** 0 | **P1:** 4 | **P2:** 4 | **P3:** 2 | **Deferred:** 2 | **Resueltos (Wave 1):** 4
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -60,11 +60,7 @@ _Ninguno abierto._
 
 ## P1 — Alta prioridad
 
-**AUDIT-PERF-01** — O(n²) en `push_md_line` al construir `boundaries`.
-- **Archivo:** `src/app/renderer.rs:738`
-- **Problema:** `boundaries.contains(&s)` dentro de un loop sobre spans — O(n) por iteración. Con líneas de markdown largas con muchos spans esto degrada cuadráticamente.
-- **Fix:** Reemplazar `Vec` con `HashSet` para construcción de boundaries; convertir a `Vec` solo para el sort final.
-- **Wave:** 1 — independiente, ~5 líneas.
+**AUDIT-PERF-01** — RESUELTO (2026-05-05). `FxHashSet` reemplaza `Vec::contains` en `push_md_line`. O(n) → O(1) por inserción. `src/app/renderer.rs:738`.
 
 **AUDIT-PERF-02** — 25+ `format!()` allocations por frame en `build_chat_panel_instances`.
 - **Archivo:** `src/app/renderer.rs:871–1593`
@@ -90,11 +86,7 @@ _Ninguno abierto._
 
 ## P2 — Prioridad media
 
-**AUDIT-PERF-04** — `header_actions_start_col()` recalcula ancho constante en cada frame.
-- **Archivo:** `src/llm/chat_panel.rs:116–131`
-- **Problema:** Los labels de las 3 acciones del header son constantes (`[↺]`, `[⎘]`, `[✕]`), su ancho total también. Se recalcula con `.map().sum()` en cada llamada (cada frame del panel).
-- **Fix:** Extraer `const HEADER_ACTIONS_TOTAL_WIDTH: usize` calculado en compile time.
-- **Wave:** 1 — independiente, trivial, 3 líneas.
+**AUDIT-PERF-04** — RESUELTO (2026-05-05). `const HEADER_ACTIONS_COLS: usize = 12` en `chat_panel.rs`. Eliminado el `.map().sum()` por frame.
 
 **AUDIT-PERF-05** — Clone de `ParseState` y `panel.input` en el render loop.
 - **Archivo:** `src/app/renderer.rs:1339, 1708`
@@ -145,17 +137,9 @@ _Ninguno abierto._
 - **Wave:** 4 — hacer DESPUÉS de `AUDIT-ENERGY-01` (toca mismos campos de App).
 - **Bloqueado por:** `AUDIT-ENERGY-01`.
 
-**AUDIT-REFAC-04** — `#![allow(dead_code)]` global en `gpu.rs`.
-- **Archivo:** `src/renderer/gpu.rs:1`
-- **Problema:** Suprime todos los warnings de dead code del módulo. Enmascara métodos realmente muertos.
-- **Fix:** Quitar el allow global. Añadir `#[allow(dead_code)]` selectivo solo en los métodos de API pública que sí se necesitan pero el compilador no ve usados.
-- **Wave:** 1 — independiente, trivial.
+**AUDIT-REFAC-04** — RESUELTO (2026-05-05). `#![allow(dead_code)]` global eliminado de `gpu.rs`. 5 métodos muertos eliminados: `has_lcd`, `take_lcd_atlas`, `queue`, `surface_format`, `is_lcd_ready`.
 
-**AUDIT-CLEAN-01** — Patrón `.cloned().unwrap_or_default()` duplicado en 7+ lugares.
-- **Archivo:** `src/app/renderer.rs:1742–1745, 1879, 1915, 1930`
-- **Problema:** Código idiomático repetido. Menor, pero agrega ruido.
-- **Fix:** Añadir extension trait o función libre `get_or_default<T: Clone + Default>(slice: &[T], idx: usize) -> T`.
-- **Wave:** 1 — independiente, trivial.
+**AUDIT-CLEAN-01** — RESUELTO (2026-05-05). Función `idx_or_default<T>` añadida en `renderer.rs`. 7 ocurrencias de `.cloned().unwrap_or_default()` reemplazadas.
 
 **AUDIT-CLEAN-02** — `ContextAction` match podría escalar mal.
 - **Archivo:** `src/app/mod.rs:2197`

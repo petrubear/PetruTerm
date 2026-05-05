@@ -113,21 +113,14 @@ pub fn header_action_label(action: HeaderAction) -> &'static str {
     }
 }
 
+// "[↺] [⎘] [✕]" — 3×3 labels + 2 spaces between + 1 margin = 12 cols.
+const HEADER_ACTIONS_COLS: usize = 12;
+
 pub fn header_actions_start_col(panel_cols: usize, has_messages: bool) -> Option<usize> {
     if !has_messages {
         return None;
     }
-    let actions = [
-        HeaderAction::Restart,
-        HeaderAction::Copy,
-        HeaderAction::Close,
-    ];
-    let labels_width = actions
-        .iter()
-        .map(|action| header_action_label(*action).chars().count())
-        .sum::<usize>();
-    let actions_width = labels_width + actions.len().saturating_sub(1);
-    Some(panel_cols.saturating_sub(actions_width + 1))
+    Some(panel_cols.saturating_sub(HEADER_ACTIONS_COLS))
 }
 
 pub fn header_action_for_col(
