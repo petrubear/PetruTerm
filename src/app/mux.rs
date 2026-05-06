@@ -296,6 +296,46 @@ impl Mux {
         (data_ids, exited)
     }
 
+    /// Process accumulated OSC 133 events and update each pane's BlockManager.
+    /// Must be called after poll_pty_events() each cycle.
+    pub fn apply_osc133_events(&mut self) {
+        let events: Vec<(usize, Osc133Marker)> = std::mem::take(&mut self.osc133_events);
+        for (terminal_id, marker) in events {
+            let Some(terminal) = self.terminals.get_mut(terminal_id).and_then(|s| s.as_mut())
+            else {
+                continue;
+            };
+
+            // Capture absolute row and (for CommandStart) the current prompt-line text.
+            let is_cmd_start = matches!(marker, Osc133Marker::CommandStart);
+            let (absolute_row, command_text) = terminal.with_term(|t| {
+                let content = t.renderable_content();
+                let history = t.grid().history_size() as i64;
+                let cursor_vp = content.cursor.point.line.0.max(0) as i64;
+                let disp_off = content.display_offset as i64;
+                let abs = history + cursor_vp - disp_off;
+
+                let cmd_text = if is_cmd_start {
+                    let line_idx = content.cursor.point.line;
+                    let cols = t.grid().columns();
+                    let mut s = String::with_capacity(cols);
+                    for col in 0..cols {
+                        let cell = &t.grid()[line_idx][Column(col)];
+                        s.push(cell.c);
+                    }
+                    s.trim_end().to_string()
+                } else {
+                    String::new()
+                };
+                (abs, cmd_text)
+            });
+
+            terminal
+                .block_manager
+                .on_marker(marker, absolute_row, command_text);
+        }
+    }
+
     /// Handle a terminal exit: close just the pane if multiple panes exist in the tab,
     /// or close the whole tab if it was the last pane.
     /// Returns `true` if no tabs remain (caller should exit the app).
@@ -387,6 +427,36 @@ impl Mux {
             }
             text.trim_end().to_string()
         })
+    }
+
+    /// Extract the output text of a completed block from the terminal grid.
+    /// Returns None if the terminal or block does not exist or is not completed.
+    pub fn block_output_text(&self, terminal_id: usize, block_id: usize) -> Option<String> {
+        let terminal = self.terminals.get(terminal_id)?.as_ref()?;
+        let block = terminal.block_manager.find_block_by_id(block_id)?;
+        let output_end = block.output_end?;
+        let output_start = block.output_start;
+
+        Some(terminal.with_term(|term| {
+            use alacritty_terminal::index::{Column, Line};
+            let history_size = term.grid().history_size() as i64;
+            let cols = term.columns();
+            let mut lines = Vec::new();
+
+            for abs_row in output_start..=output_end {
+                let grid_idx = (abs_row - history_size) as i32;
+                let mut text = String::new();
+                for col in 0..cols {
+                    let cell = &term.grid()[Line(grid_idx)][Column(col)];
+                    text.push(if cell.c == '\0' { ' ' } else { cell.c });
+                }
+                lines.push(text.trim_end().to_string());
+            }
+            while lines.last().map(|l: &String| l.is_empty()).unwrap_or(false) {
+                lines.pop();
+            }
+            lines.join("\n")
+        }))
     }
 
     pub fn last_terminal_lines(&self, n: usize) -> String {

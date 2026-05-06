@@ -1,8 +1,10 @@
+pub mod blocks;
 pub mod color;
 pub mod osc133;
 pub mod pty;
 
 pub use alacritty_terminal::vte::ansi::CursorShape;
+pub use blocks::BlockManager;
 pub use osc133::Osc133Marker;
 pub use pty::{Pty, PtyEvent, PtyEventProxy};
 
@@ -61,6 +63,8 @@ pub struct Terminal {
     pub rows: u16,
     /// PID of the shell child process (for CWD resolution).
     pub child_pid: u32,
+    /// OSC 133 command block tracker for this pane.
+    pub block_manager: BlockManager,
 }
 
 impl Terminal {
@@ -102,7 +106,14 @@ impl Terminal {
 
         let child_pid = pty.child_pid;
 
-        Ok(Self { term, pty, cols, rows, child_pid })
+        Ok(Self {
+            term,
+            pty,
+            cols,
+            rows,
+            child_pid,
+            block_manager: BlockManager::new(),
+        })
     }
 
     /// Resize the terminal grid and PTY.

@@ -133,3 +133,161 @@ Scroll independiente por sección cuando los items no caben. Sección vacía mue
 - [x] `MouseButton::Left` press en borde → `panel_resize_drag = true`
 - [x] `CursorMoved` con drag activo → `panel.width_cols = clamp(30..90)`, mark dirty, resize terminals
 - [x] `MouseButton::Left` release → `panel_resize_drag = false`
+
+---
+
+## Phase 7: Warp-inspired Terminal Intelligence
+
+> Inspirado en el código fuente de Warp. Priorizado de más simple a más complejo.
+> Fuentes: `warp_terminal/src/model/ansi/`, `warpui_core/src/elements/hoverable.rs`, `crates/ai/src/agent/`.
+
+### H-1: Hover links — URLs, paths, stack traces clicables
+**Complejidad: Baja.** PetruTerm ya tiene mouse tracking y context menu. Solo se necesita
+un scanner de celdas en hover y un highlight rect.
+
+**Alcance:**
+- Detectar en `CursorMoved`: escanear la fila lógica completa bajo el cursor buscando:
+  - URLs (`https?://[^\s]+`)
+  - Paths absolutos (`/[^\s]+`) y relativos con extensión (`[^\s]+\.[a-z]{1,5}`)
+  - Stack traces estilo Rust (`src/foo/bar.rs:123:45`)
+- Guardar `hover_link: Option<HoverLink>` en `App` con rango de columnas + tipo + texto
+- Renderer: subrayado de 1px en `ui_accent` sobre las celdas del rango
+- Click izquierdo sobre link: `open` (macOS) para URLs; abrir en `$EDITOR` para paths
+- Context menu: agregar ítem "Open link" / "Copy path" cuando hay `hover_link` activo
+
+**Archivos afectados:** `src/app/mod.rs`, `src/app/renderer.rs`, `src/ui/context_menu.rs`
+
+**Pasos:**
+- [x] `HoverLink { start_col, end_col, row, kind: HoverLinkKind, text: String }` en `src/app/hover_link.rs`
+- [x] `scan_link_at(row_text, cursor_col) -> Option<(col_start, col_end, kind, text)>` — parser manual sin regex
+- [x] `CursorMoved`: llama al scanner via `mux.viewport_row_text(row)`, actualiza `hover_link`, redraw si cambió
+- [x] Renderer: underline 1.5px en `ui_accent` (rect pre-computado antes del borrow mutable de rc)
+- [x] `MouseButton::Left Pressed`: si hover_link activo → `open <path_or_url>`, return (no selección)
+- [x] Context menu: `open_with_link` muestra "Open Link" + "Copy Link" al hacer right-click sobre link
+
+---
+
+### B-1 a B-4: OSC 133 — Command Blocks
+**Complejidad: Media.** alacritty_terminal ya parsea OSC sequences en el VTE handler.
+Se necesita interceptar los marcadores y mantener metadatos de bloque por pane.
+
+**Contexto del protocolo OSC 133 (semantic prompts):**
+```
+OSC 133 ; A ST   — prompt start (inicio del prompt)
+OSC 133 ; B ST   — command start (usuario terminó de tipear, start de output)
+OSC 133 ; C ST   — output start (igual que B en la mayoría de shells)
+OSC 133 ; D ; N ST — command end (N = exit code)
+```
+El shell emite estos via `precmd` / `preexec` hooks (zsh, bash, fish lo soportan nativamente
+o con un snippet de 3 líneas en `.zshrc`).
+
+**Estructura de datos:**
+```rust
+struct Block {
+    id: usize,
+    prompt_row: i32,     // fila grid donde empieza el prompt
+    output_start: i32,   // fila donde empieza el output
+    output_end: Option<i32>, // None si aún streamea
+    exit_code: Option<i32>,
+    command_text: String,    // capturado entre A y B
+}
+```
+
+#### B-1: Parser OSC 133 en el VTE handler
+- [ ] En `src/term/mod.rs`, interceptar `TermEvent` o hook en el `EventListener` de alacritty
+- [ ] Detectar secuencias `OSC 133 ; A/B/C/D` en el stream de eventos del terminal
+- [ ] Emitir `TermEvent::Osc133(marker: Osc133Marker)` hacia `App`
+- [ ] Capturar texto del comando entre marcador A y B leyendo el grid
+
+#### B-2: Block manager por pane
+- [x] `BlockManager` en `src/term/blocks.rs`: `Vec<Block>`, `current_block: Option<Block>`
+- [x] `on_marker(marker, current_row)` — actualiza estado del bloque activo
+- [x] Cada pane (`Terminal`) tiene su `BlockManager`
+- [x] `blocks_in_viewport(history_size, display_offset, rows) -> Vec<&Block>` para el renderer
+
+#### B-3: Render visual de bloques
+- [x] Renderer: rect sutil de fondo por bloque en viewport (alpha 6%, `ui_surface`)
+- [x] Gutter izquierdo: barra de 2px en `ui_muted` en el lado izquierdo del pane por bloque
+- [x] Indicador de exit code: pill verde (`ui_success`) / rojo en la última fila del bloque (2 cols del borde derecho)
+- [x] No renderizar bloque activo (sin output_end) — solo bloques completos
+
+#### B-4: Operaciones sobre bloques
+- [x] Hover sobre gutter → highlight del bloque completo (`ui_surface_hover`)
+- [x] Context menu sobre bloque: "Copy output", "Re-run command", "Clear block"
+- [x] `Leader y` — copiar output del bloque bajo el cursor al clipboard
+- [x] `Leader r` — re-ejecutar el comando del bloque bajo el cursor
+
+---
+
+### A-1 a A-3: AI Agent Actions
+**Complejidad: Media-alta.** El panel de chat ya existe y los providers LLM están conectados.
+Se necesita un schema de acciones estructuradas y handlers en el terminal.
+
+**Concepto:** El AI responde con acciones tipadas además de texto. PetruTerm las detecta,
+muestra una confirmación inline, y las ejecuta si el usuario acepta.
+
+**Tipos de acción:**
+```rust
+enum AgentAction {
+    RunCommand { cmd: String, explanation: String },
+    OpenFile    { path: String },
+    ExplainOutput { last_n_lines: usize },
+}
+```
+
+#### A-1: Schema de acciones + parser en respuestas LLM
+- [ ] `src/llm/agent_action.rs`: enum `AgentAction` + `parse_action_from_response(&str) -> Option<AgentAction>`
+- [ ] El parser busca bloques de código con tag especial o JSON fenced block en la respuesta
+- [ ] Alternativamente: system prompt instruye al LLM a emitir acciones en JSON entre `<action>` tags
+- [ ] Tests unitarios para el parser con fixtures de respuestas reales
+
+#### A-2: Confirm UI inline en el chat panel
+- [ ] `PanelState::ConfirmAction(AgentAction)` — nuevo estado en el chat panel
+- [ ] Renderer: card de confirmación sobre `sep_row` con descripción de la acción + pills `[Run] [Cancel]`
+- [ ] Teclado: `y` / `Enter` confirma, `n` / `Esc` cancela (mismo patrón que `ConfirmDisplay` existente)
+- [ ] El `ConfirmDisplay` actual (para file writes) puede servir de base
+
+#### A-3: Action handlers
+- [ ] `RunCommand`: spawn del comando en el pane activo via PTY write (igual que snippet expand)
+- [ ] `OpenFile`: `open -e <path>` en macOS
+- [ ] `ExplainOutput`: capturar las últimas N líneas del grid, hacer nueva query al LLM con ellas
+- [ ] Post-ejecución: append mensaje de sistema al transcript indicando que la acción se ejecutó
+
+---
+
+### I-1 a I-4: Input Decoration Layer
+**Complejidad: Alta.** Requiere interceptar el input antes del PTY y mantener un buffer
+de edición paralelo al del shell. Riesgo de divergencia con el estado real del shell.
+
+**Nota arquitectónica:** alacritty_terminal envía keystrokes directamente al PTY. Para decorar
+el input necesitamos un "shadow buffer" que refleje lo que el usuario está tipeando, sin romper
+el flujo PTY. OSC 133 (B-1) provee los límites de prompt/command que hacen esto viable.
+
+#### I-1: Shadow input buffer
+- [ ] `InputShadow { buf: String, cursor: usize, active: bool }` por pane
+- [ ] Activar cuando OSC 133-A recibido (estamos en zona de prompt)
+- [ ] Desactivar en OSC 133-B (command enviado)
+- [ ] Interceptar `KeyboardInput` en `handle_keyboard`: actualizar `InputShadow` en espejo
+  (no reemplaza el envío al PTY, solo lo replica para decoración)
+- [ ] Reset en `Ctrl+C`, `Ctrl+U`, y en OSC 133-B/D
+
+#### I-2: Syntax coloring del comando
+- [ ] `tokenize_command(input: &str) -> Vec<(Range<usize>, TokenKind)>`
+  - `TokenKind`: `Command`, `Arg`, `Flag`, `Pipe`, `Redirect`, `String`, `Error`
+- [ ] Colorear sobre las celdas del grid que coincidan con el shadow buffer
+  (overlay de color, no reemplazo de celdas — mismo mecanismo que selection highlight)
+- [ ] Resolver si el primer token es un comando válido: buscar en `$PATH` (cache, no bloqueante)
+- [ ] Comando no encontrado → `TokenKind::Error` → color rojo
+
+#### I-3: Ghost text — inline completion hints
+- [ ] Integrar con historial de comandos del shell (leer `~/.zsh_history` o `~/.bash_history`)
+- [ ] Cuando `InputShadow.buf` no está vacío: buscar el match más reciente del historial
+- [ ] Renderizar el sufijo del match en `ui_muted` (50% alpha) a la derecha del cursor
+- [ ] `Tab` o `ArrowRight` al final del buffer: aceptar el ghost text (write al PTY)
+
+#### I-4: Flag hints — tooltips de flags
+- [ ] Base de datos mínima de flags comunes (`git`, `cargo`, `docker`, `kubectl`, `ls`, `grep`)
+  guardada como `HashMap<&str, HashMap<&str, &str>>` (comando → flag → descripción)
+- [ ] Cuando el último token es un `Flag` reconocido: mostrar descripción en fila extra debajo
+  del input (misma zona de hints del chat panel, pero en el pane terminal)
+- [ ] `Esc` o continuar tipeando cierra el hint

@@ -628,6 +628,106 @@ impl RenderContext {
         });
     }
 
+    /// Render OSC 133 command blocks for all panes.
+    /// Draws per block: subtle bg rect, left gutter bar, exit-code indicator on last row.
+    /// Only completed blocks (with output_end) are rendered.
+    /// `hover_block`: if Some((terminal_id, block_id)), that block is highlighted.
+    pub fn build_block_instances(
+        &mut self,
+        pane_infos: &[crate::ui::PaneInfo],
+        mux: &crate::app::Mux,
+        colors: &crate::config::schema::ColorScheme,
+        hover_block: Option<(usize, usize)>,
+    ) {
+        let cell_w = self.shaper.cell_width;
+        let cell_h = self.shaper.cell_height;
+        let sf = self.scale_factor;
+
+        let mut bg_color = colors.ui_surface;
+        bg_color[3] = 0.06;
+        let mut hover_bg_color = colors.ui_surface_hover;
+        hover_bg_color[3] = 0.14;
+        let gutter_color = colors.ui_muted;
+        let success_color = colors.ui_success;
+        let error_color = [0.9_f32, 0.35, 0.35, 0.9];
+
+        for info in pane_infos {
+            let Some(terminal) = mux.terminals.get(info.terminal_id).and_then(|s| s.as_ref())
+            else {
+                continue;
+            };
+
+            let (display_offset, history_size) = terminal.scrollback_info();
+            let rows = info.pane_rect.h / cell_h;
+            let blocks = terminal.block_manager.blocks_in_viewport(
+                history_size,
+                display_offset,
+                rows as usize,
+            );
+            if blocks.is_empty() {
+                continue;
+            }
+
+            let h = history_size as i64;
+            let d = display_offset as i64;
+            let r = rows as i64;
+            let pane_x = info.pane_rect.x;
+            let pane_y = info.pane_rect.y;
+            let pane_w = info.pane_rect.w;
+
+            for block in blocks {
+                let Some(output_end) = block.output_end else {
+                    continue;
+                };
+
+                let vp_start = (block.prompt_row - h + d).clamp(0, r - 1) as f32;
+                let vp_end = (output_end - h + d + 1).clamp(1, r) as f32;
+                let block_h = (vp_end - vp_start) * cell_h;
+                let block_y = pane_y + vp_start * cell_h;
+
+                let is_hovered = hover_block == Some((info.terminal_id, block.id));
+                let block_bg = if is_hovered { hover_bg_color } else { bg_color };
+
+                // Background rect: subtle tint across full pane width.
+                self.rect_instances.push(RoundedRectInstance {
+                    rect: [pane_x, block_y, pane_w, block_h],
+                    color: block_bg,
+                    radius: 0.0,
+                    border_width: 0.0,
+                    _pad: [0.0; 2],
+                });
+
+                // Left gutter bar: 2px vertical stripe.
+                self.rect_instances.push(RoundedRectInstance {
+                    rect: [pane_x, block_y, 2.0 * sf, block_h],
+                    color: gutter_color,
+                    radius: sf,
+                    border_width: 0.0,
+                    _pad: [0.0; 2],
+                });
+
+                // Exit code indicator: small pill on last visible row, 2 cells from right.
+                let last_vp = (output_end - h + d).clamp(0, r - 1) as f32;
+                let ind_y = pane_y + last_vp * cell_h + (cell_h - cell_h * 0.6) * 0.5;
+                let ind_h = cell_h * 0.6;
+                let ind_w = cell_w * 1.2;
+                let ind_x = pane_x + pane_w - 2.0 * cell_w - ind_w * 0.5;
+                let ind_color = if block.exit_code == Some(0) {
+                    success_color
+                } else {
+                    error_color
+                };
+                self.rect_instances.push(RoundedRectInstance {
+                    rect: [ind_x, ind_y, ind_w, ind_h],
+                    color: ind_color,
+                    radius: sf * 3.0,
+                    border_width: 0.0,
+                    _pad: [0.0; 2],
+                });
+            }
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn push_shaped_row(
         &mut self,
@@ -830,7 +930,7 @@ impl RenderContext {
         }
 
         // ── Colors (Dracula Pro palette) ─────────────────────────────────────
-        let actual_panel_bg = config.llm.ui.background;
+        let actual_panel_bg = config.colors.background;
         let panel_bg = [0.0; 4]; // transparent
 
         let user_fg = config.llm.ui.user_fg;
@@ -1815,7 +1915,7 @@ impl RenderContext {
             let border = 1.0 * self.scale_factor;
 
             // Subtle card: slightly lighter than the panel bg, not the purple selection color.
-            let b = config.llm.ui.background;
+            let b = config.colors.background;
             let card_bg = [
                 (b[0] + 0.06).min(1.0),
                 (b[1] + 0.06).min(1.0),

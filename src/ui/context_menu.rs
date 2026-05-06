@@ -7,6 +7,16 @@ pub enum ContextAction {
     SendToChat,
     /// Copy the last shell command to the clipboard.
     CopyLastCommand,
+    /// Open a hovered URL or file path with the system default handler.
+    OpenLink(String),
+    /// Copy a hovered URL or file path to the clipboard.
+    CopyLink(String),
+    /// Copy the output text of a command block (terminal_id, block_id).
+    CopyBlockOutput(usize, usize),
+    /// Re-run the command of a block by writing it to the PTY.
+    ReRunCommand(String),
+    /// Remove a command block from the block manager (terminal_id, block_id).
+    ClearBlock(usize, usize),
     /// Non-interactive separator row.
     Separator,
     /// Non-interactive informational label (displays text, no action).
@@ -109,6 +119,46 @@ impl ContextMenu {
         self.hovered = None;
     }
 
+    /// Open a link-specific context menu at (col, row).
+    /// Shows Open Link + Copy Link at the top, followed by the standard items.
+    pub fn open_with_link(
+        &mut self,
+        link_text: String,
+        col: usize,
+        row: usize,
+        term_cols: usize,
+        term_rows: usize,
+    ) {
+        self.items = vec![
+            ContextMenuItem {
+                label: "Open Link".into(),
+                keybind: None,
+                action: ContextAction::OpenLink(link_text.clone()),
+            },
+            ContextMenuItem {
+                label: "Copy Link".into(),
+                keybind: None,
+                action: ContextAction::CopyLink(link_text),
+            },
+            ContextMenuItem {
+                label: String::new(),
+                keybind: None,
+                action: ContextAction::Separator,
+            },
+            ContextMenuItem {
+                label: "Copy".into(),
+                keybind: Some("Cmd+C".into()),
+                action: ContextAction::Copy,
+            },
+            ContextMenuItem {
+                label: "Paste".into(),
+                keybind: Some("Cmd+V".into()),
+                action: ContextAction::Paste,
+            },
+        ];
+        self.open(col, row, term_cols, term_rows);
+    }
+
     /// Open an exit-code info popup just above the status bar.
     ///
     /// `exit_code`: the non-zero code to display.
@@ -181,6 +231,80 @@ impl ContextMenu {
         self.row = row;
         self.hovered = None;
         self.visible = true;
+    }
+
+    /// Open a block-specific context menu at (col, row).
+    /// Shows Copy Output, Re-run Command, Clear Block at the top.
+    #[allow(clippy::too_many_arguments)]
+    pub fn open_with_block(
+        &mut self,
+        terminal_id: usize,
+        block_id: usize,
+        command_text: String,
+        col: usize,
+        row: usize,
+        term_cols: usize,
+        term_rows: usize,
+    ) {
+        let max_label = CONTEXT_MENU_WIDTH.saturating_sub(4);
+        let cmd_display = if command_text.is_empty() {
+            "(no command)".to_string()
+        } else {
+            let chars: Vec<char> = command_text.chars().collect();
+            if chars.len() > max_label {
+                format!(
+                    "{}…",
+                    chars[..max_label.saturating_sub(1)]
+                        .iter()
+                        .collect::<String>()
+                )
+            } else {
+                command_text.clone()
+            }
+        };
+        self.items = vec![
+            ContextMenuItem {
+                label: cmd_display,
+                keybind: None,
+                action: ContextAction::Label,
+            },
+            ContextMenuItem {
+                label: String::new(),
+                keybind: None,
+                action: ContextAction::Separator,
+            },
+            ContextMenuItem {
+                label: "Copy Output".into(),
+                keybind: Some("Leader y".into()),
+                action: ContextAction::CopyBlockOutput(terminal_id, block_id),
+            },
+            ContextMenuItem {
+                label: "Re-run Command".into(),
+                keybind: Some("Leader r".into()),
+                action: ContextAction::ReRunCommand(command_text),
+            },
+            ContextMenuItem {
+                label: "Clear Block".into(),
+                keybind: None,
+                action: ContextAction::ClearBlock(terminal_id, block_id),
+            },
+            ContextMenuItem {
+                label: String::new(),
+                keybind: None,
+                action: ContextAction::Separator,
+            },
+            ContextMenuItem {
+                label: "Copy".into(),
+                keybind: Some("Cmd+C".into()),
+                action: ContextAction::Copy,
+            },
+            ContextMenuItem {
+                label: "Paste".into(),
+                keybind: Some("Cmd+V".into()),
+                action: ContextAction::Paste,
+            },
+        ];
+        self.open(col, row, term_cols, term_rows);
     }
 
     /// Given a terminal cell (col, row), return the action for that item if it's inside the menu.

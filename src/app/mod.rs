@@ -13,6 +13,7 @@ use crate::config::watcher::ConfigWatcher;
 use crate::config::{self, Config};
 use crate::ui::{ContextAction, Rect, SidebarState};
 
+mod hover_link;
 mod input;
 mod menu;
 mod mux;
@@ -111,6 +112,11 @@ pub struct App {
     /// Rebuilt lazily on first sidebar frame and after each MCP reload.
     mcp_tools_cache: Vec<(String, Vec<String>)>,
     mcp_tools_dirty: bool,
+
+    /// Terminal cell currently under the cursor that contains a clickable link (H-1).
+    hover_link: Option<hover_link::HoverLink>,
+    /// Block (terminal_id, block_id) whose gutter the cursor is hovering (B-4).
+    hover_block: Option<(usize, usize)>,
 }
 
 impl App {
@@ -158,6 +164,8 @@ impl App {
             info_overlay: crate::ui::InfoOverlay::new(),
             mcp_tools_cache: Vec::new(),
             mcp_tools_dirty: true,
+            hover_link: None,
+            hover_block: None,
         }
     }
 
@@ -219,6 +227,39 @@ impl App {
     /// Call on PTY data arrival or terminal focus change — NOT every frame.
     fn refresh_status_cache(&mut self) {
         self.cached_cwd = self.mux.active_cwd();
+    }
+
+    /// B-4: copy the output text of `hover_block` to the clipboard.
+    fn copy_hover_block_output(&mut self) {
+        if let Some((tid, bid)) = self.hover_block {
+            if let Some(text) = self.mux.block_output_text(tid, bid) {
+                if !text.is_empty() {
+                    std::thread::spawn(move || {
+                        let _ = arboard::Clipboard::new().and_then(|mut cb| cb.set_text(text));
+                    });
+                }
+            }
+        }
+    }
+
+    /// B-4: re-run the command of `hover_block` by writing it to the PTY.
+    fn rerun_hover_block_command(&mut self) {
+        if let Some((tid, bid)) = self.hover_block {
+            let cmd = self
+                .mux
+                .terminals
+                .get(tid)
+                .and_then(|t| t.as_ref())
+                .and_then(|t| t.block_manager.find_block_by_id(bid))
+                .filter(|b| !b.command_text.is_empty())
+                .map(|b| b.command_text.clone());
+            if let Some(cmd_text) = cmd {
+                if let Some(terminal) = self.mux.terminals.get_mut(tid).and_then(|t| t.as_mut()) {
+                    let input = format!("{}\n", cmd_text);
+                    terminal.write_input(input.as_bytes());
+                }
+            }
+        }
     }
 
     /// Read shell context for a specific terminal and store it by terminal_id.
@@ -648,6 +689,42 @@ impl App {
         x >= panel_left - cell_w && x < panel_left + cell_w
     }
 
+    /// Return `(terminal_id, block_id)` if the cursor (physical pixels) is hovering
+    /// over the left gutter (first cell column) of a completed command block.
+    fn block_at_cursor(&self, x: f32, y: f32) -> Option<(usize, usize)> {
+        let rc = self.render_ctx.as_ref()?;
+        let cell_w = rc.shaper.cell_width;
+        let cell_h = rc.shaper.cell_height;
+
+        for info in &rc.pane_infos {
+            let pane = info.pane_rect;
+            // Gutter zone: first cell-width of the pane.
+            if x < pane.x || x >= pane.x + cell_w {
+                continue;
+            }
+            if y < pane.y || y >= pane.y + pane.h {
+                continue;
+            }
+
+            let Some(terminal) = self
+                .mux
+                .terminals
+                .get(info.terminal_id)
+                .and_then(|t| t.as_ref())
+            else {
+                continue;
+            };
+            let (display_offset, history_size) = terminal.scrollback_info();
+            let vp_row = ((y - pane.y) / cell_h) as i64;
+            let abs_row = vp_row + history_size as i64 - display_offset as i64;
+
+            if let Some(block) = terminal.block_manager.block_at_absolute_row(abs_row) {
+                return Some((info.terminal_id, block.id));
+            }
+        }
+        None
+    }
+
     fn mouse_in_panel(&self) -> bool {
         if !self.ui.is_panel_visible() {
             return false;
@@ -1056,6 +1133,7 @@ impl App {
 
         self.check_config_reload();
         let (data_ids, exited) = self.mux.poll_pty_events();
+        self.mux.apply_osc133_events();
         if self.close_exited_terminals(exited) {
             event_loop.exit();
             return;
@@ -1149,6 +1227,25 @@ impl App {
         if self.mcp_tools_dirty {
             self.rebuild_mcp_cache();
         }
+        // H-1: pre-compute link underline rect before the mutable render_ctx borrow.
+        let link_underline_rect: Option<crate::renderer::rounded_rect::RoundedRectInstance> =
+            self.hover_link.as_ref().and_then(|link| {
+                let scale = self.render_ctx.as_ref()?.scale_factor;
+                let cw = cell_w as f32;
+                let ch = cell_h as f32;
+                let (col_off, row_off) = self.mux.focused_pane_offset(viewport, cw, ch);
+                let pad_x = self.config.window.padding.left as f32 + sidebar_px_snapshot;
+                let x = pad_x + (col_off + link.col_start) as f32 * cw;
+                let y = sb_pad_y + (row_off + link.row) as f32 * ch + ch - 1.5 * scale;
+                let w = (link.col_end - link.col_start) as f32 * cw;
+                Some(crate::renderer::rounded_rect::RoundedRectInstance {
+                    rect: [x, y, w, 1.5 * scale],
+                    color: self.config.colors.ui_accent,
+                    radius: 0.0,
+                    border_width: 0.0,
+                    _pad: [0.0; 2],
+                })
+            });
 
         if let Some(rc) = &mut self.render_ctx {
             // Advance epoch once per frame so LRU eviction can age unused entries.
@@ -1315,6 +1412,19 @@ impl App {
                 if let Some(focused) = pane_infos.iter().find(|p| p.focused) {
                     rc.build_focus_border(focused, &self.config.colors);
                 }
+            }
+
+            // B-3/B-4: OSC 133 command block backgrounds, gutter bars, exit indicators.
+            rc.build_block_instances(
+                &pane_infos,
+                &self.mux,
+                &self.config.colors,
+                self.hover_block,
+            );
+
+            // H-1: push pre-computed link underline rect.
+            if let Some(rect) = link_underline_rect {
+                rc.rect_instances.push(rect);
             }
 
             rc.pane_infos = pane_infos;
@@ -1796,6 +1906,28 @@ impl App {
             self.request_redraw();
             return;
         }
+        // B-4: leader+y / leader+r — block operations requiring App-level hover state.
+        if event.state == ElementState::Pressed && self.input.leader_active {
+            if let winit::keyboard::Key::Character(s) = &event.logical_key {
+                match s.as_str() {
+                    "y" => {
+                        self.input.leader_active = false;
+                        self.input.leader_deadline = None;
+                        self.copy_hover_block_output();
+                        self.request_redraw();
+                        return;
+                    }
+                    "r" => {
+                        self.input.leader_active = false;
+                        self.input.leader_deadline = None;
+                        self.rerun_hover_block_command();
+                        self.request_redraw();
+                        return;
+                    }
+                    _ => {}
+                }
+            }
+        }
         let panel_was_visible = self.ui.is_panel_visible();
         let tab_count_before = self.mux.tabs.tab_count();
         let tab_idx_before = self.mux.active_tab_index();
@@ -1919,6 +2051,43 @@ impl App {
             let near = self.near_panel_left_edge(position.x);
             if near != self.sidebar.panel_resize_hover {
                 self.sidebar.panel_resize_hover = near;
+                self.request_redraw();
+            }
+        }
+        // H-1: hover link detection — only in terminal area (not panel/sidebar/menu).
+        {
+            let in_terminal =
+                !self.mouse_in_panel() && !self.sidebar.visible && !self.ui.context_menu.visible;
+            let new_link = if in_terminal {
+                let row_text = self.mux.viewport_row_text(row);
+                hover_link::scan_link_at(&row_text, col).map(|(cs, ce, kind, text)| {
+                    hover_link::HoverLink {
+                        row,
+                        col_start: cs,
+                        col_end: ce,
+                        kind,
+                        text,
+                    }
+                })
+            } else {
+                None
+            };
+            if new_link != self.hover_link {
+                self.hover_link = new_link;
+                self.request_redraw();
+            }
+        }
+        // B-4: block gutter hover detection.
+        {
+            let in_terminal =
+                !self.mouse_in_panel() && !self.sidebar.visible && !self.ui.context_menu.visible;
+            let new_hover_block = if in_terminal {
+                self.block_at_cursor(position.x as f32, position.y as f32)
+            } else {
+                None
+            };
+            if new_hover_block != self.hover_block {
+                self.hover_block = new_hover_block;
                 self.request_redraw();
             }
         }
@@ -2083,6 +2252,53 @@ impl App {
                                         });
                                     }
                                 }
+                            }
+                            ContextAction::OpenLink(url) => {
+                                let open_arg = if url.starts_with('/')
+                                    || url.starts_with("./")
+                                    || url.starts_with("../")
+                                {
+                                    hover_link::path_for_open(&url).to_string()
+                                } else {
+                                    url
+                                };
+                                std::thread::spawn(move || {
+                                    let _ =
+                                        std::process::Command::new("open").arg(&open_arg).spawn();
+                                });
+                            }
+                            ContextAction::CopyLink(url) => {
+                                std::thread::spawn(move || {
+                                    let _ = arboard::Clipboard::new()
+                                        .and_then(|mut cb| cb.set_text(url));
+                                });
+                            }
+                            // B-4: block context menu actions.
+                            ContextAction::CopyBlockOutput(tid, bid) => {
+                                if let Some(text) = self.mux.block_output_text(tid, bid) {
+                                    if !text.is_empty() {
+                                        std::thread::spawn(move || {
+                                            let _ = arboard::Clipboard::new()
+                                                .and_then(|mut cb| cb.set_text(text));
+                                        });
+                                    }
+                                }
+                            }
+                            ContextAction::ReRunCommand(cmd) => {
+                                if !cmd.is_empty() {
+                                    if let Some(terminal) = self.mux.active_terminal() {
+                                        let input = format!("{}\n", cmd);
+                                        terminal.write_input(input.as_bytes());
+                                    }
+                                }
+                            }
+                            ContextAction::ClearBlock(tid, bid) => {
+                                if let Some(terminal) =
+                                    self.mux.terminals.get_mut(tid).and_then(|t| t.as_mut())
+                                {
+                                    terminal.block_manager.remove_block(bid);
+                                }
+                                self.hover_block = None;
                             }
                             ContextAction::Separator | ContextAction::Label => {}
                         }
@@ -2379,6 +2595,30 @@ impl App {
                     self.input.mouse_left_pressed = true;
                     self.input.mouse_dragged = false;
                     self.input.mouse_press_pos = self.input.mouse_pos;
+                    // H-1: open hovered link on click (takes priority over selection).
+                    if let Some(link) = self.hover_link.clone() {
+                        if !in_panel
+                            && row == link.row
+                            && col >= link.col_start
+                            && col < link.col_end
+                        {
+                            let text = link.text.clone();
+                            let open_arg = match link.kind {
+                                hover_link::HoverLinkKind::Path => {
+                                    hover_link::path_for_open(&text).to_string()
+                                }
+                                hover_link::HoverLinkKind::Url => text,
+                            };
+                            std::thread::spawn(move || {
+                                let _ = std::process::Command::new("open").arg(&open_arg).spawn();
+                            });
+                            if let Some(terminal) = self.mux.active_terminal() {
+                                terminal.clear_selection();
+                            }
+                            self.request_redraw();
+                            return;
+                        }
+                    }
                     if !self
                         .mux
                         .active_terminal()
@@ -2436,7 +2676,32 @@ impl App {
                     self.input.send_mouse_report(2, col, row, true, &self.mux);
                 } else {
                     let (term_cols, term_rows) = self.mux.active_terminal_size();
-                    self.ui.context_menu.open(col, row, term_cols, term_rows);
+                    // H-1: show link-specific context menu when right-clicking a link.
+                    let link_under_cursor = self
+                        .hover_link
+                        .as_ref()
+                        .filter(|l| row == l.row && col >= l.col_start && col < l.col_end);
+                    // B-4: show block context menu when right-clicking a block gutter.
+                    if let Some(link) = link_under_cursor {
+                        let text = link.text.clone();
+                        self.ui
+                            .context_menu
+                            .open_with_link(text, col, row, term_cols, term_rows);
+                    } else if let Some((tid, bid)) = self.hover_block {
+                        let cmd = self
+                            .mux
+                            .terminals
+                            .get(tid)
+                            .and_then(|t| t.as_ref())
+                            .and_then(|t| t.block_manager.find_block_by_id(bid))
+                            .map(|b| b.command_text.clone())
+                            .unwrap_or_default();
+                        self.ui
+                            .context_menu
+                            .open_with_block(tid, bid, cmd, col, row, term_cols, term_rows);
+                    } else {
+                        self.ui.context_menu.open(col, row, term_cols, term_rows);
+                    }
                 }
             }
             (MouseButton::Right, ElementState::Released) => {
@@ -2527,6 +2792,7 @@ impl App {
 impl ApplicationHandler<()> for App {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, _event: ()) {
         let (data_ids, exited) = self.mux.poll_pty_events();
+        self.mux.apply_osc133_events();
         if self.close_exited_terminals(exited) {
             event_loop.exit();
             return;
@@ -2730,6 +2996,7 @@ impl ApplicationHandler<()> for App {
         // This catches batches that slipped in after user_event drained the channel,
         // and keeps last_pty_activity accurate for coalescing.
         let (data_ids, exited) = self.mux.poll_pty_events();
+        self.mux.apply_osc133_events();
         if self.close_exited_terminals(exited) {
             event_loop.exit();
             return;

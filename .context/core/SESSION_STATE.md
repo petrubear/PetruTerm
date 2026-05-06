@@ -1,16 +1,107 @@
 # Session State
 
 **Last Updated:** 2026-05-05
-**Session Focus:** Auditoría Waves 3 y 4 completadas
+**Session Focus:** Phase 7 — B-4 completa
 
-## Branch: `audit/code-review`
+## Branch: `master` (siguiente: `feat/phase-7`)
 
 ## Estado actual
 
-**Phase 1–3 + 3.5 + A + 3.6 + B + C + D + Phase 5 G-0/G-1/G-2/G-3 + G-2-overlay COMPLETE.**
-**Phase 6 Warp UI: W-1 W-2 W-3 W-4 W-5 W-6 W-7 W-8 COMPLETAS. Phase 6 COMPLETA.**
+**Phases 1–6 + Auditoría COMPLETAS. master limpio.**
 **Sin deuda técnica abierta. Diferidos: TD-PERF-03/05 (solo GPUs discretas).**
-**Todos los benches criterion funcionan. Nota "benches bloqueados" era incorrecta.**
+
+## Esta sesión (2026-05-05) — Phase 7: H-1 + B-1 + B-2 + B-3 + B-4 COMPLETAS
+
+### B-4: Operaciones sobre bloques — COMPLETA
+**Archivos modificados:**
+- `src/term/blocks.rs`: `block_at_absolute_row`, `find_block_by_id`, `remove_block` añadidos a `BlockManager`.
+- `src/app/mux.rs`: `block_output_text(terminal_id, block_id)` — extrae texto del grid entre `output_start` y `output_end` del bloque.
+- `src/ui/context_menu.rs`: `ContextAction::CopyBlockOutput(tid, bid)`, `ReRunCommand(String)`, `ClearBlock(tid, bid)` + método `open_with_block(...)`.
+- `src/app/mod.rs`:
+  - Campo `hover_block: Option<(usize, usize)>`.
+  - `block_at_cursor(x, y)` — detecta si el mouse está en la zona gutter (primer `cell_w` px) de un pane y hay un bloque en esa fila.
+  - `copy_hover_block_output()` / `rerun_hover_block_command()` — helpers para leader y/r.
+  - `handle_mouse_motion`: detección de hover de bloque tras detección de hover link.
+  - `handle_keyboard`: intercepción de `Leader+y` y `Leader+r` antes de `input.handle_key_input`.
+  - Right-click: si `hover_block` está activo → `open_with_block` en lugar del menú estándar.
+  - Context menu dispatch: arms para `CopyBlockOutput`, `ReRunCommand`, `ClearBlock`.
+- `src/app/renderer.rs`: `build_block_instances` acepta `hover_block: Option<(usize, usize)>`. El bloque hovered usa `ui_surface_hover` al 14% alpha en vez del 6% estándar.
+
+**Decisiones:**
+- Gutter hover usa el primer `cell_w` píxeles del pane (más grande que los 2px de la barra, mejor UX).
+- `block_output_text` usa `absolute_row - history_size` como índice de grid (`Line(idx)`), estable bajo scrolling.
+- `Leader y` / `Leader r` interceptados en `App::handle_keyboard` antes de delegar a `input::handle_key_input` porque necesitan acceso a `self.hover_block` (estado del App, no del input handler).
+
+### B-3: Render visual de bloques — COMPLETA
+**Archivos modificados:**
+- `src/app/renderer.rs`: nuevo método `build_block_instances(pane_infos, mux, colors)`.
+  - Itera bloques visibles via `blocks_in_viewport` de cada terminal.
+  - Background rect: `ui_surface` al 6% alpha, ancho completo del pane.
+  - Left gutter: 2px × altura del bloque, `ui_muted`, radius 1px.
+  - Exit indicator: pill 1.2×0.6 celdas, `ui_success` verde (exit=0) / rojo (exit≠0),
+    posicionado 2 celdas del borde derecho, centrado verticalmente en la última fila.
+- `src/app/mod.rs`: llamada a `build_block_instances` después del focus border y antes del link underline.
+
+**Coordenadas:**
+- `block_y = pane_rect.y + vp_start * cell_h` (pane_rect ya en pixel coords absolutos).
+- Conversión: `vp_start = (absolute_row - history_size + display_offset).clamp(0, rows-1)`.
+
+## Esta sesión (2026-05-05) — Phase 7: H-1 + B-1 COMPLETAS
+
+### B-2: Block manager por pane — COMPLETA
+**Archivos nuevos/modificados:**
+- `src/term/blocks.rs` (nuevo): `Block` + `BlockManager`.
+  - Rows almacenados como `absolute_row = history_size + cursor_vp - display_offset` — estable bajo scrolling.
+  - `on_marker(marker, absolute_row, command_text)` — maneja A/B/C/D.
+  - `blocks_in_viewport(history_size, display_offset, rows) -> Vec<&Block>` — solo bloques completos.
+  - `evict_old(history_size)` — limpieza de bloques fuera del scrollback.
+  - 5 unit tests.
+- `src/term/mod.rs`: `pub mod blocks`, re-export `BlockManager`, campo `block_manager: BlockManager` en `Terminal`, inicializado en `Terminal::new`.
+- `src/app/mux.rs`: `Mux::apply_osc133_events()` — drena `osc133_events`, captura `absolute_row` via `renderable_content()`, captura `command_text` al `CommandStart`, llama `block_manager.on_marker`.
+- `src/app/mod.rs`: `apply_osc133_events()` llamado en los 3 call sites de `poll_pty_events()`.
+
+**Decisión arquitectónica:**
+Rows guardados como `history_size + viewport_cursor_row - display_offset`. Permite que los bloques sobrevivan scrolling: al avanzar el historial, `history_size` crece en la misma cantidad que el cursor se desplaza, manteniendo el `absolute_row` estable. Conversión inversa: `viewport_row = absolute_row - history_size + display_offset`.
+
+## Esta sesión (2026-05-05) — Phase 7: H-1 + B-1 COMPLETAS
+
+### B-1: OSC 133 parser — COMPLETA
+**Archivos nuevos/modificados:**
+- `src/term/osc133.rs` (nuevo): `Osc133Marker` enum + `Osc133Scanner` state machine.
+  Reconoce `ESC]133;A/B/C/D` con BEL o ST terminator. 5 unit tests.
+- `src/term/pty.rs` (reescrito): PTY custom con `libc::openpty`. Reader thread escanea
+  bytes raw para OSC 133 antes de `vte::ansi::Processor::advance()`. `PtyEventProxy`
+  usa raw fd para PtyWrite (no más `OnceLock<Notifier>`). Nuevo `PtyEvent::Osc133`.
+- `src/term/mod.rs`: `Terminal::new()` delega creación de Term a `Pty::spawn()`.
+- `src/app/mux.rs`: `Mux::osc133_events: Vec<(usize, Osc133Marker)>` acumula
+  markers por ciclo de poll. Listo para B-2 (BlockManager).
+
+**Decisión arquitectónica clave:**
+`alacritty_terminal` 0.25.1 no parsea OSC 133 (cae en "unhandled osc_dispatch").
+La única forma de interceptar es a nivel de bytes crudos antes del VTE. Esto requirió
+reemplazar `PtyEventLoop` con un loop propio usando `libc::openpty` + reader thread.
+
+## Esta sesión (2026-05-05) — Phase 7: H-1 COMPLETA
+
+### Chat panel background (fix menor)
+- `renderer.rs:833` y `renderer.rs:1818`: `config.llm.ui.background` → `config.colors.background`
+
+### H-1: Hover links — COMPLETA
+**Archivos nuevos/modificados:**
+- `src/app/hover_link.rs` (nuevo): `HoverLink`, `HoverLinkKind`, `scan_link_at`, `path_for_open`
+- `src/app/mux.rs`: `viewport_row_text(row)` — lee texto de fila visible respetando display_offset
+- `src/app/mod.rs`: campo `hover_link: Option<HoverLink>`, detección en `handle_mouse_motion`,
+  apertura en `handle_mouse_button` Left, context menu en Right, underline rect en render
+- `src/ui/context_menu.rs`: `ContextAction::OpenLink(String)`, `ContextAction::CopyLink(String)`,
+  método `open_with_link`
+
+**Comportamiento:**
+- Hover sobre URL/path/stack-trace → underline 1.5px en `ui_accent`
+- Click izquierdo → `open <url_or_path>` (macOS), prioridad sobre selección
+- Click derecho → context menu con "Open Link" + "Copy Link" en la parte superior
+- Detección solo en área de terminal (no panel, no sidebar, no context menu visible)
+- `path_for_open` stripea `:line:col` antes de llamar a `open`
+- 5 unit tests en `src/app/hover_link.rs`
 
 ## Esta sesión (2026-05-05) — Wave 4 de auditoría
 

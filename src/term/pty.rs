@@ -130,8 +130,8 @@ impl Pty {
         term_size: &crate::term::TermSize,
     ) -> Result<(Self, Arc<FairMutex<Term<PtyEventProxy>>>)> {
         // ── 1. Open PTY pair ───────────────────────────────────────────────
-        let (master_fd, slave_fd) = unsafe { open_pty(cols, rows, cell_width, cell_height) }
-            .context("openpty failed")?;
+        let (master_fd, slave_fd) =
+            unsafe { open_pty(cols, rows, cell_width, cell_height) }.context("openpty failed")?;
 
         // ── 2. Set UTF-8 mode on master ───────────────────────────────────
         #[cfg(target_os = "macos")]
@@ -158,8 +158,7 @@ impl Pty {
         let term = Arc::new(FairMutex::new(Term::new(term_config, term_size, proxy)));
 
         // ── 6. Spawn shell process ────────────────────────────────────────
-        let child =
-            unsafe { spawn_shell(config, slave_fd, master_fd, working_directory)? };
+        let child = unsafe { spawn_shell(config, slave_fd, master_fd, working_directory)? };
         let child_pid = child.id();
         let child_pid_libc = child_pid as libc::pid_t;
 
@@ -238,8 +237,8 @@ impl Pty {
         let ws = libc::winsize {
             ws_col: cols,
             ws_row: rows,
-            ws_xpixel: (cell_width as u16).saturating_mul(cols),
-            ws_ypixel: (cell_height as u16).saturating_mul(rows),
+            ws_xpixel: cell_width.saturating_mul(cols),
+            ws_ypixel: cell_height.saturating_mul(rows),
         };
         unsafe {
             libc::ioctl(self.master_fd, libc::TIOCSWINSZ as libc::c_ulong, &ws);
@@ -288,8 +287,8 @@ unsafe fn open_pty(
     let ws = libc::winsize {
         ws_col: cols,
         ws_row: rows,
-        ws_xpixel: (cell_width as u16).saturating_mul(cols),
-        ws_ypixel: (cell_height as u16).saturating_mul(rows),
+        ws_xpixel: cell_width.saturating_mul(cols),
+        ws_ypixel: cell_height.saturating_mul(rows),
     };
     let mut master: libc::c_int = -1;
     let mut slave: libc::c_int = -1;
@@ -326,7 +325,10 @@ unsafe fn spawn_shell(
     let stdin_fd = libc::dup(slave_fd);
     let stdout_fd = libc::dup(slave_fd);
     if stdin_fd < 0 || stdout_fd < 0 {
-        return Err(anyhow::anyhow!("dup failed: {}", io::Error::last_os_error()));
+        return Err(anyhow::anyhow!(
+            "dup failed: {}",
+            io::Error::last_os_error()
+        ));
     }
     cmd.stdin(Stdio::from_raw_fd(stdin_fd));
     cmd.stdout(Stdio::from_raw_fd(stdout_fd));
@@ -388,9 +390,7 @@ fn reader_loop(
 
     loop {
         // Blocking read from PTY master.
-        let n = unsafe {
-            libc::read(master_fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len())
-        };
+        let n = unsafe { libc::read(master_fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
 
         if n <= 0 {
             // 0 = EOF, -1 = EIO (shell exited) or other error.
@@ -418,4 +418,3 @@ fn reader_loop(
     }
     log::debug!("PTY reader thread exiting");
 }
-
