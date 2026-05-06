@@ -569,6 +569,20 @@ impl InputHandler {
                 }
                 return;
             }
+            // ── Inline agent action confirm ───────────────────────────────────
+            if matches!(
+                ui.panel().state,
+                crate::llm::chat_panel::PanelState::ConfirmAction(_)
+            ) {
+                match &event.logical_key {
+                    Key::Character(s) if s.as_str() == "y" => ui.confirm_action_yes(),
+                    Key::Named(NamedKey::Enter) => ui.confirm_action_yes(),
+                    Key::Character(s) if s.as_str() == "n" => ui.confirm_action_no(),
+                    Key::Named(NamedKey::Escape) => ui.confirm_action_no(),
+                    _ => {}
+                }
+                return;
+            }
 
             // ── File picker mode ──────────────────────────────────────────────
             if ui.file_picker_focused {

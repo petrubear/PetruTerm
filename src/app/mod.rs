@@ -417,6 +417,65 @@ impl App {
         }
     }
 
+    /// Dispatch a confirmed inline agent action (A-3).
+    fn flush_pending_agent_action(&mut self) {
+        use crate::llm::agent_action::AgentAction;
+        use crate::llm::ChatMessage;
+        let Some(action) = self.ui.pending_agent_action.take() else {
+            return;
+        };
+        match action {
+            AgentAction::RunCommand { cmd, .. } => {
+                let note = format!("Running: `{cmd}`");
+                if let Some(terminal) = self.mux.active_terminal() {
+                    let mut data = cmd.into_bytes();
+                    data.push(b'\n');
+                    terminal.write_input(&data);
+                }
+                let panel = self.ui.panel_mut();
+                panel.messages.push(ChatMessage::assistant(note));
+                panel.dirty = true;
+            }
+            AgentAction::OpenFile { path } => {
+                let abs = self
+                    .mux
+                    .active_cwd()
+                    .or_else(|| std::env::current_dir().ok())
+                    .unwrap_or_default()
+                    .join(&path);
+                let p = if abs.exists() {
+                    abs.to_string_lossy().into_owned()
+                } else {
+                    path.clone()
+                };
+                let _ = std::process::Command::new("open").arg(&p).spawn();
+                let note = format!("Opening: `{path}`");
+                let panel = self.ui.panel_mut();
+                panel.messages.push(ChatMessage::assistant(note));
+                panel.dirty = true;
+            }
+            AgentAction::ExplainOutput { last_n_lines } => {
+                let output = self.mux.last_terminal_lines(last_n_lines);
+                if output.is_empty() {
+                    return;
+                }
+                if !self.ui.is_panel_visible() {
+                    self.ui.panel_mut().open();
+                    self.resize_terminals_for_panel();
+                }
+                self.ui.panel_focused = true;
+                self.ui.panel_mut().input =
+                    format!("Explain this terminal output:\n```\n{output}\n```");
+                let cwd = self
+                    .mux
+                    .active_cwd()
+                    .or_else(|| std::env::current_dir().ok())
+                    .unwrap_or_default();
+                self.ui.submit_ai_query(self.wakeup_proxy.clone(), cwd);
+            }
+        }
+    }
+
     /// Write clipboard text from an async paste request to the active terminal (TD-PERF-15).
     fn flush_pending_paste(&mut self) {
         if let Some(text) = self.ui.poll_pending_paste() {
@@ -1197,6 +1256,7 @@ impl App {
         let had_ai = panel_ai.changed;
         let had_ai_block = block_ai.changed;
         self.flush_pending_pty_run();
+        self.flush_pending_agent_action();
         self.flush_pending_paste();
         self.ui.poll_file_scan();
         self.ui.poll_branch_scan();
@@ -2867,6 +2927,7 @@ impl ApplicationHandler<()> for App {
         }
         let ai_needs_redraw = panel_ai.changed || block_ai.changed;
         self.flush_pending_pty_run();
+        self.flush_pending_agent_action();
         self.flush_pending_paste();
         let scan_ready = self.ui.poll_file_scan();
         let branch_ready = self.ui.poll_branch_scan();
@@ -3074,6 +3135,7 @@ impl ApplicationHandler<()> for App {
             self.request_redraw();
         }
         self.flush_pending_pty_run();
+        self.flush_pending_agent_action();
         self.flush_pending_paste();
 
         // ── Battery status poll (every 30 s, or immediately on first frame) ─

@@ -1,3 +1,4 @@
+pub mod agent_action;
 pub mod ai_block;
 pub mod chat_panel;
 pub mod copilot;

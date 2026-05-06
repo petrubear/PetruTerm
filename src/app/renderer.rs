@@ -910,6 +910,7 @@ impl RenderContext {
         pad_x: f32,
         pad_y: f32,
     ) {
+        use crate::llm::agent_action::AgentAction;
         use crate::llm::chat_panel::{ConfirmDisplay, PanelState, MAX_FILE_ROWS};
         use crate::llm::diff::DiffKind;
         use std::fmt::Write as _;
@@ -1140,6 +1141,86 @@ impl RenderContext {
                 }
                 None => {
                     for row in 1..sep_row {
+                        self.push_shaped_row("", sep_fg, panel_bg, row, co, panel_cols, font);
+                    }
+                }
+            }
+        } else if let PanelState::ConfirmAction(action) = &panel.state {
+            // ── Inline action confirm card ────────────────────────────────────
+            let accent = config.colors.ui_accent;
+            let muted = config.colors.ui_muted;
+            let ok_fg = config.colors.ui_success;
+            match action {
+                AgentAction::RunCommand { cmd, explanation } => {
+                    self.push_shaped_row(
+                        "  Run this command?",
+                        border_fg,
+                        panel_bg,
+                        1,
+                        co,
+                        panel_cols,
+                        font,
+                    );
+                    let max_cmd = panel_cols.saturating_sub(5);
+                    let cmd_trunc = cmd
+                        .char_indices()
+                        .nth(max_cmd)
+                        .map(|(i, _)| &cmd[..i])
+                        .unwrap_or(cmd.as_str());
+                    fmt_buf.clear();
+                    fmt_buf.push_str("  $ ");
+                    fmt_buf.push_str(cmd_trunc);
+                    self.push_shaped_row(&fmt_buf, ok_fg, panel_bg, 2, co, panel_cols, font);
+                    if !explanation.is_empty() {
+                        let max_ex = panel_cols.saturating_sub(4);
+                        let ex_trunc = explanation
+                            .char_indices()
+                            .nth(max_ex)
+                            .map(|(i, _)| &explanation[..i])
+                            .unwrap_or(explanation.as_str());
+                        fmt_buf.clear();
+                        fmt_buf.push_str("  ");
+                        fmt_buf.push_str(ex_trunc);
+                        self.push_shaped_row(&fmt_buf, muted, panel_bg, 3, co, panel_cols, font);
+                        for row in 4..sep_row {
+                            self.push_shaped_row("", sep_fg, panel_bg, row, co, panel_cols, font);
+                        }
+                    } else {
+                        for row in 3..sep_row {
+                            self.push_shaped_row("", sep_fg, panel_bg, row, co, panel_cols, font);
+                        }
+                    }
+                }
+                AgentAction::OpenFile { path } => {
+                    self.push_shaped_row(
+                        "  Open file?",
+                        border_fg,
+                        panel_bg,
+                        1,
+                        co,
+                        panel_cols,
+                        font,
+                    );
+                    let max_p = panel_cols.saturating_sub(4);
+                    let p_trunc = path
+                        .char_indices()
+                        .nth(max_p)
+                        .map(|(i, _)| &path[..i])
+                        .unwrap_or(path.as_str());
+                    fmt_buf.clear();
+                    fmt_buf.push_str("  ");
+                    fmt_buf.push_str(p_trunc);
+                    self.push_shaped_row(&fmt_buf, accent, panel_bg, 2, co, panel_cols, font);
+                    for row in 3..sep_row {
+                        self.push_shaped_row("", sep_fg, panel_bg, row, co, panel_cols, font);
+                    }
+                }
+                AgentAction::ExplainOutput { last_n_lines } => {
+                    fmt_buf.clear();
+                    let _ = write!(&mut fmt_buf, "  Explain last {last_n_lines} lines?");
+                    let title: String = fmt_buf.chars().take(panel_cols).collect();
+                    self.push_shaped_row(&title, border_fg, panel_bg, 1, co, panel_cols, font);
+                    for row in 2..sep_row {
                         self.push_shaped_row("", sep_fg, panel_bg, row, co, panel_cols, font);
                     }
                 }
@@ -1938,15 +2019,17 @@ impl RenderContext {
         }
 
         // ── Input field (or confirmation prompt) ─────────────────────────────
-        if matches!(panel.state, PanelState::AwaitingConfirm) {
-            let confirm_kind = match panel.confirm_display.as_ref() {
-                Some(ConfirmDisplay::Run { .. }) => "run",
-                _ => "write",
-            };
-            let (yes_label, no_label) = if confirm_kind == "run" {
+        if matches!(
+            panel.state,
+            PanelState::AwaitingConfirm | PanelState::ConfirmAction(_)
+        ) {
+            let (yes_label, no_label) = if matches!(panel.state, PanelState::ConfirmAction(_)) {
                 ("[y] Run", "[n] Cancel")
             } else {
-                ("[y] Apply", "[n] Reject")
+                match panel.confirm_display.as_ref() {
+                    Some(ConfirmDisplay::Run { .. }) => ("[y] Run", "[n] Cancel"),
+                    _ => ("[y] Apply", "[n] Reject"),
+                }
             };
             let confirm_yes = config.colors.ui_success;
             let confirm_no = config.colors.ansi[1];
@@ -2069,6 +2152,7 @@ impl RenderContext {
                 PanelState::Loading | PanelState::Streaming => "  streaming\u{2026}",
                 PanelState::Error(_) => "  Esc: dismiss",
                 PanelState::AwaitingConfirm => "  y/Enter: confirm   n/Esc: reject",
+                PanelState::ConfirmAction(_) => "  y/Enter: run   n/Esc: cancel",
                 PanelState::Hidden => " ",
             };
             fmt_buf.clear();

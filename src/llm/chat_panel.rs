@@ -1,3 +1,4 @@
+use crate::llm::agent_action::{parse_action_from_response, AgentAction};
 use crate::llm::diff::{compress_diff, diff_lines, DiffLine};
 use crate::llm::markdown::{parse_markdown, AnnotatedLine, ParseState};
 use crate::llm::{ChatMessage, ChatRole};
@@ -94,8 +95,10 @@ pub enum PanelState {
     /// Tokens are arriving.
     Streaming,
     Error(String),
-    /// LLM proposed a file write or command — waiting for y/n from the user.
+    /// LLM proposed a file write or command via tool-call — waiting for y/n.
     AwaitingConfirm,
+    /// LLM embedded an inline action in its text response — waiting for y/n.
+    ConfirmAction(AgentAction),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -605,6 +608,8 @@ impl ChatPanel {
 
     pub fn mark_done(&mut self) {
         let response = self.streaming_buf.trim().to_string();
+        // Parse for an embedded action before adding to history.
+        let action = parse_action_from_response(&response);
         if !response.is_empty() {
             self.messages.push(ChatMessage::assistant(response));
         }
@@ -616,11 +621,36 @@ impl ChatPanel {
             let cached = self.wrapped_cache.len().min(drop);
             self.wrapped_cache.drain(..cached);
         }
-        self.state = PanelState::Idle;
         self.scroll_offset = 0; // snap to bottom
-        self.show_suggestions = true;
         self.suggestion_hover = None;
+        if let Some(act) = action {
+            self.state = PanelState::ConfirmAction(act);
+            self.show_suggestions = false;
+        } else {
+            self.state = PanelState::Idle;
+            self.show_suggestions = true;
+        }
         self.dirty = true;
+    }
+
+    /// Extract the pending inline action and return to Idle (user confirmed).
+    pub fn resolve_action_yes(&mut self) -> Option<AgentAction> {
+        if let PanelState::ConfirmAction(action) =
+            std::mem::replace(&mut self.state, PanelState::Idle)
+        {
+            self.dirty = true;
+            Some(action)
+        } else {
+            None
+        }
+    }
+
+    /// Cancel the pending inline action and return to Idle.
+    pub fn resolve_action_no(&mut self) {
+        if matches!(self.state, PanelState::ConfirmAction(_)) {
+            self.state = PanelState::Idle;
+            self.dirty = true;
+        }
     }
 
     pub fn mark_error(&mut self, msg: String) {

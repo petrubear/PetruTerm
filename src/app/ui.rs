@@ -91,6 +91,8 @@ pub struct UiManager {
     pub undo_stack: VecDeque<(PathBuf, String)>,
     /// A confirmed run_command to forward to the active PTY. Consumed by app.rs.
     pub pending_pty_run: Option<String>,
+    /// A confirmed inline agent action waiting to be dispatched (A-3). Consumed by app.rs.
+    pub pending_agent_action: Option<crate::llm::agent_action::AgentAction>,
 
     // ── Status bar data ───────────────────────────────────────────────────────
     /// Cached git branch string for the current CWD. None = not yet fetched or not a repo.
@@ -229,6 +231,7 @@ impl UiManager {
             pending_confirm_tx: None,
             undo_stack: VecDeque::new(),
             pending_pty_run: None,
+            pending_agent_action: None,
             git_branch_cache: None,
             git_branch_fetched_at: None,
             git_branch_last_poll: std::time::Instant::now(),
@@ -381,6 +384,18 @@ impl UiManager {
             let _ = tx.send(false);
             self.panel_mut().resolve_confirm();
         }
+    }
+
+    /// User confirmed an inline agent action (A-2). Extracts the action for A-3 to dispatch.
+    pub fn confirm_action_yes(&mut self) {
+        if let Some(action) = self.panel_mut().resolve_action_yes() {
+            self.pending_agent_action = Some(action);
+        }
+    }
+
+    /// User cancelled an inline agent action.
+    pub fn confirm_action_no(&mut self) {
+        self.panel_mut().resolve_action_no();
     }
 
     /// Poll for async git branch results and refresh the cache if due.
@@ -825,6 +840,11 @@ impl UiManager {
                 total_bytes += cap;
             }
         }
+
+        // Append inline action instructions so the LLM knows how to propose actions.
+        system_text.push('\n');
+        system_text.push('\n');
+        system_text.push_str(crate::llm::agent_action::system_prompt_instructions());
 
         // Build initial API-format messages (Vec<Value> for tool-use compatibility).
         let mut api_msgs: Vec<serde_json::Value> =
@@ -1727,6 +1747,7 @@ mod tests {
             pending_confirm_tx: None,
             undo_stack: VecDeque::new(),
             pending_pty_run: None,
+            pending_agent_action: None,
             git_branch_cache: None,
             git_branch_fetched_at: None,
             git_branch_last_poll: std::time::Instant::now(),
@@ -1795,6 +1816,7 @@ mod tests {
             pending_confirm_tx: None,
             undo_stack: VecDeque::new(),
             pending_pty_run: None,
+            pending_agent_action: None,
             git_branch_cache: Some("main".to_string()),
             git_branch_fetched_at: Some(std::time::Instant::now()),
             git_branch_last_poll: std::time::Instant::now(),
