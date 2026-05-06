@@ -239,6 +239,11 @@ pub struct ChatPanel {
     pub show_suggestions: bool,
     /// Which suggestion pill is currently hovered (0 = first, 1 = second, None = neither).
     pub suggestion_hover: Option<u8>,
+
+    // ── A-2: Inline action auto-confirm ───────────────────────────────────────
+    /// When true, future inline actions are dispatched without showing the confirm card.
+    /// Reset when the panel is closed or cleared.
+    pub auto_confirm_actions: bool,
 }
 
 impl ChatPanel {
@@ -269,6 +274,7 @@ impl ChatPanel {
             zero_state_hover: None,
             show_suggestions: false,
             suggestion_hover: None,
+            auto_confirm_actions: false,
             wrapped_cache: Vec::new(),
             wrapped_cache_width: 0,
             separator_cache: String::new(),
@@ -336,6 +342,7 @@ impl ChatPanel {
 
     pub fn close(&mut self) {
         self.state = PanelState::Hidden;
+        self.auto_confirm_actions = false;
         self.streaming_buf.clear();
         self.separator_cache.clear();
         self.thin_separator_cache.clear();
@@ -680,6 +687,7 @@ impl ChatPanel {
         self.zero_state_hover = None;
         self.show_suggestions = false;
         self.suggestion_hover = None;
+        self.auto_confirm_actions = false;
         if !matches!(self.state, PanelState::Hidden) {
             self.state = PanelState::Idle;
         }

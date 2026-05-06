@@ -302,6 +302,17 @@ impl UiManager {
                 AiEvent::Done => {
                     panel.mark_done();
                     result.completed = true;
+                    // Auto-confirm inline actions when the user has opted in this session.
+                    if panel.auto_confirm_actions
+                        && matches!(
+                            panel.state,
+                            crate::llm::chat_panel::PanelState::ConfirmAction(_)
+                        )
+                    {
+                        if let Some(action) = panel.resolve_action_yes() {
+                            self.pending_agent_action = Some(action);
+                        }
+                    }
                 }
                 AiEvent::Error(e) => {
                     log::error!("LLM error: {e}");
@@ -396,6 +407,12 @@ impl UiManager {
     /// User cancelled an inline agent action.
     pub fn confirm_action_no(&mut self) {
         self.panel_mut().resolve_action_no();
+    }
+
+    /// User pressed [a] — confirm this action and skip confirmation for future ones this session.
+    pub fn confirm_action_always(&mut self) {
+        self.panel_mut().auto_confirm_actions = true;
+        self.confirm_action_yes();
     }
 
     /// Poll for async git branch results and refresh the cache if due.

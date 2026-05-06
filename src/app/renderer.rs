@@ -2023,44 +2023,73 @@ impl RenderContext {
             panel.state,
             PanelState::AwaitingConfirm | PanelState::ConfirmAction(_)
         ) {
-            let (yes_label, no_label) = if matches!(panel.state, PanelState::ConfirmAction(_)) {
-                ("[y] Run", "[n] Cancel")
+            let confirm_yes = config.colors.ui_success;
+            let confirm_always = config.colors.ui_accent;
+            let confirm_no = config.colors.ansi[1];
+            if matches!(panel.state, PanelState::ConfirmAction(_)) {
+                // Three-option layout for inline actions.
+                self.push_shaped_row(
+                    "   [y] Run once",
+                    confirm_yes,
+                    panel_bg,
+                    input_row1,
+                    co,
+                    panel_cols,
+                    font,
+                );
+                self.push_shaped_row(
+                    "   [a] Always allow",
+                    confirm_always,
+                    panel_bg,
+                    input_row2,
+                    co,
+                    panel_cols,
+                    font,
+                );
+                self.push_shaped_row(
+                    "   [n] Cancel",
+                    confirm_no,
+                    panel_bg,
+                    input_row3,
+                    co,
+                    panel_cols,
+                    font,
+                );
             } else {
-                match panel.confirm_display.as_ref() {
+                // Two-option layout for tool-call confirms (write_file / run_command).
+                let (yes_label, no_label) = match panel.confirm_display.as_ref() {
                     Some(ConfirmDisplay::Run { .. }) => ("[y] Run", "[n] Cancel"),
                     _ => ("[y] Apply", "[n] Reject"),
-                }
-            };
-            let confirm_yes = config.colors.ui_success;
-            let confirm_no = config.colors.ansi[1];
-            self.push_shaped_row(
-                {
-                    fmt_buf.clear();
-                    fmt_buf.push_str("   ");
-                    fmt_buf.push_str(yes_label);
-                    &fmt_buf
-                },
-                confirm_yes,
-                panel_bg,
-                input_row2,
-                co,
-                panel_cols,
-                font,
-            );
-            self.push_shaped_row(
-                {
-                    fmt_buf.clear();
-                    fmt_buf.push_str("   ");
-                    fmt_buf.push_str(no_label);
-                    &fmt_buf
-                },
-                confirm_no,
-                panel_bg,
-                input_row3,
-                co,
-                panel_cols,
-                font,
-            );
+                };
+                self.push_shaped_row(
+                    {
+                        fmt_buf.clear();
+                        fmt_buf.push_str("   ");
+                        fmt_buf.push_str(yes_label);
+                        &fmt_buf
+                    },
+                    confirm_yes,
+                    panel_bg,
+                    input_row2,
+                    co,
+                    panel_cols,
+                    font,
+                );
+                self.push_shaped_row(
+                    {
+                        fmt_buf.clear();
+                        fmt_buf.push_str("   ");
+                        fmt_buf.push_str(no_label);
+                        &fmt_buf
+                    },
+                    confirm_no,
+                    panel_bg,
+                    input_row3,
+                    co,
+                    panel_cols,
+                    font,
+                );
+            }
         } else {
             let input_inner_w = panel_cols.saturating_sub(5);
             let show_cursor =
@@ -2152,7 +2181,7 @@ impl RenderContext {
                 PanelState::Loading | PanelState::Streaming => "  streaming\u{2026}",
                 PanelState::Error(_) => "  Esc: dismiss",
                 PanelState::AwaitingConfirm => "  y/Enter: confirm   n/Esc: reject",
-                PanelState::ConfirmAction(_) => "  y/Enter: run   n/Esc: cancel",
+                PanelState::ConfirmAction(_) => "  y: run once   a: always   n/Esc: cancel",
                 PanelState::Hidden => " ",
             };
             fmt_buf.clear();
