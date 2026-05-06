@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::term::{PtyEvent, Terminal};
+use crate::term::{Osc133Marker, PtyEvent, Terminal};
 use crate::ui::search_bar::SearchMatch;
 use crate::ui::{PaneInfo, PaneManager, PaneSeparator, Rect, TabManager};
 
@@ -79,6 +79,8 @@ pub struct Mux {
     inactive_workspaces: Vec<WorkspaceData>,
     /// Terminal ID of the pane currently zoomed to fill the viewport. None if no zoom.
     pub zoomed_pane: Option<usize>,
+    /// OSC 133 markers received this cycle: (terminal_id, marker).
+    pub osc133_events: Vec<(usize, Osc133Marker)>,
 }
 
 impl Mux {
@@ -98,6 +100,7 @@ impl Mux {
             next_workspace_id: 1,
             inactive_workspaces: Vec::new(),
             zoomed_pane: None,
+            osc133_events: Vec::new(),
         }
     }
 
@@ -235,6 +238,8 @@ impl Mux {
     pub fn poll_pty_events(&mut self) -> (Vec<usize>, Vec<usize>) {
         let mut data_ids: Vec<usize> = Vec::new();
         let mut exited: Vec<usize> = Vec::new();
+        self.osc133_events.clear();
+        let mut osc133_pending: Vec<(usize, Osc133Marker)> = Vec::new();
         for (id, terminal_slot) in self.terminals.iter_mut().enumerate() {
             let Some(terminal) = terminal_slot else {
                 continue;
@@ -275,6 +280,9 @@ impl Mux {
                         PtyEvent::PtyWrite(text) => {
                             terminal.write_input(text.as_bytes());
                         }
+                        PtyEvent::Osc133(marker) => {
+                            osc133_pending.push((id, marker));
+                        }
                     },
                     Err(TryRecvError::Disconnected) => {
                         log::warn!("PTY channel disconnected.");
@@ -284,6 +292,7 @@ impl Mux {
                 }
             }
         }
+        self.osc133_events.extend(osc133_pending);
         (data_ids, exited)
     }
 
@@ -352,6 +361,31 @@ impl Mux {
                 result.push((text, colors));
             }
             result
+        })
+    }
+
+    /// Read the text of the viewport row at position `row` (0 = top of visible area).
+    /// Accounts for scrollback display offset so the result matches what the user sees.
+    pub fn viewport_row_text(&self, row: usize) -> String {
+        let Some(terminal) = self.active_terminal() else {
+            return String::new();
+        };
+        terminal.with_term(|term| {
+            use alacritty_terminal::index::{Column, Line};
+            let cols = term.columns();
+            let screen_rows = term.screen_lines() as i32;
+            let display_offset = term.grid().display_offset() as i32;
+            let grid_line = Line(row as i32 - display_offset);
+            // Guard against out-of-range access (shouldn't happen but be safe).
+            if grid_line.0 >= screen_rows {
+                return String::new();
+            }
+            let mut text = String::with_capacity(cols);
+            for col in 0..cols {
+                let cell = &term.grid()[grid_line][Column(col)];
+                text.push(if cell.c == '\0' { ' ' } else { cell.c });
+            }
+            text.trim_end().to_string()
         })
     }
 

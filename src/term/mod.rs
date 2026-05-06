@@ -1,7 +1,9 @@
 pub mod color;
+pub mod osc133;
 pub mod pty;
 
 pub use alacritty_terminal::vte::ansi::CursorShape;
+pub use osc133::Osc133Marker;
 pub use pty::{Pty, PtyEvent, PtyEventProxy};
 
 use alacritty_terminal::grid::{Dimensions, Scroll};
@@ -74,24 +76,6 @@ impl Terminal {
         wakeup: EventLoopProxy<()>,
         working_directory: Option<std::path::PathBuf>,
     ) -> Result<Self> {
-        // TD-002 (partial fix): Term requires an EventListener at construction,
-        // but the Notifier is only available after PtyEventLoop is created in
-        // Pty::spawn. We create the shared Arc<OnceLock<Notifier>> here and
-        // pass it to BOTH the placeholder proxy (stored inside Term) and to
-        // Pty::spawn, which sets the OnceLock once the Notifier is ready.
-        // This ensures that PtyWrite events from term.process() — which go
-        // through Term's internal proxy — can forward responses immediately.
-        let direct_notifier: Arc<std::sync::OnceLock<alacritty_terminal::event_loop::Notifier>> =
-            Arc::new(std::sync::OnceLock::new());
-
-        let (tx_placeholder, _rx) = crossbeam_channel::unbounded();
-        let proxy = PtyEventProxy {
-            tx: tx_placeholder,
-            wakeup: wakeup.clone(),
-            direct_notifier: Arc::clone(&direct_notifier),
-            qos_set: Arc::new(std::sync::OnceLock::new()),
-        };
-
         let term_config = TermConfig {
             scrolling_history: config.scrollback_lines as usize,
             kitty_keyboard: true,
@@ -104,27 +88,21 @@ impl Terminal {
             scrollback: config.scrollback_lines as usize,
         };
 
-        let term = Arc::new(FairMutex::new(Term::new(term_config, &size, proxy)));
-        let pty = Pty::spawn(
+        let (pty, term) = Pty::spawn(
             config,
-            Arc::clone(&term),
             cols,
             rows,
             cell_width,
             cell_height,
             wakeup,
-            direct_notifier,
             working_directory,
+            term_config,
+            &size,
         )?;
+
         let child_pid = pty.child_pid;
 
-        Ok(Self {
-            term,
-            pty,
-            cols,
-            rows,
-            child_pid,
-        })
+        Ok(Self { term, pty, cols, rows, child_pid })
     }
 
     /// Resize the terminal grid and PTY.

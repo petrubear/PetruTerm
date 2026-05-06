@@ -1,46 +1,33 @@
 # Active Context
 
-**Current Focus:** Auditoría de código — Waves 1–4 completas
-**Last Active:** 2026-05-05
+**Current Focus:** Phase 7 — Warp-inspired Terminal Intelligence
+**Last Active:** 2026-05-05 (B-1 completa)
 
 ## Estado actual del proyecto
 
-**Phases 1–6 COMPLETAS en `feat/phase-6-warp-ui`** → mergeado a master.
+**Phases 1–6 + Auditoría Waves 1–4 COMPLETAS.** Branch `audit/code-review` mergeado a master.
 **Sin deuda técnica abierta. Diferidos: TD-PERF-03, TD-PERF-05 (solo GPUs discretas).**
-**Todos los benches criterion funcionan. mimalloc activo como global allocator.**
 
-## Completado en Phase 6
+## Phase 7 — Plan de trabajo (simple → complejo)
 
-- [x] W-1: Full-width message background tinting
-- [x] W-2: Input box as a bordered card
-- [x] W-3: Code block background + left accent bar
-- [x] W-4: Sidebar active/inactive color contrast
-- [x] W-5: Zero state / empty panel
-- [x] W-6: Header — icon anchor + right-aligned action buttons
-- [x] W-7: Prepared response pill buttons (post-response)
-- [x] W-8: Resizable panel width via mouse drag
+Ver spec completo en [`.context/specs/build_phases.md`](../specs/build_phases.md).
 
-## Rama activa: `audit/code-review`
+| ID | Feature | Complejidad | Estado |
+|----|---------|-------------|--------|
+| H-1 | Hover links — URLs, paths, stack traces clicables | Baja | **COMPLETA** |
+| B-1 | OSC 133 parser en VTE handler | Media | **COMPLETA** |
+| B-2 | Block manager por pane | Media | Pendiente |
+| B-3 | Render visual de bloques | Media | Pendiente |
+| B-4 | Operaciones sobre bloques (context menu, keybinds) | Media | Pendiente |
+| A-1 | AI agent: schema de acciones + parser | Media-Alta | Pendiente |
+| A-2 | AI agent: confirm UI inline | Media-Alta | Pendiente |
+| A-3 | AI agent: action handlers | Media-Alta | Pendiente |
+| I-1 | Input shadow buffer (depende de B-1) | Alta | Pendiente |
+| I-2 | Syntax coloring del comando | Alta | Pendiente |
+| I-3 | Ghost text — inline completion hints | Alta | Pendiente |
+| I-4 | Flag hints — tooltips de flags | Alta | Pendiente |
 
-Objetivo: auditoría sistemática del codebase completo buscando:
-- Código repetido o candidato a refactor
-- Optimizaciones de rendimiento (hot paths, asignaciones innecesarias)
-- Optimizaciones de memoria (retención innecesaria, buffers sobredimensionados)
-- Consumo de energía (trabajo innecesario en idle, polling)
-- Aplicación de patrones de diseño donde corresponda
-- Simplificación de código complejo
-
-## Progreso de auditoría
-
-**Wave 1 COMPLETA (2026-05-05):** AUDIT-PERF-01, AUDIT-PERF-04, AUDIT-REFAC-04, AUDIT-CLEAN-01
-**Wave 2 COMPLETA (2026-05-05):** AUDIT-PERF-05, AUDIT-PERF-03, AUDIT-MEM-01, AUDIT-MEM-02, AUDIT-MEM-03
-
-**Wave 3 COMPLETA (2026-05-05):** AUDIT-PERF-02, AUDIT-ENERGY-01
-
-**Wave 4 COMPLETA (2026-05-05):** AUDIT-REFAC-02, AUDIT-REFAC-03, AUDIT-REFAC-01
-
-**Watch / sin cambio necesario:**
-- AUDIT-CLEAN-02: `ContextAction` sigue por debajo del umbral; no amerita dispatch table todavía
+## Rama sugerida: `feat/phase-7`
 
 ## Invariantes arquitectónicos clave (no romper)
 
