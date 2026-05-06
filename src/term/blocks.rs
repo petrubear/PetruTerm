@@ -60,10 +60,10 @@ impl BlockManager {
                 });
                 self.next_id += 1;
             }
-            Osc133Marker::CommandStart | Osc133Marker::OutputStart => {
+            Osc133Marker::CommandStart(_) | Osc133Marker::OutputStart => {
                 if let Some(ref mut block) = self.current {
                     block.output_start = absolute_row;
-                    if matches!(marker, Osc133Marker::CommandStart) {
+                    if !command_text.is_empty() {
                         block.command_text = command_text;
                     }
                 }
@@ -116,8 +116,10 @@ impl BlockManager {
     }
 
     /// Return the completed block whose row range contains `absolute_row`, if any.
+    /// Searches newest-first so that when two blocks share a boundary row (D and A
+    /// fire at the same cursor position), the newer block wins.
     pub fn block_at_absolute_row(&self, absolute_row: i64) -> Option<&Block> {
-        self.blocks.iter().find(|b| {
+        self.blocks.iter().rev().find(|b| {
             let Some(end) = b.output_end else {
                 return false;
             };
@@ -130,10 +132,7 @@ impl BlockManager {
         self.blocks.iter().find(|b| b.id == id)
     }
 
-    /// Remove a block by id. Used by "Clear block" context action.
-    pub fn remove_block(&mut self, id: usize) {
-        self.blocks.retain(|b| b.id != id);
-    }
+
 }
 
 #[cfg(test)]
@@ -149,7 +148,7 @@ mod tests {
     fn complete_block_lifecycle() {
         let mut m = mgr();
         m.on_marker(Osc133Marker::PromptStart, 100, String::new());
-        m.on_marker(Osc133Marker::CommandStart, 100, "ls -la".to_string());
+        m.on_marker(Osc133Marker::CommandStart("ls -la".into()), 100, String::new());
         m.on_marker(Osc133Marker::CommandEnd(0), 115, String::new());
         assert_eq!(m.blocks.len(), 1);
         let b = &m.blocks[0];
@@ -191,7 +190,7 @@ mod tests {
     fn incomplete_block_not_in_viewport() {
         let mut m = mgr();
         m.on_marker(Osc133Marker::PromptStart, 100, String::new());
-        m.on_marker(Osc133Marker::CommandStart, 100, "cmd".to_string());
+        m.on_marker(Osc133Marker::CommandStart("cmd".into()), 100, String::new());
         // No CommandEnd
         let visible = m.blocks_in_viewport(90, 0, 24);
         assert_eq!(visible.len(), 0);

@@ -306,28 +306,17 @@ impl Mux {
                 continue;
             };
 
-            // Capture absolute row and (for CommandStart) the current prompt-line text.
-            let is_cmd_start = matches!(marker, Osc133Marker::CommandStart);
-            let (absolute_row, command_text) = terminal.with_term(|t| {
+            // Extract command text embedded in the marker (set by preexec in the shell).
+            let command_text = match &marker {
+                Osc133Marker::CommandStart(cmd) => cmd.clone(),
+                _ => String::new(),
+            };
+            let absolute_row = terminal.with_term(|t| {
                 let content = t.renderable_content();
                 let history = t.grid().history_size() as i64;
                 let cursor_vp = content.cursor.point.line.0.max(0) as i64;
                 let disp_off = content.display_offset as i64;
-                let abs = history + cursor_vp - disp_off;
-
-                let cmd_text = if is_cmd_start {
-                    let line_idx = content.cursor.point.line;
-                    let cols = t.grid().columns();
-                    let mut s = String::with_capacity(cols);
-                    for col in 0..cols {
-                        let cell = &t.grid()[line_idx][Column(col)];
-                        s.push(cell.c);
-                    }
-                    s.trim_end().to_string()
-                } else {
-                    String::new()
-                };
-                (abs, cmd_text)
+                history + cursor_vp - disp_off
             });
 
             terminal

@@ -647,7 +647,6 @@ impl RenderContext {
         bg_color[3] = 0.06;
         let mut hover_bg_color = colors.ui_surface_hover;
         hover_bg_color[3] = 0.14;
-        let gutter_color = colors.ui_muted;
         let success_color = colors.ui_success;
         let error_color = [0.9_f32, 0.35, 0.35, 0.9];
 
@@ -693,15 +692,6 @@ impl RenderContext {
                     rect: [pane_x, block_y, pane_w, block_h],
                     color: block_bg,
                     radius: 0.0,
-                    border_width: 0.0,
-                    _pad: [0.0; 2],
-                });
-
-                // Left gutter bar: 2px vertical stripe.
-                self.rect_instances.push(RoundedRectInstance {
-                    rect: [pane_x, block_y, 2.0 * sf, block_h],
-                    color: gutter_color,
-                    radius: sf,
                     border_width: 0.0,
                     _pad: [0.0; 2],
                 });

@@ -1,14 +1,44 @@
 # Session State
 
-**Last Updated:** 2026-05-05
-**Session Focus:** Phase 7 — B-4 completa
+**Last Updated:** 2026-05-06
+**Session Focus:** Phase 7 — B-4 bugs corregidos. Siguiente: A-1 + I-1.
 
 ## Branch: `master` (siguiente: `feat/phase-7`)
 
 ## Estado actual
 
 **Phases 1–6 + Auditoría COMPLETAS. master limpio.**
+**Phase 7 completadas:** H-1 + B-1 + B-2 + B-3 + B-4. **Pendientes:** A-1..A-3, I-1..I-4.
 **Sin deuda técnica abierta. Diferidos: TD-PERF-03/05 (solo GPUs discretas).**
+
+## Esta sesión (2026-05-06) — B-4 bug fixes
+
+### Bugs corregidos en B-4
+
+**shell-integration.zsh — OSC 133 no se emitía:**
+El script solo escribía un JSON en disco (para shell context del LLM). No emitía las secuencias OSC 133.
+Añadidos: `D;$?` + `A` en `precmd`; `B;$1` + `C` en `preexec`. `_petruterm_first_prompt` evita emitir `D` en el primer prompt. Versión bumpeada a 2 (auto-instala en próximo launch).
+
+**`Osc133Marker::CommandStart` — texto capturado incluía el prompt:**
+La captura leyendo el grid completo incluía PS1 (ej: `❯ ls`). Ahora el comando viaja embebido en la secuencia: `ESC]133;B;<cmd>ST`. `parse_marker` extrae `buf[2..]` cuando `buf[1] == b';'`. `apply_osc133_events` extrae el comando del marker; eliminada la lectura del grid para `CommandStart`.
+
+**`block_at_absolute_row` — siempre devolvía el primer bloque:**
+Cuando `D` y `A` caen en la misma fila (borde compartido entre bloques), `iter().find()` devolvía siempre el bloque más antiguo. Cambiado a `iter().rev().find()` — el bloque más nuevo gana.
+
+**Context menu — mezclado con menú original:**
+El menú de bloque se abría al hacer right-click en cualquier fila de un bloque (vía `hover_block`). Ahora solo se abre al hacer clic derecho sobre el exit-code pill (últimas 3 columnas de la última fila del bloque). Nuevo método `block_indicator_at_pixel(x, y)` en `App`.
+
+**`block_at_cursor` — hover solo en columna 0 (gutter eliminado):**
+Con el gutter eliminado, el hover highlight solo activaba si x era < 1 cell del borde. Expandido para cubrir todo el ancho del pane.
+
+**ClearBlock eliminado:**
+`ContextAction::ClearBlock`, `BlockManager::remove_block`, y el item "Clear Block" del menú removidos. No aportaban valor real.
+
+**Menú de bloque — items faltantes:**
+Agregado "Clear" (limpiar consola) y "Ask AI" al menú `open_with_block`. `CONTEXT_MENU_WIDTH` subido de 24 a 30.
+
+**Gutter bar eliminada:**
+El 2px stripe izquierdo (`ui_muted`) fue removido del renderer junto con la variable `gutter_color`.
 
 ## Esta sesión (2026-05-05) — Phase 7: H-1 + B-1 + B-2 + B-3 + B-4 COMPLETAS
 

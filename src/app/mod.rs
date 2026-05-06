@@ -689,17 +689,15 @@ impl App {
         x >= panel_left - cell_w && x < panel_left + cell_w
     }
 
-    /// Return `(terminal_id, block_id)` if the cursor (physical pixels) is hovering
-    /// over the left gutter (first cell column) of a completed command block.
+    /// Return `(terminal_id, block_id)` if the pixel is inside any row of a completed
+    /// command block. Used for hover highlight.
     fn block_at_cursor(&self, x: f32, y: f32) -> Option<(usize, usize)> {
         let rc = self.render_ctx.as_ref()?;
-        let cell_w = rc.shaper.cell_width;
         let cell_h = rc.shaper.cell_height;
 
         for info in &rc.pane_infos {
             let pane = info.pane_rect;
-            // Gutter zone: first cell-width of the pane.
-            if x < pane.x || x >= pane.x + cell_w {
+            if x < pane.x || x >= pane.x + pane.w {
                 continue;
             }
             if y < pane.y || y >= pane.y + pane.h {
@@ -720,6 +718,56 @@ impl App {
 
             if let Some(block) = terminal.block_manager.block_at_absolute_row(abs_row) {
                 return Some((info.terminal_id, block.id));
+            }
+        }
+        None
+    }
+
+    /// Return `(terminal_id, block_id)` if the pixel is over the exit-code indicator
+    /// pill of a completed block. Used exclusively for right-click context menu.
+    fn block_indicator_at_pixel(&self, x: f32, y: f32) -> Option<(usize, usize)> {
+        let rc = self.render_ctx.as_ref()?;
+        let cell_w = rc.shaper.cell_width;
+        let cell_h = rc.shaper.cell_height;
+
+        for info in &rc.pane_infos {
+            let pane = info.pane_rect;
+            if x < pane.x || x >= pane.x + pane.w {
+                continue;
+            }
+            if y < pane.y || y >= pane.y + pane.h {
+                continue;
+            }
+
+            let Some(terminal) = self
+                .mux
+                .terminals
+                .get(info.terminal_id)
+                .and_then(|t| t.as_ref())
+            else {
+                continue;
+            };
+            let (display_offset, history_size) = terminal.scrollback_info();
+            let rows = (pane.h / cell_h) as usize;
+
+            for block in terminal
+                .block_manager
+                .blocks_in_viewport(history_size, display_offset, rows)
+            {
+                let Some(output_end) = block.output_end else {
+                    continue;
+                };
+                let h = history_size as i64;
+                let d = display_offset as i64;
+                let r = rows as i64;
+                let last_vp = (output_end - h + d).clamp(0, r - 1) as f32;
+
+                // Hit zone: right 3 columns of the last output row — easy to click.
+                let hit_x = pane.x + pane.w - 3.0 * cell_w;
+                let hit_y = pane.y + last_vp * cell_h;
+                if x >= hit_x && y >= hit_y && y < hit_y + cell_h {
+                    return Some((info.terminal_id, block.id));
+                }
             }
         }
         None
@@ -2292,14 +2340,6 @@ impl App {
                                     }
                                 }
                             }
-                            ContextAction::ClearBlock(tid, bid) => {
-                                if let Some(terminal) =
-                                    self.mux.terminals.get_mut(tid).and_then(|t| t.as_mut())
-                                {
-                                    terminal.block_manager.remove_block(bid);
-                                }
-                                self.hover_block = None;
-                            }
                             ContextAction::Separator | ContextAction::Label => {}
                         }
                         self.request_redraw();
@@ -2681,13 +2721,15 @@ impl App {
                         .hover_link
                         .as_ref()
                         .filter(|l| row == l.row && col >= l.col_start && col < l.col_end);
-                    // B-4: show block context menu when right-clicking a block gutter.
+                    // Show link menu, block menu (only on exit-code pill), or default menu.
+                    let mx = self.input.mouse_pos.0 as f32;
+                    let my = self.input.mouse_pos.1 as f32;
                     if let Some(link) = link_under_cursor {
                         let text = link.text.clone();
                         self.ui
                             .context_menu
                             .open_with_link(text, col, row, term_cols, term_rows);
-                    } else if let Some((tid, bid)) = self.hover_block {
+                    } else if let Some((tid, bid)) = self.block_indicator_at_pixel(mx, my) {
                         let cmd = self
                             .mux
                             .terminals

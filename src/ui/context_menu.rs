@@ -15,8 +15,6 @@ pub enum ContextAction {
     CopyBlockOutput(usize, usize),
     /// Re-run the command of a block by writing it to the PTY.
     ReRunCommand(String),
-    /// Remove a command block from the block manager (terminal_id, block_id).
-    ClearBlock(usize, usize),
     /// Non-interactive separator row.
     Separator,
     /// Non-interactive informational label (displays text, no action).
@@ -56,7 +54,7 @@ pub struct ContextMenu {
 }
 
 /// Width in terminal columns for the context menu popup.
-pub const CONTEXT_MENU_WIDTH: usize = 24;
+pub const CONTEXT_MENU_WIDTH: usize = 30;
 
 impl ContextMenu {
     pub fn new() -> Self {
@@ -284,14 +282,14 @@ impl ContextMenu {
                 action: ContextAction::ReRunCommand(command_text),
             },
             ContextMenuItem {
-                label: "Clear Block".into(),
-                keybind: None,
-                action: ContextAction::ClearBlock(terminal_id, block_id),
-            },
-            ContextMenuItem {
                 label: String::new(),
                 keybind: None,
                 action: ContextAction::Separator,
+            },
+            ContextMenuItem {
+                label: "Clear".into(),
+                keybind: None,
+                action: ContextAction::Clear,
             },
             ContextMenuItem {
                 label: "Copy".into(),
@@ -302,6 +300,11 @@ impl ContextMenu {
                 label: "Paste".into(),
                 keybind: Some("Cmd+V".into()),
                 action: ContextAction::Paste,
+            },
+            ContextMenuItem {
+                label: "Ask AI".into(),
+                keybind: None,
+                action: ContextAction::SendToChat,
             },
         ];
         self.open(col, row, term_cols, term_rows);

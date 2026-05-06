@@ -167,9 +167,9 @@ un scanner de celdas en hover y un highlight rect.
 
 ---
 
-### B-1 a B-4: OSC 133 — Command Blocks
-**Complejidad: Media.** alacritty_terminal ya parsea OSC sequences en el VTE handler.
-Se necesita interceptar los marcadores y mantener metadatos de bloque por pane.
+### B-1 a B-4: OSC 133 — Command Blocks — COMPLETAS (2026-05-05, bugs corregidos 2026-05-06)
+**Complejidad: Media.** Implementadas vía scanner de bytes raw en el PTY reader thread
+antes de `vte::ansi::Processor::advance()`, más metadatos de bloque por pane.
 
 **Contexto del protocolo OSC 133 (semantic prompts):**
 ```
@@ -193,29 +193,35 @@ struct Block {
 }
 ```
 
-#### B-1: Parser OSC 133 en el VTE handler
-- [ ] En `src/term/mod.rs`, interceptar `TermEvent` o hook en el `EventListener` de alacritty
-- [ ] Detectar secuencias `OSC 133 ; A/B/C/D` en el stream de eventos del terminal
-- [ ] Emitir `TermEvent::Osc133(marker: Osc133Marker)` hacia `App`
-- [ ] Capturar texto del comando entre marcador A y B leyendo el grid
+#### B-1: Parser OSC 133 en el VTE handler — COMPLETA
+- [x] En `src/term/mod.rs`, interceptar `TermEvent` o hook en el `EventListener` de alacritty
+- [x] Detectar secuencias `OSC 133 ; A/B/C/D` en el stream de eventos del terminal
+- [x] Emitir `TermEvent::Osc133(marker: Osc133Marker)` hacia `App`
+- [x] Capturar texto del comando entre marcador A y B leyendo el grid
 
-#### B-2: Block manager por pane
+#### B-2: Block manager por pane — COMPLETA
 - [x] `BlockManager` en `src/term/blocks.rs`: `Vec<Block>`, `current_block: Option<Block>`
 - [x] `on_marker(marker, current_row)` — actualiza estado del bloque activo
 - [x] Cada pane (`Terminal`) tiene su `BlockManager`
 - [x] `blocks_in_viewport(history_size, display_offset, rows) -> Vec<&Block>` para el renderer
 
-#### B-3: Render visual de bloques
+#### B-3: Render visual de bloques — COMPLETA
 - [x] Renderer: rect sutil de fondo por bloque en viewport (alpha 6%, `ui_surface`)
-- [x] Gutter izquierdo: barra de 2px en `ui_muted` en el lado izquierdo del pane por bloque
 - [x] Indicador de exit code: pill verde (`ui_success`) / rojo en la última fila del bloque (2 cols del borde derecho)
 - [x] No renderizar bloque activo (sin output_end) — solo bloques completos
+- ~~Gutter izquierdo 2px~~ eliminado — no aportaba valor visual
 
-#### B-4: Operaciones sobre bloques
-- [x] Hover sobre gutter → highlight del bloque completo (`ui_surface_hover`)
-- [x] Context menu sobre bloque: "Copy output", "Re-run command", "Clear block"
+#### B-4: Operaciones sobre bloques — COMPLETA
+- [x] Hover sobre cualquier fila del bloque → highlight (`ui_surface_hover`)
+- [x] Right-click sobre exit-code pill → context menu de bloque: "Copy Output", "Re-run Command", "Clear", "Copy", "Paste", "Ask AI"
 - [x] `Leader y` — copiar output del bloque bajo el cursor al clipboard
 - [x] `Leader r` — re-ejecutar el comando del bloque bajo el cursor
+
+**Notas de implementación (no obvias):**
+- `shell-integration.zsh` emite `B;<cmd>` (comando embebido en el OSC) para evitar capturar PS1 del grid.
+- `block_at_absolute_row` usa `iter().rev()` — cuando `D` y `A` comparten fila, el bloque más nuevo gana.
+- `block_indicator_at_pixel` (hit-test del pill) es independiente de `hover_block` (highlight visual).
+- `clear block` eliminado — `BlockManager::remove_block` también eliminado.
 
 ---
 

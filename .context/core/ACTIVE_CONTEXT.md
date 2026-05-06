@@ -1,11 +1,12 @@
 # Active Context
 
-**Current Focus:** Phase 7 — Warp-inspired Terminal Intelligence
-**Last Active:** 2026-05-05 (B-1 completa)
+**Current Focus:** Phase 7 — AI Agent Actions + Input Decoration
+**Last Active:** 2026-05-06 (B-4 bugs corregidos)
 
 ## Estado actual del proyecto
 
 **Phases 1–6 + Auditoría Waves 1–4 COMPLETAS.** Branch `audit/code-review` mergeado a master.
+**Phase 7 completadas:** H-1 + B-1 + B-2 + B-3 + B-4.
 **Sin deuda técnica abierta. Diferidos: TD-PERF-03, TD-PERF-05 (solo GPUs discretas).**
 
 ## Phase 7 — Plan de trabajo (simple → complejo)
@@ -16,9 +17,9 @@ Ver spec completo en [`.context/specs/build_phases.md`](../specs/build_phases.md
 |----|---------|-------------|--------|
 | H-1 | Hover links — URLs, paths, stack traces clicables | Baja | **COMPLETA** |
 | B-1 | OSC 133 parser en VTE handler | Media | **COMPLETA** |
-| B-2 | Block manager por pane | Media | Pendiente |
-| B-3 | Render visual de bloques | Media | Pendiente |
-| B-4 | Operaciones sobre bloques (context menu, keybinds) | Media | Pendiente |
+| B-2 | Block manager por pane | Media | **COMPLETA** |
+| B-3 | Render visual de bloques | Media | **COMPLETA** |
+| B-4 | Operaciones sobre bloques (context menu, keybinds) | Media | **COMPLETA** |
 | A-1 | AI agent: schema de acciones + parser | Media-Alta | Pendiente |
 | A-2 | AI agent: confirm UI inline | Media-Alta | Pendiente |
 | A-3 | AI agent: action handlers | Media-Alta | Pendiente |

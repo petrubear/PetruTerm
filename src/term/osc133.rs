@@ -10,7 +10,8 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Osc133Marker {
     PromptStart,
-    CommandStart,
+    /// Carries the raw command text embedded in the OSC sequence (`B;<cmd>`).
+    CommandStart(String),
     OutputStart,
     CommandEnd(i32),
 }
@@ -34,7 +35,9 @@ pub struct Osc133Scanner {
 
 impl Osc133Scanner {
     pub fn new() -> Self {
-        Self { state: ScanState::Normal }
+        Self {
+            state: ScanState::Normal,
+        }
     }
 
     pub fn scan(&mut self, b: u8) -> Option<Osc133Marker> {
@@ -109,7 +112,15 @@ impl Osc133Scanner {
 fn parse_marker(buf: &[u8]) -> Option<Osc133Marker> {
     match buf.first()? {
         b'A' => Some(Osc133Marker::PromptStart),
-        b'B' => Some(Osc133Marker::CommandStart),
+        b'B' => {
+            // Optional embedded command: "B;<cmd text>"
+            let cmd = if buf.len() > 2 && buf[1] == b';' {
+                String::from_utf8_lossy(&buf[2..]).trim_end().to_string()
+            } else {
+                String::new()
+            };
+            Some(Osc133Marker::CommandStart(cmd))
+        }
         b'C' => Some(Osc133Marker::OutputStart),
         b'D' => {
             // "D;exitcode"
@@ -145,7 +156,25 @@ mod tests {
     #[test]
     fn command_start_st() {
         let seq = b"\x1b]133;B\x1b\\";
-        assert_eq!(scan_all(seq), vec![Osc133Marker::CommandStart]);
+        assert_eq!(scan_all(seq), vec![Osc133Marker::CommandStart(String::new())]);
+    }
+
+    #[test]
+    fn command_start_with_cmd() {
+        let seq = b"\x1b]133;B;ls -la\x07";
+        assert_eq!(
+            scan_all(seq),
+            vec![Osc133Marker::CommandStart("ls -la".to_string())]
+        );
+    }
+
+    #[test]
+    fn command_start_cmd_with_semicolons() {
+        let seq = b"\x1b]133;B;ls; echo done\x07";
+        assert_eq!(
+            scan_all(seq),
+            vec![Osc133Marker::CommandStart("ls; echo done".to_string())]
+        );
     }
 
     #[test]
