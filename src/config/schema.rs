@@ -180,7 +180,7 @@ impl Default for FontConfig {
         Self {
             family: "JetBrainsMono Nerd Font Mono".into(),
             size: 15.0,
-            line_height: 1.2,
+            line_height: 1.4,
             features: vec!["calt=1".into(), "liga=1".into(), "dlig=1".into()],
             fallbacks: vec!["Noto Color Emoji".into()],
             lcd_antialiasing: false,

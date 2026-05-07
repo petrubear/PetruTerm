@@ -2973,7 +2973,10 @@ impl ApplicationHandler<()> for App {
             if let Some(h) = self.config.window.initial_height {
                 attrs = attrs.with_inner_size(winit::dpi::LogicalSize::new(w, h));
             }
-        } else {
+        } else if !self.config.window.start_maximized {
+            // Only set an explicit inner_size when not maximizing. When start_maximized is true,
+            // letting winit pick the default avoids a spurious Resized(1280x800) event that
+            // arrives after the maximize Resized and would shrink the PTY back to the wrong size.
             attrs = attrs.with_inner_size(winit::dpi::LogicalSize::new(1280u32, 800u32));
         }
 

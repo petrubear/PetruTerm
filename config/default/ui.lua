@@ -13,8 +13,8 @@ function module.apply_to_config(config)
 	-- Font size in points.
 	config.font_size = 16
 
-	-- Line height multiplier (1.0 = no extra leading, 1.2 = 20% extra spacing).
-	config.font_line_height = 1.2
+	-- Line height multiplier (1.0 = no extra leading, 1.4 = 40% extra spacing).
+	config.font_line_height = 1.4
 
 	-- HarfBuzz OpenType features: contextual alternates, ligatures, discretionary ligatures.
 	config.font_features = { "calt=1", "liga=1", "dlig=1" }
@@ -58,7 +58,7 @@ function module.apply_to_config(config)
 	-- ── Window ───────────────────────────────────────────────────────────────
 	-- title_bar_style:
 	--   "custom" — transparent title bar, traffic lights in native position,
-	--              content extends behind bar (macOS only). top padding >= 60.
+	--              content extends behind bar (macOS only).
 	--   "native" — standard OS title bar.
 	--   "none"   — fully borderless (no chrome at all).
 	config.window = {
@@ -68,8 +68,9 @@ function module.apply_to_config(config)
 		-- initial_height = 900,
 		start_maximized = true,
 		title_bar_style = "custom",
-		-- top should be >= 60 when using "custom" to clear the traffic lights on macOS.
-		padding = { left = 20, right = 20, top = 60, bottom = 10 },
+		-- top is the gap between the titlebar and the first terminal row.
+		-- The titlebar height (30 px) is handled internally — do not add it here.
+		padding = { left = 20, right = 20, top = 5, bottom = 10 },
 		-- Window background opacity (0.0 = fully transparent, 1.0 = opaque).
 		opacity = 1.0,
 	}

@@ -320,6 +320,9 @@ impl Mux {
                         }
                         PtyEvent::ScreenCleared => {
                             terminal.block_manager.clear();
+                            // Drop any OSC 133 events queued before this clear so that
+                            // apply_osc133_events() does not re-create blocks we just erased.
+                            osc133_pending.retain(|(pid, _)| *pid != id);
                         }
                     },
                     Err(TryRecvError::Disconnected) => {
