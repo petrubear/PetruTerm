@@ -292,9 +292,9 @@ el flujo PTY. OSC 133 (B-1) provee los límites de prompt/command que hacen esto
 - [x] Damage-skip nunca omite el ghost row (se redibuja en cada keypress)
 - [x] `Tab` o `ArrowRight` al final del buffer: `accept_ghost()` escribe el sufijo al PTY
 
-#### I-4: Flag hints — tooltips de flags
-- [ ] Base de datos mínima de flags comunes (`git`, `cargo`, `docker`, `kubectl`, `ls`, `grep`)
-  guardada como `HashMap<&str, HashMap<&str, &str>>` (comando → flag → descripción)
-- [ ] Cuando el último token es un `Flag` reconocido: mostrar descripción en fila extra debajo
-  del input (misma zona de hints del chat panel, pero en el pane terminal)
-- [ ] `Esc` o continuar tipeando cierra el hint
+#### I-4: Flag hints — tooltips de flags — COMPLETA
+- [x] `src/term/flag_db.rs`: `lookup_flag(cmd, flag) -> Option<&'static str>` — 10 comandos (ls, git, cargo, grep/rg, docker, kubectl, ssh, curl, tar, find)
+- [x] `FlagHintOverlay` en `mux.rs` — similar a `GhostOverlay` pero en `cursor.row + 1`; aligned con la posición del flag en el grid
+- [x] Hint format: `"<flag>  <description>"` en color `ui_muted`
+- [x] Aparece cuando el último token es `TokenKind::Flag` y `lookup_flag` retorna Some
+- [x] Cierra solo (el último token deja de ser Flag cuando el usuario sigue tipeando; Esc limpia el buf)

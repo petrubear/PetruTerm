@@ -26,7 +26,7 @@ Ver spec completo en [`.context/specs/build_phases.md`](../specs/build_phases.md
 | I-1 | Input shadow buffer (depende de B-1) | Alta | **COMPLETA** |
 | I-2 | Syntax coloring del comando | Alta | **COMPLETA** |
 | I-3 | Ghost text — inline completion hints | Alta | **COMPLETA** |
-| I-4 | Flag hints — tooltips de flags | Alta | Pendiente |
+| I-4 | Flag hints — tooltips de flags | Alta | **COMPLETA** |
 
 ## Rama sugerida: `feat/phase-7`
 

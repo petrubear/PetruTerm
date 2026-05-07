@@ -1,5 +1,6 @@
 pub mod blocks;
 pub mod color;
+pub mod flag_db;
 pub mod input_shadow;
 pub mod osc133;
 pub mod pty;

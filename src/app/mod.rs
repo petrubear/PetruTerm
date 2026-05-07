@@ -3436,6 +3436,52 @@ fn build_all_pane_instances(
                     ),
                 })
             });
+        // Compute flag hint overlay (I-4): description shown below cursor when last token is a flag.
+        let flag_hint_overlay = mux
+            .terminals
+            .get(info.terminal_id)
+            .and_then(|s| s.as_ref())
+            .and_then(|t| {
+                let shadow = &t.input_shadow;
+                if !shadow.active || shadow.buf.is_empty() {
+                    return None;
+                }
+                let cursor = t.cursor_info();
+                if !cursor.visible || cursor.row + 1 >= t.rows as usize {
+                    return None;
+                }
+                use crate::term::tokenizer::{tokenize_command, TokenKind};
+                let tokens = tokenize_command(&shadow.buf);
+                let last = tokens.last()?;
+                if last.kind != TokenKind::Flag {
+                    return None;
+                }
+                let flag_text = &shadow.buf[last.range.clone()];
+                let cmd_text = tokens
+                    .iter()
+                    .find(|t| t.kind == TokenKind::Command)
+                    .map(|t| &shadow.buf[t.range.clone()])
+                    .unwrap_or("");
+                let desc = crate::term::flag_db::lookup_flag(cmd_text, flag_text)?;
+                // Align hint with flag start column in the terminal grid.
+                let cursor_as_col = shadow.buf[..shadow.cursor].chars().count();
+                let cmd_start_col = cursor.col.saturating_sub(cursor_as_col);
+                let flag_col_in_buf = shadow.buf[..last.range.start].chars().count();
+                let flag_start_col = cmd_start_col + flag_col_in_buf;
+                let hint: String = format!("{}  {}", flag_text, desc);
+                let muted = config.colors.ui_muted;
+                let r = (muted[0] * 255.0).round() as u8;
+                let g = (muted[1] * 255.0).round() as u8;
+                let b = (muted[2] * 255.0).round() as u8;
+                Some(mux::FlagHintOverlay {
+                    viewport_row: cursor.row + 1,
+                    start_col: flag_start_col,
+                    chars: hint.chars().collect(),
+                    fg: alacritty_terminal::vte::ansi::Color::Spec(
+                        alacritty_terminal::vte::ansi::Rgb { r, g, b },
+                    ),
+                })
+            });
         mux.collect_grid_cells_for(
             info.terminal_id,
             &mut cell_data_scratch,
@@ -3443,6 +3489,7 @@ fn build_all_pane_instances(
             terminal_changed,
             syntax_overlay.as_ref(),
             ghost_overlay.as_ref(),
+            flag_hint_overlay.as_ref(),
         );
         let cell_data = &cell_data_scratch[..];
         rc.build_instances(

@@ -46,6 +46,18 @@ pub struct GhostOverlay {
     pub fg: AnsiColor,
 }
 
+/// Flag hint overlay (I-4): one-line description shown below the input row when a flag is typed.
+pub struct FlagHintOverlay {
+    /// Viewport row where the hint appears (= cursor.row + 1).
+    pub viewport_row: usize,
+    /// Column where hint text begins (aligned with flag start in the input row).
+    pub start_col: usize,
+    /// Hint characters (flag + "  " + description).
+    pub chars: Vec<char>,
+    /// Pre-converted fg color (ui_muted).
+    pub fg: AnsiColor,
+}
+
 /// Highlight colors injected into cell data for search matches.
 const SEARCH_MATCH_FG: AnsiColor = AnsiColor::Spec(Rgb {
     r: 40,
@@ -714,6 +726,7 @@ impl Mux {
         force_full: bool,
         syntax: Option<&SyntaxOverlay>,
         ghost: Option<&GhostOverlay>,
+        flag_hint: Option<&FlagHintOverlay>,
     ) {
         let Some(Some(terminal)) = self.terminals.get(terminal_id) else {
             buf.clear();
@@ -769,10 +782,11 @@ impl Mux {
         }
 
         for (row, (text, colors)) in buf.iter_mut().enumerate() {
-            // Skip undamaged rows — but never skip the ghost-text row (it changes every keypress).
+            // Skip undamaged rows — but never skip ghost/hint rows (they change every keypress).
             if let Some(ref ds) = damage_set {
                 let is_ghost_row = ghost.map(|g| g.viewport_row == row).unwrap_or(false);
-                if !ds.contains(&row) && !is_ghost_row {
+                let is_hint_row = flag_hint.map(|h| h.viewport_row == row).unwrap_or(false);
+                if !ds.contains(&row) && !is_ghost_row && !is_hint_row {
                     continue;
                 }
             }
@@ -782,26 +796,31 @@ impl Mux {
             let grid_line = Line(row as i32 - display_offset);
             for col in 0..cols {
                 let cell = &term.grid()[grid_line][Column(col)];
+                let cell_char = if cell.c == '\0' { ' ' } else { cell.c };
 
-                // I-3: ghost text — replace cell char and fg with completion suffix.
-                let ghost_fg = if let Some(g) = ghost {
-                    if row == g.viewport_row && col >= g.start_col {
-                        let idx = col - g.start_col;
-                        if let Some(&gc) = g.chars.get(idx) {
-                            text.push(gc);
-                            Some(g.fg)
-                        } else {
-                            text.push(if cell.c == '\0' { ' ' } else { cell.c });
-                            None
+                // I-3/I-4: compute overlay char + fg from ghost text or flag hint.
+                // Ghost and hint are on different rows, so at most one fires per cell.
+                let (overlay_char, overlay_fg): (Option<char>, Option<AnsiColor>) = 'ovl: {
+                    if let Some(g) = ghost {
+                        if row == g.viewport_row && col >= g.start_col {
+                            let idx = col - g.start_col;
+                            if let Some(&gc) = g.chars.get(idx) {
+                                break 'ovl (Some(gc), Some(g.fg));
+                            }
                         }
-                    } else {
-                        text.push(if cell.c == '\0' { ' ' } else { cell.c });
-                        None
                     }
-                } else {
-                    text.push(if cell.c == '\0' { ' ' } else { cell.c });
-                    None
+                    if let Some(h) = flag_hint {
+                        if row == h.viewport_row && col >= h.start_col {
+                            let idx = col - h.start_col;
+                            if let Some(&hc) = h.chars.get(idx) {
+                                break 'ovl (Some(hc), Some(h.fg));
+                            }
+                        }
+                    }
+                    (None, None)
                 };
+
+                text.push(overlay_char.unwrap_or(cell_char));
 
                 let (fg, bg) = if cell.flags.contains(Flags::INVERSE) {
                     (cell.bg, cell.fg)
@@ -815,7 +834,7 @@ impl Mux {
                 };
                 let (fg, bg) =
                     search_highlight_at(grid_line.0, col, &search_idx).unwrap_or((fg, bg));
-                let fg = ghost_fg
+                let fg = overlay_fg
                     .or_else(|| syntax_highlight_at(row, col, syntax))
                     .unwrap_or(fg);
                 colors.push((fg, bg));
