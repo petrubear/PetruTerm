@@ -16,7 +16,9 @@ enum EraseState {
 
 impl EraseScanner {
     pub fn new() -> Self {
-        Self { state: EraseState::Normal }
+        Self {
+            state: EraseState::Normal,
+        }
     }
 
     /// Feed one byte. Returns `true` if a `CSI 2 J` or `CSI 3 J` was completed.
@@ -24,20 +26,29 @@ impl EraseScanner {
         use EraseState::*;
         match self.state {
             Normal => {
-                if b == 0x1b { self.state = Esc; }
+                if b == 0x1b {
+                    self.state = Esc;
+                }
                 false
             }
             Esc => {
                 self.state = if b == b'[' { CsiBracket } else { Normal };
                 false
             }
-            CsiBracket => {
-                match b {
-                    b'2' | b'3' => { self.state = CsiParam(b); false }
-                    0x1b        => { self.state = Esc; false }
-                    _           => { self.state = Normal; false }
+            CsiBracket => match b {
+                b'2' | b'3' => {
+                    self.state = CsiParam(b);
+                    false
                 }
-            }
+                0x1b => {
+                    self.state = Esc;
+                    false
+                }
+                _ => {
+                    self.state = Normal;
+                    false
+                }
+            },
             CsiParam(n) => {
                 self.state = Normal;
                 b == b'J' && (n == b'2' || n == b'3')

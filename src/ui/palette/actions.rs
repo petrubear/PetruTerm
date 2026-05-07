@@ -130,6 +130,11 @@ pub fn built_in_actions(config: &Config) -> Vec<PaletteAction> {
             keybind: None,
         },
         PaletteAction {
+            name: t!("palette.open_config_folder").to_string(),
+            action: Action::OpenConfigFolder,
+            keybind: None,
+        },
+        PaletteAction {
             name: t!("palette.reload_config").to_string(),
             action: Action::ReloadConfig,
             keybind: None,
@@ -238,6 +243,11 @@ pub fn built_in_actions(config: &Config) -> Vec<PaletteAction> {
             name: t!("palette.undo_write").to_string(),
             action: Action::UndoLastWrite,
             keybind: kb("UndoLastWrite"),
+        },
+        PaletteAction {
+            name: t!("palette.clear_ai_context").to_string(),
+            action: Action::ClearAiContext,
+            keybind: None,
         },
         PaletteAction {
             name: t!("palette.toggle_status").to_string(),

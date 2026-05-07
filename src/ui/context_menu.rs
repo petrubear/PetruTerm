@@ -1,5 +1,5 @@
 /// An action that a context menu item can trigger.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ContextAction {
     Copy,
     Paste,
@@ -15,6 +15,8 @@ pub enum ContextAction {
     CopyBlockOutput(usize, usize),
     /// Re-run the command of a block by writing it to the PTY.
     ReRunCommand(String),
+    /// Set the accent color for a tab (tab_index, color). None resets to theme default.
+    SetTabColor(usize, Option<[f32; 4]>),
     /// Non-interactive separator row.
     Separator,
     /// Non-interactive informational label (displays text, no action).
@@ -27,6 +29,8 @@ pub struct ContextMenuItem {
     pub label: String,
     pub keybind: Option<String>,
     pub action: ContextAction,
+    /// When Some, a colored "●" swatch is rendered before the label.
+    pub swatch_color: Option<[f32; 4]>,
 }
 
 impl ContextMenuItem {
@@ -56,6 +60,42 @@ pub struct ContextMenu {
 /// Width in terminal columns for the context menu popup.
 pub const CONTEXT_MENU_WIDTH: usize = 30;
 
+fn item(label: &str, action: ContextAction) -> ContextMenuItem {
+    ContextMenuItem {
+        label: label.to_string(),
+        keybind: None,
+        action,
+        swatch_color: None,
+    }
+}
+
+fn item_kb(label: &str, kb: &str, action: ContextAction) -> ContextMenuItem {
+    ContextMenuItem {
+        label: label.to_string(),
+        keybind: Some(kb.to_string()),
+        action,
+        swatch_color: None,
+    }
+}
+
+fn separator() -> ContextMenuItem {
+    ContextMenuItem {
+        label: String::new(),
+        keybind: None,
+        action: ContextAction::Separator,
+        swatch_color: None,
+    }
+}
+
+fn label_item(text: &str) -> ContextMenuItem {
+    ContextMenuItem {
+        label: text.to_string(),
+        keybind: None,
+        action: ContextAction::Label,
+        swatch_color: None,
+    }
+}
+
 impl ContextMenu {
     pub fn new() -> Self {
         Self {
@@ -63,31 +103,11 @@ impl ContextMenu {
             col: 0,
             row: 0,
             items: vec![
-                ContextMenuItem {
-                    label: "Copy".into(),
-                    keybind: Some("Cmd+C".into()),
-                    action: ContextAction::Copy,
-                },
-                ContextMenuItem {
-                    label: "Paste".into(),
-                    keybind: Some("Cmd+V".into()),
-                    action: ContextAction::Paste,
-                },
-                ContextMenuItem {
-                    label: "Clear".into(),
-                    keybind: None,
-                    action: ContextAction::Clear,
-                },
-                ContextMenuItem {
-                    label: String::new(),
-                    keybind: None,
-                    action: ContextAction::Separator,
-                },
-                ContextMenuItem {
-                    label: "Ask AI".into(),
-                    keybind: None,
-                    action: ContextAction::SendToChat,
-                },
+                item_kb("Copy", "Cmd+C", ContextAction::Copy),
+                item_kb("Paste", "Cmd+V", ContextAction::Paste),
+                item("Clear", ContextAction::Clear),
+                separator(),
+                item("Ask AI", ContextAction::SendToChat),
             ],
             hovered: None,
         }
@@ -118,7 +138,6 @@ impl ContextMenu {
     }
 
     /// Open a link-specific context menu at (col, row).
-    /// Shows Open Link + Copy Link at the top, followed by the standard items.
     pub fn open_with_link(
         &mut self,
         link_text: String,
@@ -128,42 +147,16 @@ impl ContextMenu {
         term_rows: usize,
     ) {
         self.items = vec![
-            ContextMenuItem {
-                label: "Open Link".into(),
-                keybind: None,
-                action: ContextAction::OpenLink(link_text.clone()),
-            },
-            ContextMenuItem {
-                label: "Copy Link".into(),
-                keybind: None,
-                action: ContextAction::CopyLink(link_text),
-            },
-            ContextMenuItem {
-                label: String::new(),
-                keybind: None,
-                action: ContextAction::Separator,
-            },
-            ContextMenuItem {
-                label: "Copy".into(),
-                keybind: Some("Cmd+C".into()),
-                action: ContextAction::Copy,
-            },
-            ContextMenuItem {
-                label: "Paste".into(),
-                keybind: Some("Cmd+V".into()),
-                action: ContextAction::Paste,
-            },
+            item("Open Link", ContextAction::OpenLink(link_text.clone())),
+            item("Copy Link", ContextAction::CopyLink(link_text)),
+            separator(),
+            item_kb("Copy", "Cmd+C", ContextAction::Copy),
+            item_kb("Paste", "Cmd+V", ContextAction::Paste),
         ];
         self.open(col, row, term_cols, term_rows);
     }
 
     /// Open an exit-code info popup just above the status bar.
-    ///
-    /// `exit_code`: the non-zero code to display.
-    /// `last_command`: the last shell command that ran (may be empty).
-    /// `col`: click column from the status bar click.
-    /// `term_rows`: terminal grid height (status bar is at row `term_rows`).
-    /// `term_cols`: terminal grid width.
     pub fn open_exit_info(
         &mut self,
         exit_code: i32,
@@ -190,31 +183,11 @@ impl ContextMenu {
         };
 
         self.items = vec![
-            ContextMenuItem {
-                label: format!("✘ Exit code: {exit_code}"),
-                keybind: None,
-                action: ContextAction::Label,
-            },
-            ContextMenuItem {
-                label: String::new(),
-                keybind: None,
-                action: ContextAction::Separator,
-            },
-            ContextMenuItem {
-                label: cmd_display,
-                keybind: None,
-                action: ContextAction::Label,
-            },
-            ContextMenuItem {
-                label: String::new(),
-                keybind: None,
-                action: ContextAction::Separator,
-            },
-            ContextMenuItem {
-                label: "Copy command".to_string(),
-                keybind: None,
-                action: ContextAction::CopyLastCommand,
-            },
+            label_item(&format!("✘ Exit code: {exit_code}")),
+            separator(),
+            label_item(&cmd_display),
+            separator(),
+            item("Copy command", ContextAction::CopyLastCommand),
         ];
 
         let height = self.items.len();
@@ -223,7 +196,6 @@ impl ContextMenu {
         } else {
             col
         };
-        // Place above the status bar (status bar is at term_rows, menu goes upward).
         let row = term_rows.saturating_sub(height);
         self.col = clamped_col;
         self.row = row;
@@ -232,7 +204,6 @@ impl ContextMenu {
     }
 
     /// Open a block-specific context menu at (col, row).
-    /// Shows Copy Output, Re-run Command, Clear Block at the top.
     #[allow(clippy::too_many_arguments)]
     pub fn open_with_block(
         &mut self,
@@ -261,57 +232,57 @@ impl ContextMenu {
             }
         };
         self.items = vec![
-            ContextMenuItem {
-                label: cmd_display,
-                keybind: None,
-                action: ContextAction::Label,
-            },
-            ContextMenuItem {
-                label: String::new(),
-                keybind: None,
-                action: ContextAction::Separator,
-            },
-            ContextMenuItem {
-                label: "Copy Output".into(),
-                keybind: Some("Leader y".into()),
-                action: ContextAction::CopyBlockOutput(terminal_id, block_id),
-            },
-            ContextMenuItem {
-                label: "Re-run Command".into(),
-                keybind: Some("Leader r".into()),
-                action: ContextAction::ReRunCommand(command_text),
-            },
-            ContextMenuItem {
-                label: String::new(),
-                keybind: None,
-                action: ContextAction::Separator,
-            },
-            ContextMenuItem {
-                label: "Clear".into(),
-                keybind: None,
-                action: ContextAction::Clear,
-            },
-            ContextMenuItem {
-                label: "Copy".into(),
-                keybind: Some("Cmd+C".into()),
-                action: ContextAction::Copy,
-            },
-            ContextMenuItem {
-                label: "Paste".into(),
-                keybind: Some("Cmd+V".into()),
-                action: ContextAction::Paste,
-            },
-            ContextMenuItem {
-                label: "Ask AI".into(),
-                keybind: None,
-                action: ContextAction::SendToChat,
-            },
+            label_item(&cmd_display),
+            separator(),
+            item_kb(
+                "Copy Output",
+                "Leader y",
+                ContextAction::CopyBlockOutput(terminal_id, block_id),
+            ),
+            item_kb(
+                "Re-run Command",
+                "Leader r",
+                ContextAction::ReRunCommand(command_text),
+            ),
+            separator(),
+            item("Clear", ContextAction::Clear),
+            item_kb("Copy", "Cmd+C", ContextAction::Copy),
+            item_kb("Paste", "Cmd+V", ContextAction::Paste),
+            item("Ask AI", ContextAction::SendToChat),
         ];
         self.open(col, row, term_cols, term_rows);
     }
 
+    /// Open a tab color picker at (col, row).
+    /// `tab_idx`: the tab index to color.
+    /// `brights`: the theme's bright ANSI colors array [8 entries].
+    pub fn open_tab_color_picker(
+        &mut self,
+        tab_idx: usize,
+        brights: &[[f32; 4]; 8],
+        col: usize,
+        row: usize,
+        term_cols: usize,
+        term_rows: usize,
+    ) {
+        let color_names = ["Red", "Green", "Yellow", "Blue", "Magenta", "Cyan", "White"];
+        let mut items: Vec<ContextMenuItem> = vec![label_item("Tab Color"), separator()];
+        for (i, name) in color_names.iter().enumerate() {
+            let color = brights[i + 1];
+            items.push(ContextMenuItem {
+                label: name.to_string(),
+                keybind: None,
+                action: ContextAction::SetTabColor(tab_idx, Some(color)),
+                swatch_color: Some(color),
+            });
+        }
+        items.push(separator());
+        items.push(item("Reset", ContextAction::SetTabColor(tab_idx, None)));
+        self.items = items;
+        self.open(col, row, term_cols, term_rows);
+    }
+
     /// Given a terminal cell (col, row), return the action for that item if it's inside the menu.
-    /// Separator rows are skipped (return None).
     pub fn hit_test(&self, col: usize, row: usize) -> Option<ContextAction> {
         if !self.visible {
             return None;
@@ -333,7 +304,6 @@ impl ContextMenu {
     }
 
     /// Update the hovered item index based on a terminal cell position.
-    /// Separator rows are never hovered. Returns true if hover state changed.
     pub fn update_hover(&mut self, col: usize, row: usize) -> bool {
         if !self.visible {
             return false;

@@ -78,6 +78,7 @@ impl AppMenu {
         let explain = MenuItem::new(t!("menu.explain_output").as_ref(), true, None);
         let fix_error = MenuItem::new(t!("menu.fix_error").as_ref(), true, None);
         let undo_write = MenuItem::new(t!("menu.undo_write").as_ref(), true, None);
+        let clear_ai_context = MenuItem::new(t!("menu.clear_ai_context").as_ref(), true, None);
         let enable_ai = MenuItem::new(t!("menu.enable_ai").as_ref(), true, None);
         let disable_ai = MenuItem::new(t!("menu.disable_ai").as_ref(), true, None);
         ai_menu
@@ -86,6 +87,7 @@ impl AppMenu {
                 &explain,
                 &fix_error,
                 &undo_write,
+                &clear_ai_context,
                 &PredefinedMenuItem::separator(),
                 &enable_ai,
                 &disable_ai,
@@ -95,6 +97,7 @@ impl AppMenu {
         items.push((explain.id().clone(), Action::ExplainLastOutput));
         items.push((fix_error.id().clone(), Action::FixLastError));
         items.push((undo_write.id().clone(), Action::UndoLastWrite));
+        items.push((clear_ai_context.id().clone(), Action::ClearAiContext));
         items.push((enable_ai.id().clone(), Action::EnableAiFeatures));
         items.push((disable_ai.id().clone(), Action::DisableAiFeatures));
 

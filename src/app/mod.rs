@@ -1520,7 +1520,8 @@ impl App {
             // Focus border — only when there are multiple panes.
             if pane_infos.len() > 1 {
                 if let Some(focused) = pane_infos.iter().find(|p| p.focused) {
-                    rc.build_focus_border(focused, &self.config.colors);
+                    let tab_accent = self.mux.tabs.active_tab().and_then(|t| t.accent_color);
+                    rc.build_focus_border(focused, &self.config.colors, tab_accent);
                 }
             }
 
@@ -2405,6 +2406,12 @@ impl App {
                                     }
                                 }
                             }
+                            ContextAction::SetTabColor(idx, color) => {
+                                self.mux.tabs.set_tab_color(idx, color);
+                                if let Some(rc) = &mut self.render_ctx {
+                                    rc.tab_bar_instances_cache.clear();
+                                }
+                            }
                             ContextAction::Separator | ContextAction::Label => {}
                         }
                         self.request_redraw();
@@ -2769,9 +2776,22 @@ impl App {
                     self.input.send_mouse_report(0, col, row, false, &self.mux);
                 }
             }
-            // In mouse-reporting mode, pass right-click to the terminal app.
-            // Otherwise, open the context menu.
+            // Right-click on tab bar → open tab color picker.
             (MouseButton::Right, ElementState::Pressed) if !in_panel => {
+                let tab_h = self.tab_bar_height_px() as f64;
+                let y_px = self.input.mouse_pos.1;
+                let pad_top = self.config.window.padding.top as f64;
+                if tab_h > 0.0 && y_px >= pad_top && y_px < pad_top + tab_h {
+                    if let Some(tab_idx) = self.hit_test_tab_bar(self.input.mouse_pos.0) {
+                        let (term_cols, term_rows) = self.mux.active_terminal_size();
+                        let brights = &self.config.colors.brights;
+                        self.ui.context_menu.open_tab_color_picker(
+                            tab_idx, brights, col, row, term_cols, term_rows,
+                        );
+                        self.request_redraw();
+                        return;
+                    }
+                }
                 let (any_mouse, _, _) = self
                     .mux
                     .active_terminal()

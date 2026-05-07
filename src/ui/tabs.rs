@@ -7,6 +7,8 @@ pub struct Tab {
     pub title: String,
     /// Index into the pane tree (one pane tree per tab).
     pub pane_tree_id: usize,
+    /// Optional accent color override. None → use theme ui_accent.
+    pub accent_color: Option<[f32; 4]>,
 }
 
 /// Manages the ordered list of tabs.
@@ -34,6 +36,7 @@ impl TabManager {
             id,
             title: title.into(),
             pane_tree_id,
+            accent_color: None,
         });
         self.active = self.tabs.len() - 1;
         id
@@ -74,6 +77,21 @@ impl TabManager {
         if !self.tabs.is_empty() {
             self.active = (self.active + self.tabs.len() - 1) % self.tabs.len();
         }
+    }
+
+    /// Set the accent color for the tab at `idx`. Pass None to reset to theme default.
+    pub fn set_tab_color(&mut self, idx: usize, color: Option<[f32; 4]>) {
+        if let Some(tab) = self.tabs.get_mut(idx) {
+            tab.accent_color = color;
+        }
+    }
+
+    /// Returns the active tab's accent color, falling back to `default`.
+    pub fn active_accent(&self, default: [f32; 4]) -> [f32; 4] {
+        self.tabs
+            .get(self.active)
+            .and_then(|t| t.accent_color)
+            .unwrap_or(default)
     }
 
     /// Rename the active tab.

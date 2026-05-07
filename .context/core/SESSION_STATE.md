@@ -1,14 +1,35 @@
 # Session State
 
 **Last Updated:** 2026-05-07
-**Session Focus:** Phase 7 — A-1..A-3 + I-1..I-4 COMPLETAS. Phase 7 cerrada.
+**Session Focus:** Post-Phase 7 — Paleta/menú + Tab color picker.
 
 ## Branch: `master`
 
 ## Estado actual
 
-**Phases 1–7 COMPLETAS. master limpio. 10 commits ahead of origin.**
+**Phases 1–7 COMPLETAS. master limpio.**
 **Sin deuda técnica abierta. Diferidos: TD-PERF-03/05 (solo GPUs discretas).**
+
+## Esta sesión (2026-05-07) — Paleta, menú nativo, tab color picker
+
+### Paleta de comandos — auditoria y actualizacion
+- Agregadas entradas faltantes: `OpenConfigFolder` y `ClearAiContext`.
+- Locales actualizados: `palette.open_config_folder`, `palette.clear_ai_context` (en/es).
+
+### Menú nativo (menu.rs)
+- Agregado `Clear AI Context` en el submenu AI (entre "Undo Last Write" y el separador enable/disable).
+- Locale `menu.clear_ai_context` agregado a `en.toml`.
+
+### Tab color picker — COMPLETO
+- `Tab.accent_color: Option<[f32; 4]>` en `src/ui/tabs.rs`.
+- `TabManager::set_tab_color(idx, color)` y `active_accent(default)`.
+- `ContextAction::SetTabColor(usize, Option<[f32; 4]>)` en `context_menu.rs`.
+- `ContextMenuItem.swatch_color: Option<[f32; 4]>` — renderer dibuja `● ` en el color del swatch.
+- `ContextMenu::open_tab_color_picker(tab_idx, brights, ...)` — 7 swatches de `colors.brights[1..7]` + Reset.
+- Clic derecho en zona del tab bar → abre el color picker (no el menú normal).
+- Tab activo: fondo + underline en `accent_color`. Tab inactivo con color: solo underline. Sin color: sin cambio.
+- `build_focus_border` usa `tab_accent: Option<[f32; 4]>` — borde del pane sigue el color del tab activo.
+- Cache del tab bar invalidado (`tab_bar_instances_cache.clear()`) al cambiar color.
 
 ## Esta sesión (2026-05-06) — Phase 7: A-1..A-3 + I-1..I-4
 

@@ -591,8 +591,9 @@ impl RenderContext {
         &mut self,
         focused: &crate::ui::PaneInfo,
         colors: &crate::config::schema::ColorScheme,
+        tab_accent: Option<[f32; 4]>,
     ) {
-        let [r, g, b, _] = colors.ui_accent;
+        let [r, g, b, _] = tab_accent.unwrap_or(colors.ui_accent);
         let focus_color = [r, g, b, 0.85];
         let border = 1.5 * self.scale_factor;
         let radius = 6.0 * self.scale_factor;
@@ -3133,9 +3134,23 @@ impl RenderContext {
             let is_hovered = menu.hovered == Some(i);
             let current_bg = if is_hovered { hover_bg } else { bg };
 
-            // Name on the left.
-            let name_text = format!("  {}", item.label);
-            self.push_shaped_row(&name_text, fg, current_bg, row, menu.col, width, font);
+            // Name on the left — with optional colored swatch prefix.
+            if let Some(swatch) = item.swatch_color {
+                self.push_shaped_row("● ", swatch, current_bg, row, menu.col + 1, 2, font);
+                let name_text = format!(" {}", item.label);
+                self.push_shaped_row(
+                    &name_text,
+                    fg,
+                    current_bg,
+                    row,
+                    menu.col + 3,
+                    width.saturating_sub(3),
+                    font,
+                );
+            } else {
+                let name_text = format!("  {}", item.label);
+                self.push_shaped_row(&name_text, fg, current_bg, row, menu.col, width, font);
+            }
 
             // Keybind right-aligned.
             if let Some(kb) = &item.keybind {
@@ -3436,7 +3451,6 @@ impl RenderContext {
 
         // Active tab: flat subtle rect, not a pill. Inactive: transparent bg.
         let active_tab_bg = colors.ui_surface_active;
-        let active_underline = colors.ui_accent;
         let flat_radius = 2.0 * sf;
 
         let effective_tabs_start = tabs_start_x.max(pad_left);
@@ -3478,24 +3492,35 @@ impl RenderContext {
             let tab_x = pad_left + col as f32 * cell_w;
             let tab_w = label_w as f32 * cell_w;
 
-            if is_active && tab_w > 0.0 {
-                // Subtle flat background rect
-                self.rect_instances.push(RoundedRectInstance {
-                    rect: [tab_x, pill_y, tab_w, pill_h],
-                    color: active_tab_bg,
-                    radius: flat_radius,
-                    border_width: 0.0,
-                    _pad: [0.0; 2],
-                });
-                // Amber underline at the bottom edge of the titlebar
+            let tab_accent = tab.accent_color.unwrap_or(colors.ui_accent);
+            if tab_w > 0.0 {
                 let underline_h = (1.5 * sf).max(1.0);
-                self.rect_instances.push(RoundedRectInstance {
-                    rect: [tab_x, pill_y + pill_h - underline_h, tab_w, underline_h],
-                    color: active_underline,
-                    radius: 0.0,
-                    border_width: 0.0,
-                    _pad: [0.0; 2],
-                });
+                if is_active {
+                    // Active: background + accent underline
+                    self.rect_instances.push(RoundedRectInstance {
+                        rect: [tab_x, pill_y, tab_w, pill_h],
+                        color: active_tab_bg,
+                        radius: flat_radius,
+                        border_width: 0.0,
+                        _pad: [0.0; 2],
+                    });
+                    self.rect_instances.push(RoundedRectInstance {
+                        rect: [tab_x, pill_y + pill_h - underline_h, tab_w, underline_h],
+                        color: tab_accent,
+                        radius: 0.0,
+                        border_width: 0.0,
+                        _pad: [0.0; 2],
+                    });
+                } else if tab.accent_color.is_some() {
+                    // Inactive with custom color: underline only
+                    self.rect_instances.push(RoundedRectInstance {
+                        rect: [tab_x, pill_y + pill_h - underline_h, tab_w, underline_h],
+                        color: tab_accent,
+                        radius: 0.0,
+                        border_width: 0.0,
+                        _pad: [0.0; 2],
+                    });
+                }
             }
 
             if label_w > 0 {
