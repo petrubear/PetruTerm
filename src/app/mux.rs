@@ -318,6 +318,9 @@ impl Mux {
                         PtyEvent::Osc133(marker) => {
                             osc133_pending.push((id, marker));
                         }
+                        PtyEvent::ScreenCleared => {
+                            terminal.block_manager.clear();
+                        }
                     },
                     Err(TryRecvError::Disconnected) => {
                         log::warn!("PTY channel disconnected.");

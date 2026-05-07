@@ -37,6 +37,12 @@ impl BlockManager {
         }
     }
 
+    /// Discard all blocks (completed and in-progress). Called on screen clear.
+    pub fn clear(&mut self) {
+        self.blocks.clear();
+        self.current = None;
+    }
+
     /// Update block state from an OSC 133 marker.
     /// `absolute_row` = `history_size + cursor_viewport_row - display_offset` at event time.
     /// `command_text` is the text of the current row; only used at CommandStart.

@@ -776,9 +776,9 @@ impl InputHandler {
                         return;
                     }
                     "k" => {
-                        if let Some(terminal) = mux.active_terminal() {
-                            // Clear screen and scrollback, move cursor home.
+                        if let Some(terminal) = mux.active_terminal_mut() {
                             terminal.write_input(b"\x1b[H\x1b[2J\x1b[3J");
+                            terminal.block_manager.clear();
                         }
                         return;
                     }

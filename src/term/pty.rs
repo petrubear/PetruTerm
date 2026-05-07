@@ -12,7 +12,7 @@ use std::thread::JoinHandle;
 use winit::event_loop::EventLoopProxy;
 
 use crate::config::Config;
-use crate::term::osc133::{Osc133Marker, Osc133Scanner};
+use crate::term::osc133::{EraseScanner, Osc133Marker, Osc133Scanner};
 
 /// Events emitted by the PTY reader thread to the main thread.
 pub enum PtyEvent {
@@ -33,6 +33,9 @@ pub enum PtyEvent {
     PtyWrite(String),
     /// OSC 133 semantic prompt marker.
     Osc133(Osc133Marker),
+    /// CSI 2 J (erase display) or CSI 3 J (erase scrollback) detected.
+    /// Block decorations must be cleared.
+    ScreenCleared,
 }
 
 /// Bridges alacritty_terminal events from Term's internal event listener to our
@@ -386,6 +389,7 @@ fn reader_loop(
 ) {
     let mut processor: VteProcessor<StdSyncHandler> = VteProcessor::new();
     let mut scanner = Osc133Scanner::new();
+    let mut erase_scanner = EraseScanner::new();
     let mut buf = vec![0u8; 0x10_0000]; // 1 MiB read buffer
 
     loop {
@@ -399,10 +403,13 @@ fn reader_loop(
         let n = n as usize;
         let bytes = &buf[..n];
 
-        // OSC 133 scan — must run before VTE advance.
+        // OSC 133 + erase scan — must run before VTE advance.
         for &b in bytes {
             if let Some(marker) = scanner.scan(b) {
                 let _ = tx.try_send(PtyEvent::Osc133(marker));
+            }
+            if erase_scanner.scan(b) {
+                let _ = tx.try_send(PtyEvent::ScreenCleared);
             }
         }
 
