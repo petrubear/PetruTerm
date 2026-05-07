@@ -822,8 +822,9 @@ impl App {
                 let r = rows as i64;
                 let last_vp = (output_end - h + d).clamp(0, r - 1) as f32;
 
-                // Hit zone: right 3 columns of the last output row — easy to click.
-                let hit_x = pane.x + pane.w - 3.0 * cell_w;
+                // Hit zone: right 10 columns of the last output row.
+                // Covers the widest possible pill " ✗ 255 " (7 chars) + 1-cell margin.
+                let hit_x = pane.x + pane.w - 10.0 * cell_w;
                 let hit_y = pane.y + last_vp * cell_h;
                 if x >= hit_x && y >= hit_y && y < hit_y + cell_h {
                     return Some((info.terminal_id, block.id));
@@ -1523,12 +1524,15 @@ impl App {
                 }
             }
 
-            // B-3/B-4: OSC 133 command block backgrounds, gutter bars, exit indicators.
+            // B-3/B-4: OSC 133 command block backgrounds, exit-code text pills.
             rc.build_block_instances(
                 &pane_infos,
                 &self.mux,
                 &self.config.colors,
                 self.hover_block,
+                sep_pad_x,
+                sb_pad_y,
+                &scaled_font,
             );
 
             // H-1: push pre-computed link underline rect.

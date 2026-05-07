@@ -629,15 +629,19 @@ impl RenderContext {
     }
 
     /// Render OSC 133 command blocks for all panes.
-    /// Draws per block: subtle bg rect, left gutter bar, exit-code indicator on last row.
+    /// Draws per block: subtle bg rect, exit-code text pill on last row.
     /// Only completed blocks (with output_end) are rendered.
     /// `hover_block`: if Some((terminal_id, block_id)), that block is highlighted.
+    #[allow(clippy::too_many_arguments)]
     pub fn build_block_instances(
         &mut self,
         pane_infos: &[crate::ui::PaneInfo],
         mux: &crate::app::Mux,
         colors: &crate::config::schema::ColorScheme,
         hover_block: Option<(usize, usize)>,
+        pad_x: f32,
+        pad_y: f32,
+        font: &crate::config::schema::FontConfig,
     ) {
         let cell_w = self.shaper.cell_width;
         let cell_h = self.shaper.cell_height;
@@ -647,8 +651,13 @@ impl RenderContext {
         bg_color[3] = 0.06;
         let mut hover_bg_color = colors.ui_surface_hover;
         hover_bg_color[3] = 0.14;
-        let success_color = colors.ui_success;
-        let error_color = [0.9_f32, 0.35, 0.35, 0.9];
+        // Badge design: dark theme surface bg + bright theme-color text.
+        // ui_surface_active = selection_bg (e.g. Dracula's #454158) — already in the palette.
+        // Text uses the theme's own success/error colors at full brightness → no off-palette tones.
+        let pill_bg = colors.ui_surface_active;
+        let success_fg = colors.ui_success; // e.g. Dracula #50FA7B
+        let error_fg = colors.ansi[1]; // ANSI red,  e.g. Dracula #FF5555
+        let transparent = [0.0f32; 4];
 
         for info in pane_infos {
             let Some(terminal) = mux.terminals.get(info.terminal_id).and_then(|s| s.as_ref())
@@ -674,6 +683,11 @@ impl RenderContext {
             let pane_y = info.pane_rect.y;
             let pane_w = info.pane_rect.w;
 
+            // Pane origin and size in grid coordinates.
+            let pane_col0 = ((pane_x - pad_x) / cell_w).round() as usize;
+            let pane_row0 = ((pane_y - pad_y) / cell_h).round() as usize;
+            let pane_cols = (pane_w / cell_w).round() as usize;
+
             for block in blocks {
                 let Some(output_end) = block.output_end else {
                     continue;
@@ -696,24 +710,43 @@ impl RenderContext {
                     _pad: [0.0; 2],
                 });
 
-                // Exit code indicator: small pill on last visible row, 2 cells from right.
-                let last_vp = (output_end - h + d).clamp(0, r - 1) as f32;
-                let ind_y = pane_y + last_vp * cell_h + (cell_h - cell_h * 0.6) * 0.5;
-                let ind_h = cell_h * 0.6;
-                let ind_w = cell_w * 1.2;
-                let ind_x = pane_x + pane_w - 2.0 * cell_w - ind_w * 0.5;
-                let ind_color = if block.exit_code == Some(0) {
-                    success_color
+                // Exit code pill: rounded text badge right-aligned on last visible row.
+                // Format: " ✓ 0 " (success) or " ✗ 127 " (error).
+                let last_vp = (output_end - h + d).clamp(0, r - 1) as usize;
+                let exit_code = block.exit_code.unwrap_or(-1);
+                let (icon, text_fg) = if exit_code == 0 {
+                    ("✓", success_fg)
                 } else {
-                    error_color
+                    ("✗", error_fg)
                 };
+                let pill_text = format!(" {} {} ", icon, exit_code);
+                let pill_len = pill_text.chars().count();
+
+                // Grid position: right-aligned with 1-cell margin from pane edge.
+                let pill_col = pane_col0 + pane_cols.saturating_sub(pill_len + 1);
+                let pill_grid_row = pane_row0 + last_vp;
+                let pill_x = pad_x + pill_col as f32 * cell_w;
+                let pill_y = pad_y + pill_grid_row as f32 * cell_h;
+
+                // Rounded rect: theme's selection/surface color as bg.
                 self.rect_instances.push(RoundedRectInstance {
-                    rect: [ind_x, ind_y, ind_w, ind_h],
-                    color: ind_color,
+                    rect: [pill_x, pill_y, pill_len as f32 * cell_w, cell_h],
+                    color: pill_bg,
                     radius: sf * 3.0,
                     border_width: 0.0,
                     _pad: [0.0; 2],
                 });
+
+                // Text in theme success/error color; transparent bg reveals the rounded rect.
+                self.push_shaped_row(
+                    &pill_text,
+                    text_fg,
+                    transparent,
+                    pill_grid_row,
+                    pill_col,
+                    pill_len,
+                    font,
+                );
             }
         }
     }

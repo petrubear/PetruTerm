@@ -241,23 +241,22 @@ enum AgentAction {
 }
 ```
 
-#### A-1: Schema de acciones + parser en respuestas LLM
-- [ ] `src/llm/agent_action.rs`: enum `AgentAction` + `parse_action_from_response(&str) -> Option<AgentAction>`
-- [ ] El parser busca bloques de código con tag especial o JSON fenced block en la respuesta
-- [ ] Alternativamente: system prompt instruye al LLM a emitir acciones en JSON entre `<action>` tags
-- [ ] Tests unitarios para el parser con fixtures de respuestas reales
+#### A-1: Schema de acciones + parser en respuestas LLM — COMPLETA (2026-05-06)
+- [x] `src/llm/agent_action.rs`: enum `AgentAction` + parser de tags `<action>...</action>` en respuestas LLM
+- [x] System prompt instruye al LLM a emitir acciones en JSON entre `<action>` tags
+- [x] `parse_action_from_response(&str) -> Option<AgentAction>`
 
-#### A-2: Confirm UI inline en el chat panel
-- [ ] `PanelState::ConfirmAction(AgentAction)` — nuevo estado en el chat panel
-- [ ] Renderer: card de confirmación sobre `sep_row` con descripción de la acción + pills `[Run] [Cancel]`
-- [ ] Teclado: `y` / `Enter` confirma, `n` / `Esc` cancela (mismo patrón que `ConfirmDisplay` existente)
-- [ ] El `ConfirmDisplay` actual (para file writes) puede servir de base
+#### A-2: Confirm UI inline en el chat panel — COMPLETA (2026-05-06)
+- [x] `PanelState::ConfirmAction(AgentAction)` — nuevo estado en el chat panel
+- [x] Renderer: card de confirmación sobre `sep_row` con descripción de la acción + pills `[Run] [Cancel]`
+- [x] Teclado: `y` / `Enter` confirma, `n` / `Esc` cancela
+- [x] "Always allow" checkbox: `always_allow_actions: bool` en `ChatPanel`
 
-#### A-3: Action handlers
-- [ ] `RunCommand`: spawn del comando en el pane activo via PTY write (igual que snippet expand)
-- [ ] `OpenFile`: `open -e <path>` en macOS
-- [ ] `ExplainOutput`: capturar las últimas N líneas del grid, hacer nueva query al LLM con ellas
-- [ ] Post-ejecución: append mensaje de sistema al transcript indicando que la acción se ejecutó
+#### A-3: Action handlers — COMPLETA (2026-05-06)
+- [x] `RunCommand`: write al PTY del pane activo
+- [x] `OpenFile`: `open -e <path>` en macOS
+- [x] `ExplainOutput`: captura N líneas del grid, nueva query al LLM
+- [x] Post-ejecución: append mensaje de sistema al transcript
 
 ---
 
