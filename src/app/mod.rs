@@ -3016,6 +3016,14 @@ impl ApplicationHandler<()> for App {
             }
             WindowEvent::Focused(focused) => {
                 self.window_focused = focused;
+                if focused {
+                    // Clear any stale modifier state (e.g. Shift held when Cmd+Tab-ing
+                    // away and released outside the window). Stale shift + active KKP
+                    // (DISAMBIGUATE_ESC_CODES) would cause Enter to send \x1b[13;2u
+                    // (Shift+Enter) instead of \r, making zsh insert a newline rather
+                    // than execute the command.
+                    self.input.modifiers = winit::event::Modifiers::default();
+                }
             }
             WindowEvent::RedrawRequested => {
                 self.handle_redraw(event_loop);
