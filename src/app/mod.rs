@@ -2920,9 +2920,13 @@ impl ApplicationHandler<()> for App {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, _event: ()) {
         let (data_ids, exited) = self.mux.poll_pty_events();
         self.mux.apply_osc133_events();
+        let had_exit = !exited.is_empty();
         if self.close_exited_terminals(exited) {
             event_loop.exit();
             return;
+        }
+        if had_exit {
+            self.request_redraw();
         }
 
         // PTY data: mark pending but do NOT request_redraw immediately.
@@ -3136,9 +3140,13 @@ impl ApplicationHandler<()> for App {
         // and keeps last_pty_activity accurate for coalescing.
         let (data_ids, exited) = self.mux.poll_pty_events();
         self.mux.apply_osc133_events();
+        let had_exit = !exited.is_empty();
         if self.close_exited_terminals(exited) {
             event_loop.exit();
             return;
+        }
+        if had_exit {
+            self.request_redraw();
         }
         let had_pty_data = !data_ids.is_empty();
         if had_pty_data {
