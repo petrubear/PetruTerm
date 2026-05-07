@@ -15,6 +15,10 @@ pub struct Config {
     pub snippets: Vec<SnippetConfig>,
     pub shell: String,
     pub shell_integration: bool,
+    /// Show history-based ghost text after the cursor while typing (I-3).
+    /// Set to `false` if you use zsh-autosuggestions or fish shell — they
+    /// already provide this feature and the two will conflict visually.
+    pub input_ghost_text: bool,
     pub llm: LlmConfig,
     pub status_bar: StatusBarConfig,
     pub keyboard: KeyboardConfig,
@@ -89,6 +93,7 @@ impl Default for Config {
             snippets: vec![],
             shell: std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into()),
             shell_integration: true,
+            input_ghost_text: true,
             llm: LlmConfig::default(),
             status_bar: StatusBarConfig::default(),
             keyboard: KeyboardConfig::default(),

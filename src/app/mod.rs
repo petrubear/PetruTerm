@@ -3409,7 +3409,8 @@ fn build_all_pane_instances(
                 })
             });
         // Compute ghost text overlay (I-3): history completion suffix after cursor.
-        let ghost_overlay = mux
+        // Skipped when config.input_ghost_text = false (e.g. user has zsh-autosuggestions).
+        let ghost_overlay = if !config.input_ghost_text { None } else { mux
             .terminals
             .get(info.terminal_id)
             .and_then(|s| s.as_ref())
@@ -3435,7 +3436,7 @@ fn build_all_pane_instances(
                         alacritty_terminal::vte::ansi::Rgb { r, g, b },
                     ),
                 })
-            });
+            })};
         // Compute flag hint overlay (I-4): description shown below cursor when last token is a flag.
         let flag_hint_overlay = mux
             .terminals

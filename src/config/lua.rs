@@ -509,6 +509,10 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
         config.shell_integration = si;
     }
 
+    if let Ok(v) = table.get::<bool>("input_ghost_text") {
+        config.input_ghost_text = v;
+    }
+
     if let Ok(win) = table.get::<LuaTable>("window") {
         if let Ok(b) = win.get::<bool>("borderless") {
             config.window.borderless = b;
