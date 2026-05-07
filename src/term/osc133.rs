@@ -156,7 +156,10 @@ mod tests {
     #[test]
     fn command_start_st() {
         let seq = b"\x1b]133;B\x1b\\";
-        assert_eq!(scan_all(seq), vec![Osc133Marker::CommandStart(String::new())]);
+        assert_eq!(
+            scan_all(seq),
+            vec![Osc133Marker::CommandStart(String::new())]
+        );
     }
 
     #[test]

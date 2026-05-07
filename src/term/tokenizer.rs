@@ -106,7 +106,10 @@ pub fn tokenize_command(input: &str) -> Vec<Token> {
             if i < n && (b[i] == b'|' || b[i] == b'&') {
                 i += 1;
             }
-            tokens.push(Token { kind: TokenKind::Pipe, range: start..i });
+            tokens.push(Token {
+                kind: TokenKind::Pipe,
+                range: start..i,
+            });
             first_word = true;
             continue;
         }
@@ -118,7 +121,10 @@ pub fn tokenize_command(input: &str) -> Vec<Token> {
             if i < n && b[i] == b'>' {
                 i += 1;
             }
-            tokens.push(Token { kind: TokenKind::Redirect, range: start..i });
+            tokens.push(Token {
+                kind: TokenKind::Redirect,
+                range: start..i,
+            });
             first_word = false;
             continue;
         }
@@ -137,7 +143,10 @@ pub fn tokenize_command(input: &str) -> Vec<Token> {
             if i < n {
                 i += 1; // closing quote
             }
-            tokens.push(Token { kind: TokenKind::String, range: start..i });
+            tokens.push(Token {
+                kind: TokenKind::String,
+                range: start..i,
+            });
             first_word = false;
             continue;
         }
@@ -152,7 +161,10 @@ pub fn tokenize_command(input: &str) -> Vec<Token> {
             while i < n && !is_word_break(b[i]) {
                 i += 1;
             }
-            tokens.push(Token { kind: TokenKind::Flag, range: start..i });
+            tokens.push(Token {
+                kind: TokenKind::Flag,
+                range: start..i,
+            });
             continue;
         }
 
@@ -167,7 +179,10 @@ pub fn tokenize_command(input: &str) -> Vec<Token> {
         } else {
             TokenKind::Arg
         };
-        tokens.push(Token { kind, range: start..i });
+        tokens.push(Token {
+            kind,
+            range: start..i,
+        });
     }
 
     tokens
@@ -183,11 +198,11 @@ pub type SyntaxFg = Vec<Option<[f32; 4]>>;
 
 /// Dracula-palette colors used for syntax spans.
 /// These are RGBA [0,1] values.
-const CMD_VALID:   [f32; 4] = [0.314, 0.980, 0.482, 1.0]; // #50fa7b green
-const CMD_ERROR:   [f32; 4] = [1.000, 0.333, 0.333, 1.0]; // #ff5555 red
-const FLAG_COLOR:  [f32; 4] = [0.545, 0.914, 0.992, 1.0]; // #8be9fd cyan
-const STR_COLOR:   [f32; 4] = [0.945, 0.980, 0.549, 1.0]; // #f1fa8c yellow
-const PIPE_COLOR:  [f32; 4] = [1.000, 0.722, 0.424, 1.0]; // #ffb86c orange
+const CMD_VALID: [f32; 4] = [0.314, 0.980, 0.482, 1.0]; // #50fa7b green
+const CMD_ERROR: [f32; 4] = [1.000, 0.333, 0.333, 1.0]; // #ff5555 red
+const FLAG_COLOR: [f32; 4] = [0.545, 0.914, 0.992, 1.0]; // #8be9fd cyan
+const STR_COLOR: [f32; 4] = [0.945, 0.980, 0.549, 1.0]; // #f1fa8c yellow
+const PIPE_COLOR: [f32; 4] = [1.000, 0.722, 0.424, 1.0]; // #ffb86c orange
 
 /// Compute per-column fg overrides for `buf` given resolved command validity.
 /// `cmd_valid`: `None` if the command name hasn't been resolved yet (no override).
@@ -212,8 +227,8 @@ pub fn build_syntax_fg(buf: &str, cmd_valid: Option<bool>) -> SyntaxFg {
         // Map byte range to char column range
         let col_start = buf[..token.range.start].chars().count();
         let col_end = col_start + buf[token.range.clone()].chars().count();
-        for col in col_start..col_end.min(char_count) {
-            fg[col] = Some(color);
+        for fg_slot in fg[col_start..col_end.min(char_count)].iter_mut() {
+            *fg_slot = Some(color);
         }
     }
     fg
@@ -255,7 +270,9 @@ impl CommandResolver {
             }
         }
         {
-            let Ok(mut pending) = self.pending.lock() else { return };
+            let Ok(mut pending) = self.pending.lock() else {
+                return;
+            };
             if !pending.insert(cmd.to_string()) {
                 return; // already in flight
             }
@@ -295,7 +312,10 @@ mod tests {
     use super::*;
 
     fn kinds(input: &str) -> Vec<TokenKind> {
-        tokenize_command(input).into_iter().map(|t| t.kind).collect()
+        tokenize_command(input)
+            .into_iter()
+            .map(|t| t.kind)
+            .collect()
     }
 
     #[test]
@@ -366,7 +386,7 @@ mod tests {
         let fg = build_syntax_fg("ls -la", Some(true));
         assert_eq!(fg[0], Some(CMD_VALID)); // 'l'
         assert_eq!(fg[1], Some(CMD_VALID)); // 's'
-        assert_eq!(fg[2], None);            // ' '
+        assert_eq!(fg[2], None); // ' '
         assert_eq!(fg[3], Some(FLAG_COLOR)); // '-'
     }
 

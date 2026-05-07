@@ -718,6 +718,7 @@ impl Mux {
     /// eliminating per-frame heap allocations once the buffer has reached steady state.
     ///
     /// When `search` is `Some`, cells that match the query are recolored in-place.
+    #[allow(clippy::too_many_arguments)]
     pub fn collect_grid_cells_for(
         &self,
         terminal_id: usize,

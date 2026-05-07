@@ -809,9 +809,10 @@ impl App {
             let (display_offset, history_size) = terminal.scrollback_info();
             let rows = (pane.h / cell_h) as usize;
 
-            for block in terminal
-                .block_manager
-                .blocks_in_viewport(history_size, display_offset, rows)
+            for block in
+                terminal
+                    .block_manager
+                    .blocks_in_viewport(history_size, display_offset, rows)
             {
                 let Some(output_end) = block.output_end else {
                     continue;
@@ -3376,67 +3377,71 @@ fn build_all_pane_instances(
             }
         });
         // Compute syntax overlay for the active input line (I-2).
-        let syntax_overlay = if !config.input_syntax_highlight { None } else { mux
-            .terminals
-            .get(info.terminal_id)
-            .and_then(|s| s.as_ref())
-            .and_then(|t| {
-                if !t.input_shadow.active {
-                    return None;
-                }
-                let cursor = t.cursor_info();
-                if !cursor.visible {
-                    return None;
-                }
-                let shadow = &t.input_shadow;
-                let cursor_as_col = shadow.buf[..shadow.cursor].chars().count();
-                let cmd_start_col = cursor.col.saturating_sub(cursor_as_col);
-                let cmd_valid = {
-                    use crate::term::tokenizer::tokenize_command;
-                    use crate::term::tokenizer::TokenKind;
-                    tokenize_command(&shadow.buf)
-                        .into_iter()
-                        .find(|tok| tok.kind == TokenKind::Command)
-                        .and_then(|tok| {
-                            shadow.cmd_resolver.resolve(&shadow.buf[tok.range])
-                        })
-                };
-                let fg = crate::term::tokenizer::build_syntax_fg(&shadow.buf, cmd_valid);
-                Some(mux::SyntaxOverlay {
-                    viewport_row: cursor.row,
-                    cmd_start_col,
-                    fg,
+        let syntax_overlay = if !config.input_syntax_highlight {
+            None
+        } else {
+            mux.terminals
+                .get(info.terminal_id)
+                .and_then(|s| s.as_ref())
+                .and_then(|t| {
+                    if !t.input_shadow.active {
+                        return None;
+                    }
+                    let cursor = t.cursor_info();
+                    if !cursor.visible {
+                        return None;
+                    }
+                    let shadow = &t.input_shadow;
+                    let cursor_as_col = shadow.buf[..shadow.cursor].chars().count();
+                    let cmd_start_col = cursor.col.saturating_sub(cursor_as_col);
+                    let cmd_valid = {
+                        use crate::term::tokenizer::tokenize_command;
+                        use crate::term::tokenizer::TokenKind;
+                        tokenize_command(&shadow.buf)
+                            .into_iter()
+                            .find(|tok| tok.kind == TokenKind::Command)
+                            .and_then(|tok| shadow.cmd_resolver.resolve(&shadow.buf[tok.range]))
+                    };
+                    let fg = crate::term::tokenizer::build_syntax_fg(&shadow.buf, cmd_valid);
+                    Some(mux::SyntaxOverlay {
+                        viewport_row: cursor.row,
+                        cmd_start_col,
+                        fg,
+                    })
                 })
-            })};
+        };
         // Compute ghost text overlay (I-3): history completion suffix after cursor.
         // Skipped when config.input_ghost_text = false (e.g. user has zsh-autosuggestions).
-        let ghost_overlay = if !config.input_ghost_text { None } else { mux
-            .terminals
-            .get(info.terminal_id)
-            .and_then(|s| s.as_ref())
-            .and_then(|t| {
-                let shadow = &t.input_shadow;
-                let ghost_text = shadow.ghost.as_ref()?;
-                if !shadow.active || shadow.cursor != shadow.buf.len() {
-                    return None;
-                }
-                let cursor = t.cursor_info();
-                if !cursor.visible {
-                    return None;
-                }
-                let muted = config.colors.ui_muted;
-                let r = (muted[0] * 255.0).round() as u8;
-                let g = (muted[1] * 255.0).round() as u8;
-                let b = (muted[2] * 255.0).round() as u8;
-                Some(mux::GhostOverlay {
-                    viewport_row: cursor.row,
-                    start_col: cursor.col,
-                    chars: ghost_text.chars().collect(),
-                    fg: alacritty_terminal::vte::ansi::Color::Spec(
-                        alacritty_terminal::vte::ansi::Rgb { r, g, b },
-                    ),
+        let ghost_overlay = if !config.input_ghost_text {
+            None
+        } else {
+            mux.terminals
+                .get(info.terminal_id)
+                .and_then(|s| s.as_ref())
+                .and_then(|t| {
+                    let shadow = &t.input_shadow;
+                    let ghost_text = shadow.ghost.as_ref()?;
+                    if !shadow.active || shadow.cursor != shadow.buf.len() {
+                        return None;
+                    }
+                    let cursor = t.cursor_info();
+                    if !cursor.visible {
+                        return None;
+                    }
+                    let muted = config.colors.ui_muted;
+                    let r = (muted[0] * 255.0).round() as u8;
+                    let g = (muted[1] * 255.0).round() as u8;
+                    let b = (muted[2] * 255.0).round() as u8;
+                    Some(mux::GhostOverlay {
+                        viewport_row: cursor.row,
+                        start_col: cursor.col,
+                        chars: ghost_text.chars().collect(),
+                        fg: alacritty_terminal::vte::ansi::Color::Spec(
+                            alacritty_terminal::vte::ansi::Rgb { r, g, b },
+                        ),
+                    })
                 })
-            })};
+        };
         // Compute flag hint overlay (I-4): description shown below cursor when last token is a flag.
         let flag_hint_overlay = mux
             .terminals

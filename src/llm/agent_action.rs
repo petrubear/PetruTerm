@@ -77,7 +77,9 @@ mod tests {
         let text = "Here: <action>{\"type\":\"open_file\",\"path\":\"src/main.rs\"}</action>";
         assert_eq!(
             parse_action_from_response(text).unwrap(),
-            AgentAction::OpenFile { path: "src/main.rs".into() }
+            AgentAction::OpenFile {
+                path: "src/main.rs".into()
+            }
         );
     }
 
@@ -117,7 +119,9 @@ mod tests {
                     <action>{\"type\":\"open_file\",\"path\":\"b.rs\"}</action>";
         assert_eq!(
             parse_action_from_response(text).unwrap(),
-            AgentAction::OpenFile { path: "a.rs".into() }
+            AgentAction::OpenFile {
+                path: "a.rs".into()
+            }
         );
     }
 
@@ -155,7 +159,9 @@ mod tests {
         let text = "<action>  \n{\"type\":\"open_file\",\"path\":\"foo.rs\"}\n  </action>";
         assert_eq!(
             parse_action_from_response(text).unwrap(),
-            AgentAction::OpenFile { path: "foo.rs".into() }
+            AgentAction::OpenFile {
+                path: "foo.rs".into()
+            }
         );
     }
 }

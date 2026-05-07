@@ -80,6 +80,7 @@ impl InputShadow {
 
     /// Mirror a key event into the shadow buffer.
     /// Only has effect when `active == true`. Does not write to PTY.
+    #[allow(clippy::collapsible_match)]
     pub fn on_key(&mut self, event: &KeyEvent, modifiers: &Modifiers) {
         if !self.active {
             return;
