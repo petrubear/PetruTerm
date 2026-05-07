@@ -665,6 +665,10 @@ impl RenderContext {
                 continue;
             };
 
+            if terminal.is_alt_screen() {
+                continue;
+            }
+
             let (display_offset, history_size) = terminal.scrollback_info();
             let rows = info.pane_rect.h / cell_h;
             let blocks = terminal.block_manager.blocks_in_viewport(

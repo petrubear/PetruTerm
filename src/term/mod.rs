@@ -219,6 +219,10 @@ impl Terminal {
         self.term.lock().mode().contains(TermMode::BRACKETED_PASTE)
     }
 
+    pub fn is_alt_screen(&self) -> bool {
+        self.term.lock().mode().contains(TermMode::ALT_SCREEN)
+    }
+
     /// Return the active mouse mode flags: (any_reporting, sgr, motion).
     pub fn mouse_mode_flags(&self) -> (bool, bool, bool) {
         let mode = *self.term.lock().mode();
