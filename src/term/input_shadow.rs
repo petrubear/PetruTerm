@@ -169,6 +169,13 @@ impl InputShadow {
                 self.buf.clear();
                 self.cursor = 0;
             }
+            // History navigation: the shell replaces the entire line — shadow is invalid.
+            Key::Named(NamedKey::ArrowUp) | Key::Named(NamedKey::ArrowDown) => {
+                self.active = false;
+                self.buf.clear();
+                self.cursor = 0;
+                self.ghost = None;
+            }
             _ => {}
         }
         self.maybe_schedule_cmd_resolve();

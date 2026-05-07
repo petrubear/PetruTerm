@@ -513,6 +513,10 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
         config.input_ghost_text = v;
     }
 
+    if let Ok(v) = table.get::<bool>("input_syntax_highlight") {
+        config.input_syntax_highlight = v;
+    }
+
     if let Ok(win) = table.get::<LuaTable>("window") {
         if let Ok(b) = win.get::<bool>("borderless") {
             config.window.borderless = b;

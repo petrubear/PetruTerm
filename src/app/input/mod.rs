@@ -819,7 +819,12 @@ impl InputHandler {
             return;
         }
 
-        self.send_key_to_active_terminal(event, mux, config.keyboard.option_as_meta);
+        self.send_key_to_active_terminal(
+            event,
+            mux,
+            config.keyboard.option_as_meta,
+            config.input_ghost_text,
+        );
     }
 
     /// Try to expand a snippet trigger from `input_echo`. If the last contiguous
@@ -866,6 +871,7 @@ impl InputHandler {
         event: &KeyEvent,
         mux: &mut Mux,
         option_as_meta: bool,
+        input_ghost_text: bool,
     ) {
         let mode = mux
             .active_terminal()
@@ -900,16 +906,31 @@ impl InputHandler {
                 terminal.input_shadow.on_key(event, &self.modifiers);
                 self.last_key_instant = Some(std::time::Instant::now());
 
-                // I-3: Tab or ArrowRight at end of buf with ghost text → accept completion.
+                // I-3: Tab or ArrowRight at end of buf → accept ghost text completion.
+                // Only fires when input_ghost_text is enabled to avoid interfering with
+                // zsh-autosuggestions (which also intercepts ArrowRight at end-of-line).
                 let is_accept_key = matches!(
                     &event.logical_key,
                     Key::Named(NamedKey::Tab) | Key::Named(NamedKey::ArrowRight)
                 );
                 if is_accept_key {
-                    if let Some(suffix) = terminal.input_shadow.accept_ghost() {
-                        terminal.write_input(suffix.as_bytes());
-                        terminal.clear_selection();
-                        return;
+                    let at_buf_end = terminal.input_shadow.cursor
+                        == terminal.input_shadow.buf.len()
+                        && terminal.input_shadow.active;
+                    if input_ghost_text {
+                        if let Some(suffix) = terminal.input_shadow.accept_ghost() {
+                            terminal.write_input(suffix.as_bytes());
+                            terminal.clear_selection();
+                            return;
+                        }
+                    }
+                    // If we're at buf-end but didn't accept a ghost (either disabled or no
+                    // match), the shell (e.g. zsh-autosuggestions) will move the terminal
+                    // cursor into text the shadow doesn't know about. Deactivate so the
+                    // I-2 syntax overlay doesn't compute a wrong cmd_start_col.
+                    if at_buf_end {
+                        terminal.input_shadow.active = false;
+                        terminal.input_shadow.ghost = None;
                     }
                 }
 

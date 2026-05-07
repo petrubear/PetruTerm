@@ -78,9 +78,13 @@ function module.apply_to_config(config)
 	config.hide_tab_bar_if_one = true
 
 	-- ── Input decoration ─────────────────────────────────────────────────────
+	-- Colorize the command as you type: green/red for command, cyan for flags, yellow for strings.
+	-- Set to false if you use zsh-syntax-highlighting.
+	config.input_syntax_highlight = true
+
 	-- Show ghost text (history-based inline completion) after the cursor while typing.
-	-- Set to false if you use zsh-autosuggestions or fish shell — they already provide
-	-- this feature and the two will conflict visually.
+	-- Set to false if you use zsh-autosuggestions or fish — they already provide this,
+	-- and having both active causes conflicts (double text written to shell on ArrowRight).
 	config.input_ghost_text = true
 
 	-- ── Status bar ───────────────────────────────────────────────────────────

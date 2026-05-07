@@ -19,6 +19,9 @@ pub struct Config {
     /// Set to `false` if you use zsh-autosuggestions or fish shell — they
     /// already provide this feature and the two will conflict visually.
     pub input_ghost_text: bool,
+    /// Colorize the command being typed based on token type (I-2).
+    /// Set to `false` if you use zsh-syntax-highlighting or similar.
+    pub input_syntax_highlight: bool,
     pub llm: LlmConfig,
     pub status_bar: StatusBarConfig,
     pub keyboard: KeyboardConfig,
@@ -94,6 +97,7 @@ impl Default for Config {
             shell: std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into()),
             shell_integration: true,
             input_ghost_text: true,
+            input_syntax_highlight: true,
             llm: LlmConfig::default(),
             status_bar: StatusBarConfig::default(),
             keyboard: KeyboardConfig::default(),

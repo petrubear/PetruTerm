@@ -3376,7 +3376,7 @@ fn build_all_pane_instances(
             }
         });
         // Compute syntax overlay for the active input line (I-2).
-        let syntax_overlay = mux
+        let syntax_overlay = if !config.input_syntax_highlight { None } else { mux
             .terminals
             .get(info.terminal_id)
             .and_then(|s| s.as_ref())
@@ -3407,7 +3407,7 @@ fn build_all_pane_instances(
                     cmd_start_col,
                     fg,
                 })
-            });
+            })};
         // Compute ghost text overlay (I-3): history completion suffix after cursor.
         // Skipped when config.input_ghost_text = false (e.g. user has zsh-autosuggestions).
         let ghost_overlay = if !config.input_ghost_text { None } else { mux
