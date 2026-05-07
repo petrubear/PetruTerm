@@ -269,27 +269,28 @@ de edición paralelo al del shell. Riesgo de divergencia con el estado real del 
 el input necesitamos un "shadow buffer" que refleje lo que el usuario está tipeando, sin romper
 el flujo PTY. OSC 133 (B-1) provee los límites de prompt/command que hacen esto viable.
 
-#### I-1: Shadow input buffer
-- [ ] `InputShadow { buf: String, cursor: usize, active: bool }` por pane
-- [ ] Activar cuando OSC 133-A recibido (estamos en zona de prompt)
-- [ ] Desactivar en OSC 133-B (command enviado)
-- [ ] Interceptar `KeyboardInput` en `handle_keyboard`: actualizar `InputShadow` en espejo
+#### I-1: Shadow input buffer — COMPLETA
+- [x] `InputShadow { buf: String, cursor: usize, active: bool }` por pane
+- [x] Activar cuando OSC 133-A recibido (estamos en zona de prompt)
+- [x] Desactivar en OSC 133-B (command enviado)
+- [x] Interceptar `KeyboardInput` en `handle_keyboard`: actualizar `InputShadow` en espejo
   (no reemplaza el envío al PTY, solo lo replica para decoración)
-- [ ] Reset en `Ctrl+C`, `Ctrl+U`, y en OSC 133-B/D
+- [x] Reset en `Ctrl+C`, `Ctrl+U`, y en OSC 133-B/D
 
-#### I-2: Syntax coloring del comando
-- [ ] `tokenize_command(input: &str) -> Vec<(Range<usize>, TokenKind)>`
-  - `TokenKind`: `Command`, `Arg`, `Flag`, `Pipe`, `Redirect`, `String`, `Error`
-- [ ] Colorear sobre las celdas del grid que coincidan con el shadow buffer
-  (overlay de color, no reemplazo de celdas — mismo mecanismo que selection highlight)
-- [ ] Resolver si el primer token es un comando válido: buscar en `$PATH` (cache, no bloqueante)
-- [ ] Comando no encontrado → `TokenKind::Error` → color rojo
+#### I-2: Syntax coloring del comando — COMPLETA
+- [x] `tokenize_command(input: &str) -> Vec<(Range<usize>, TokenKind)>`
+  - `TokenKind`: `Command`, `Arg`, `Flag`, `Pipe`, `Redirect`, `String`, `Arg`
+- [x] Colorear sobre las celdas del grid que coincidan con el shadow buffer
+  (overlay de color — mismo mecanismo que selection highlight)
+- [x] Resolver si el primer token es un comando válido: buscar en `$PATH` (cache, no bloqueante)
+- [x] Comando no encontrado → color rojo
 
-#### I-3: Ghost text — inline completion hints
-- [ ] Integrar con historial de comandos del shell (leer `~/.zsh_history` o `~/.bash_history`)
-- [ ] Cuando `InputShadow.buf` no está vacío: buscar el match más reciente del historial
-- [ ] Renderizar el sufijo del match en `ui_muted` (50% alpha) a la derecha del cursor
-- [ ] `Tab` o `ArrowRight` al final del buffer: aceptar el ghost text (write al PTY)
+#### I-3: Ghost text — inline completion hints — COMPLETA
+- [x] `HistoryIndex::load()` en `src/term/tokenizer.rs` — lee `~/.zsh_history` o `~/.bash_history`; most-recent-first
+- [x] `InputShadow.ghost: Option<String>` — suffix actualizado en cada keypress cuando cursor al final del buf
+- [x] `GhostOverlay` en `mux.rs` — reemplaza chars + aplica `ui_muted` fg en el viewport row del cursor
+- [x] Damage-skip nunca omite el ghost row (se redibuja en cada keypress)
+- [x] `Tab` o `ArrowRight` al final del buffer: `accept_ghost()` escribe el sufijo al PTY
 
 #### I-4: Flag hints — tooltips de flags
 - [ ] Base de datos mínima de flags comunes (`git`, `cargo`, `docker`, `kubectl`, `ls`, `grep`)

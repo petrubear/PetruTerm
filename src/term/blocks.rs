@@ -148,7 +148,7 @@ mod tests {
     fn complete_block_lifecycle() {
         let mut m = mgr();
         m.on_marker(Osc133Marker::PromptStart, 100, String::new());
-        m.on_marker(Osc133Marker::CommandStart("ls -la".into()), 100, String::new());
+        m.on_marker(Osc133Marker::CommandStart("ls -la".into()), 100, "ls -la".to_string());
         m.on_marker(Osc133Marker::CommandEnd(0), 115, String::new());
         assert_eq!(m.blocks.len(), 1);
         let b = &m.blocks[0];

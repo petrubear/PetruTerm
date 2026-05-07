@@ -1,10 +1,13 @@
 pub mod blocks;
 pub mod color;
+pub mod input_shadow;
 pub mod osc133;
 pub mod pty;
+pub mod tokenizer;
 
 pub use alacritty_terminal::vte::ansi::CursorShape;
 pub use blocks::BlockManager;
+pub use input_shadow::InputShadow;
 pub use osc133::Osc133Marker;
 pub use pty::{Pty, PtyEvent, PtyEventProxy};
 
@@ -65,6 +68,8 @@ pub struct Terminal {
     pub child_pid: u32,
     /// OSC 133 command block tracker for this pane.
     pub block_manager: BlockManager,
+    /// Shadow of the current input line for decoration (syntax colour, ghost text).
+    pub input_shadow: InputShadow,
 }
 
 impl Terminal {
@@ -113,6 +118,7 @@ impl Terminal {
             rows,
             child_pid,
             block_manager: BlockManager::new(),
+            input_shadow: InputShadow::new(),
         })
     }
 

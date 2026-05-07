@@ -20,12 +20,12 @@ Ver spec completo en [`.context/specs/build_phases.md`](../specs/build_phases.md
 | B-2 | Block manager por pane | Media | **COMPLETA** |
 | B-3 | Render visual de bloques | Media | **COMPLETA** |
 | B-4 | Operaciones sobre bloques (context menu, keybinds) | Media | **COMPLETA** |
-| A-1 | AI agent: schema de acciones + parser | Media-Alta | Pendiente |
-| A-2 | AI agent: confirm UI inline | Media-Alta | Pendiente |
-| A-3 | AI agent: action handlers | Media-Alta | Pendiente |
-| I-1 | Input shadow buffer (depende de B-1) | Alta | Pendiente |
-| I-2 | Syntax coloring del comando | Alta | Pendiente |
-| I-3 | Ghost text — inline completion hints | Alta | Pendiente |
+| A-1 | AI agent: schema de acciones + parser | Media-Alta | **COMPLETA** |
+| A-2 | AI agent: confirm UI inline | Media-Alta | **COMPLETA** |
+| A-3 | AI agent: action handlers | Media-Alta | **COMPLETA** |
+| I-1 | Input shadow buffer (depende de B-1) | Alta | **COMPLETA** |
+| I-2 | Syntax coloring del comando | Alta | **COMPLETA** |
+| I-3 | Ghost text — inline completion hints | Alta | **COMPLETA** |
 | I-4 | Flag hints — tooltips de flags | Alta | Pendiente |
 
 ## Rama sugerida: `feat/phase-7`

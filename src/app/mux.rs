@@ -23,6 +23,29 @@ use alacritty_terminal::vte::ansi::{Color as AnsiColor, Rgb};
 use anyhow::Result;
 use winit::event_loop::EventLoopProxy;
 
+/// Per-column fg override for the active input row (I-2 syntax highlight).
+pub struct SyntaxOverlay {
+    /// Viewport row (0-based from top) containing the active input line.
+    pub viewport_row: usize,
+    /// Column index where the command text begins on that row.
+    pub cmd_start_col: usize,
+    /// Per-column RGBA fg override. Index 0 corresponds to `cmd_start_col`.
+    /// `None` at a position means "keep original fg".
+    pub fg: Vec<Option<[f32; 4]>>,
+}
+
+/// Ghost text overlay (I-3): history completion suffix shown after the cursor in ui_muted color.
+pub struct GhostOverlay {
+    /// Viewport row containing the cursor.
+    pub viewport_row: usize,
+    /// Column where the ghost text starts (= current terminal cursor column).
+    pub start_col: usize,
+    /// Characters of the completion suffix.
+    pub chars: Vec<char>,
+    /// Pre-converted fg color (ui_muted).
+    pub fg: AnsiColor,
+}
+
 /// Highlight colors injected into cell data for search matches.
 const SEARCH_MATCH_FG: AnsiColor = AnsiColor::Spec(Rgb {
     r: 40,
@@ -319,6 +342,7 @@ impl Mux {
                 history + cursor_vp - disp_off
             });
 
+            terminal.input_shadow.on_osc133(&marker);
             terminal
                 .block_manager
                 .on_marker(marker, absolute_row, command_text);
@@ -688,6 +712,8 @@ impl Mux {
         buf: &mut Vec<(String, Vec<(AnsiColor, AnsiColor)>)>,
         search: Option<(&[SearchMatch], usize)>,
         force_full: bool,
+        syntax: Option<&SyntaxOverlay>,
+        ghost: Option<&GhostOverlay>,
     ) {
         let Some(Some(terminal)) = self.terminals.get(terminal_id) else {
             buf.clear();
@@ -743,9 +769,10 @@ impl Mux {
         }
 
         for (row, (text, colors)) in buf.iter_mut().enumerate() {
-            // Skip undamaged rows: retain previous-frame data so the row-cache hash matches.
+            // Skip undamaged rows — but never skip the ghost-text row (it changes every keypress).
             if let Some(ref ds) = damage_set {
-                if !ds.contains(&row) {
+                let is_ghost_row = ghost.map(|g| g.viewport_row == row).unwrap_or(false);
+                if !ds.contains(&row) && !is_ghost_row {
                     continue;
                 }
             }
@@ -755,7 +782,27 @@ impl Mux {
             let grid_line = Line(row as i32 - display_offset);
             for col in 0..cols {
                 let cell = &term.grid()[grid_line][Column(col)];
-                text.push(if cell.c == '\0' { ' ' } else { cell.c });
+
+                // I-3: ghost text — replace cell char and fg with completion suffix.
+                let ghost_fg = if let Some(g) = ghost {
+                    if row == g.viewport_row && col >= g.start_col {
+                        let idx = col - g.start_col;
+                        if let Some(&gc) = g.chars.get(idx) {
+                            text.push(gc);
+                            Some(g.fg)
+                        } else {
+                            text.push(if cell.c == '\0' { ' ' } else { cell.c });
+                            None
+                        }
+                    } else {
+                        text.push(if cell.c == '\0' { ' ' } else { cell.c });
+                        None
+                    }
+                } else {
+                    text.push(if cell.c == '\0' { ' ' } else { cell.c });
+                    None
+                };
+
                 let (fg, bg) = if cell.flags.contains(Flags::INVERSE) {
                     (cell.bg, cell.fg)
                 } else {
@@ -768,6 +815,9 @@ impl Mux {
                 };
                 let (fg, bg) =
                     search_highlight_at(grid_line.0, col, &search_idx).unwrap_or((fg, bg));
+                let fg = ghost_fg
+                    .or_else(|| syntax_highlight_at(row, col, syntax))
+                    .unwrap_or(fg);
                 colors.push((fg, bg));
             }
         }
@@ -1048,4 +1098,24 @@ fn search_highlight_at(
         }
     }
     None
+}
+
+/// Apply I-2 syntax highlight for the active input row.
+/// Returns `Some(override_fg)` when the cell fg should be recoloured,
+/// `None` otherwise (caller keeps original fg).
+fn syntax_highlight_at(
+    row: usize,
+    col: usize,
+    syntax: Option<&SyntaxOverlay>,
+) -> Option<AnsiColor> {
+    let syn = syntax?;
+    if row != syn.viewport_row {
+        return None;
+    }
+    let col_in_cmd = col.checked_sub(syn.cmd_start_col)?;
+    let rgba = syn.fg.get(col_in_cmd)?.as_ref()?;
+    let r = (rgba[0] * 255.0).round() as u8;
+    let g = (rgba[1] * 255.0).round() as u8;
+    let b = (rgba[2] * 255.0).round() as u8;
+    Some(AnsiColor::Spec(Rgb { r, g, b }))
 }

@@ -864,7 +864,7 @@ impl InputHandler {
     pub fn send_key_to_active_terminal(
         &mut self,
         event: &KeyEvent,
-        mux: &Mux,
+        mux: &mut Mux,
         option_as_meta: bool,
     ) {
         let mode = mux
@@ -895,9 +895,24 @@ impl InputHandler {
                 _ => {}
             }
 
-            if let Some(terminal) = mux.active_terminal() {
+            if let Some(terminal) = mux.active_terminal_mut() {
                 terminal.scroll_to_bottom();
+                terminal.input_shadow.on_key(event, &self.modifiers);
                 self.last_key_instant = Some(std::time::Instant::now());
+
+                // I-3: Tab or ArrowRight at end of buf with ghost text → accept completion.
+                let is_accept_key = matches!(
+                    &event.logical_key,
+                    Key::Named(NamedKey::Tab) | Key::Named(NamedKey::ArrowRight)
+                );
+                if is_accept_key {
+                    if let Some(suffix) = terminal.input_shadow.accept_ghost() {
+                        terminal.write_input(suffix.as_bytes());
+                        terminal.clear_selection();
+                        return;
+                    }
+                }
+
                 terminal.write_input(&data);
                 terminal.clear_selection();
             }

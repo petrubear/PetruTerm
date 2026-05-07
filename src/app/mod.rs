@@ -3375,11 +3375,74 @@ fn build_all_pane_instances(
                 None
             }
         });
+        // Compute syntax overlay for the active input line (I-2).
+        let syntax_overlay = mux
+            .terminals
+            .get(info.terminal_id)
+            .and_then(|s| s.as_ref())
+            .and_then(|t| {
+                if !t.input_shadow.active {
+                    return None;
+                }
+                let cursor = t.cursor_info();
+                if !cursor.visible {
+                    return None;
+                }
+                let shadow = &t.input_shadow;
+                let cursor_as_col = shadow.buf[..shadow.cursor].chars().count();
+                let cmd_start_col = cursor.col.saturating_sub(cursor_as_col);
+                let cmd_valid = {
+                    use crate::term::tokenizer::tokenize_command;
+                    use crate::term::tokenizer::TokenKind;
+                    tokenize_command(&shadow.buf)
+                        .into_iter()
+                        .find(|tok| tok.kind == TokenKind::Command)
+                        .and_then(|tok| {
+                            shadow.cmd_resolver.resolve(&shadow.buf[tok.range])
+                        })
+                };
+                let fg = crate::term::tokenizer::build_syntax_fg(&shadow.buf, cmd_valid);
+                Some(mux::SyntaxOverlay {
+                    viewport_row: cursor.row,
+                    cmd_start_col,
+                    fg,
+                })
+            });
+        // Compute ghost text overlay (I-3): history completion suffix after cursor.
+        let ghost_overlay = mux
+            .terminals
+            .get(info.terminal_id)
+            .and_then(|s| s.as_ref())
+            .and_then(|t| {
+                let shadow = &t.input_shadow;
+                let ghost_text = shadow.ghost.as_ref()?;
+                if !shadow.active || shadow.cursor != shadow.buf.len() {
+                    return None;
+                }
+                let cursor = t.cursor_info();
+                if !cursor.visible {
+                    return None;
+                }
+                let muted = config.colors.ui_muted;
+                let r = (muted[0] * 255.0).round() as u8;
+                let g = (muted[1] * 255.0).round() as u8;
+                let b = (muted[2] * 255.0).round() as u8;
+                Some(mux::GhostOverlay {
+                    viewport_row: cursor.row,
+                    start_col: cursor.col,
+                    chars: ghost_text.chars().collect(),
+                    fg: alacritty_terminal::vte::ansi::Color::Spec(
+                        alacritty_terminal::vte::ansi::Rgb { r, g, b },
+                    ),
+                })
+            });
         mux.collect_grid_cells_for(
             info.terminal_id,
             &mut cell_data_scratch,
             search_arg,
             terminal_changed,
+            syntax_overlay.as_ref(),
+            ghost_overlay.as_ref(),
         );
         let cell_data = &cell_data_scratch[..];
         rc.build_instances(
