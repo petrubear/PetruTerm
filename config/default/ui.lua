@@ -77,6 +77,12 @@ function module.apply_to_config(config)
 	config.enable_tab_bar     = true
 	config.hide_tab_bar_if_one = true
 
+	-- ── Input decoration ─────────────────────────────────────────────────────
+	-- Show ghost text (history-based inline completion) after the cursor while typing.
+	-- Set to false if you use zsh-autosuggestions or fish shell — they already provide
+	-- this feature and the two will conflict visually.
+	config.input_ghost_text = true
+
 	-- ── Status bar ───────────────────────────────────────────────────────────
 	-- enabled:  show/hide the status bar (also togglable via command palette).
 	-- position: "bottom" (default) or "top".

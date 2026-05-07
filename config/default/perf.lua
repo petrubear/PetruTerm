@@ -30,10 +30,6 @@ function module.apply_to_config(config)
   -- Inject shell integration (CWD tracking, exit codes, last command).
   config.shell_integration = true
 
-  -- Show ghost text (history-based inline completion) after the cursor while typing.
-  -- Set to false if you use zsh-autosuggestions or fish shell — they already provide
-  -- this feature and the two will conflict visually.
-  config.input_ghost_text = true
 
   -- Show dirty indicator (*) next to the git branch name in the status bar.
   -- Requires running `git status --porcelain` every 5 s — costs an extra subprocess.
