@@ -3106,9 +3106,11 @@ impl RenderContext {
             return;
         }
 
-        let bg = colors.ui_overlay;
+        let mut bg = colors.ui_overlay;
+        bg[3] = 1.0;
         let fg = colors.foreground;
-        let hover_bg = colors.ui_surface_hover;
+        let mut hover_bg = colors.ui_surface_hover;
+        hover_bg[3] = 1.0;
         let keybind_fg = colors.ui_muted;
 
         let sep_fg = colors.ui_muted;
