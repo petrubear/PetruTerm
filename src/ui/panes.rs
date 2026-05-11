@@ -355,6 +355,12 @@ pub struct PaneInfo {
     /// Raw pixel rect of this pane in the same coordinate space as the viewport rect.
     /// Use this (not col/row_offset) to align with separator lines.
     pub pane_rect: crate::ui::Rect,
+    /// True when the right edge of this pane borders an adjacent separator (not the viewport edge).
+    pub pad_right: bool,
+    /// True when the bottom edge of this pane borders an adjacent separator (not the viewport edge).
+    pub pad_bottom: bool,
+    /// True when the top edge of this pane borders an adjacent separator (not the viewport edge).
+    pub pad_top: bool,
 }
 
 /// A separator line between two adjacent panes.
@@ -460,6 +466,9 @@ fn collect_leaf_infos_impl(
                     w: sx2 - sx,
                     h: sy2 - sy,
                 },
+                pad_right: pad.right,
+                pad_bottom: pad.bottom,
+                pad_top: pad.top,
             });
         }
         PaneNode::Split {

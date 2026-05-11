@@ -129,7 +129,7 @@ pub struct RenderContext {
 
     // ── Static-geometry caches (TD-PERF-08/09/10/16) ────────────────────────────
     // Scroll bar: ~50 CellVertex per frame, no HarfBuzz. Keyed by scroll state.
-    pub scroll_bar_state: Option<(usize, usize, usize, usize)>,
+    pub scroll_bar_state: Option<(usize, usize, usize, usize, bool)>,
     pub scroll_bar_cache: Vec<CellVertex>,
     // Tab bar: HarfBuzz per tab name. Cached inputs checked directly (no hash) (TD-PERF-16).
     pub tab_bar_instances_cache: Vec<CellVertex>,
@@ -600,25 +600,34 @@ impl RenderContext {
         let inset = border * 0.5;
 
         let cell_w = self.shaper.cell_width;
+        let cell_h = self.shaper.cell_height;
 
-        // For panes at the left viewport edge (col_offset == 0), pane_rect.x equals the
-        // text start position — there is no separator gap on that side.  Shift the border
-        // rect's left edge one cell outward so the stroke falls in the window margin rather
-        // than overlapping the first column of text.  Out-of-bounds pixels are GPU-clipped,
-        // so the left border line disappears behind the window frame (same visual as a pane
-        // with a left separator, where the stroke already sits in the separator gap).
-        //
-        // The top edge is NOT shifted: the viewport's top padding (tab bar + window chrome)
-        // provides enough vertical space so the top stroke doesn't visibly overlap text, and
-        // shifting upward would push the border into the title bar / traffic-light area.
+        // For edges that sit at the viewport boundary (no adjacent separator), the border
+        // rect edge coincides exactly with the start of the text cells — the stroke would
+        // overlap the outermost row/column of text.  Push each such edge one cell outward
+        // so it falls outside the content area and gets GPU-clipped, same as the left-edge
+        // workaround that already existed.  Edges next to a separator use `inset` as before
+        // (the separator gap gives room for the stroke without touching text).
         let x = if focused.col_offset == 0 {
             focused.pane_rect.x - cell_w
         } else {
             focused.pane_rect.x + inset
         };
-        let y = focused.pane_rect.y + inset;
-        let right = focused.pane_rect.x + focused.pane_rect.w - inset;
-        let bottom = focused.pane_rect.y + focused.pane_rect.h - inset;
+        let y = if focused.pad_top {
+            focused.pane_rect.y + inset
+        } else {
+            focused.pane_rect.y - cell_h
+        };
+        let right = if focused.pad_right {
+            focused.pane_rect.x + focused.pane_rect.w - inset
+        } else {
+            focused.pane_rect.x + focused.pane_rect.w + cell_w
+        };
+        let bottom = if focused.pad_bottom {
+            focused.pane_rect.y + focused.pane_rect.h - inset
+        } else {
+            focused.pane_rect.y + focused.pane_rect.h + cell_h
+        };
 
         self.rect_instances.push(RoundedRectInstance {
             rect: [x, y, right - x, bottom - y],
@@ -3544,6 +3553,7 @@ impl RenderContext {
         history_size: usize,
         screen_rows: usize,
         term_cols: usize,
+        pad_right: bool,
         colors: &crate::config::schema::ColorScheme,
     ) {
         if history_size == 0 || screen_rows == 0 || term_cols == 0 {
@@ -3569,7 +3579,14 @@ impl RenderContext {
         let scroll_frac = (display_offset as f32 / history_size as f32).clamp(0.0, 1.0);
         let thumb_start = ((1.0 - scroll_frac) * slack as f32).round() as usize;
 
-        let col = (term_cols - 1) as f32;
+        // When there is a right separator, the pane has an unused pad cell between the last
+        // content column and the separator.  Use that cell so the scrollbar sits flush against
+        // the border rather than leaving a cell-wide gap.
+        let col = if pad_right {
+            term_cols as f32
+        } else {
+            (term_cols - 1) as f32
+        };
         let x_off = [cell_w - SCROLLBAR_PX, 0.0];
 
         // Track — 1 rect covering the full scroll bar column height.

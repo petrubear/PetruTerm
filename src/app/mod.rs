@@ -1463,6 +1463,9 @@ impl App {
                     zoomed.rows = rows;
                     zoomed.pane_rect = viewport;
                     zoomed.focused = true;
+                    zoomed.pad_right = false;
+                    zoomed.pad_bottom = false;
+                    zoomed.pad_top = false;
                     pane_infos.clear();
                     pane_infos.push(zoomed);
                 } else {
@@ -1635,10 +1638,15 @@ impl App {
             }
 
             // ── Scroll bar (overlays right edge of terminal) ─────────────────────
+            let focused_pad_right = rc
+                .pane_infos
+                .iter()
+                .find(|p| p.focused)
+                .is_some_and(|p| p.pad_right);
             if self.config.enable_scroll_bar {
                 if let Some(terminal) = self.mux.active_terminal() {
                     let (disp_off, hist) = terminal.scrollback_info();
-                    let sb_state = (disp_off, hist, term_rows, term_cols);
+                    let sb_state = (disp_off, hist, term_rows, term_cols, focused_pad_right);
                     if rc.scroll_bar_state.as_ref() == Some(&sb_state) {
                         // Geometry unchanged — append cached instances (TD-PERF-08).
                         rc.instances.extend_from_slice(&rc.scroll_bar_cache);
@@ -1649,6 +1657,7 @@ impl App {
                             hist,
                             term_rows,
                             term_cols,
+                            focused_pad_right,
                             &self.config.colors,
                         );
                         rc.scroll_bar_cache.clear();

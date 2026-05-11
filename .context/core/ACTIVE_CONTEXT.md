@@ -1,7 +1,7 @@
 # Active Context
 
-**Current Focus:** Post-Phase 7 — Tab color picker + mantenimiento paleta/menú
-**Last Active:** 2026-05-07
+**Current Focus:** Post-Phase 7 — Bug fixes UI (pane border padding, scrollbar gap)
+**Last Active:** 2026-05-11
 
 ## Estado actual del proyecto
 

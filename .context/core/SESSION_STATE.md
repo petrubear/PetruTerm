@@ -1,7 +1,7 @@
 # Session State
 
-**Last Updated:** 2026-05-07
-**Session Focus:** Post-Phase 7 — Paleta/menú + Tab color picker.
+**Last Updated:** 2026-05-11
+**Session Focus:** Post-Phase 7 — Bug fixes UI: pane border padding + scrollbar gap.
 
 ## Branch: `master`
 
@@ -9,6 +9,25 @@
 
 **Phases 1–7 COMPLETAS. master limpio.**
 **Sin deuda técnica abierta. Diferidos: TD-PERF-03/05 (solo GPUs discretas).**
+
+## Esta sesión (2026-05-11) — Pane border padding + scrollbar gap
+
+### Bugs corregidos
+
+**Pane focus border overlaps text (top/right/bottom):**
+`build_focus_border` solo empujaba el borde izquierdo fuera del contenido cuando `col_offset == 0`.
+Los bordes right, bottom y top usaban solo `inset = border/2`, haciendo que el stroke se superpusiera
+al texto de la primera/última fila/columna. Fix: agregar `pad_right`, `pad_bottom`, `pad_top: bool`
+a `PaneInfo` (propagados desde `PanePad` en `collect_leaf_infos_impl`). Cuando la bandera es `false`
+(borde en el edge del viewport, sin separator), el rect del borde se empuja un `cell_w`/`cell_h`
+hacia afuera — los pixels fuera del viewport quedan GPU-clipped. Mismo patrón que ya existía para left.
+
+**Scrollbar gap from pane border (split panes):**
+Cuando `pad_right = true`, el pane tiene una "pad cell" entre el contenido y el separator. El scrollbar
+usaba columna `term_cols - 1` (última columna de contenido), dejando esa pad cell vacía entre el scroll
+track y el borde coloreado del pane (~`cell_w` de gap visible). Fix: cuando `pad_right = true`, el
+scrollbar usa columna `term_cols` (la pad cell), quedando flush contra el separator/border.
+`scroll_bar_state` actualizado para incluir `pad_right` en la cache key.
 
 ## Esta sesión (2026-05-07) — Paleta, menú nativo, tab color picker
 
