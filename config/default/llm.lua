@@ -36,12 +36,7 @@ function module.apply_to_config(config)
     ui = {
       -- Panel width in terminal columns.
       width_cols   = 55,
-      -- Panel background color (RGBA hex or table {r,g,b,a}).
-      background   = "#1a1726",
-      -- Message colors.
-      user_fg      = "#bfe5ff",   -- User message text
-      assistant_fg = "#8dff85",   -- Assistant message text
-      input_fg     = "#ffffff",   -- Input line text
+      -- Colors are derived from the active theme automatically.
     },
   }
 end

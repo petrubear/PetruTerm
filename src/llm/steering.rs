@@ -10,8 +10,9 @@ impl SteeringManager {
     }
 
     /// Load `*.md` files from `~/.config/petruterm/steering/` (global) and
-    /// `<cwd>/.petruterm/steering/` (project-local, wins on name clash).
-    pub fn load(&mut self, cwd: &Path) {
+    /// `<cwd>/.petruterm/steering/` (project-local, wins on name clash) only when
+    /// `include_local` is true. Pass `false` when the cwd is not trusted (AUDIT-SEC-03).
+    pub fn load(&mut self, cwd: &Path, include_local: bool) {
         self.files.clear();
 
         if let Some(home) = dirs::home_dir() {
@@ -19,8 +20,10 @@ impl SteeringManager {
             self.scan_dir(&global);
         }
 
-        let local = cwd.join(".petruterm/steering");
-        self.scan_dir_overlay(&local);
+        if include_local {
+            let local = cwd.join(".petruterm/steering");
+            self.scan_dir_overlay(&local);
+        }
     }
 
     #[allow(dead_code)]

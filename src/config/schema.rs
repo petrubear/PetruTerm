@@ -275,6 +275,9 @@ pub struct ColorScheme {
     /// Semi-transparent background for toasts and modals. Default: background at 0.95 alpha.
     #[serde(default)]
     pub ui_overlay: [f32; 4],
+    /// Pane separator lines. Default: background +17% brightness (opaque).
+    #[serde(default)]
+    pub ui_border: [f32; 4],
 }
 
 impl ColorScheme {
@@ -316,6 +319,15 @@ impl ColorScheme {
         if self.ui_overlay == zero {
             let [r, g, b, _] = self.background;
             self.ui_overlay = [r, g, b, 0.95];
+        }
+        if self.ui_border == zero {
+            let [r, g, b, _] = self.background;
+            self.ui_border = [
+                (r + 0.17).min(1.0),
+                (g + 0.17).min(1.0),
+                (b + 0.17).min(1.0),
+                1.0,
+            ];
         }
     }
 
@@ -366,6 +378,7 @@ impl ColorScheme {
             ui_muted: hexa("#e0e0e8", 0.35),   // foreground at 35% alpha
             ui_success: hex("#8aff80"),        // ansi green
             ui_overlay: hexa("#131316", 0.95), // panel bg near-opaque
+            ui_border: hex("#2a2a2f"),         // pane separator
         }
     }
 
@@ -388,6 +401,55 @@ impl ColorScheme {
             _ => self.foreground,
         }
     }
+
+    /// Derive status bar colors from the active theme so the status bar follows
+    /// theme changes automatically (AUDIT-THEME-01).
+    pub fn status_bar_colors(&self) -> StatusBarColors {
+        fn darken(c: [f32; 4], factor: f32) -> [f32; 4] {
+            [c[0] * factor, c[1] * factor, c[2] * factor, 1.0]
+        }
+        let [mr, mg, mb, _] = self.ui_muted;
+        StatusBarColors {
+            bar_bg: self.background,
+            fg_default: self.foreground,
+            fg_dim: [mr, mg, mb, 1.0],
+            leader_active: self.ui_accent,
+            leader_resize: self.ansi[3], // yellow
+            leader_inactive: self.ui_surface,
+            zoom_bg: darken(self.ansi[6], 0.3),  // cyan, very dark
+            cwd_bg: darken(self.ansi[6], 0.15),
+            cwd_fg: self.ansi[6],
+            git_bg: darken(self.ansi[3], 0.15),  // yellow, very dark
+            git_fg: self.ansi[3],
+            error_bg: darken(self.ansi[1], 0.5), // red, darkened
+            bat_ok_fg: self.ansi[2],             // green
+            bat_ok_bg: darken(self.ansi[2], 0.15),
+            bat_low_fg: self.ansi[1],            // red
+            bat_low_bg: darken(self.ansi[1], 0.2),
+        }
+    }
+}
+
+/// Status bar colors derived from the active `ColorScheme` (AUDIT-THEME-01).
+/// All fields are RGBA `[f32; 4]` in linear sRGB.
+#[derive(Debug, Clone)]
+pub struct StatusBarColors {
+    pub bar_bg: [f32; 4],
+    pub fg_default: [f32; 4],
+    pub fg_dim: [f32; 4],
+    pub leader_active: [f32; 4],
+    pub leader_resize: [f32; 4],
+    pub leader_inactive: [f32; 4],
+    pub zoom_bg: [f32; 4],
+    pub cwd_bg: [f32; 4],
+    pub cwd_fg: [f32; 4],
+    pub git_bg: [f32; 4],
+    pub git_fg: [f32; 4],
+    pub error_bg: [f32; 4],
+    pub bat_ok_fg: [f32; 4],
+    pub bat_ok_bg: [f32; 4],
+    pub bat_low_fg: [f32; 4],
+    pub bat_low_bg: [f32; 4],
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -460,21 +522,11 @@ impl Default for LlmConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatUiConfig {
     pub width_cols: u16,
-    pub background: [f32; 4],
-    pub user_fg: [f32; 4],
-    pub assistant_fg: [f32; 4],
-    pub input_fg: [f32; 4],
 }
 
 impl Default for ChatUiConfig {
     fn default() -> Self {
-        Self {
-            width_cols: 55,
-            background: [0.075, 0.075, 0.086, 1.0], // #131316 panel
-            user_fg: [0.306, 0.788, 0.690, 1.0],    // #4ec9b0 teal
-            assistant_fg: [0.878, 0.878, 0.910, 1.0], // #e0e0e8
-            input_fg: [0.878, 0.878, 0.910, 1.0],   // #e0e0e8
-        }
+        Self { width_cols: 55 }
     }
 }
 

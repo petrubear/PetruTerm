@@ -196,17 +196,13 @@ fn is_word_break(b: u8) -> bool {
 /// `None` at a column means "keep original fg".
 pub type SyntaxFg = Vec<Option<[f32; 4]>>;
 
-/// Dracula-palette colors used for syntax spans.
-/// These are RGBA [0,1] values.
-const CMD_VALID: [f32; 4] = [0.314, 0.980, 0.482, 1.0]; // #50fa7b green
-const CMD_ERROR: [f32; 4] = [1.000, 0.333, 0.333, 1.0]; // #ff5555 red
-const FLAG_COLOR: [f32; 4] = [0.545, 0.914, 0.992, 1.0]; // #8be9fd cyan
-const STR_COLOR: [f32; 4] = [0.945, 0.980, 0.549, 1.0]; // #f1fa8c yellow
-const PIPE_COLOR: [f32; 4] = [1.000, 0.722, 0.424, 1.0]; // #ffb86c orange
-
 /// Compute per-column fg overrides for `buf` given resolved command validity.
 /// `cmd_valid`: `None` if the command name hasn't been resolved yet (no override).
-pub fn build_syntax_fg(buf: &str, cmd_valid: Option<bool>) -> SyntaxFg {
+pub fn build_syntax_fg(
+    buf: &str,
+    cmd_valid: Option<bool>,
+    colors: &crate::config::schema::ColorScheme,
+) -> SyntaxFg {
     let char_count = buf.chars().count();
     let mut fg: SyntaxFg = vec![None; char_count];
 
@@ -214,13 +210,13 @@ pub fn build_syntax_fg(buf: &str, cmd_valid: Option<bool>) -> SyntaxFg {
     for token in tokens {
         let color: Option<[f32; 4]> = match token.kind {
             TokenKind::Command => match cmd_valid {
-                Some(true) => Some(CMD_VALID),
-                Some(false) => Some(CMD_ERROR),
+                Some(true) => Some(colors.ansi[2]),  // green
+                Some(false) => Some(colors.ansi[1]), // red
                 None => None,
             },
-            TokenKind::Flag => Some(FLAG_COLOR),
-            TokenKind::String => Some(STR_COLOR),
-            TokenKind::Pipe | TokenKind::Redirect => Some(PIPE_COLOR),
+            TokenKind::Flag => Some(colors.ansi[6]),    // cyan
+            TokenKind::String => Some(colors.ansi[3]),   // yellow
+            TokenKind::Pipe | TokenKind::Redirect => Some(colors.brights[3]), // bright yellow → operator
             TokenKind::Arg => None,
         };
         let Some(color) = color else { continue };
@@ -376,24 +372,27 @@ mod tests {
 
     #[test]
     fn build_syntax_fg_length_matches_char_count() {
+        let colors = crate::config::schema::ColorScheme::dracula_pro();
         let buf = "git commit";
-        let fg = build_syntax_fg(buf, Some(true));
+        let fg = build_syntax_fg(buf, Some(true), &colors);
         assert_eq!(fg.len(), buf.chars().count());
     }
 
     #[test]
     fn command_valid_colors_first_word() {
-        let fg = build_syntax_fg("ls -la", Some(true));
-        assert_eq!(fg[0], Some(CMD_VALID)); // 'l'
-        assert_eq!(fg[1], Some(CMD_VALID)); // 's'
+        let colors = crate::config::schema::ColorScheme::dracula_pro();
+        let fg = build_syntax_fg("ls -la", Some(true), &colors);
+        assert_eq!(fg[0], Some(colors.ansi[2])); // 'l' — green
+        assert_eq!(fg[1], Some(colors.ansi[2])); // 's'
         assert_eq!(fg[2], None); // ' '
-        assert_eq!(fg[3], Some(FLAG_COLOR)); // '-'
+        assert_eq!(fg[3], Some(colors.ansi[6])); // '-' — cyan
     }
 
     #[test]
     fn command_error_colors_first_word() {
-        let fg = build_syntax_fg("notacmd --flag", Some(false));
-        assert_eq!(fg[0], Some(CMD_ERROR));
+        let colors = crate::config::schema::ColorScheme::dracula_pro();
+        let fg = build_syntax_fg("notacmd --flag", Some(false), &colors);
+        assert_eq!(fg[0], Some(colors.ansi[1])); // red
     }
 
     #[test]

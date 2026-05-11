@@ -27,30 +27,45 @@ struct McpFile {
     servers: McpConfig,
 }
 
-/// Load and merge MCP server configs from global and project-local sources.
+/// Load MCP server configs from global sources only (platform config dir + XDG fallback).
+/// Project-local `.petruterm/mcp.json` is intentionally excluded — use `load_local` for
+/// that, guarded by a trust check.
 ///
 /// Resolution order (last wins on name conflict):
 /// 1. `{config_dir}/petruterm/mcp/mcp.json`  — platform config dir
 ///    - macOS: `~/Library/Application Support/petruterm/mcp/mcp.json`
 ///    - Linux: `~/.config/petruterm/mcp/mcp.json`
 /// 2. `~/.config/petruterm/mcp/mcp.json`     — XDG fallback (macOS only, if different from above)
-/// 3. `<cwd>/.petruterm/mcp.json`            — project-local (highest priority)
 ///
 /// Missing files are silently skipped. Malformed JSON returns `Err`.
-pub fn load(cwd: &Path) -> Result<McpConfig> {
-    // 1. Platform config dir (~/Library/Application Support on macOS, ~/.config on Linux)
+pub fn load_global() -> Result<McpConfig> {
     let platform_path = dirs::config_dir().map(|d| d.join("petruterm/mcp/mcp.json"));
-
-    // 2. XDG fallback: ~/.config/petruterm/mcp/mcp.json
-    //    On macOS, dirs::config_dir() returns ~/Library/Application Support, so
-    //    ~/.config is a separate location that many users expect to work.
     let xdg_path = dirs::home_dir().map(|home| home.join(".config/petruterm/mcp/mcp.json"));
-
-    // 3. Project-local config (overrides global on name conflict)
-    let local_path = cwd.join(".petruterm/mcp.json");
-    load_from_paths(platform_path.as_deref(), xdg_path.as_deref(), &local_path)
+    let already_loaded = matches!((platform_path.as_deref(), xdg_path.as_deref()), (Some(p), Some(x)) if p == x);
+    let mut config = McpConfig::new();
+    if let Some(p) = platform_path.as_deref().filter(|p| p.exists()) {
+        let servers = parse_file(p).with_context(|| format!("Failed to parse {}", p.display()))?;
+        config.extend(servers);
+    }
+    if let Some(p) = xdg_path.as_deref().filter(|p| !already_loaded && p.exists()) {
+        let servers = parse_file(p).with_context(|| format!("Failed to parse {}", p.display()))?;
+        config.extend(servers);
+    }
+    Ok(config)
 }
 
+/// Load MCP server config from a project-local `.petruterm/mcp.json`.
+/// Returns an empty config if the file does not exist.
+/// Callers MUST verify trust via `mcp::trust::is_trusted(cwd)` before calling this.
+pub fn load_local(cwd: &Path) -> Result<McpConfig> {
+    let local_path = cwd.join(".petruterm/mcp.json");
+    if !local_path.exists() {
+        return Ok(McpConfig::new());
+    }
+    parse_file(&local_path).with_context(|| format!("Failed to parse {}", local_path.display()))
+}
+
+#[cfg(test)]
 fn load_from_paths(
     platform_path: Option<&Path>,
     xdg_path: Option<&Path>,

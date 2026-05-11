@@ -1,4 +1,4 @@
-use crate::config::schema::StatusBarStyle;
+use crate::config::schema::{StatusBarColors, StatusBarStyle};
 use rust_i18n::t;
 use std::time::SystemTime;
 
@@ -43,30 +43,17 @@ impl Default for StatusBar {
     }
 }
 
-// ── PetruTerm Dark palette constants ─────────────────────────────────────────
-const BG_BAR: [f32; 4] = [0.039, 0.039, 0.047, 1.0]; // #0a0a0c — deep black
-const FG_DEFAULT: [f32; 4] = [0.878, 0.878, 0.910, 1.0]; // #e0e0e8 — soft white
-const FG_DIM: [f32; 4] = [0.420, 0.420, 0.478, 1.0]; // #6b6b7a — muted
-
-const BG_LEADER_ACTIVE: [f32; 4] = [0.58, 0.50, 1.00, 1.0]; // purple  #9580ff
-const BG_LEADER_RESIZE: [f32; 4] = [0.831, 0.643, 0.298, 1.0]; // amber #d4a44c
-const BG_LEADER_INACTIVE: [f32; 4] = [0.075, 0.075, 0.086, 1.0]; // #131316
-const BG_ZOOM: [f32; 4] = [0.039, 0.235, 0.196, 1.0]; // dark teal #0a3c32
-const BG_CWD: [f32; 4] = [0.039, 0.075, 0.063, 1.0]; // dark teal tint
-const BG_GIT: [f32; 4] = [0.075, 0.055, 0.020, 1.0]; // dark amber tint
-const BG_ERROR: [f32; 4] = [0.60, 0.12, 0.12, 1.0]; // red
-const BG_TIME: [f32; 4] = [0.039, 0.039, 0.047, 1.0]; // #0a0a0c
-
 impl StatusBar {
     /// Build the status bar from current application state.
     ///
     /// - `leader_active`: true when the leader key has been pressed and the
-    ///   timeout is still running (shows the LEADER segment in purple).
+    ///   timeout is still running (shows the LEADER segment in theme accent color).
     /// - `leader_resize_mode`: true when leader is active AND the Alt/Option modifier
-    ///   is held, indicating the user is about to resize a pane (shows RESIZE in orange).
+    ///   is held, indicating the user is about to resize a pane (shows RESIZE in yellow).
     /// - `cwd`: current working directory (None if unavailable).
     /// - `git_branch`: cached git branch string (None if not a git repo or not yet fetched).
     /// - `last_exit_code`: last exit code from shell context (None if unavailable).
+    /// - `colors`: theme-derived status bar colors (AUDIT-THEME-01).
     #[allow(clippy::too_many_arguments)]
     pub fn build(
         leader_active: bool,
@@ -78,6 +65,7 @@ impl StatusBar {
         pane_zoomed: bool,
         style: StatusBarStyle,
         battery: Option<(u8, bool)>,
+        colors: &StatusBarColors,
     ) -> Self {
         let mut bar = StatusBar {
             style,
@@ -88,18 +76,18 @@ impl StatusBar {
 
         // Leader-mode indicator.
         let (leader_text, leader_bg) = if leader_resize_mode {
-            (t!("status.resize").to_string(), BG_LEADER_RESIZE)
+            (t!("status.resize").to_string(), colors.leader_resize)
         } else if leader_active {
-            (t!("status.leader").to_string(), BG_LEADER_ACTIVE)
+            (t!("status.leader").to_string(), colors.leader_active)
         } else {
             (
                 format!(" ^{} ", leader_key.to_uppercase()),
-                BG_LEADER_INACTIVE,
+                colors.leader_inactive,
             )
         };
         bar.left.push(StatusBarSegment {
             text: leader_text,
-            fg: FG_DEFAULT,
+            fg: colors.fg_default,
             bg: leader_bg,
             kind: SegmentKind::Leader,
         });
@@ -107,8 +95,8 @@ impl StatusBar {
         if pane_zoomed {
             bar.left.push(StatusBarSegment {
                 text: " ZOOM ".to_string(),
-                fg: FG_DEFAULT,
-                bg: BG_ZOOM,
+                fg: colors.fg_default,
+                bg: colors.zoom_bg,
                 kind: SegmentKind::Leader,
             });
         }
@@ -118,8 +106,8 @@ impl StatusBar {
             let display = truncate_path(path, 25);
             bar.left.push(StatusBarSegment {
                 text: format!("  {display} "),
-                fg: [0.306, 0.788, 0.690, 1.0], // #4ec9b0 teal
-                bg: BG_CWD,
+                fg: colors.cwd_fg,
+                bg: colors.cwd_bg,
                 kind: SegmentKind::Cwd,
             });
         }
@@ -129,8 +117,8 @@ impl StatusBar {
             if !branch.is_empty() {
                 bar.left.push(StatusBarSegment {
                     text: format!("  {branch} "),
-                    fg: [0.831, 0.643, 0.298, 1.0], // #d4a44c amber
-                    bg: BG_GIT,
+                    fg: colors.git_fg,
+                    bg: colors.git_bg,
                     kind: SegmentKind::GitBranch,
                 });
             }
@@ -143,8 +131,8 @@ impl StatusBar {
             if code != 0 {
                 bar.right.push(StatusBarSegment {
                     text: t!("status.exit_code", code = code).to_string(),
-                    fg: FG_DEFAULT,
-                    bg: BG_ERROR,
+                    fg: colors.fg_default,
+                    bg: colors.error_bg,
                     kind: SegmentKind::ExitCode,
                 });
             }
@@ -153,9 +141,9 @@ impl StatusBar {
         // Battery — shown only when running on battery power.
         if let Some((percent, true)) = battery {
             let (fg, bg) = if percent < 20 {
-                ([1.0_f32, 0.35, 0.35, 1.0], [0.25_f32, 0.05, 0.05, 1.0])
+                (colors.bat_low_fg, colors.bat_low_bg)
             } else {
-                ([0.55_f32, 0.85, 0.60, 1.0], [0.04_f32, 0.12, 0.06, 1.0])
+                (colors.bat_ok_fg, colors.bat_ok_bg)
             };
             bar.right.push(StatusBarSegment {
                 text: format!(" BAT {percent}% "),
@@ -169,17 +157,17 @@ impl StatusBar {
         let time_str = format_time();
         bar.right.push(StatusBarSegment {
             text: format!(" {time_str} "),
-            fg: FG_DIM,
-            bg: BG_TIME,
+            fg: colors.fg_dim,
+            bg: colors.bar_bg,
             kind: SegmentKind::Time,
         });
 
         bar
     }
 
-    /// Background color for empty space between left and right groups.
-    pub fn bar_bg() -> [f32; 4] {
-        BG_BAR
+    /// Background color for empty space between left and right groups, derived from theme.
+    pub fn bar_bg(colors: &StatusBarColors) -> [f32; 4] {
+        colors.bar_bg
     }
 
     /// Powerline left arrow glyph (U+E0B0 — solid right-pointing triangle).

@@ -12,10 +12,9 @@ function module.apply_to_config(config)
   config.enable_scroll_bar = true
 
   -- Maximum frames per second for the GPU render loop.
+  -- PetruTerm will not render more than this many frames per second regardless
+  -- of how fast PTY data or input events arrive. Lower values save battery.
   config.max_fps           = 60
-
-  -- Animation frame rate (set low for snappiness; increase for smooth transitions).
-  config.animation_fps     = 1
 
   -- GPU power preference: "high_performance" | "low_power" | "none"
   -- Selects the wgpu GPU adapter at startup. Use "low_power" (default) to

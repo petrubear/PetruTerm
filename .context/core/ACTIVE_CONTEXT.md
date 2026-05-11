@@ -1,12 +1,19 @@
 # Active Context
 
-**Current Focus:** Post-Phase 7 — Bug fixes UI (pane border padding, scrollbar gap)
+**Current Focus:** Auditoría técnica — Waves 1–3 COMPLETAS. Sin deuda abierta.
 **Last Active:** 2026-05-11
 
 ## Estado actual del proyecto
 
-**Phases 1–7 COMPLETAS.** master limpio, 10 commits ahead of origin.
-**Sin deuda técnica abierta. Diferidos: TD-PERF-03, TD-PERF-05 (solo GPUs discretas).**
+**Phases 1–7 COMPLETAS.** master limpio.
+**Deuda técnica: Wave 1 + Wave 2 resueltas. Pendiente: Wave 3 (AUDIT-THEME-02, AUDIT-REFAC-05) + Watch (AUDIT-CLEAN-02). Diferidos: TD-PERF-03, TD-PERF-05 (solo GPUs discretas).**
+
+## Infraestructura de seguridad nueva (Wave 1+2)
+
+- `src/llm/mcp/trust.rs` — lista de cwds confiables (`~/.config/petruterm/mcp_trust.json`)
+- Trust gate unificado: MCP local, skills locales y steering local comparten el mismo check `trust::is_trusted(&cwd)`
+- Palette action "Trust local MCP config" → `trust::trust(cwd)` + `reload_mcp()`
+- Camino por defecto: global siempre, local solo si trusted
 
 ## Phase 7 — COMPLETA
 

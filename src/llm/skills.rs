@@ -24,9 +24,10 @@ impl SkillManager {
         }
     }
 
-    /// Load global skills from `~/.config/petruterm/skills/`, then overlay
-    /// project-local skills from `<cwd>/.petruterm/skills/` (project wins on name clash).
-    pub fn load(&mut self, cwd: &Path) {
+    /// Load global skills from `~/.config/petruterm/skills/`, and project-local skills
+    /// from `<cwd>/.petruterm/skills/` only when `include_local` is true (project wins
+    /// on name clash). Pass `false` when the cwd is not trusted (AUDIT-SEC-03).
+    pub fn load(&mut self, cwd: &Path, include_local: bool) {
         self.skills.clear();
 
         if let Some(home) = dirs::home_dir() {
@@ -34,8 +35,10 @@ impl SkillManager {
             self.scan_dir(&global);
         }
 
-        let local = cwd.join(".petruterm/skills");
-        self.scan_dir_overlay(&local);
+        if include_local {
+            let local = cwd.join(".petruterm/skills");
+            self.scan_dir_overlay(&local);
+        }
     }
 
     /// Return the skill explicitly named in `query` (e.g. "use skill git-helper ..."),

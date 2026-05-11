@@ -272,6 +272,7 @@ fn table_to_color_scheme(table: LuaTable) -> LuaResult<ColorScheme> {
         ui_muted: get_opt_color("ui_muted"),
         ui_success: get_opt_color("ui_success"),
         ui_overlay: get_opt_color("ui_overlay"),
+        ui_border: get_opt_color("ui_border"),
     };
     scheme.derive_ui_colors();
     Ok(scheme)
@@ -604,18 +605,6 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
         if let Ok(ui_table) = llm_table.get::<LuaTable>("ui") {
             if let Ok(w) = ui_table.get::<u16>("width_cols") {
                 config.llm.ui.width_cols = w;
-            }
-            if let Ok(bg) = ui_table.get::<String>("background") {
-                config.llm.ui.background = parse_hex_linear(&bg);
-            }
-            if let Ok(ufg) = ui_table.get::<String>("user_fg") {
-                config.llm.ui.user_fg = parse_hex_linear(&ufg);
-            }
-            if let Ok(afg) = ui_table.get::<String>("assistant_fg") {
-                config.llm.ui.assistant_fg = parse_hex_linear(&afg);
-            }
-            if let Ok(ifg) = ui_table.get::<String>("input_fg") {
-                config.llm.ui.input_fg = parse_hex_linear(&ifg);
             }
         }
     }

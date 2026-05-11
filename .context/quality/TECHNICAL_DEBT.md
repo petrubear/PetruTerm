@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-05-05
+**Last Updated:** 2026-05-11
 **Open Items:** 0
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0 | **Deferred:** 2 | **Resueltos (Wave 1):** 4 | **Resueltos (Wave 2):** 5 | **Resueltos (Wave 3):** 2 | **Resueltos (Wave 4):** 3 | **Watch:** 1
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Watch:** 1
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -22,46 +22,51 @@
 ## Grafo de dependencias
 
 ```
-Wave 1 — Quick wins, independientes (hacer primero)
-  AUDIT-PERF-01  ──────────────────────────────────────┐
-  AUDIT-PERF-04  ──────────────────────────────────────┤
-  AUDIT-REFAC-04 ──────────────────────────────────────┤─► Wave 2
-  AUDIT-CLEAN-01 ──────────────────────────────────────┘
+Wave 1 — Riesgo y desperdicio inmediato
+  AUDIT-SEC-01   ──────────────────────────────────────┐
+  AUDIT-SEC-02   ──────────────────────────────────────┤
+  AUDIT-ENERGY-02──────────────────────────────────────┤─► Wave 2
+  AUDIT-PERF-06  ──────────────────────────────────────┘
 
-Wave 2 — Independientes, esfuerzo medio
-  AUDIT-PERF-05  ──────────────────────────────────────┐
-  AUDIT-MEM-01   ──────────────────────────────────────┤
-  AUDIT-MEM-02   ──────────────────────────────────────┤─► Wave 3
-  AUDIT-MEM-03   ──────────────────────────────────────┤
-  AUDIT-PERF-03  ──────────────────────────────────────┘
+Wave 2 — Best in class (speed / battery / safety)
+  AUDIT-ENERGY-03──────────────────────────────────────┐
+  AUDIT-SEC-03   ──────────────────────────────────────┤
+  AUDIT-ENERGY-04──────────────────────────────────────┤
+  AUDIT-THEME-01 ──────────────────────────────────────┤─► Wave 3
+  AUDIT-PERF-07  ──────────────────────────────────────┘
 
-Wave 3 — RESUELTA
-  AUDIT-PERF-02  ──────────────────────────────────────┐
-  AUDIT-ENERGY-01 ─────────────────────────────────────┤─► Wave 4
-
-Wave 4 — RESUELTA
-  AUDIT-REFAC-02  ──────────────────────────────────────┐
-  AUDIT-REFAC-03  ──────────────────────────────────────┤
-  AUDIT-REFAC-01  ──────────────────────────────────────┘
+Wave 3 — Consistencia visual y mantenibilidad
+  AUDIT-THEME-02 ──────────────────────────────────────┐
+  AUDIT-REFAC-05 ──────────────────────────────────────┘
 
 Watch
   AUDIT-CLEAN-02 (sin cambio; reevaluar si ContextAction crece)
 ```
 
 **Conflictos a evitar:**
-- `AUDIT-ENERGY-01` y `AUDIT-REFAC-03` tocan los mismos campos de `App` → commits separados.
-- `AUDIT-PERF-02` y `AUDIT-REFAC-02` tocan `build_chat_panel_instances` → hacer PERF-02 primero.
-- `AUDIT-REFAC-01` y cualquier cambio en `window_event()` → hacer REFAC-01 al final.
+- `AUDIT-SEC-02` y `AUDIT-ENERGY-03` tocan el boot path de `UiManager`/MCP → separar trust gate de lazy-init.
+- `AUDIT-ENERGY-02` y `AUDIT-ENERGY-04` tocan `about_to_wait()` → resolver el bug de polling infinito antes de retocar más timers.
+- `AUDIT-THEME-01` y `AUDIT-THEME-02` deben compartir un único diseño de tokens semánticos para evitar re-hardcodear colores.
 
 ---
 
 ## P0 — Crítico
 
-_Ninguno abierto._
+**AUDIT-SEC-01** — RESUELTO (2026-05-11). Path traversal en `write_file` cerrado: se canonicaliza el ancestro más cercano (para soportar ficheros nuevos en directorios nuevos) y se verifica `starts_with(cwd)` antes de mostrar el diálogo de confirmación. `src/app/ui.rs`.
+
+**AUDIT-SEC-02** — RESUELTO (2026-05-11). Trust gate para MCP local: `load_global` y `load_local` separados en `config.rs`; `src/llm/mcp/trust.rs` persiste cwds confiables en `~/.config/petruterm/mcp_trust.json`; `UiManager::new()` y `reload_mcp()` sólo cargan `.petruterm/mcp.json` si el cwd está en la lista; acción "Trust local MCP config" en la palette para activarlo explícitamente.
 
 ---
 
 ## P1 — Alta prioridad
+
+**AUDIT-ENERGY-02** — RESUELTO (2026-05-11). `battery_polled: bool` reemplaza `battery_status.is_none()` como guarda de primera ejecución; en desktop (sin batería) el poll ocurre una vez al arranque y luego cada 30 s. `src/app/mod.rs`.
+
+**AUDIT-ENERGY-03** — RESUELTO (2026-05-11). Cuando `llm.enabled = false`: runtime Tokio cambiado a `current_thread` (ahorra 2 threads OS) y bloque MCP omitido completamente. `src/app/ui.rs`.
+
+**AUDIT-PERF-06** — RESUELTO (2026-05-11). `max_fps` conectado al render loop: `flush_redraw_request` respeta el intervalo `1/max_fps` y deja `needs_redraw=true` cuando el frame llega demasiado pronto; `about_to_wait` inyecta `frame_deadline` en el `WaitUntil` para despertar exactamente cuando el siguiente frame es válido. `animation_fps` eliminado de `perf.lua` (nunca estuvo en el schema). `src/app/mod.rs`.
+
+**AUDIT-SEC-03** — RESUELTO (2026-05-11). `SkillManager::load()` y `SteeringManager::load()` aceptan `include_local: bool`; en `UiManager::new()` y `rewire_llm_provider()` se pasa `trust::is_trusted(&cwd)`. Local skills/steering solo se cargan si el cwd está en la lista de confianza (misma lista que SEC-02). `src/llm/skills.rs`, `src/llm/steering.rs`, `src/app/ui.rs`.
 
 **AUDIT-PERF-01** — RESUELTO (2026-05-05). `FxHashSet` reemplaza `Vec::contains` en `push_md_line`. O(n) → O(1) por inserción. `src/app/renderer.rs:738`.
 
@@ -74,6 +79,14 @@ _Ninguno abierto._
 ---
 
 ## P2 — Prioridad media
+
+**AUDIT-ENERGY-04** — RESUELTO (2026-05-11). (a) Git poll guard extendido a 60 s en battery saver mode (coincide con TTL). (b) `next_minute_wake` solo se computa cuando `status_bar.enabled`. (c) Battery poll condicionado a `window_focused`. `src/app/mod.rs`.
+
+**AUDIT-THEME-01** — RESUELTO (2026-05-11). `ColorScheme::status_bar_colors() -> StatusBarColors` deriva todos los colores de la status bar del tema activo (accent, surface, ANSI cyan/yellow/red). `StatusBar::build()` recibe `&StatusBarColors`; constantes hardcoded eliminadas. `src/config/schema.rs`, `src/ui/status_bar.rs`, `src/app/mod.rs`, `src/app/renderer.rs`.
+
+**AUDIT-THEME-02** — RESUELTO (2026-05-11). `ColorScheme.ui_border` derivado del fondo (pane separators). Palette `keybind_fg` → `colors.ui_muted`. `build_syntax_fg` recibe `&ColorScheme`; colores de sintaxis del input mapean a `ansi[1/2/3/6]` y `brights[3]`. `ChatUiConfig` reducido a `width_cols`; colores del panel de chat derivados del tema activo (`ansi[6]`, `foreground`). `config/default/llm.lua` limpiado.
+
+**AUDIT-PERF-07** — RESUELTO (2026-05-11). `tab_bar_titles: Vec<String>` reemplazado por `tab_bar_titles_hash: u64` (FxHasher) en `RenderContext`. Comparacion y actualizacion del cache sin aloc por frame. `src/app/renderer.rs`, `src/app/mod.rs`.
 
 **AUDIT-PERF-04** — RESUELTO (2026-05-05). `const HEADER_ACTIONS_COLS: usize = 12` en `chat_panel.rs`. Eliminado el `.map().sum()` por frame.
 
@@ -88,6 +101,8 @@ _Ninguno abierto._
 ---
 
 ## P3 — Prioridad baja / Backlog
+
+**AUDIT-REFAC-05** — RESUELTO (2026-05-11). Todos los monolitos convertidos a directorios-módulo con subarchivos por responsabilidad. Antes → ahora (mayor archivo del grupo): `renderer.rs` 4024 → `renderer/{mod,terminal,chat,overlay}.rs` max 1483; `mod.rs` 3663 → `mod+frame+app_state+layout.rs` max 1921; `ui.rs` 1986 → `ui/{mod,git,providers}.rs` max 1579; `chat_panel.rs` 1188 → `chat_panel/{mod,picker}.rs` max 919; `mux.rs` 1147 → `mux/{mod,workspace}.rs` max 981. 101/101 tests pasan.
 
 **AUDIT-REFAC-01** — RESUELTO (2026-05-05). `window_event()` delega en `handle_redraw()`, `handle_keyboard()`, `handle_mouse_motion()`, `handle_mouse_button()` y `handle_scroll()`, preservando el flujo del loop.
 
@@ -118,9 +133,8 @@ Ningún fix P2/P3 debe implementarse sin profiling previo. El HUD F12 + benches 
 
 ### Orden de ejecución recomendado (estado actual)
 ``` 
-Wave 1: COMPLETA
-Wave 2: COMPLETA
-Wave 3: COMPLETA
-Wave 4: COMPLETA
+Wave 1: AUDIT-SEC-01, AUDIT-SEC-02, AUDIT-ENERGY-02, AUDIT-PERF-06
+Wave 2: AUDIT-ENERGY-03, AUDIT-SEC-03, AUDIT-ENERGY-04, AUDIT-THEME-01, AUDIT-PERF-07
+Wave 3: AUDIT-THEME-02, AUDIT-REFAC-05
 Watch: AUDIT-CLEAN-02
 ```

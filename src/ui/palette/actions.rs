@@ -55,6 +55,7 @@ pub enum Action {
     FixLastError,
     UndoLastWrite,
     ClearAiContext,
+    TrustLocalMcp,
     ToggleStatusBar,
     RenameTab,
     GitCheckout(String),
@@ -247,6 +248,11 @@ pub fn built_in_actions(config: &Config) -> Vec<PaletteAction> {
         PaletteAction {
             name: t!("palette.clear_ai_context").to_string(),
             action: Action::ClearAiContext,
+            keybind: None,
+        },
+        PaletteAction {
+            name: "Trust local MCP config".to_string(),
+            action: Action::TrustLocalMcp,
             keybind: None,
         },
         PaletteAction {

@@ -19,6 +19,9 @@ use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
 use winit::window::Window;
 
+mod git;
+mod providers;
+
 // Convert a raw LLM error string into an actionable user message (TD-038).
 fn classify_llm_error(e: &str) -> String {
     let e_lower = e.to_ascii_lowercase();
@@ -64,21 +67,21 @@ pub struct UiManager {
     pub context_menu: ContextMenu,
 
     // ── Chat panel (side panel, workspace-level) ──────────────────────────────
-    chat_panel: ChatPanel,
+    pub(super) chat_panel: ChatPanel,
     /// Width used when creating new ChatPanels (kept in sync with config.llm.ui.width_cols).
-    panel_width_cols: u16,
+    pub(super) panel_width_cols: u16,
     pub panel_focused: bool,
     /// True when Tab has been pressed and focus is on the file picker overlay.
     pub file_picker_focused: bool,
 
     // ── Inline AI block (Ctrl+Space, single-shot NL→command) ─────────────────
     pub ai_block: AiBlock,
-    block_tx: Sender<AiEvent>,
-    block_rx: Receiver<AiEvent>,
+    pub(super) block_tx: Sender<AiEvent>,
+    pub(super) block_rx: Receiver<AiEvent>,
 
     pub llm_provider: Option<Arc<dyn LlmProvider>>,
     /// Error from the last `build_provider` call, shown to the user when llm_provider is None.
-    llm_init_error: Option<String>,
+    pub(super) llm_init_error: Option<String>,
     pub tokio_rt: tokio::runtime::Runtime,
     /// TD-019: channel carries (panel_id, event) so tokens always reach the originating panel.
     pub ai_tx: Sender<(usize, AiEvent)>,
@@ -86,7 +89,7 @@ pub struct UiManager {
 
     // ── Confirmation (write_file / run_command) ───────────────────────────────
     /// Oneshot sender to complete a pending confirmation. Consumed on y/n.
-    pending_confirm_tx: Option<tokio::sync::oneshot::Sender<bool>>,
+    pub(super) pending_confirm_tx: Option<tokio::sync::oneshot::Sender<bool>>,
     /// Undo stack: (path, original_content) pairs, newest first.
     pub undo_stack: VecDeque<(PathBuf, String)>,
     /// A confirmed run_command to forward to the active PTY. Consumed by app.rs.
@@ -98,22 +101,22 @@ pub struct UiManager {
     /// Cached git branch string for the current CWD. None = not yet fetched or not a repo.
     pub git_branch_cache: Option<String>,
     /// Instant of the last git branch fetch, for TTL-based refresh.
-    git_branch_fetched_at: Option<std::time::Instant>,
+    pub(super) git_branch_fetched_at: Option<std::time::Instant>,
     /// Independent wall-clock timer for git poll (TD-PERF-19): we call poll_git_branch
     /// at most once per second, regardless of PTY/render activity.
     pub git_branch_last_poll: std::time::Instant,
     /// True while an async git fetch is in flight — prevents duplicate spawns (TD-PERF-19).
-    git_branch_in_flight: bool,
+    pub(super) git_branch_in_flight: bool,
     /// Time when the current in-flight git fetch was spawned, for timeout detection (TD-PERF-19).
-    git_branch_spawn_time: Option<std::time::Instant>,
+    pub(super) git_branch_spawn_time: Option<std::time::Instant>,
     /// Channel to receive async git branch results.
-    git_tx: crossbeam_channel::Sender<String>,
+    pub(super) git_tx: crossbeam_channel::Sender<String>,
     pub git_rx: crossbeam_channel::Receiver<String>,
     /// CWD used for the last git branch fetch (to detect CWD changes).
-    git_branch_cwd: Option<PathBuf>,
+    pub(super) git_branch_cwd: Option<PathBuf>,
 
     /// Handle for the in-flight LLM streaming task. Aborted on panel close or new query (TD-MEM-12).
-    streaming_handle: Option<tokio::task::JoinHandle<()>>,
+    pub(super) streaming_handle: Option<tokio::task::JoinHandle<()>>,
 
     // ── Tab rename prompt ─────────────────────────────────────────────────────
     /// When `Some`, the user is typing a new name for the active tab.
@@ -126,20 +129,20 @@ pub struct UiManager {
 
     // ── Async file scan (TD-PERF-04) ─────────────────────────────────────────
     /// Receives scan results from the background file-picker scan thread.
-    file_scan_rx: Option<crossbeam_channel::Receiver<Vec<std::path::PathBuf>>>,
+    pub(super) file_scan_rx: Option<crossbeam_channel::Receiver<Vec<std::path::PathBuf>>>,
 
     // ── Async clipboard paste (TD-PERF-15) ───────────────────────────────────
     /// Receives clipboard text from the background paste thread.
-    pending_paste_rx: Option<crossbeam_channel::Receiver<String>>,
+    pub(super) pending_paste_rx: Option<crossbeam_channel::Receiver<String>>,
 
     // ── Async branch scan (TD-PERF-25) ───────────────────────────────────────
     /// Receives branch list from the background branch scan thread.
-    branch_scan_rx: Option<crossbeam_channel::Receiver<Vec<String>>>,
+    pub(super) branch_scan_rx: Option<crossbeam_channel::Receiver<Vec<String>>>,
     /// CWD used for the in-flight branch scan (to build palette items on arrival).
-    branch_scan_cwd: Option<std::path::PathBuf>,
+    pub(super) branch_scan_cwd: Option<std::path::PathBuf>,
 
     // ── System prompt (loaded from ~/.config/petruterm/system/system_prompt.md) ─
-    system_prompt: String,
+    pub(super) system_prompt: String,
 
     // ── Skills (D-4) ─────────────────────────────────────────────────────────
     pub skill_manager: SkillManager,
@@ -161,11 +164,20 @@ impl UiManager {
     pub fn new(config: &Config) -> Self {
         let (ai_tx, ai_rx) = crossbeam_channel::bounded(256);
         let (block_tx, block_rx) = crossbeam_channel::bounded(64);
-        let tokio_rt = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
-            .enable_all()
-            .build()
-            .expect("Failed to build tokio runtime");
+        // Use a 2-thread runtime when LLM is enabled; single-threaded otherwise.
+        // Saves 2 OS threads + scheduler overhead when AI is disabled (AUDIT-ENERGY-03).
+        let tokio_rt = if config.llm.enabled {
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
+                .enable_all()
+                .build()
+                .expect("Failed to build tokio runtime")
+        } else {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("Failed to build tokio runtime")
+        };
 
         let (llm_provider, llm_init_error) = if config.llm.enabled {
             match crate::llm::build_provider(&config.llm) {
@@ -189,24 +201,58 @@ impl UiManager {
         let mut skill_manager = SkillManager::new();
         let mut steering_manager = SteeringManager::new();
         if let Ok(cwd) = std::env::current_dir() {
-            skill_manager.load(&cwd);
-            steering_manager.load(&cwd);
+            let trusted = crate::llm::mcp::trust::is_trusted(&cwd);
+            if !trusted {
+                let has_local = cwd.join(".petruterm/skills").exists()
+                    || cwd.join(".petruterm/steering").exists();
+                if has_local {
+                    log::info!(
+                        "Local skills/steering at {}/.petruterm/ not trusted — loading global only. \
+                         Use 'Trust local MCP' in the palette to enable.",
+                        cwd.display()
+                    );
+                }
+            }
+            skill_manager.load(&cwd, trusted);
+            steering_manager.load(&cwd, trusted);
         }
         let skill_count = skill_manager.skills().len();
 
-        let mcp_manager = {
+        // Skip MCP entirely when LLM is disabled — no AI panel, no tool calls (AUDIT-ENERGY-03).
+        let mcp_manager = if config.llm.enabled {
             let mut mgr = McpManager::new();
-            if let Ok(cwd) = std::env::current_dir() {
-                if let Ok(cfg) = mcp_config::load(&cwd) {
-                    if !cfg.is_empty() {
-                        let errors = tokio_rt.block_on(mgr.start_all(&cfg));
-                        for (name, err) in &errors {
-                            log::warn!("MCP server '{name}' failed to start: {err:#}");
+            // Always load global MCP servers (installed by the user deliberately).
+            if let Ok(mut cfg) = mcp_config::load_global() {
+                // Load project-local MCP only if this cwd has been explicitly trusted.
+                // This prevents a malicious repo's .petruterm/mcp.json from spawning
+                // arbitrary processes when the directory is opened (AUDIT-SEC-02).
+                if let Ok(cwd) = std::env::current_dir() {
+                    let local_path = cwd.join(".petruterm/mcp.json");
+                    if local_path.exists() {
+                        if crate::llm::mcp::trust::is_trusted(&cwd) {
+                            if let Ok(local) = mcp_config::load_local(&cwd) {
+                                cfg.extend(local);
+                            }
+                        } else {
+                            log::info!(
+                                "Local MCP config found at {}/.petruterm/mcp.json but this \
+                                 directory is not trusted — skipping. Use 'Trust local MCP' \
+                                 in the command palette to enable.",
+                                cwd.display()
+                            );
                         }
+                    }
+                }
+                if !cfg.is_empty() {
+                    let errors = tokio_rt.block_on(mgr.start_all(&cfg));
+                    for (name, err) in &errors {
+                        log::warn!("MCP server '{name}' failed to start: {err:#}");
                     }
                 }
             }
             std::sync::Arc::new(mgr)
+        } else {
+            std::sync::Arc::new(McpManager::new())
         };
         let mcp_connected = mcp_manager.connected_count();
 
@@ -413,165 +459,6 @@ impl UiManager {
     pub fn confirm_action_always(&mut self) {
         self.panel_mut().auto_confirm_actions = true;
         self.confirm_action_yes();
-    }
-
-    /// Poll for async git branch results and refresh the cache if due.
-    /// Returns true if the cache was updated (caller should redraw).
-    pub fn poll_git_branch(
-        &mut self,
-        cwd: Option<&std::path::Path>,
-        dirty_check: bool,
-        ttl: std::time::Duration,
-    ) -> bool {
-        // Drain any result that arrived from a previous spawn.
-        let mut updated = false;
-        while let Ok(branch) = self.git_rx.try_recv() {
-            log::debug!("Git branch fetch completed: '{}'", branch);
-            self.git_branch_cache = Some(branch);
-            self.git_branch_fetched_at = Some(std::time::Instant::now());
-            self.git_branch_in_flight = false;
-            self.git_branch_spawn_time = None;
-            updated = true;
-        }
-
-        // TD-PERF-19: Timeout recovery — if fetch is stuck in-flight for >30s, reset flag
-        // without clearing the cache (keep stale result visible).
-        if self.git_branch_in_flight {
-            if let Some(spawn_time) = self.git_branch_spawn_time {
-                if spawn_time.elapsed() > std::time::Duration::from_secs(30) {
-                    log::warn!(
-                        "Git branch fetch stuck for >30s, resetting in-flight flag (cache remains stale)"
-                    );
-                    self.git_branch_in_flight = false;
-                    self.git_branch_spawn_time = None;
-                }
-            }
-        }
-
-        // Decide whether to spawn a fresh fetch.
-        let cwd_changed = cwd.map(|p| p.to_path_buf()) != self.git_branch_cwd;
-        let ttl_expired = self
-            .git_branch_fetched_at
-            .map(|t| t.elapsed() > ttl)
-            .unwrap_or(true);
-
-        if (cwd_changed || ttl_expired) && !self.git_branch_in_flight {
-            if let Some(cwd_path) = cwd {
-                self.git_branch_cwd = Some(cwd_path.to_path_buf());
-                self.git_branch_in_flight = true;
-                self.git_branch_spawn_time = Some(std::time::Instant::now());
-                let tx = self.git_tx.clone();
-                let cwd_owned = cwd_path.to_path_buf();
-                log::debug!("Spawning git branch fetch for CWD: {:?}", cwd_owned);
-                self.tokio_rt.spawn(async move {
-                    let branch = fetch_git_branch(&cwd_owned, dirty_check).await;
-                    let _ = tx.send(branch);
-                });
-            }
-        }
-
-        updated
-    }
-
-    /// Open the command palette in theme-picker mode.
-    /// Lists .lua files in ~/.config/petruterm/themes/ and pre-populates the palette.
-    pub fn open_theme_picker(&mut self) {
-        use crate::ui::palette::{Action, PaletteAction};
-        let themes = crate::config::list_themes();
-        if themes.is_empty() {
-            log::warn!(
-                "No themes found in {}",
-                crate::config::themes_dir().display()
-            );
-            return;
-        }
-        let items: Vec<PaletteAction> = themes
-            .into_iter()
-            .map(|name| PaletteAction {
-                name: format!("  {name}"),
-                action: Action::SwitchTheme(name),
-                keybind: None,
-            })
-            .collect();
-        self.palette.open_with_items(items);
-    }
-
-    /// Open the command palette in branch-picker mode.
-    /// The palette opens immediately with a placeholder; branches populate async (TD-PERF-25).
-    pub fn open_branch_picker(&mut self, cwd: &std::path::Path) {
-        use crate::ui::palette::{Action, PaletteAction};
-        let placeholder = vec![PaletteAction {
-            name: t!("ai.loading_branches").to_string(),
-            action: Action::Noop,
-            keybind: None,
-        }];
-        self.palette.open_with_items(placeholder);
-        let (tx, rx) = crossbeam_channel::bounded(1);
-        self.branch_scan_rx = Some(rx);
-        self.branch_scan_cwd = Some(cwd.to_path_buf());
-        let cwd_owned = cwd.to_path_buf();
-        std::thread::spawn(move || {
-            let branches = list_git_branches_sync(&cwd_owned);
-            let _ = tx.send(branches);
-        });
-    }
-
-    /// Drain branch scan results and repopulate the palette. Returns true if updated.
-    pub fn poll_branch_scan(&mut self) -> bool {
-        let Some(rx) = &self.branch_scan_rx else {
-            return false;
-        };
-        match rx.try_recv() {
-            Ok(branches) => {
-                self.branch_scan_rx = None;
-                if branches.is_empty() {
-                    self.palette.close();
-                    self.branch_scan_cwd = None;
-                    return true;
-                }
-                use crate::ui::palette::{Action, PaletteAction};
-                let current = self
-                    .git_branch_cache
-                    .as_deref()
-                    .unwrap_or("")
-                    .trim_end_matches('*');
-                let items: Vec<PaletteAction> = branches
-                    .into_iter()
-                    .map(|b| {
-                        let label = if b == current {
-                            format!("  {b}  ✓")
-                        } else {
-                            format!("  {b}")
-                        };
-                        PaletteAction {
-                            name: label,
-                            action: Action::GitCheckout(b),
-                            keybind: None,
-                        }
-                    })
-                    .collect();
-                self.palette.open_with_items(items);
-                self.branch_scan_cwd = None;
-                true
-            }
-            Err(_) => false,
-        }
-    }
-
-    /// Run `git checkout <branch>` in `cwd` and invalidate the branch cache.
-    pub fn git_checkout(&mut self, branch: &str, cwd: &std::path::Path) {
-        let status = std::process::Command::new("git")
-            .args(["-C", &cwd.to_string_lossy(), "checkout", branch])
-            .status();
-        match status {
-            Ok(s) if s.success() => {
-                // Invalidate cache so the status bar refreshes immediately.
-                self.git_branch_cache = None;
-                self.git_branch_fetched_at = None;
-            }
-            Ok(s) => log::warn!("git checkout {branch} exited with {s}"),
-            Err(e) => log::error!("git checkout {branch} failed: {e}"),
-        }
     }
 
     /// Undo the last file write by restoring the saved original content.
@@ -937,42 +824,68 @@ impl UiManager {
                                     match call.content_arg() {
                                         None => t!("ai.missing_content").to_string(),
                                         Some(new_content) => {
-                                            let (confirm_tx, confirm_rx) =
-                                                tokio::sync::oneshot::channel::<bool>();
                                             let abs = cwd.join(&path_str);
-                                            // Compute diff in async task — keeps main thread unblocked (TD-PERF-31).
-                                            let display =
-                                                crate::llm::chat_panel::ConfirmDisplay::for_write(
-                                                    &abs,
-                                                    &new_content,
-                                                );
-                                            let _ = tx.send((
-                                                panel_id,
-                                                AiEvent::ConfirmWrite {
-                                                    display,
-                                                    result_tx: confirm_tx,
-                                                },
-                                            ));
-                                            let _ = wakeup_proxy.send_event(());
-                                            match confirm_rx.await {
-                                                Ok(true) => {
-                                                    let old = std::fs::read_to_string(&abs)
-                                                        .unwrap_or_default();
-                                                    let _ = tx.send((
-                                                        panel_id,
-                                                        AiEvent::UndoState {
-                                                            path: abs.clone(),
-                                                            content: old,
-                                                        },
-                                                    ));
-                                                    match std::fs::write(&abs, &new_content) {
-                                                        Ok(_) => t!("ai.file_written").to_string(),
-                                                        Err(e) => {
-                                                            format!("Error writing file: {e}")
+                                            // Guard against path traversal: walk up to the
+                                            // nearest existing ancestor, canonicalize it,
+                                            // and verify it stays within cwd. This handles
+                                            // both existing files and new files in new dirs.
+                                            let is_safe = {
+                                                let mut probe = abs.clone();
+                                                loop {
+                                                    match probe.canonicalize() {
+                                                        Ok(c) => break c.starts_with(&cwd),
+                                                        Err(_) => {
+                                                            if !probe.pop() {
+                                                                break false;
+                                                            }
                                                         }
                                                     }
                                                 }
-                                                _ => t!("ai.write_rejected").to_string(),
+                                            };
+                                            if !is_safe {
+                                                format!(
+                                                    "Error: path '{}' is outside the working directory",
+                                                    path_str
+                                                )
+                                            } else {
+                                                let (confirm_tx, confirm_rx) =
+                                                    tokio::sync::oneshot::channel::<bool>();
+                                                // Compute diff in async task — keeps main thread unblocked (TD-PERF-31).
+                                                let display =
+                                                    crate::llm::chat_panel::ConfirmDisplay::for_write(
+                                                        &abs,
+                                                        &new_content,
+                                                    );
+                                                let _ = tx.send((
+                                                    panel_id,
+                                                    AiEvent::ConfirmWrite {
+                                                        display,
+                                                        result_tx: confirm_tx,
+                                                    },
+                                                ));
+                                                let _ = wakeup_proxy.send_event(());
+                                                match confirm_rx.await {
+                                                    Ok(true) => {
+                                                        let old = std::fs::read_to_string(&abs)
+                                                            .unwrap_or_default();
+                                                        let _ = tx.send((
+                                                            panel_id,
+                                                            AiEvent::UndoState {
+                                                                path: abs.clone(),
+                                                                content: old,
+                                                            },
+                                                        ));
+                                                        match std::fs::write(&abs, &new_content) {
+                                                            Ok(_) => {
+                                                                t!("ai.file_written").to_string()
+                                                            }
+                                                            Err(e) => {
+                                                                format!("Error writing file: {e}")
+                                                            }
+                                                        }
+                                                    }
+                                                    _ => t!("ai.write_rejected").to_string(),
+                                                }
                                             }
                                         }
                                     }
@@ -1241,151 +1154,6 @@ impl UiManager {
         }
     }
 
-    /// Reload MCP servers from disk config. Creates a fresh McpManager, starts all
-    /// servers, and replaces the Arc. Called on hot-reload of mcp.json (D-5).
-    pub fn reload_mcp(&mut self, cwd: &std::path::Path) {
-        match crate::llm::mcp::config::load(cwd) {
-            Ok(cfg) => {
-                let mut mgr = McpManager::new();
-                let errors = self.tokio_rt.block_on(mgr.start_all(&cfg));
-                for (name, err) in &errors {
-                    log::warn!("MCP hot-reload: server '{name}' failed to start: {err:#}");
-                }
-                let connected = mgr.connected_count();
-                self.mcp_manager = std::sync::Arc::new(mgr);
-                self.chat_panel.mcp_connected = connected;
-                log::info!("MCP hot-reloaded: {connected} server(s) connected.");
-            }
-            Err(e) => log::warn!("MCP hot-reload: failed to load config: {e:#}"),
-        }
-    }
-
-    /// TD-020: Re-wire the LLM provider and panel width from a fresh config.
-    /// Call this on every config reload (both hot-reload and palette-triggered).
-    pub fn rewire_llm_provider(&mut self, config: &Config) {
-        (self.llm_provider, self.llm_init_error) = if config.llm.enabled {
-            match crate::llm::build_provider(&config.llm) {
-                Ok(p) => (Some(p), None),
-                Err(e) => (None, Some(format!("{e:#}"))),
-            }
-        } else {
-            (None, None)
-        };
-        self.panel_width_cols = config.llm.ui.width_cols;
-        self.system_prompt = crate::config::load_system_prompt();
-        if let Ok(cwd) = std::env::current_dir() {
-            self.skill_manager.load(&cwd);
-            self.steering_manager.load(&cwd);
-        }
-    }
-
-    // ── Slash command dispatcher (D-4) ───────────────────────────────────────
-
-    /// Handle a slash command entered in the AI panel input.
-    /// Returns true if the command was recognized, false if unknown.
-    /// The input field is cleared on entry regardless of outcome.
-    pub fn handle_slash_command(&mut self, input: &str) -> bool {
-        self.panel_mut().input.clear();
-        self.panel_mut().dirty = true;
-
-        let trimmed = input.trim_start_matches('/');
-        let (cmd, args) = trimmed
-            .split_once(' ')
-            .map_or((trimmed, ""), |(c, a)| (c, a.trim()));
-
-        match cmd {
-            "q" | "quit" => {
-                self.close_panel();
-                true
-            }
-            "clear" | "reset" => {
-                self.restart_chat_panel();
-                true
-            }
-            "skills" => {
-                let msg = {
-                    let skills = self.skill_manager.skills();
-                    if skills.is_empty() {
-                        "No skills loaded. Place SKILL.md files in ~/.config/petruterm/skills/<name>/".to_string()
-                    } else {
-                        let filtered: Vec<String> = skills
-                            .iter()
-                            .filter(|s| {
-                                args.is_empty()
-                                    || s.name.contains(args)
-                                    || s.description.contains(args)
-                            })
-                            .map(|s| format!("## {}\n{}", s.name, s.description))
-                            .collect();
-                        if filtered.is_empty() {
-                            format!("No skills matching '{args}'")
-                        } else {
-                            format!("# Skills\n{}", filtered.join("\n"))
-                        }
-                    }
-                };
-                self.panel_mut()
-                    .messages
-                    .push(crate::llm::ChatMessage::assistant(msg));
-                self.panel_mut().dirty = true;
-                true
-            }
-            "mcp" => {
-                let msg = if self.mcp_manager.connected_count() == 0 {
-                    "No MCP servers connected.".to_string()
-                } else {
-                    let mut tools = self.mcp_manager.all_tools();
-                    tools.sort_by(|(a, _), (b, _)| a.cmp(b));
-
-                    // Group tool names by server, preserving sort order.
-                    let mut servers: Vec<(String, Vec<String>)> = Vec::new();
-                    for (server, tool) in &tools {
-                        if let Some(entry) = servers.iter_mut().find(|(s, _)| s == server) {
-                            entry.1.push(tool.name.clone());
-                        } else {
-                            servers.push((server.clone(), vec![tool.name.clone()]));
-                        }
-                    }
-
-                    let lines: Vec<String> = servers
-                        .iter()
-                        .map(|(name, tool_names)| {
-                            let n = tool_names.len();
-                            format!(
-                                "## {} ({} tool{})\n{}",
-                                name,
-                                n,
-                                if n == 1 { "" } else { "s" },
-                                tool_names.join(", ")
-                            )
-                        })
-                        .collect();
-
-                    let n = servers.len();
-                    format!(
-                        "# MCP ({} server{})\n{}",
-                        n,
-                        if n == 1 { "" } else { "s" },
-                        lines.join("\n")
-                    )
-                };
-                self.panel_mut()
-                    .messages
-                    .push(crate::llm::ChatMessage::assistant(msg));
-                self.panel_mut().dirty = true;
-                true
-            }
-            _ => {
-                let msg = format!("Unknown command: /{cmd}. Try /clear, /skills, /mcp or /quit.");
-                self.panel_mut()
-                    .messages
-                    .push(crate::llm::ChatMessage::assistant(msg));
-                self.panel_mut().dirty = true;
-                false
-            }
-        }
-    }
-
     // ── Palette action dispatch ───────────────────────────────────────────────
 
     pub fn handle_palette_action(
@@ -1595,6 +1363,16 @@ impl UiManager {
             Action::FixLastError => self.fix_last_error(mux, wakeup_proxy),
             Action::UndoLastWrite => self.cmd_undo_last_write(),
             Action::ClearAiContext => self.restart_chat_panel(),
+            Action::TrustLocalMcp => {
+                let cwd = std::env::current_dir().unwrap_or_default();
+                match crate::llm::mcp::trust::trust(&cwd) {
+                    Ok(()) => {
+                        log::info!("Trusted local MCP config for {}", cwd.display());
+                        self.reload_mcp(&cwd);
+                    }
+                    Err(e) => log::warn!("Failed to trust local MCP: {e:#}"),
+                }
+            }
             Action::ToggleStatusBar => {
                 config.status_bar.enabled = !config.status_bar.enabled;
             }
@@ -1644,93 +1422,6 @@ impl UiManager {
             Action::Noop => {}
         }
     }
-
-    /// Build markdown content for the info overlay when the user opens an MCP server.
-    /// Shows a tool list with descriptions and JSON input schemas.
-    pub fn mcp_overlay_content(&self, server_name: &str) -> String {
-        let tools = self.mcp_manager.tools_for_server(server_name);
-        let mut out = format!("# {server_name}\n\n");
-        if tools.is_empty() {
-            out.push_str("*No tools registered (server not connected or no tools).*\n");
-            return out;
-        }
-        let n = tools.len();
-        out.push_str(&format!("## Tools ({})\n\n", n));
-        for tool in tools {
-            out.push_str(&format!("### {}\n", tool.name));
-            if !tool.description.is_empty() {
-                out.push_str(&format!("{}\n\n", tool.description));
-            }
-            let schema = serde_json::to_string_pretty(&tool.input_schema).unwrap_or_default();
-            if schema != "null" && !schema.is_empty() {
-                out.push_str(&format!("```json\n{schema}\n```\n\n"));
-            }
-        }
-        out
-    }
-}
-
-/// Async helper: fetch the current git branch for `cwd`.
-/// Returns the branch name (with dirty `*` suffix if uncommitted changes),
-/// or an empty string if `cwd` is not a git repo.
-async fn fetch_git_branch(cwd: &std::path::Path, dirty_check: bool) -> String {
-    use tokio::process::Command;
-
-    let branch = Command::new("git")
-        .args(["-C", &cwd.to_string_lossy(), "branch", "--show-current"])
-        .output()
-        .await
-        .ok()
-        .filter(|o| o.status.success())
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .map(|s| s.trim().to_string())
-        .unwrap_or_default();
-
-    if branch.is_empty() {
-        return String::new();
-    }
-
-    if !dirty_check {
-        return branch;
-    }
-
-    let dirty = Command::new("git")
-        .args(["-C", &cwd.to_string_lossy(), "status", "--porcelain"])
-        .output()
-        .await
-        .ok()
-        .map(|o| !o.stdout.is_empty())
-        .unwrap_or(false);
-
-    if dirty {
-        format!("{branch}*")
-    } else {
-        branch
-    }
-}
-
-/// Sync helper: list local git branches for `cwd` (runs in a background thread).
-/// Returns branch names sorted alphabetically, empty vec if not a git repo.
-fn list_git_branches_sync(cwd: &std::path::Path) -> Vec<String> {
-    let out = std::process::Command::new("git")
-        .args([
-            "-C",
-            &cwd.to_string_lossy(),
-            "branch",
-            "--format=%(refname:short)",
-        ])
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .unwrap_or_default();
-    let mut branches: Vec<String> = out
-        .lines()
-        .map(|l| l.trim().to_string())
-        .filter(|l| !l.is_empty())
-        .collect();
-    branches.sort();
-    branches
 }
 
 #[cfg(test)]

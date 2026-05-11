@@ -1,14 +1,50 @@
 # Session State
 
 **Last Updated:** 2026-05-11
-**Session Focus:** Post-Phase 7 — Bug fixes UI: pane border padding + scrollbar gap.
+**Session Focus:** Auditoría técnica — Waves 1–3 completas.
 
 ## Branch: `master`
 
 ## Estado actual
 
 **Phases 1–7 COMPLETAS. master limpio.**
-**Sin deuda técnica abierta. Diferidos: TD-PERF-03/05 (solo GPUs discretas).**
+**Deuda técnica: Waves 1–3 resueltas. Watch: AUDIT-CLEAN-02. Diferidos: TD-PERF-03, TD-PERF-05.**
+
+## Esta sesión (2026-05-11) — Auditoría Wave 1 + Wave 2
+
+### Wave 1 — Riesgo y desperdicio inmediato (4 items)
+
+**AUDIT-SEC-01** — Path traversal en `write_file` (`src/app/ui.rs`):
+Canonicaliza el ancestro mas cercano existente y verifica `starts_with(cwd)` antes del dialogo de confirmacion. Soporta ficheros en directorios nuevos (no existentes aun).
+
+**AUDIT-SEC-02** — MCP local sin trust gate:
+- Nuevo `src/llm/mcp/trust.rs`: lista de cwds confiables en `~/.config/petruterm/mcp_trust.json`.
+- `mcp/config.rs`: `load_global()` + `load_local()` separados; `load()` legacy eliminado.
+- `UiManager::new()` y `reload_mcp()` solo inician `.petruterm/mcp.json` si `is_trusted(cwd)`.
+- Palette: nueva accion "Trust local MCP config".
+
+**AUDIT-ENERGY-02** — Battery poll infinito en desktop:
+`battery_polled: bool` reemplaza `battery_status.is_none()` como guarda; poll cada 30 s, no cada iteracion.
+
+**AUDIT-PERF-06** — `max_fps` muerto + `animation_fps` fantasma:
+`flush_redraw_request` respeta `1_000_000_000/max_fps ns`; `about_to_wait` inyecta `frame_deadline` en `WaitUntil`. `animation_fps` eliminado de `perf.lua`.
+
+### Wave 2 — Best in class (5 items)
+
+**AUDIT-ENERGY-03** — Tokio + MCP eager cuando `llm.enabled = false`:
+Runtime cambia a `current_thread`; bloque MCP omitido completamente.
+
+**AUDIT-SEC-03** — Skills/steering locales sin trust gate:
+`load(cwd, include_local: bool)` en ambos managers; se pasa `trust::is_trusted(&cwd)`.
+
+**AUDIT-ENERGY-04** — Wakeups periodicos no gobernados por battery saver:
+Git poll guard: 1 s normal / 60 s battery saver. `next_minute_wake` solo cuando `status_bar.enabled`. Battery poll condicionado a `window_focused`.
+
+**AUDIT-THEME-01** — Status bar hardcoded Dracula:
+`StatusBarColors` derivado de `ColorScheme::status_bar_colors()`. `StatusBar::build()` recibe `&StatusBarColors`. Constantes eliminadas de `status_bar.rs`.
+
+**AUDIT-PERF-07** — Tab bar aloca `Vec<String>` por frame:
+`tab_bar_titles: Vec<String>` → `tab_bar_titles_hash: u64` (FxHasher). Zero aloc en hot path.
 
 ## Esta sesión (2026-05-11) — Pane border padding + scrollbar gap
 
