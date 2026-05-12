@@ -1324,7 +1324,9 @@ impl App {
                             .context_menu
                             .open_with_block(tid, bid, cmd, col, row, term_cols, term_rows);
                     } else {
-                        self.ui.context_menu.open(col, row, term_cols, term_rows);
+                        self.ui
+                            .context_menu
+                            .open_default(col, row, term_cols, term_rows);
                     }
                 }
             }

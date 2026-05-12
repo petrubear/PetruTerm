@@ -60,6 +60,16 @@ pub struct ContextMenu {
 /// Width in terminal columns for the context menu popup.
 pub const CONTEXT_MENU_WIDTH: usize = 30;
 
+fn default_items() -> Vec<ContextMenuItem> {
+    vec![
+        item_kb("Copy", "Cmd+C", ContextAction::Copy),
+        item_kb("Paste", "Cmd+V", ContextAction::Paste),
+        item("Clear", ContextAction::Clear),
+        separator(),
+        item("Ask AI", ContextAction::SendToChat),
+    ]
+}
+
 fn item(label: &str, action: ContextAction) -> ContextMenuItem {
     ContextMenuItem {
         label: label.to_string(),
@@ -102,13 +112,7 @@ impl ContextMenu {
             visible: false,
             col: 0,
             row: 0,
-            items: vec![
-                item_kb("Copy", "Cmd+C", ContextAction::Copy),
-                item_kb("Paste", "Cmd+V", ContextAction::Paste),
-                item("Clear", ContextAction::Clear),
-                separator(),
-                item("Ask AI", ContextAction::SendToChat),
-            ],
+            items: default_items(),
             hovered: None,
         }
     }
@@ -130,6 +134,12 @@ impl ContextMenu {
         self.row = clamped_row;
         self.hovered = None;
         self.visible = true;
+    }
+
+    /// Open the standard terminal context menu at the given terminal cell position.
+    pub fn open_default(&mut self, col: usize, row: usize, term_cols: usize, term_rows: usize) {
+        self.items = default_items();
+        self.open(col, row, term_cols, term_rows);
     }
 
     pub fn close(&mut self) {
@@ -333,5 +343,37 @@ impl ContextMenu {
         } else {
             false
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ContextAction, ContextMenu};
+
+    #[test]
+    fn open_default_resets_tab_color_picker_items() {
+        let mut menu = ContextMenu::new();
+        let brights = [
+            [0.0, 0.0, 0.0, 1.0],
+            [1.0, 0.0, 0.0, 1.0],
+            [0.0, 1.0, 0.0, 1.0],
+            [1.0, 1.0, 0.0, 1.0],
+            [0.0, 0.0, 1.0, 1.0],
+            [1.0, 0.0, 1.0, 1.0],
+            [0.0, 1.0, 1.0, 1.0],
+            [1.0, 1.0, 1.0, 1.0],
+        ];
+
+        menu.open_tab_color_picker(0, &brights, 1, 1, 80, 24);
+        menu.open_default(2, 2, 80, 24);
+
+        assert_eq!(menu.items[0].label, "Copy");
+        assert_eq!(menu.items[1].label, "Paste");
+        assert_eq!(menu.items[2].label, "Clear");
+        assert_eq!(menu.items[4].label, "Ask AI");
+        assert!(matches!(menu.items[0].action, ContextAction::Copy));
+        assert!(matches!(menu.items[1].action, ContextAction::Paste));
+        assert!(matches!(menu.items[2].action, ContextAction::Clear));
+        assert!(matches!(menu.items[4].action, ContextAction::SendToChat));
     }
 }
