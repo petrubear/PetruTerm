@@ -3,6 +3,7 @@ use crate::term::{Osc133Marker, PtyEvent, Terminal};
 use crate::ui::search_bar::SearchMatch;
 use crate::ui::{PaneInfo, PaneManager, PaneSeparator, Rect, TabManager};
 
+pub mod snapshot;
 mod workspace;
 
 /// A named workspace that groups a set of tabs and panes.

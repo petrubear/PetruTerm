@@ -669,5 +669,14 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
         }
     }
 
+    if let Ok(ws_table) = table.get::<LuaTable>("workspaces") {
+        if let Ok(v) = ws_table.get::<bool>("auto_save_on_exit") {
+            config.workspaces.auto_save_on_exit = v;
+        }
+        if let Ok(v) = ws_table.get::<bool>("auto_save_on_switch") {
+            config.workspaces.auto_save_on_switch = v;
+        }
+    }
+
     Ok(config)
 }

@@ -1,12 +1,63 @@
 # Active Context
 
-**Current Focus:** Tier 5 desbloqueado — baseline criterion establecido.
+**Current Focus:** —
 **Last Active:** 2026-05-12
 
 ## Estado actual del proyecto
 
-**Phases 1–7 COMPLETAS.** master limpio.
-**Deuda técnica: Wave 1 + Wave 2 resueltas. Pendiente: Wave 3 (AUDIT-THEME-02, AUDIT-REFAC-05) + Watch (AUDIT-CLEAN-02). Diferidos: TD-PERF-03, TD-PERF-05 (solo GPUs discretas).**
+**Phases 1–7 COMPLETAS. Workspace persistence COMPLETA (2026-05-12).** master limpio.
+**Deuda técnica: Waves 1–3 resueltas. Watch: AUDIT-CLEAN-02. Diferidos: TD-PERF-03, TD-PERF-05.**
+
+## Workspace Persistence — COMPLETA (2026-05-12)
+
+**Estado:** IMPLEMENTADA. CI limpio (101 tests, clippy, fmt).
+
+### Almacenamiento
+- Un archivo JSON por workspace: `~/.config/petruterm/workspaces/<name>.json`
+- Versión: `"version": 1`
+- Contenido: nombre, `saved_at`, array de tabs (nombre + árbol de panes `PaneNode` + CWD por pane)
+- No se guardan procesos corriendo ni scrollback; al cargar se abre shell nuevo en cada CWD
+
+### Formato `pane_tree` (recurso serde)
+```json
+{ "type": "split", "dir": "horizontal", "ratio": 0.6,
+  "left":  { "type": "leaf", "cwd": "/path/to/a" },
+  "right": { "type": "leaf", "cwd": "/path/to/b" } }
+```
+
+### Keybinds nuevos
+| Keybind | Acción |
+|---------|--------|
+| `Leader W s` | Guardar workspace activo a disco |
+| `Leader W L` | Abrir paleta filtrada en workspaces guardados |
+
+### Paleta de comandos
+- Nueva sección dinámica **"Saved Workspaces"**: escanea `~/.config/petruterm/workspaces/*.json` en tiempo real
+- Muestra: nombre, nro de tabs, fecha de guardado
+- Seleccionar → crea workspace NUEVO basado en ese layout (no destruye el actual)
+- Si ya existe un workspace con ese nombre en memoria: aviso + opción de cancelar o renombrar
+
+### Comportamiento de carga
+- CWD inexistente → fallback a `$HOME`
+- Procesos: shell limpio (no se puede restaurar proceso previo)
+
+### Config opcional (`config.lua`)
+```lua
+workspaces = {
+  auto_save_on_exit   = true,   -- guarda todos los ws al cerrar la app
+  auto_save_on_switch = false,  -- guarda ws activo al cambiar a otro
+}
+```
+
+### Pasos de implementación
+1. `serde` derives en `PaneNode`, `SplitDir`, `Tab` → struct `WorkspaceSnapshot`
+2. `save_workspace(path)` — serializa activo, escribe JSON
+3. `load_workspace(path)` — deserializa, crea tabs/panes, spawna PTYs con CWDs guardados
+4. Paleta: sección "Saved Workspaces" dinámica
+5. Keybinds `Leader W s` y `Leader W L`
+6. Auto-save on exit (respeta config)
+
+---
 
 ## Infraestructura de seguridad nueva (Wave 1+2)
 

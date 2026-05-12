@@ -1533,6 +1533,9 @@ impl ApplicationHandler<()> for App {
     ) {
         match event {
             WindowEvent::CloseRequested => {
+                if self.config.workspaces.auto_save_on_exit {
+                    self.mux.save_all_workspaces();
+                }
                 event_loop.exit();
             }
             WindowEvent::Occluded(occluded) => {

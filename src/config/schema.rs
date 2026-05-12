@@ -31,6 +31,7 @@ pub struct Config {
     /// integrated GPU. Has no effect at runtime — requires a restart to apply.
     pub gpu_preference: GpuPreference,
     pub notifications: NotificationsConfig,
+    pub workspaces: WorkspacesConfig,
 }
 
 /// Keyboard behaviour options.
@@ -104,6 +105,7 @@ impl Default for Config {
             battery_saver: BatterySaverMode::default(),
             gpu_preference: GpuPreference::default(),
             notifications: NotificationsConfig::default(),
+            workspaces: WorkspacesConfig::default(),
         }
     }
 }
@@ -153,6 +155,21 @@ impl Default for NotificationsConfig {
     fn default() -> Self {
         Self {
             style: NotificationStyle::Toast,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspacesConfig {
+    pub auto_save_on_exit: bool,
+    pub auto_save_on_switch: bool,
+}
+
+impl Default for WorkspacesConfig {
+    fn default() -> Self {
+        Self {
+            auto_save_on_exit: true,
+            auto_save_on_switch: false,
         }
     }
 }

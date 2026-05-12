@@ -18,4 +18,9 @@ llm.apply_to_config(config)
 snippets.apply_to_config(config)
 notifications.apply_to_config(config)
 
+config.workspaces = {
+  auto_save_on_exit   = true,
+  auto_save_on_switch = false,
+}
+
 return config

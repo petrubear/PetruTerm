@@ -389,6 +389,8 @@ impl InputHandler {
                             "," => Some(Action::RenameWorkspace),
                             "j" => Some(Action::NextWorkspace),
                             "k" => Some(Action::PrevWorkspace),
+                            "s" => Some(Action::SaveWorkspace),
+                            "L" => Some(Action::OpenSavedWorkspaces),
                             _ => None,
                         };
                         if let Some(action) = action {

@@ -33,6 +33,9 @@ pub enum Action {
     RenameWorkspace,
     NextWorkspace,
     PrevWorkspace,
+    SaveWorkspace,
+    OpenSavedWorkspaces,
+    RestoreWorkspace(String),
     // Panes
     SplitHorizontal,
     SplitVertical,
@@ -294,6 +297,16 @@ pub fn built_in_actions(config: &Config) -> Vec<PaletteAction> {
             name: t!("palette.switch_theme").to_string(),
             action: Action::OpenThemePicker,
             keybind: None,
+        },
+        PaletteAction {
+            name: "Save Workspace".to_string(),
+            action: Action::SaveWorkspace,
+            keybind: Some("^F W s".into()),
+        },
+        PaletteAction {
+            name: "Saved Workspaces...".to_string(),
+            action: Action::OpenSavedWorkspaces,
+            keybind: Some("^F W L".into()),
         },
     ];
     actions.sort_unstable_by(|a, b| a.name.cmp(&b.name));

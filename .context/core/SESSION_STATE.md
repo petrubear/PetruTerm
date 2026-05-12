@@ -1,7 +1,7 @@
 # Session State
 
 **Last Updated:** 2026-05-12
-**Session Focus:** Atlas split + PGO.
+**Session Focus:** Workspace persistence — COMPLETA.
 
 ## Branch: `master`
 
@@ -221,6 +221,30 @@ Expandido para cubrir todo el ancho del pane.
 **ClearBlock eliminado:** `ContextAction::ClearBlock`, `BlockManager::remove_block` removidos.
 
 **Gutter bar eliminada:** 2px stripe izquierdo removido del renderer.
+
+## Esta sesión (2026-05-12) — Workspace Persistence
+
+### COMPLETA. CI limpio (101 tests, 0 clippy warnings, fmt ok).
+
+**Archivos nuevos:**
+- `src/app/mux/snapshot.rs` — tipos `WorkspaceSnapshot/TabSnapshot/PaneNodeSnapshot/SplitDirSnapshot/SavedWorkspaceInfo` + `workspaces_dir/list_saved_workspaces/load_workspace/save_snapshot`
+
+**Archivos modificados:**
+- `src/app/mux/workspace.rs` — `save_workspace`, `save_all_workspaces`, `build_workspace_snapshot`, `snapshot_pane_node`, `restore_workspace` + helpers libres `home_str` y `restore_pane_recursive`
+- `src/app/mux/mod.rs` — `pub mod snapshot;`
+- `src/config/schema.rs` — `WorkspacesConfig { auto_save_on_exit: bool, auto_save_on_switch: bool }` + campo en `Config`
+- `src/config/lua.rs` — parsing de `workspaces.*`
+- `config/default/config.lua` — defaults `workspaces`
+- `src/ui/palette/actions.rs` — `SaveWorkspace`, `OpenSavedWorkspaces`, `RestoreWorkspace(String)` + 2 palette items
+- `src/app/input/mod.rs` — `Leader W s` (guardar), `Leader W L` (abrir paleta de guardados)
+- `src/app/ui/mod.rs` — handlers para los 3 nuevos actions
+- `src/app/mod.rs` — auto-save antes de `event_loop.exit()` cuando `auto_save_on_exit = true`
+- `src/ui/panes.rs` — `next_node_id` → `pub(crate)`
+
+**No obvio — `restore_pane_recursive` es free fn:**
+No puede ser método de Mux porque toma `&mut Mux` y llama `mux.open_terminal` mientras itera sobre el snapshot. Si fuera método, el borrow checker rechazaría el doble borrow. Diseño: función libre que recibe `&mut Mux` explícitamente.
+
+**Formato JSON guardado:** `~/.config/petruterm/workspaces/<name>.json`
 
 ## Sesiones anteriores (resumen)
 

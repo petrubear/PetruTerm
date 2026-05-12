@@ -1265,6 +1265,58 @@ impl UiManager {
             Action::PrevWorkspace => {
                 mux.cmd_prev_workspace();
             }
+            Action::SaveWorkspace => {
+                if let Err(e) = mux.save_workspace() {
+                    log::error!("save_workspace: {e}");
+                }
+            }
+            Action::OpenSavedWorkspaces => {
+                let items: Vec<crate::ui::palette::PaletteAction> =
+                    crate::app::mux::snapshot::list_saved_workspaces()
+                        .into_iter()
+                        .map(|info| crate::ui::palette::PaletteAction {
+                            name: format!(
+                                "{} ({} tabs) — {}",
+                                info.name, info.tab_count, info.saved_at
+                            ),
+                            action: crate::ui::palette::Action::RestoreWorkspace(
+                                info.path.to_string_lossy().into_owned(),
+                            ),
+                            keybind: None,
+                        })
+                        .collect();
+                if items.is_empty() {
+                    self.palette.open();
+                } else {
+                    self.palette.open_with_items(items);
+                }
+            }
+            Action::RestoreWorkspace(path) => {
+                match crate::app::mux::snapshot::load_workspace(&std::path::PathBuf::from(&path)) {
+                    Ok(snap) => {
+                        let (cols, rows) = mux.active_terminal_size();
+                        let viewport = Rect {
+                            x: 0.0,
+                            y: 0.0,
+                            w: 800.0,
+                            h: 600.0,
+                        };
+                        let cell_w = render_ctx.shaper.cell_width as u16;
+                        let cell_h = render_ctx.shaper.cell_height as u16;
+                        mux.restore_workspace(
+                            snap,
+                            config,
+                            viewport,
+                            cols as u16,
+                            rows as u16,
+                            cell_w,
+                            cell_h,
+                            wakeup_proxy,
+                        );
+                    }
+                    Err(e) => log::error!("restore_workspace: {e}"),
+                }
+            }
             Action::SplitHorizontal => {
                 let (cols, rows) = mux.active_terminal_size();
                 let (cell_w, cell_h) = (

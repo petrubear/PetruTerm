@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 static NEXT_NODE_ID: AtomicU32 = AtomicU32::new(1);
 
-fn next_node_id() -> u32 {
+pub(crate) fn next_node_id() -> u32 {
     NEXT_NODE_ID.fetch_add(1, Ordering::Relaxed)
 }
 
