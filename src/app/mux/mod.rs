@@ -861,39 +861,62 @@ impl Mux {
 
     /// Search all visible rows and scrollback history for `query` (case-insensitive).
     /// Returns matches sorted from oldest history to current screen.
+    ///
+    /// Implementation uses a collect-then-parallel strategy:
+    ///   Phase 1 (serial, lock held): read the terminal grid into a flat Vec<char>.
+    ///   Phase 2 (parallel, lock released): scan the flat buffer with rayon par_chunks.
+    /// This keeps the term lock held for only ~O(rows*cols) char copies instead of the
+    /// full search duration, and parallelizes the CPU-bound scan across all cores.
+    /// For short scrollback (< PAR_THRESHOLD rows) the serial path is used instead
+    /// because rayon fork-join overhead (~50 µs) exceeds the serial scan time.
     pub fn search_active_terminal(&self, query: &str) -> (Vec<SearchMatch>, bool) {
+        use rayon::prelude::*;
+        const PAR_THRESHOLD: usize = 400;
+
         if query.is_empty() {
             return (Vec::new(), false);
         }
         let query_lower = query.to_lowercase();
-        let query_len = query.chars().count();
+        let query_chars: Vec<char> = query_lower.chars().collect();
+        let query_len = query_chars.len();
         let Some(terminal) = self.active_terminal() else {
             return (Vec::new(), false);
         };
 
-        terminal.with_term(|term| {
+        // Phase 1: collect the entire grid into a flat char buffer while holding the lock.
+        // A single flat allocation (rows * cols chars) avoids per-row Vec overhead and
+        // produces a contiguous layout suitable for par_chunks in phase 2.
+        let (history_i32, cols, flat) = terminal.with_term(|term| {
             let screen_rows = term.screen_lines() as i32;
             let history = term.grid().history_size() as i32;
             let cols = term.columns();
-            let query_chars: Vec<char> = query_lower.chars().collect();
-            let mut matches = Vec::new();
-
+            let total = (history + screen_rows) as usize;
+            let mut flat = Vec::with_capacity(total * cols);
             for grid_row in (-history)..screen_rows {
                 let line = Line(grid_row);
-                // Build a char-indexed row: index i == terminal column i.
-                let row_chars: Vec<char> = (0..cols)
-                    .map(|col| {
-                        let c = term.grid()[line][Column(col)].c;
-                        let c = if c == '\0' { ' ' } else { c };
-                        // Lowercase per char for case-insensitive matching.
-                        c.to_lowercase().next().unwrap_or(c)
-                    })
-                    .collect();
+                for col in 0..cols {
+                    let c = term.grid()[line][Column(col)].c;
+                    let c = if c == '\0' { ' ' } else { c };
+                    flat.push(c.to_lowercase().next().unwrap_or(c));
+                }
+            }
+            (history, cols, flat)
+        }); // Term lock released here.
 
-                // Slide a window of query_len over the char array.
-                // Each index is a terminal column — no byte-offset ambiguity.
-                for col in 0..row_chars.len().saturating_sub(query_chars.len() - 1) {
-                    if row_chars[col..col + query_chars.len()] == query_chars[..]
+        if cols == 0 || query_chars.is_empty() {
+            return (Vec::new(), false);
+        }
+
+        let total_rows = flat.len() / cols;
+
+        if total_rows < PAR_THRESHOLD {
+            // Serial path: short scrollback or small terminal.
+            let mut matches = Vec::new();
+            for (chunk_idx, row_chars) in flat.chunks(cols).enumerate() {
+                let grid_row = chunk_idx as i32 - history_i32;
+                let scan_end = row_chars.len().saturating_sub(query_len.saturating_sub(1));
+                for col in 0..scan_end {
+                    if row_chars[col..col + query_len] == query_chars[..]
                         && push_search_match(&mut matches, grid_row, col, query_len)
                     {
                         return (matches, true);
@@ -901,7 +924,39 @@ impl Mux {
                 }
             }
             (matches, false)
-        })
+        } else {
+            // Parallel path: rayon par_chunks — each task scans one row.
+            // collect() preserves row order (rayon guarantees output order matches input).
+            // No early exit: collect all matches then truncate to MAX_SEARCH_MATCHES.
+            // `qc` is a &[char] slice (Copy) so it can be moved into per-row closures
+            // without consuming `query_chars`.
+            let qc: &[char] = &query_chars;
+            let ql = query_len;
+            let hi = history_i32;
+            let mut matches: Vec<SearchMatch> = flat
+                .par_chunks(cols)
+                .enumerate()
+                .flat_map_iter(|(chunk_idx, row_chars)| {
+                    let grid_row = chunk_idx as i32 - hi;
+                    let scan_end = row_chars.len().saturating_sub(ql.saturating_sub(1));
+                    (0..scan_end).filter_map(move |col| {
+                        if row_chars[col..col + ql] == qc[..] {
+                            Some(SearchMatch {
+                                grid_line: grid_row,
+                                col,
+                                len: ql,
+                            })
+                        } else {
+                            None
+                        }
+                    })
+                })
+                .collect();
+
+            let truncated = matches.len() > MAX_SEARCH_MATCHES;
+            matches.truncate(MAX_SEARCH_MATCHES);
+            (matches, truncated)
+        }
     }
 
     pub fn shutdown(&mut self) {

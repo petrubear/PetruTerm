@@ -1,7 +1,7 @@
 # Session State
 
-**Last Updated:** 2026-05-11
-**Session Focus:** Auditoría técnica — Waves 1–3 completas.
+**Last Updated:** 2026-05-12
+**Session Focus:** Tier 0 profiling baseline — Tier 5 desbloqueado.
 
 ## Branch: `master`
 
@@ -9,6 +9,32 @@
 
 **Phases 1–7 COMPLETAS. master limpio.**
 **Deuda técnica: Waves 1–3 resueltas. Watch: AUDIT-CLEAN-02. Diferidos: TD-PERF-03, TD-PERF-05.**
+**Tier 0 COMPLETO: baseline criterion establecido en `.criterion-baselines/`. Tier 5 desbloqueado.**
+
+## Esta sesión (2026-05-12) — Tier 0: criterion baseline
+
+18 benchmarks ejecutados en release profile (Apple M-series). Baseline guardado en `.criterion-baselines/`.
+
+| Benchmark | Tiempo |
+|---|---|
+| build_frame_hit (cache hit) | 754 ns |
+| build_frame_miss (cache miss) | 31.5 µs |
+| build_row_hit | 124 ns |
+| build_row_miss | 806 ns |
+| rasterize_glyph_ascii | 1.24 µs |
+| rasterize_line_ascii | 30.5 µs |
+| rasterize_line_ligatures | 44.4 µs |
+| rasterize_line_unicode | 39.7 µs |
+| search_cold (common word) | ~2.1 ms |
+| search_cold (medium) | ~1.94 ms |
+| search_incremental | 18.8 µs |
+| shape_line_ascii | 245 ns |
+| shape_line_ascii_cached | 247 ns |
+| shape_line_ligatures | 515 ns |
+| shape_line_ligatures_cached | 517 ns |
+| shape_line_unicode | 5.3 µs |
+
+`critcmp` instalado. Gate CI `bench-regression` activo: falla si regresion > 5% vs baseline.
 
 ## Esta sesión (2026-05-11) — Auditoría Wave 1 + Wave 2
 

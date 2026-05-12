@@ -71,6 +71,9 @@ lru = "0.17"
 # Fast non-cryptographic hash for internal cache keys (TD-PERF-34)
 rustc-hash = "2"
 
+# Data-parallelism for build_instances vertex assembly (Tier 5)
+rayon = "1"
+
 # Faster Mutex/RwLock — ~2x faster than std on uncontended paths (REC-PERF-02)
 parking_lot = "0.12"
 

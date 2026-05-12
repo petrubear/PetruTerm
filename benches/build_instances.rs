@@ -4,11 +4,13 @@ use petruterm::config::schema::FontConfig;
 use petruterm::font::{TextShaper, TextShaperConfig};
 use petruterm::renderer::atlas::GlyphAtlas;
 use petruterm::renderer::cell::{CellVertex, FLAG_COLOR_GLYPH};
+use rayon::prelude::*;
 use rustc_hash::FxHasher;
 use std::hash::{Hash, Hasher};
 
 const COLS: usize = 80;
 const ROWS: usize = 24;
+const ROWS_LARGE: usize = 200;
 const DEFAULT_BG: [f32; 4] = [0.012, 0.012, 0.012, 1.0];
 const WHITE_FG: [f32; 4] = [0.9, 0.9, 0.9, 1.0];
 
@@ -340,11 +342,92 @@ fn bench_build_frame_hit(c: &mut Criterion) {
     });
 }
 
+/// Full 200-row frame, all cache hits, SERIAL emit path.
+/// Baseline for rayon comparison; uses the same offset-apply logic as the
+/// serial branch in build_instances (n < PARALLEL_ROW_THRESHOLD path).
+fn bench_build_frame_hit_large_serial(c: &mut Criterion) {
+    let (device, queue) = create_headless_wgpu();
+    let mut atlas = GlyphAtlas::new(&device);
+    let (mut shaper, font_config) = make_shaper();
+
+    let rows: Vec<&str> = (0..ROWS_LARGE)
+        .map(|i| SAMPLE_ROWS[i % SAMPLE_ROWS.len()])
+        .collect();
+    let colors = make_colors(COLS);
+
+    let row_cache: Vec<(u64, Vec<CellVertex>)> = rows
+        .iter()
+        .map(|&text| {
+            build_row_vertices(text, &colors, &font_config, &mut shaper, &mut atlas, &queue)
+        })
+        .collect();
+    let row_hashes: Vec<u64> = rows.iter().map(|&text| row_hash(text, &colors)).collect();
+
+    let mut out: Vec<CellVertex> = Vec::with_capacity(COLS * ROWS_LARGE);
+    c.bench_function("build_frame_hit_large_serial", |b| {
+        b.iter(|| {
+            out.clear();
+            for (row_idx, ((hash, cached), expected)) in
+                row_cache.iter().zip(&row_hashes).enumerate()
+            {
+                if hash == expected {
+                    apply_row_offset(cached, 0.0, row_idx as f32, &mut out);
+                }
+            }
+            out.len()
+        });
+    });
+}
+
+/// Full 200-row frame, all cache hits, PARALLEL emit path (rayon).
+/// Measures the Phase 2 rayon path from build_instances: flat_map_iter over
+/// RowCacheEntry slices to apply pane offsets in parallel, then serial collect.
+fn bench_build_frame_hit_large_par(c: &mut Criterion) {
+    let (device, queue) = create_headless_wgpu();
+    let mut atlas = GlyphAtlas::new(&device);
+    let (mut shaper, font_config) = make_shaper();
+
+    let rows: Vec<&str> = (0..ROWS_LARGE)
+        .map(|i| SAMPLE_ROWS[i % SAMPLE_ROWS.len()])
+        .collect();
+    let colors = make_colors(COLS);
+
+    // Pre-build cache entries (simulate populated RowCache).
+    let row_cache: Vec<Vec<CellVertex>> = rows
+        .iter()
+        .map(|&text| {
+            let (_, verts) =
+                build_row_vertices(text, &colors, &font_config, &mut shaper, &mut atlas, &queue);
+            verts
+        })
+        .collect();
+
+    c.bench_function("build_frame_hit_large_par", |b| {
+        b.iter(|| {
+            let co = 0.0_f32;
+            let out: Vec<CellVertex> = row_cache
+                .par_iter()
+                .enumerate()
+                .flat_map_iter(|(row_idx, cached)| {
+                    let ro = row_idx as f32;
+                    cached.iter().map(move |inst| CellVertex {
+                        grid_pos: [inst.grid_pos[0] + co, ro],
+                        ..*inst
+                    })
+                })
+                .collect();
+            out.len()
+        });
+    });
+}
+
 criterion_group!(
     benches,
     bench_build_row_miss,
     bench_build_row_hit,
     bench_build_frame_miss,
     bench_build_frame_hit,
+    bench_build_frame_hit_large_serial,
+    bench_build_frame_hit_large_par,
 );
 criterion_main!(benches);

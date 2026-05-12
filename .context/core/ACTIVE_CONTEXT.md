@@ -1,7 +1,7 @@
 # Active Context
 
-**Current Focus:** Auditoría técnica — Waves 1–3 COMPLETAS. Sin deuda abierta.
-**Last Active:** 2026-05-11
+**Current Focus:** Tier 5 desbloqueado — baseline criterion establecido.
+**Last Active:** 2026-05-12
 
 ## Estado actual del proyecto
 

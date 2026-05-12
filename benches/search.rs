@@ -11,12 +11,15 @@
 // - `search_cold_rare_word`: full-grid scan for a word with ~0 hits
 // - `search_incremental_extend`: re-filter an existing match set (proxy of
 //   `Mux::filter_matches`, i.e. TD-PERF-11 — the incremental path).
+// - `search_cold_par_*`: parallel equivalents using the rayon path from
+//   `search_active_terminal` Phase 2 (flat_chars + par_chunks).
 //
 // When the real `Mux::search_active_terminal` becomes benchable (after extracting
 // the grid-access from winit coupling), swap this synthetic harness for the real
 // one. The measurements should remain comparable within the same order of magnitude.
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use rayon::prelude::*;
 
 const COLS: usize = 80;
 const SCREEN_ROWS: usize = 40;
@@ -47,6 +50,59 @@ fn push_search_match(
         len,
     });
     false
+}
+
+/// Same corpus as `build_grid` but returned as a single flat Vec<char> (rows*cols).
+/// Mirrors the collect phase in `search_active_terminal` Phase 1.
+fn build_flat_grid() -> Vec<char> {
+    let corpus = "the quick brown fox jumps over the lazy dog \
+                  error warning info debug trace fatal panic retry timeout \
+                  fn let const mut struct impl pub use mod trait where match \
+                  null void none some ok err true false return yield await async \
+                  build test check run install update remove list show help ";
+    let corpus_chars: Vec<char> = corpus.chars().collect();
+    let mut state: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut flat = Vec::with_capacity(TOTAL_ROWS * COLS);
+    for _ in 0..(TOTAL_ROWS * COLS) {
+        state = state.wrapping_mul(0x2545_F491_4F6C_DD1D).wrapping_add(1);
+        let idx = ((state >> 11) as usize) % corpus_chars.len();
+        flat.push(corpus_chars[idx]);
+    }
+    flat
+}
+
+/// Parallel search over a flat grid using the same rayon pattern as
+/// `search_active_terminal` Phase 2 (par_chunks + flat_map_iter).
+fn search_flat_par(flat: &[char], history: i32, query: &str) -> Vec<SearchMatch> {
+    if query.is_empty() {
+        return Vec::new();
+    }
+    let q_lower = query.to_lowercase();
+    let qc: Vec<char> = q_lower.chars().collect();
+    let ql = qc.len();
+    let qc_ref: &[char] = &qc;
+    let hi = history;
+
+    let mut matches: Vec<SearchMatch> = flat
+        .par_chunks(COLS)
+        .enumerate()
+        .flat_map_iter(|(chunk_idx, row_chars)| {
+            let grid_row = chunk_idx as i32 - hi;
+            let scan_end = row_chars.len().saturating_sub(ql.saturating_sub(1));
+            (0..scan_end).filter_map(move |col| {
+                if row_chars[col..col + ql] == qc_ref[..] {
+                    Some(SearchMatch { grid_line: grid_row, col, len: ql })
+                } else {
+                    None
+                }
+            })
+        })
+        .collect();
+
+    let truncated = matches.len() > MAX_SEARCH_MATCHES;
+    matches.truncate(MAX_SEARCH_MATCHES);
+    let _ = truncated;
+    matches
 }
 
 /// Deterministic pseudo-random grid seeded from a fixed string corpus. Uses a
@@ -173,5 +229,29 @@ fn bench_search_incremental(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_search_cold, bench_search_incremental);
+/// Parallel cold search using rayon par_chunks over a flat grid.
+/// Directly measures Phase 2 of the new `search_active_terminal` implementation.
+fn bench_search_cold_par(c: &mut Criterion) {
+    let flat = build_flat_grid();
+    let history = SCROLLBACK as i32;
+    let mut group = c.benchmark_group("search_cold_par");
+
+    for (label, query) in &[
+        ("common_word_the", "the"),
+        ("common_word_error", "error"),
+        ("rare_word_zzz", "zzz"),
+    ] {
+        group.bench_with_input(BenchmarkId::from_parameter(label), query, |b, &q| {
+            b.iter(|| search_flat_par(&flat, history, q));
+        });
+    }
+    group.finish();
+}
+
+criterion_group!(
+    benches,
+    bench_search_cold,
+    bench_search_incremental,
+    bench_search_cold_par,
+);
 criterion_main!(benches);
