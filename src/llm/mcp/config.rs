@@ -41,13 +41,17 @@ struct McpFile {
 pub fn load_global() -> Result<McpConfig> {
     let platform_path = dirs::config_dir().map(|d| d.join("petruterm/mcp/mcp.json"));
     let xdg_path = dirs::home_dir().map(|home| home.join(".config/petruterm/mcp/mcp.json"));
-    let already_loaded = matches!((platform_path.as_deref(), xdg_path.as_deref()), (Some(p), Some(x)) if p == x);
+    let already_loaded =
+        matches!((platform_path.as_deref(), xdg_path.as_deref()), (Some(p), Some(x)) if p == x);
     let mut config = McpConfig::new();
     if let Some(p) = platform_path.as_deref().filter(|p| p.exists()) {
         let servers = parse_file(p).with_context(|| format!("Failed to parse {}", p.display()))?;
         config.extend(servers);
     }
-    if let Some(p) = xdg_path.as_deref().filter(|p| !already_loaded && p.exists()) {
+    if let Some(p) = xdg_path
+        .as_deref()
+        .filter(|p| !already_loaded && p.exists())
+    {
         let servers = parse_file(p).with_context(|| format!("Failed to parse {}", p.display()))?;
         config.extend(servers);
     }

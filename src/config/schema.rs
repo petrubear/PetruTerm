@@ -416,15 +416,15 @@ impl ColorScheme {
             leader_active: self.ui_accent,
             leader_resize: self.ansi[3], // yellow
             leader_inactive: self.ui_surface,
-            zoom_bg: darken(self.ansi[6], 0.3),  // cyan, very dark
+            zoom_bg: darken(self.ansi[6], 0.3), // cyan, very dark
             cwd_bg: darken(self.ansi[6], 0.15),
             cwd_fg: self.ansi[6],
-            git_bg: darken(self.ansi[3], 0.15),  // yellow, very dark
+            git_bg: darken(self.ansi[3], 0.15), // yellow, very dark
             git_fg: self.ansi[3],
             error_bg: darken(self.ansi[1], 0.5), // red, darkened
             bat_ok_fg: self.ansi[2],             // green
             bat_ok_bg: darken(self.ansi[2], 0.15),
-            bat_low_fg: self.ansi[1],            // red
+            bat_low_fg: self.ansi[1], // red
             bat_low_bg: darken(self.ansi[1], 0.2),
         }
     }

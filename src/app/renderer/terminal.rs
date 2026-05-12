@@ -338,34 +338,31 @@ impl RenderContext {
         let radius = 6.0 * self.scale_factor;
         let inset = border * 0.5;
 
-        let cell_w = self.shaper.cell_width;
-        let cell_h = self.shaper.cell_height;
-
-        // For edges that sit at the viewport boundary (no adjacent separator), the border
-        // rect edge coincides exactly with the start of the text cells — the stroke would
-        // overlap the outermost row/column of text.  Push each such edge one cell outward
-        // so it falls outside the content area and gets GPU-clipped, same as the left-edge
-        // workaround that already existed.  Edges next to a separator use `inset` as before
-        // (the separator gap gives room for the stroke without touching text).
+        // Boundary edges (no adjacent separator) are pushed far off-screen so they are
+        // GPU-clipped. Using ±cell_dimension is insufficient — the window padding and tab
+        // bar area still fall within screen bounds, so the stroke remains visible there.
+        // 9999 px is beyond any realistic display size and guarantees clipping.
+        // Separator-adjacent edges use `inset` so the stroke sits in the separator gap.
+        let off = 9999.0_f32;
         let x = if focused.col_offset == 0 {
-            focused.pane_rect.x - cell_w
+            -off
         } else {
             focused.pane_rect.x + inset
         };
         let y = if focused.pad_top {
             focused.pane_rect.y + inset
         } else {
-            focused.pane_rect.y - cell_h
+            -off
         };
         let right = if focused.pad_right {
             focused.pane_rect.x + focused.pane_rect.w - inset
         } else {
-            focused.pane_rect.x + focused.pane_rect.w + cell_w
+            focused.pane_rect.x + focused.pane_rect.w + off
         };
         let bottom = if focused.pad_bottom {
             focused.pane_rect.y + focused.pane_rect.h - inset
         } else {
-            focused.pane_rect.y + focused.pane_rect.h + cell_h
+            focused.pane_rect.y + focused.pane_rect.h + off
         };
 
         self.rect_instances.push(RoundedRectInstance {

@@ -91,7 +91,11 @@ fn search_flat_par(flat: &[char], history: i32, query: &str) -> Vec<SearchMatch>
             let scan_end = row_chars.len().saturating_sub(ql.saturating_sub(1));
             (0..scan_end).filter_map(move |col| {
                 if row_chars[col..col + ql] == qc_ref[..] {
-                    Some(SearchMatch { grid_line: grid_row, col, len: ql })
+                    Some(SearchMatch {
+                        grid_line: grid_row,
+                        col,
+                        len: ql,
+                    })
                 } else {
                     None
                 }

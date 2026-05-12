@@ -1867,11 +1867,10 @@ impl ApplicationHandler<()> for App {
         };
 
         // Helper: fold an optional deadline into a base deadline.
-        let with_opt =
-            |base: std::time::Instant, opt: Option<std::time::Instant>| match opt {
-                Some(t) => base.min(t),
-                None => base,
-            };
+        let with_opt = |base: std::time::Instant, opt: Option<std::time::Instant>| match opt {
+            Some(t) => base.min(t),
+            None => base,
+        };
 
         if idle || !self.window_focused {
             // Fully idle or window not focused: park the thread.
@@ -1918,4 +1917,3 @@ impl Drop for App {
         self.mux.shutdown();
     }
 }
-

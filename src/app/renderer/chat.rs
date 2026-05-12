@@ -150,7 +150,10 @@ impl RenderContext {
                     self.push_shaped_row("", sep_fg, panel_bg, row, co, panel_cols, font);
                 }
             }
-        } else if matches!(panel.state, crate::llm::chat_panel::PanelState::AwaitingConfirm) {
+        } else if matches!(
+            panel.state,
+            crate::llm::chat_panel::PanelState::AwaitingConfirm
+        ) {
             // ── Confirmation view: diff preview + [y]/[n] ────────────────────
             use crate::llm::chat_panel::ConfirmDisplay;
             use crate::llm::diff::DiffKind;

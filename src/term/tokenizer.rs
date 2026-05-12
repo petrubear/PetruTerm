@@ -214,8 +214,8 @@ pub fn build_syntax_fg(
                 Some(false) => Some(colors.ansi[1]), // red
                 None => None,
             },
-            TokenKind::Flag => Some(colors.ansi[6]),    // cyan
-            TokenKind::String => Some(colors.ansi[3]),   // yellow
+            TokenKind::Flag => Some(colors.ansi[6]), // cyan
+            TokenKind::String => Some(colors.ansi[3]), // yellow
             TokenKind::Pipe | TokenKind::Redirect => Some(colors.brights[3]), // bright yellow → operator
             TokenKind::Arg => None,
         };
