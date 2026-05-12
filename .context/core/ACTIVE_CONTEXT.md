@@ -1,16 +1,22 @@
 # Active Context
 
-**Current Focus:** —
+**Current Focus:** Release prep v0.1.9 + context menu regression fix
 **Last Active:** 2026-05-12
 
 ## Estado actual del proyecto
 
-**Phases 1–7 COMPLETAS. Workspace persistence COMPLETA (2026-05-12).** master limpio.
+**Phases 1–7 COMPLETAS. Workspace persistence COMPLETA (2026-05-12).** Release prep v0.1.9 en curso.
 **Deuda técnica: Waves 1–3 resueltas. Watch: AUDIT-CLEAN-02. Diferidos: TD-PERF-03, TD-PERF-05.**
+
+## Release prep v0.1.9 — EN CURSO (2026-05-12)
+
+- Fix incluido: el menú contextual normal de la terminal vuelve a restaurar `Copy/Paste/Clear/Ask AI` después de usar el color picker de tabs.
+- `scripts/ci-local.sh` ejecutado: detectó dos fallos de clippy preexistentes en `src/app/mux/snapshot.rs` y `src/app/mux/workspace.rs`.
+- Versionado: siguiente release preparada como `v0.1.9`.
 
 ## Workspace Persistence — COMPLETA (2026-05-12)
 
-**Estado:** IMPLEMENTADA. CI limpio (101 tests, clippy, fmt).
+**Estado:** IMPLEMENTADA. Validación previa limpia; el run actual de `ci-local.sh` expuso fallos de clippy no relacionados.
 
 ### Almacenamiento
 - Un archivo JSON por workspace: `~/.config/petruterm/workspaces/<name>.json`

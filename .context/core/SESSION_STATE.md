@@ -1,15 +1,31 @@
 # Session State
 
 **Last Updated:** 2026-05-12
-**Session Focus:** Workspace persistence — COMPLETA.
+**Session Focus:** Release prep v0.1.9 + context menu regression fix.
 
 ## Branch: `master`
 
 ## Estado actual
 
-**Phases 1–7 COMPLETAS. master limpio.**
+**Phases 1–7 COMPLETAS. Release prep v0.1.9 en curso.**
 **Deuda técnica: Waves 1–3 resueltas. Watch: AUDIT-CLEAN-02. Diferidos: TD-PERF-03, TD-PERF-05.**
 **Tier 0 COMPLETO: baseline criterion establecido en `.criterion-baselines/`. Tier 5 desbloqueado.**
+
+## Esta sesión (2026-05-12) — Release prep v0.1.9
+
+### Context menu regression fix — COMPLETO
+
+- Bug corregido: tras abrir el color picker de tabs con click derecho, el siguiente click derecho en la terminal seguía mostrando ese menú en lugar del menú estándar.
+- `src/ui/context_menu.rs`: nuevo `default_items()` y `open_default()` para restaurar explícitamente el menú base (`Copy`, `Paste`, `Clear`, `Ask AI`).
+- `src/app/mod.rs`: el menú contextual normal de la terminal ahora usa `open_default(...)`.
+- Cobertura: prueba unitaria `open_default_resets_tab_color_picker_items`.
+
+### CI local — estado actual observado
+
+- `scripts/ci-local.sh` se ejecutó completo, pero expuso dos fallos de clippy ya existentes:
+  - `src/app/mux/snapshot.rs`: `clippy::unnecessary_sort_by`
+  - `src/app/mux/workspace.rs`: `clippy::too_many_arguments`
+- `cargo fmt --check`, `cargo test --lib` y `cargo audit` siguieron ejecutándose; los tests de librería pasaron.
 
 ## Esta sesión (2026-05-12) — Atlas split + PGO
 
