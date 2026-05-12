@@ -184,8 +184,8 @@ impl RenderContext {
 
         // Pre-rasterize printable ASCII into the atlas to eliminate cold-start cache misses (REC-PERF-01).
         {
-            let (atlas, queue) = renderer.atlas_and_queue();
-            shaper.warmup_atlas(atlas, queue);
+            let (atlas, color_atlas, queue) = renderer.atlases_and_queue();
+            shaper.warmup_atlas(atlas, color_atlas, queue);
         }
         if let Some(atlas) = shaper.lcd_atlas.take() {
             renderer.set_lcd_atlas(atlas);
@@ -353,14 +353,15 @@ impl RenderContext {
                 continue;
             }
 
-            let (atlas, queue) = self.renderer.atlas_and_queue();
-            let entry = match self
-                .shaper
-                .rasterize_to_atlas(glyph.cache_key, atlas, queue)
-            {
-                Ok(e) => e,
-                Err(_) => continue, // skip; bg-coverage vertex already pushed above
-            };
+            let (atlas, color_atlas, queue) = self.renderer.atlases_and_queue();
+            let entry =
+                match self
+                    .shaper
+                    .rasterize_to_atlas(glyph.cache_key, atlas, color_atlas, queue)
+                {
+                    Ok(e) => e,
+                    Err(_) => continue, // skip; bg-coverage vertex already pushed above
+                };
 
             let ox = entry.bearing_x as f32;
             let oy = shaped.ascent - entry.bearing_y as f32;

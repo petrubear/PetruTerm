@@ -32,8 +32,10 @@ struct VertexOut {
 const FLAG_COLOR_GLYPH: u32 = 0x20u;
 
 @group(0) @binding(0) var<uniform> uniforms: CellUniforms;
-@group(1) @binding(0) var t_atlas:   texture_2d<f32>;
-@group(1) @binding(1) var s_atlas:   sampler;
+@group(1) @binding(0) var t_mask:    texture_2d<f32>;
+@group(1) @binding(1) var s_mask:    sampler;
+@group(1) @binding(2) var t_color:   texture_2d<f32>;
+@group(1) @binding(3) var s_color:   sampler;
 
 // Fullscreen quad vertices (two triangles covering the cell)
 const QUAD: array<vec2<f32>, 6> = array<vec2<f32>, 6>(
@@ -88,9 +90,9 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     // Avoids sampling uninitialized atlas data at origin (TD-RENDER-01).
     if in.uv.x < 0.001 && in.uv.y < 0.001 { discard; }
 
-    // Color glyphs (emoji): atlas stores pre-colored RGBA — sample directly.
+    // Color glyphs (emoji): sample from the color atlas (Rgba8Unorm, t_color).
     if (in.flags & FLAG_COLOR_GLYPH) != 0u {
-        let color = textureSample(t_atlas, s_atlas, in.uv);
+        let color = textureSample(t_color, s_color, in.uv);
         if color.a < 0.004 { discard; }
         // Convert sRGB→linear, premultiply, convert back for Bgra8Unorm surface.
         let r = lin_to_srgb(srgb_to_lin(color.r));
@@ -99,7 +101,8 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
         return vec4(r * color.a, g * color.a, b * color.a, color.a);
     }
 
-    let mask = textureSample(t_atlas, s_atlas, in.uv).r;
+    // Grayscale glyphs: sample from the mask atlas (R8Unorm, t_mask).
+    let mask = textureSample(t_mask, s_mask, in.uv).r;
 
     // Gamma-corrected coverage (TD-026).
     // Powerline symbols need a slightly softer curve to avoid aliasing artifacts.
@@ -122,7 +125,7 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
 fn fs_bg_aware(in: VertexOut) -> @location(0) vec4<f32> {
     // Skip rendering if uv is [0, 0] (background-only cell without glyph).
     if in.uv.x < 0.001 && in.uv.y < 0.001 { discard; }
-    let alpha = textureSample(t_atlas, s_atlas, in.uv).r;
+    let alpha = textureSample(t_mask, s_mask, in.uv).r;
     let corrected_alpha = pow(alpha, 1.0 / 1.4);
 
     let fg = to_array4(in.fg);
@@ -396,6 +399,7 @@ impl CellPipeline {
         let atlas_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("atlas bgl"),
             entries: &[
+                // binding 0: mask atlas texture (R8Unorm)
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::FRAGMENT,
@@ -406,8 +410,27 @@ impl CellPipeline {
                     },
                     count: None,
                 },
+                // binding 1: mask atlas sampler
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                // binding 2: color atlas texture (Rgba8Unorm, emoji)
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                // binding 3: color atlas sampler
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,

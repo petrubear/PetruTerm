@@ -62,7 +62,7 @@ impl RenderContext {
                 .get(&terminal_id)
                 .and_then(|c| c.rows.get(row_idx))
                 .and_then(|e| e.as_ref())
-                .map_or(false, |e| e.hash == row_hash);
+                .is_some_and(|e| e.hash == row_hash);
 
             if is_hit {
                 self.shape_cache_hits = self.shape_cache_hits.saturating_add(1);
@@ -121,10 +121,13 @@ impl RenderContext {
                 // upload for every text glyph on a cache miss. Color emoji never produce an
                 // LCD entry and always fall through to the Swash path (TD-PERF-06).
                 let (atlas_uv, glyph_offset, glyph_size, color_flag) = if lcd_entry.is_none() {
-                    let (atlas, queue) = self.renderer.atlas_and_queue();
-                    let se = self
-                        .shaper
-                        .rasterize_to_atlas(glyph.cache_key, atlas, queue)?;
+                    let (atlas, color_atlas, queue) = self.renderer.atlases_and_queue();
+                    let se = self.shaper.rasterize_to_atlas(
+                        glyph.cache_key,
+                        atlas,
+                        color_atlas,
+                        queue,
+                    )?;
                     let ox = se.bearing_x as f32;
                     let oy = shaped.ascent - se.bearing_y as f32;
                     let gw = se.width as f32;

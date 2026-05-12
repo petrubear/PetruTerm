@@ -13,7 +13,7 @@ use cosmic_text::{
 
 use crate::config::schema::FontConfig;
 use crate::font::freetype_lcd::{FreeTypeLcdRasterizer, LcdAtlasEntry};
-use crate::renderer::atlas::{AtlasEntry, GlyphAtlas};
+use crate::renderer::atlas::{AtlasEntry, ColorAtlas, GlyphAtlas};
 use crate::renderer::lcd_atlas::LcdGlyphAtlas;
 
 // ── PUA detection ─────────────────────────────────────────────────────────────
@@ -471,7 +471,12 @@ impl TextShaper {
 
     /// Pre-rasterize all 95 printable ASCII glyphs into the atlas at startup (REC-PERF-01).
     /// Eliminates atlas cache-misses for the dominant glyph set on the first rendered frame.
-    pub fn warmup_atlas(&mut self, atlas: &mut GlyphAtlas, queue: &wgpu::Queue) {
+    pub fn warmup_atlas(
+        &mut self,
+        atlas: &mut GlyphAtlas,
+        color_atlas: &mut ColorAtlas,
+        queue: &wgpu::Queue,
+    ) {
         let font_size = self.metrics.font_size;
         for cp in 0x20u32..=0x7Eu32 {
             let glyph_id = self.ascii_glyph_cache[cp as usize];
@@ -486,7 +491,7 @@ impl TextShaper {
                 fontdb::Weight::NORMAL,
                 CacheKeyFlags::empty(),
             );
-            let _ = self.rasterize_to_atlas(key, atlas, queue);
+            let _ = self.rasterize_to_atlas(key, atlas, color_atlas, queue);
         }
         log::info!(
             "Atlas warmup: pre-rasterized {} ASCII glyphs.",
@@ -891,9 +896,13 @@ impl TextShaper {
         &mut self,
         cache_key: CacheKey,
         atlas: &mut GlyphAtlas,
+        color_atlas: &mut ColorAtlas,
         queue: &wgpu::Queue,
     ) -> Result<AtlasEntry, crate::renderer::atlas::AtlasError> {
         if let Some(entry) = atlas.get_and_touch(&cache_key) {
+            return Ok(entry);
+        }
+        if let Some(entry) = color_atlas.get_and_touch(&cache_key) {
             return Ok(entry);
         }
 
@@ -922,27 +931,27 @@ impl TextShaper {
             });
         }
 
-        let is_color = matches!(image.content, cosmic_text::SwashContent::Color);
-        let rgba: Vec<u8> = match image.content {
-            cosmic_text::SwashContent::Mask => {
-                image.data.iter().flat_map(|&a| [a, a, a, 255u8]).collect()
-            }
-            cosmic_text::SwashContent::Color => image.data.to_vec(),
-            cosmic_text::SwashContent::SubpixelMask => {
-                image.data.iter().flat_map(|&a| [a, a, a, 255u8]).collect()
-            }
-        };
-
-        atlas.upload(
-            queue,
-            cache_key,
-            &rgba,
-            width,
-            height,
-            image.placement.left,
-            image.placement.top,
-            is_color,
-        )
+        match image.content {
+            cosmic_text::SwashContent::Color => color_atlas.upload(
+                queue,
+                cache_key,
+                &image.data,
+                width,
+                height,
+                image.placement.left,
+                image.placement.top,
+            ),
+            _ => atlas.upload(
+                queue,
+                cache_key,
+                &image.data,
+                width,
+                height,
+                image.placement.left,
+                image.placement.top,
+                false,
+            ),
+        }
     }
 
     /// Clear the LCD rasterizer's local glyph cache.

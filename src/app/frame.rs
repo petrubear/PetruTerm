@@ -1,9 +1,9 @@
 use anyhow::Result;
 use winit::event_loop::ActiveEventLoop;
 
-use super::App;
-use super::mux::{Mux, SyntaxOverlay, GhostOverlay, FlagHintOverlay};
+use super::mux::{FlagHintOverlay, GhostOverlay, Mux, SyntaxOverlay};
 use super::renderer::RenderContext;
+use super::App;
 use crate::ui::PaneInfo;
 
 impl App {
@@ -280,6 +280,7 @@ impl App {
         if let Some(rc) = &mut self.render_ctx {
             // Advance epoch once per frame so LRU eviction can age unused entries.
             rc.renderer.atlas.next_epoch();
+            rc.renderer.color_atlas.next_epoch();
             if let Some(lcd) = rc.renderer.get_lcd_atlas() {
                 lcd.borrow_mut().next_epoch();
             }
@@ -298,6 +299,7 @@ impl App {
                     // invalidate all row caches (UVs now point to wiped data).
                     if rc.renderer.atlas.cursor_fill_ratio() > 0.75 {
                         rc.renderer.atlas.clear(&rc.renderer.device());
+                        rc.renderer.color_atlas.clear(&rc.renderer.device());
                         if let Some(lcd) = rc.renderer.get_lcd_atlas() {
                             lcd.borrow_mut().clear(&rc.renderer.device());
                             rc.shaper.clear_lcd_rasterizer_cache();
@@ -307,6 +309,19 @@ impl App {
                         rc.clear_all_row_caches();
                         log::debug!("Atlas: cursor still high after eviction — preemptive clear");
                     }
+                }
+            }
+
+            // Proactive eviction for the color atlas (emoji).
+            if rc.renderer.color_atlas.is_near_full() {
+                let evicted = rc.renderer.color_atlas.evict_cold(60);
+                if evicted > 0 {
+                    log::debug!("Color atlas: evicted {} cold emoji glyphs", evicted);
+                }
+                if rc.renderer.color_atlas.cursor_fill_ratio() > 0.75 {
+                    rc.renderer.color_atlas.clear(&rc.renderer.device());
+                    rc.renderer.rebuild_atlas_bind_groups();
+                    rc.clear_all_row_caches();
                 }
             }
 
@@ -414,6 +429,7 @@ impl App {
             if let Err(crate::renderer::atlas::AtlasError::Full) = render_result {
                 // Atlas full — clear everything and retry.
                 rc.renderer.atlas.clear(&rc.renderer.device());
+                rc.renderer.color_atlas.clear(&rc.renderer.device());
                 if let Some(atlas) = rc.renderer.get_lcd_atlas() {
                     atlas.borrow_mut().clear(&rc.renderer.device());
                     // LCD atlas clear invalidates the rasterizer's local cache (TD-MEM-02).
@@ -438,7 +454,12 @@ impl App {
             // Pane separator lines (hidden when a pane is zoomed).
             let sep_pad_x = self.config.window.padding.left as f32 + sidebar_px_snapshot;
             if self.mux.zoomed_pane.is_none() {
-                rc.build_pane_separators(&self.separator_snapshot, sep_pad_x, sb_pad_y, &self.config.colors);
+                rc.build_pane_separators(
+                    &self.separator_snapshot,
+                    sep_pad_x,
+                    sb_pad_y,
+                    &self.config.colors,
+                );
             }
             // Focus border — only when there are multiple panes.
             if pane_infos.len() > 1 {
@@ -514,8 +535,8 @@ impl App {
                     let inst_start = rc.instances.len();
                     let rect_start = rc.rect_instances.len();
                     let win_w = rc.renderer.size().0 as f32;
-                    let gpu_pad_y =
-                        super::TITLEBAR_HEIGHT * rc.scale_factor + self.config.window.padding.top as f32;
+                    let gpu_pad_y = super::TITLEBAR_HEIGHT * rc.scale_factor
+                        + self.config.window.padding.top as f32;
                     rc.build_tab_bar_instances(
                         self.mux.tabs.tabs(),
                         active_idx,
@@ -1010,7 +1031,11 @@ fn build_all_pane_instances(
                             .find(|tok| tok.kind == TokenKind::Command)
                             .and_then(|tok| shadow.cmd_resolver.resolve(&shadow.buf[tok.range]))
                     };
-                    let fg = crate::term::tokenizer::build_syntax_fg(&shadow.buf, cmd_valid, &config.colors);
+                    let fg = crate::term::tokenizer::build_syntax_fg(
+                        &shadow.buf,
+                        cmd_valid,
+                        &config.colors,
+                    );
                     Some(SyntaxOverlay {
                         viewport_row: cursor.row,
                         cmd_start_col,

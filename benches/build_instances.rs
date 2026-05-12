@@ -2,7 +2,7 @@ use cosmic_text::{fontdb, FontSystem};
 use criterion::{criterion_group, criterion_main, Criterion};
 use petruterm::config::schema::FontConfig;
 use petruterm::font::{TextShaper, TextShaperConfig};
-use petruterm::renderer::atlas::GlyphAtlas;
+use petruterm::renderer::atlas::{ColorAtlas, GlyphAtlas};
 use petruterm::renderer::cell::{CellVertex, FLAG_COLOR_GLYPH};
 use rayon::prelude::*;
 use rustc_hash::FxHasher;
@@ -138,6 +138,7 @@ fn build_row_vertices(
     font: &FontConfig,
     shaper: &mut TextShaper,
     atlas: &mut GlyphAtlas,
+    color_atlas: &mut ColorAtlas,
     queue: &wgpu::Queue,
 ) -> (u64, Vec<CellVertex>) {
     let hash = row_hash(text, colors);
@@ -174,7 +175,7 @@ fn build_row_vertices(
             continue;
         }
 
-        let Ok(se) = shaper.rasterize_to_atlas(key, atlas, queue) else {
+        let Ok(se) = shaper.rasterize_to_atlas(key, atlas, color_atlas, queue) else {
             continue;
         };
 
@@ -231,15 +232,34 @@ fn apply_row_offset(cached: &[CellVertex], col_offset: f32, row: f32, out: &mut 
 fn bench_build_row_miss(c: &mut Criterion) {
     let (device, queue) = create_headless_wgpu();
     let mut atlas = GlyphAtlas::new(&device);
+    let mut color_atlas = ColorAtlas::new(&device);
     let (mut shaper, font_config) = make_shaper();
     let text = SAMPLE_ROWS[0];
     let colors = make_colors(text.chars().count());
 
     // Prime atlas and word cache.
-    build_row_vertices(text, &colors, &font_config, &mut shaper, &mut atlas, &queue);
+    build_row_vertices(
+        text,
+        &colors,
+        &font_config,
+        &mut shaper,
+        &mut atlas,
+        &mut color_atlas,
+        &queue,
+    );
 
     c.bench_function("build_row_miss", |b| {
-        b.iter(|| build_row_vertices(text, &colors, &font_config, &mut shaper, &mut atlas, &queue));
+        b.iter(|| {
+            build_row_vertices(
+                text,
+                &colors,
+                &font_config,
+                &mut shaper,
+                &mut atlas,
+                &mut color_atlas,
+                &queue,
+            )
+        });
     });
 }
 
@@ -248,11 +268,19 @@ fn bench_build_row_miss(c: &mut Criterion) {
 fn bench_build_row_hit(c: &mut Criterion) {
     let (device, queue) = create_headless_wgpu();
     let mut atlas = GlyphAtlas::new(&device);
+    let mut color_atlas = ColorAtlas::new(&device);
     let (mut shaper, font_config) = make_shaper();
     let text = SAMPLE_ROWS[0];
     let colors = make_colors(text.chars().count());
-    let (hash, cached) =
-        build_row_vertices(text, &colors, &font_config, &mut shaper, &mut atlas, &queue);
+    let (hash, cached) = build_row_vertices(
+        text,
+        &colors,
+        &font_config,
+        &mut shaper,
+        &mut atlas,
+        &mut color_atlas,
+        &queue,
+    );
     let expected_hash = row_hash(text, &colors);
 
     let mut out: Vec<CellVertex> = Vec::new();
@@ -273,6 +301,7 @@ fn bench_build_row_hit(c: &mut Criterion) {
 fn bench_build_frame_miss(c: &mut Criterion) {
     let (device, queue) = create_headless_wgpu();
     let mut atlas = GlyphAtlas::new(&device);
+    let mut color_atlas = ColorAtlas::new(&device);
     let (mut shaper, font_config) = make_shaper();
 
     let rows: Vec<&str> = (0..ROWS)
@@ -282,7 +311,15 @@ fn bench_build_frame_miss(c: &mut Criterion) {
 
     // Prime atlas and word cache.
     for &text in &rows {
-        build_row_vertices(text, &colors, &font_config, &mut shaper, &mut atlas, &queue);
+        build_row_vertices(
+            text,
+            &colors,
+            &font_config,
+            &mut shaper,
+            &mut atlas,
+            &mut color_atlas,
+            &queue,
+        );
     }
 
     let mut out: Vec<CellVertex> = Vec::with_capacity(COLS * ROWS);
@@ -296,6 +333,7 @@ fn bench_build_frame_miss(c: &mut Criterion) {
                     &font_config,
                     &mut shaper,
                     &mut atlas,
+                    &mut color_atlas,
                     &queue,
                 );
                 apply_row_offset(&verts, 0.0, row_idx as f32, &mut out);
@@ -310,6 +348,7 @@ fn bench_build_frame_miss(c: &mut Criterion) {
 fn bench_build_frame_hit(c: &mut Criterion) {
     let (device, queue) = create_headless_wgpu();
     let mut atlas = GlyphAtlas::new(&device);
+    let mut color_atlas = ColorAtlas::new(&device);
     let (mut shaper, font_config) = make_shaper();
 
     let rows: Vec<&str> = (0..ROWS)
@@ -321,7 +360,15 @@ fn bench_build_frame_hit(c: &mut Criterion) {
     let row_cache: Vec<(u64, Vec<CellVertex>)> = rows
         .iter()
         .map(|&text| {
-            build_row_vertices(text, &colors, &font_config, &mut shaper, &mut atlas, &queue)
+            build_row_vertices(
+                text,
+                &colors,
+                &font_config,
+                &mut shaper,
+                &mut atlas,
+                &mut color_atlas,
+                &queue,
+            )
         })
         .collect();
     let row_hashes: Vec<u64> = rows.iter().map(|&text| row_hash(text, &colors)).collect();
@@ -348,6 +395,7 @@ fn bench_build_frame_hit(c: &mut Criterion) {
 fn bench_build_frame_hit_large_serial(c: &mut Criterion) {
     let (device, queue) = create_headless_wgpu();
     let mut atlas = GlyphAtlas::new(&device);
+    let mut color_atlas = ColorAtlas::new(&device);
     let (mut shaper, font_config) = make_shaper();
 
     let rows: Vec<&str> = (0..ROWS_LARGE)
@@ -358,7 +406,15 @@ fn bench_build_frame_hit_large_serial(c: &mut Criterion) {
     let row_cache: Vec<(u64, Vec<CellVertex>)> = rows
         .iter()
         .map(|&text| {
-            build_row_vertices(text, &colors, &font_config, &mut shaper, &mut atlas, &queue)
+            build_row_vertices(
+                text,
+                &colors,
+                &font_config,
+                &mut shaper,
+                &mut atlas,
+                &mut color_atlas,
+                &queue,
+            )
         })
         .collect();
     let row_hashes: Vec<u64> = rows.iter().map(|&text| row_hash(text, &colors)).collect();
@@ -385,6 +441,7 @@ fn bench_build_frame_hit_large_serial(c: &mut Criterion) {
 fn bench_build_frame_hit_large_par(c: &mut Criterion) {
     let (device, queue) = create_headless_wgpu();
     let mut atlas = GlyphAtlas::new(&device);
+    let mut color_atlas = ColorAtlas::new(&device);
     let (mut shaper, font_config) = make_shaper();
 
     let rows: Vec<&str> = (0..ROWS_LARGE)
@@ -396,8 +453,15 @@ fn bench_build_frame_hit_large_par(c: &mut Criterion) {
     let row_cache: Vec<Vec<CellVertex>> = rows
         .iter()
         .map(|&text| {
-            let (_, verts) =
-                build_row_vertices(text, &colors, &font_config, &mut shaper, &mut atlas, &queue);
+            let (_, verts) = build_row_vertices(
+                text,
+                &colors,
+                &font_config,
+                &mut shaper,
+                &mut atlas,
+                &mut color_atlas,
+                &queue,
+            );
             verts
         })
         .collect();

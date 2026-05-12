@@ -1,7 +1,7 @@
 # Session State
 
 **Last Updated:** 2026-05-12
-**Session Focus:** Tier 0 profiling baseline — Tier 5 desbloqueado.
+**Session Focus:** Atlas split + PGO.
 
 ## Branch: `master`
 
@@ -11,9 +11,59 @@
 **Deuda técnica: Waves 1–3 resueltas. Watch: AUDIT-CLEAN-02. Diferidos: TD-PERF-03, TD-PERF-05.**
 **Tier 0 COMPLETO: baseline criterion establecido en `.criterion-baselines/`. Tier 5 desbloqueado.**
 
-## Esta sesión (2026-05-12) — Tier 0: criterion baseline
+## Esta sesión (2026-05-12) — Atlas split + PGO
 
-18 benchmarks ejecutados en release profile (Apple M-series). Baseline guardado en `.criterion-baselines/`.
+### Atlas split — COMPLETO
+
+**Cambio:** `GlyphAtlas` (4096×4096 `Rgba8Unorm`, 64 MiB) → dos atlases separados:
+- `GlyphAtlas` (mask): 4096×4096 `R8Unorm` = **16 MiB** (texto, grayscale)
+- `ColorAtlas`: 1024×1024 `Rgba8Unorm` = **4 MiB** (emoji/color glyphs)
+- Total: **20 MiB** vs 64 MiB anterior = **68% reducción VRAM**
+
+**Archivos modificados:**
+- `src/renderer/atlas.rs`: `GlyphAtlas` → R8Unorm + helper `pad_r8_rows()`; nuevo `ColorAtlas`
+- `src/renderer/pipeline.rs`: `CELL_SHADER` atlas bind group → 4 bindings (mask tex/sampler + color tex/sampler); shader usa `t_mask`/`t_color` según `FLAG_COLOR_GLYPH`
+- `src/renderer/gpu.rs`: campo `pub color_atlas: ColorAtlas`; `atlas_and_queue()` → `atlases_and_queue()` retorna ambos; `make_main_atlas_bind_group()` 4 entries
+- `src/font/shaper.rs`: `rasterize_to_atlas(key, atlas, color_atlas, queue)` — `Mask/SubpixelMask` → GlyphAtlas (raw 1-byte/pixel), `Color` → ColorAtlas (RGBA); `warmup_atlas` actualizado
+- `src/app/renderer/mod.rs`, `terminal.rs`: call sites actualizados
+- `src/app/frame.rs`: `color_atlas.next_epoch()`, eviction y clear en todos los paths
+- `benches/build_instances.rs`: actualizado para `color_atlas`
+
+**No obvio:** `pad_r8_rows()` en atlas.rs — wgpu exige `bytes_per_row` múltiplo de 256 para R8Unorm. La mayoría de glyphs son más estrechos que 256px, así que se rellena con zeros antes del upload. Solo ocurre en cache miss, no hot path.
+
+### PGO — COMPLETO
+
+`scripts/build_pgo.sh` — proceso 3 fases:
+1. Build instrumentado: `RUSTFLAGS="-Cprofile-generate=..."`
+2. Workload: benches de shaping + search + rasterize + build_instances (--profile-time 3)
+3. Build optimizado: `RUSTFLAGS="-Cprofile-use=..."` → `target/pgo/release/petruterm`
+
+`llvm-profdata` disponible via `xcrun` (Xcode). Beneficio esperado: 5-10% en hot paths.
+
+## Esta sesión (2026-05-12) — Tier 5: rayon
+
+### Tier 0: criterion baseline
+18 benchmarks ejecutados en release profile (Apple M-series). Baseline en `.criterion-baselines/`.
+
+### Tier 5: rayon — search parallelization
+
+**Hallazgo clave — vertex offset NO paralelizable con rayon:**
+`build_instances` vertex offset (200 rows): serial 9.7 µs → rayon 138 µs (14x PEOR).
+Fork-join overhead (~130 µs) > tiempo de computo (~10 µs). Rayon solo ayuda con tareas > ~50 µs.
+
+**search_active_terminal — collect-then-parallel:**
+`src/app/mux/mod.rs`: dos fases:
+1. Serial (lock held): leer grid en flat `Vec<char>` (liberación rápida del lock).
+2. Parallel (lock released): `par_chunks(cols)` + `flat_map_iter` → collect.
+Fallback serial para < 400 filas (overhead rayon > ganancia).
+Resultado: 2.3 ms → 278 µs = **8-9x speedup** en scrollback de 10k filas.
+Lock hold time: de 2 ms → ~200 µs (beneficio adicional para PTY output concurrente).
+
+**build_instances two-phase refactor (sin rayon):**
+`src/app/renderer/terminal.rs`: fase 1 = shape+cache, fase 2 = emit serial.
+Código más limpio; rayon documentado como no aplicable (benchmark `build_frame_hit_large_{serial,par}`).
+
+**Bench baseline actualizado:** 3 nuevos entries en `.criterion-baselines/search_cold_par/`.
 
 | Benchmark | Tiempo |
 |---|---|

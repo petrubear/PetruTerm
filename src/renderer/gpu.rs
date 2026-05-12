@@ -7,7 +7,7 @@ use std::sync::Arc;
 use winit::window::Window;
 
 use crate::config::Config;
-use crate::renderer::atlas::GlyphAtlas;
+use crate::renderer::atlas::{ColorAtlas, GlyphAtlas};
 use crate::renderer::cell::{CellUniforms, CellVertex};
 use crate::renderer::lcd_atlas::LcdGlyphAtlas;
 use crate::renderer::pipeline::{CellPipeline, CellPipelineBgAware, CellPipelineLcd};
@@ -36,6 +36,7 @@ pub struct GpuRenderer {
     pipeline: CellPipeline,
     bg_aware_pipeline: CellPipelineBgAware,
     pub atlas: GlyphAtlas,
+    pub color_atlas: ColorAtlas,
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
     atlas_bind_group: wgpu::BindGroup,
@@ -153,10 +154,11 @@ impl GpuRenderer {
 
         let bg = config.colors.background_wgpu();
 
-        // Build pipeline and atlas
+        // Build pipeline and atlases
         let pipeline = CellPipeline::new(&device, format);
         let bg_aware_pipeline = CellPipelineBgAware::new(&device, format);
         let atlas = GlyphAtlas::new(&device);
+        let color_atlas = ColorAtlas::new(&device);
 
         // Uniform buffer (CellUniforms, updated when cell size or viewport changes)
         let pad = &config.window.padding;
@@ -183,8 +185,8 @@ impl GpuRenderer {
             }],
         });
 
-        // Atlas bind group
-        let atlas_bind_group = make_atlas_bind_group(&device, &pipeline, &atlas);
+        // Atlas bind group (mask + color)
+        let atlas_bind_group = make_main_atlas_bind_group(&device, &pipeline, &atlas, &color_atlas);
 
         // Bind groups for bg-aware pipeline (same resource, different layout instances)
         let bg_aware_uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -278,6 +280,7 @@ impl GpuRenderer {
             pipeline,
             bg_aware_pipeline,
             atlas,
+            color_atlas,
             uniform_buffer,
             uniform_bind_group,
             atlas_bind_group,
@@ -495,10 +498,10 @@ impl GpuRenderer {
         self.bg_color = color;
     }
 
-    /// Returns mutable access to the atlas and an immutable reference to the queue
+    /// Returns mutable access to both atlases and an immutable reference to the queue
     /// in one call, avoiding split-borrow issues in callers.
-    pub fn atlas_and_queue(&mut self) -> (&mut GlyphAtlas, &wgpu::Queue) {
-        (&mut self.atlas, &self.queue)
+    pub fn atlases_and_queue(&mut self) -> (&mut GlyphAtlas, &mut ColorAtlas, &wgpu::Queue) {
+        (&mut self.atlas, &mut self.color_atlas, &self.queue)
     }
 
     /// Returns the wgpu queue when LCD AA is enabled, without borrowing the atlas.
@@ -610,7 +613,12 @@ impl GpuRenderer {
     ///
     /// Call this immediately after any atlas clear, before the next render pass.
     pub fn rebuild_atlas_bind_groups(&mut self) {
-        self.atlas_bind_group = make_atlas_bind_group(&self.device, &self.pipeline, &self.atlas);
+        self.atlas_bind_group = make_main_atlas_bind_group(
+            &self.device,
+            &self.pipeline,
+            &self.atlas,
+            &self.color_atlas,
+        );
         self.bg_aware_atlas_bind_group =
             self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("atlas bg (bg-aware)"),
@@ -649,10 +657,11 @@ impl GpuRenderer {
     }
 }
 
-fn make_atlas_bind_group(
+fn make_main_atlas_bind_group(
     device: &wgpu::Device,
     pipeline: &CellPipeline,
     atlas: &GlyphAtlas,
+    color_atlas: &ColorAtlas,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("atlas bg"),
@@ -665,6 +674,14 @@ fn make_atlas_bind_group(
             wgpu::BindGroupEntry {
                 binding: 1,
                 resource: wgpu::BindingResource::Sampler(atlas.sampler()),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::TextureView(color_atlas.texture_view()),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: wgpu::BindingResource::Sampler(color_atlas.sampler()),
             },
         ],
     })
