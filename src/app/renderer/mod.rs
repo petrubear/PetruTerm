@@ -251,6 +251,68 @@ impl RenderContext {
         cfg
     }
 
+    /// Rebuild text metrics after a DPI/font change and invalidate cached shaped UI.
+    pub fn refresh_text_metrics(&mut self, config: &Config, scale_factor: f32) -> Result<()> {
+        self.scale_factor = scale_factor;
+
+        let mut scaled_font = config.font.clone();
+        scaled_font.size *= scale_factor;
+        crate::font::loader::locate_font_for_lcd(&mut scaled_font);
+
+        let (font_system, actual_family, face_id, font_path, face_index) =
+            build_font_system(&scaled_font)?;
+        let lcd_atlas = self.renderer.get_lcd_atlas();
+
+        let mut shaper = TextShaper::new(
+            Some(&self.renderer.device()),
+            font_system,
+            crate::font::shaper::TextShaperConfig {
+                actual_family,
+                font_id: face_id,
+                font_path,
+                face_index,
+                font_config: &scaled_font,
+                lcd_atlas,
+            },
+        );
+
+        self.renderer
+            .set_cell_size(shaper.cell_width, shaper.cell_height);
+
+        {
+            let (atlas, color_atlas, queue) = self.renderer.atlases_and_queue();
+            shaper.warmup_atlas(atlas, color_atlas, queue);
+        }
+        if let Some(atlas) = shaper.lcd_atlas.take() {
+            self.renderer.set_lcd_atlas(atlas);
+        }
+
+        self.shaper = shaper;
+        self.clear_all_row_caches();
+        self.panel_instances_cache.clear();
+        self.panel_rect_cache.clear();
+        self.panel_cache_term_cols = 0;
+        self.scroll_bar_state = None;
+        self.scroll_bar_cache.clear();
+        self.tab_bar_instances_cache.clear();
+        self.tab_bar_rects_cache.clear();
+        self.tab_bar_inputs = None;
+        self.tab_bar_titles_hash = 0;
+        self.tab_bar_rename_input = None;
+        self.status_bar_key = 0;
+        self.status_bar_instances_cache.clear();
+        self.status_bar_rect_cache.clear();
+        self.sidebar_instances_cache.clear();
+        self.sidebar_rect_cache.clear();
+        self.sidebar_cache_key = None;
+        self.cursor_vertex_template = None;
+        self.content_end = 0;
+        self.last_instance_count = 0;
+        self.last_overlay_start = 0;
+
+        Ok(())
+    }
+
     /// Clear per-frame instance buffers. Call once before rendering all panes.
     pub fn begin_frame(&mut self) {
         // Periodic capacity shrink — every 300 frames, reclaim memory if a capacity spike

@@ -1565,6 +1565,24 @@ impl ApplicationHandler<()> for App {
                 self.ui.ai_block.dirty = true;
                 self.request_redraw();
             }
+            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                if let Some(rc) = &mut self.render_ctx {
+                    if let Err(err) = rc.refresh_text_metrics(&self.config, scale_factor as f32) {
+                        log::warn!(
+                            "Failed to rebuild text metrics after scale-factor change: {err}"
+                        );
+                    }
+                    if let Some(window) = &self.window {
+                        let size = window.inner_size();
+                        rc.renderer.resize(size.width, size.height);
+                    }
+                }
+                self.apply_tab_bar_padding();
+                self.resize_terminals_for_panel();
+                self.ui.panel_mut().dirty = true;
+                self.ui.ai_block.dirty = true;
+                self.request_redraw();
+            }
             WindowEvent::ModifiersChanged(mods) => {
                 self.input.modifiers = mods;
                 if !mods.state().alt_key() {

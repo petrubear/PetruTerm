@@ -137,10 +137,18 @@ impl App {
                 if let Some(rc) = &mut self.render_ctx {
                     rc.renderer
                         .update_bg_color(self.config.colors.background_wgpu());
+                    if let Err(err) = rc.refresh_text_metrics(&self.config, rc.scale_factor) {
+                        log::warn!("Failed to rebuild text metrics after config reload: {err}");
+                    }
                 }
+                self.apply_tab_bar_padding();
+                self.resize_terminals_for_panel();
+                self.ui.panel_mut().dirty = true;
+                self.ui.ai_block.dirty = true;
                 self.ui.palette.rebuild_keybinds(&self.config);
                 self.ui.palette.rebuild_snippets(&self.config.snippets);
                 self.ui.rewire_llm_provider(&self.config);
+                self.request_redraw();
                 log::info!("Config hot-reloaded.");
             }
         }
