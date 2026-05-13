@@ -282,19 +282,18 @@ impl Mux {
         proxy: winit::event_loop::EventLoopProxy<()>,
     ) {
         self.cmd_new_workspace(snap.name.clone());
+        let restore_ctx = RestorePaneContext {
+            viewport,
+            config,
+            cols,
+            rows,
+            cell_w,
+            cell_h,
+            proxy,
+        };
 
         for tab_snap in &snap.tabs {
-            let result = restore_pane_recursive(
-                self,
-                &tab_snap.pane_tree,
-                viewport,
-                config,
-                cols,
-                rows,
-                cell_w,
-                cell_h,
-                proxy.clone(),
-            );
+            let result = restore_pane_recursive(self, &tab_snap.pane_tree, &restore_ctx);
             match result {
                 Ok((root, focused)) => {
                     self.tabs.new_tab(&tab_snap.title);
@@ -321,16 +320,20 @@ fn home_str() -> String {
         .unwrap_or_else(|| "/".to_string())
 }
 
-fn restore_pane_recursive(
-    mux: &mut Mux,
-    node: &snapshot::PaneNodeSnapshot,
+struct RestorePaneContext<'a> {
     viewport: crate::ui::Rect,
-    config: &crate::config::Config,
+    config: &'a crate::config::Config,
     cols: u16,
     rows: u16,
     cell_w: u16,
     cell_h: u16,
     proxy: winit::event_loop::EventLoopProxy<()>,
+}
+
+fn restore_pane_recursive(
+    mux: &mut Mux,
+    node: &snapshot::PaneNodeSnapshot,
+    ctx: &RestorePaneContext<'_>,
 ) -> anyhow::Result<(crate::ui::panes::PaneNode, usize)> {
     use crate::ui::panes::{next_node_id, PaneNode};
     use crate::ui::SplitDir;
@@ -343,11 +346,19 @@ fn restore_pane_recursive(
             } else {
                 dirs::home_dir()
             };
-            let tid = mux.open_terminal(config, cols, rows, cell_w, cell_h, proxy, cwd_opt)?;
+            let tid = mux.open_terminal(
+                ctx.config,
+                ctx.cols,
+                ctx.rows,
+                ctx.cell_w,
+                ctx.cell_h,
+                ctx.proxy.clone(),
+                cwd_opt,
+            )?;
             Ok((
                 PaneNode::Leaf {
                     terminal_id: tid,
-                    rect: viewport,
+                    rect: ctx.viewport,
                 },
                 tid,
             ))
@@ -358,20 +369,8 @@ fn restore_pane_recursive(
             left,
             right,
         } => {
-            let (ln, lf) = restore_pane_recursive(
-                mux,
-                left,
-                viewport,
-                config,
-                cols,
-                rows,
-                cell_w,
-                cell_h,
-                proxy.clone(),
-            )?;
-            let (rn, _) = restore_pane_recursive(
-                mux, right, viewport, config, cols, rows, cell_w, cell_h, proxy,
-            )?;
+            let (ln, lf) = restore_pane_recursive(mux, left, ctx)?;
+            let (rn, _) = restore_pane_recursive(mux, right, ctx)?;
             let split_dir = match dir {
                 SplitDirSnapshot::Horizontal => SplitDir::Horizontal,
                 SplitDirSnapshot::Vertical => SplitDir::Vertical,
@@ -383,7 +382,7 @@ fn restore_pane_recursive(
                     ratio: *ratio,
                     left: Box::new(ln),
                     right: Box::new(rn),
-                    rect: viewport,
+                    rect: ctx.viewport,
                 },
                 lf,
             ))

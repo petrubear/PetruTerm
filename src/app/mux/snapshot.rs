@@ -73,7 +73,7 @@ pub fn list_saved_workspaces() -> Vec<SavedWorkspaceInfo> {
             }
         }
     }
-    results.sort_by(|a, b| b.saved_at.cmp(&a.saved_at));
+    results.sort_by_key(|workspace| std::cmp::Reverse(workspace.saved_at));
     results
 }
 
