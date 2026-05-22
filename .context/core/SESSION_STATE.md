@@ -1,15 +1,33 @@
 # Session State
 
-**Last Updated:** 2026-05-12
-**Session Focus:** Release prep v0.1.9 + context menu regression fix.
+**Last Updated:** 2026-05-22
+**Session Focus:** Deuda técnica Wave 7 + validación ci-local.sh.
 
 ## Branch: `master`
 
 ## Estado actual
 
-**Phases 1–7 COMPLETAS. Release prep v0.1.9 en curso.**
-**Deuda técnica: Waves 1–3 resueltas. Watch: AUDIT-CLEAN-02. Diferidos: TD-PERF-03, TD-PERF-05.**
-**Tier 0 COMPLETO: baseline criterion establecido en `.criterion-baselines/`. Tier 5 desbloqueado.**
+**Phases 1–7 COMPLETAS. Deuda técnica Wave 7 cerrada.**
+**Deuda técnica: 3 items abiertos (AUDIT-ENERGY-05 PARCIAL, AUDIT-REFAC-07, AUDIT-REFAC-08). Watch: AUDIT-CLEAN-02, AUDIT-PERF-10. Diferidos: TD-PERF-03, TD-PERF-05, AUDIT-MEM-04.**
+**ci-local.sh: PASA (clippy + fmt + tests + audit).**
+
+## Esta sesión (2026-05-22) — Wave 7 deuda técnica
+
+### AUDIT-REFAC-06 — RESUELTO
+- `SidebarDrawParams<'a>` en `src/app/renderer/mod.rs` elimina los 18 parámetros de `build_workspace_sidebar_instances`.
+- Call site en `frame.rs` construye el struct; `overlay.rs` destructura al inicio. Supresión `too_many_arguments` eliminada.
+
+### ci-local.sh — corregidos fallos bloqueantes
+- 3 errores clippy `unneeded_struct_pattern` en `BlockKind::CodeBlock { .. }` → `BlockKind::CodeBlock` (`chat.rs` ×2, `renderer/mod.rs` ×1).
+- `cargo fmt` aplicado a violaciones preexistentes en 7 archivos.
+- Script pasa completo: clippy -D warnings + fmt --check + test --lib + audit.
+
+### Validación de reaperturas de Copilot
+- AUDIT-CLEAN-03: rechazada — grep confirmó 0 coincidencias de `#![allow(dead_code)]` en los 4 archivos citados.
+- AUDIT-ENERGY-05: aceptada como PARCIAL — WaitUntil deduplication resuelta, pero about_to_wait (290 líneas) sigue mezclando battery/git/blink/PTY.
+- AUDIT-REFAC-07: aceptada — 8 métodos tab_rename_*/workspace_rename_* duplicados confirmados.
+- AUDIT-REFAC-08: aceptada con corrección — build_panel_messages 505 líneas real (548-1052); rango 5-1455 del claim era el archivo completo.
+- AUDIT-PERF-10: aceptada como watch — micro-regresiones 1-2% en shaping/rasterize.
 
 ## Esta sesión (2026-05-12) — Release prep v0.1.9
 
