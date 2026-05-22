@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-05-22
-**Open Items:** 0
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 1 | **Watch:** 1
+**Open Items:** 3
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 1 | **P3:** 2 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 1 | **Watch:** 2
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -54,8 +54,12 @@ Wave 6 — Limpieza estructural
   AUDIT-REFAC-07 ──────────────────────────────────────┐
   AUDIT-CLEAN-03 ──────────────────────────────────────┘
 
+Wave 7 — Deuda estructural remanente
+  AUDIT-REFAC-08 ──────────────────────────────────────┘
+
 Watch
   AUDIT-CLEAN-02 (sin cambio; reevaluar si ContextAction crece)
+  AUDIT-PERF-10 (micro-regresiones de benchmark; reevaluar tras el próximo pase de perf)
 ```
 
 **Conflictos a evitar:**
@@ -65,6 +69,7 @@ Watch
 - `AUDIT-PERF-08` y `AUDIT-MEM-05` tocan el renderer/atlas path → reducir rebinding sin mezclarlo con cambios de packing/eviction en la misma PR.
 - `AUDIT-RESP-01`, `AUDIT-ENERGY-05` y `AUDIT-MEM-04` tocan scheduling/background work → primero capar drenados y unificar wakeups, luego mover trabajo a un manager/threadpool.
 - `AUDIT-REFAC-06` no debe abrirse antes de cerrar `AUDIT-PERF-08/09` y `AUDIT-RESP-01`; si no, se mezcla refactor estructural con hot paths.
+- `AUDIT-REFAC-07`, `AUDIT-CLEAN-03` y `AUDIT-REFAC-08` tocan la capa de render/markdown/ui → separar reaperturas pequeñas (deduplicación/suppressions) de cualquier split mayor de módulos.
 
 ---
 
@@ -104,7 +109,7 @@ Watch
 
 ## P2 — Prioridad media
 
-**AUDIT-ENERGY-05** — RESUELTO (2026-05-22). `about_to_wait()` mezcla battery poll, git poll, blink, PTY coalescing y clock wake en el thread UI, además de duplicar el cálculo de `ControlFlow::WaitUntil` en ramas idle/battery-saver/normal. `src/app/mod.rs:1705-1933`. El coste no es sólo mantenibilidad: cada iteración recalcula deadlines de distinta prioridad y mantiene trabajo de baja frecuencia acoplado al camino crítico de responsividad/energía.
+**AUDIT-ENERGY-05** — PARCIAL (2026-05-22). La duplicación de `ControlFlow::WaitUntil` sí fue eliminada con un único cálculo de wakeup (`src/app/mod.rs:1883-1904`), pero `about_to_wait()` todavía concentra battery poll, git poll, blink, PTY coalescing y clock wake en el mismo camino crítico (`src/app/mod.rs:1696-1904`). El issue baja de severidad, pero no está completamente cerrado mientras el trabajo de baja frecuencia siga acoplado al loop principal.
 
 **AUDIT-MEM-04** — DIFERIDO (2026-05-22). Los 16 spawns ad-hoc son de baja frecuencia (clipboard, file scan, git). El coste de migrar a tokio::spawn_blocking o un BackgroundTaskManager es alto y el impacto en RSS medible es bajo en sesiones normales. Reevaluar si se observan picos de RSS bajo carga. Hay al menos 16 `std::thread::spawn` ad-hoc para clipboard, file scan, branch scan, PATH checks y `open`, sin pool ni backpressure. `src/app/mod.rs:823-889, 1221-1223`; `src/app/ui/mod.rs:496-533, 650-652`; `src/app/ui/git.rs:77-80`; `src/app/input/mod.rs:542-545, 790-793`; `src/term/tokenizer.rs:279-287`. Esto aumenta RSS, wakeups y jitter; conviene centralizar en `tokio::spawn_blocking` o un `BackgroundTaskManager`.
 
@@ -134,9 +139,11 @@ Watch
 
 **AUDIT-REFAC-06** — RESUELTO (2026-05-22). `build_workspace_sidebar_instances()` tenía 18 parámetros con `#[allow(clippy::too_many_arguments)]`. Resuelto con `SidebarDrawParams<'a>` en `src/app/renderer/mod.rs`; call site en `frame.rs` construye el struct; función en `overlay.rs` destructura al inicio — cuerpo sin cambios, supresión eliminada.
 
-**AUDIT-REFAC-07** — RESUELTO (2026-05-22). Hay duplicación clara en el renombrado tab/workspace (`src/app/input/mod.rs:234-282`) y en el parser markdown para headings y spans delimitados (`src/llm/markdown.rs:79-106, 224-309`). Extraer helpers/traits reduciría ramas repetidas, bajaría mantenimiento y eliminaría trabajo redundante del parser.
+**AUDIT-REFAC-07** — REABIERTO (2026-05-22). El dispatch de rename se consolidó en `handle_rename_key()` (`src/app/input/mod.rs:234-236`), pero sigue habiendo lógica duplicada en `tab_rename_*` vs `workspace_rename_*` y en el parser markdown (`src/app/ui/mod.rs:572-631`; `src/llm/markdown.rs:198-289`). Se avanzó, pero la deduplicación reportada no quedó completa.
 
-**AUDIT-CLEAN-03** — RESUELTO (2026-05-22). El análisis estático muestra suppressions demasiado amplias: `#![allow(dead_code)]` global en `src/llm/markdown.rs:1` pese a que el módulo está activo, y `#[allow(clippy::too_many_arguments)]` duplicado en `src/app/renderer/overlay.rs:4-5`. Estas excepciones ocultan señal útil de clippy/dead code y conviene reemplazarlas por suppressions locales o por extracción de helpers/context structs.
+**AUDIT-CLEAN-03** — RESUELTO (2026-05-22). Se eliminó `#![allow(dead_code)]` global de `markdown.rs` y la supresión duplicada de `overlay.rs`. Los archivos `freetype_lcd.rs`, `pipeline.rs`, `tabs.rs` y `panes.rs` verificados: ninguno tiene `#![allow(dead_code)]` global. Reapertura de Copilot rechazada por falsa.
+
+**AUDIT-REFAC-08** — Abierto (2026-05-22). `build_panel_messages()` tiene 505 líneas (`src/app/renderer/chat.rs:548-1052`), por encima del límite de 400. `build_chat_panel_instances()` tiene 382 líneas (dentro de límite). `App`, `UiManager` y `RenderContext` siguen concentrando muchos fields; la refactorización estructural mayor queda pendiente tras el `SidebarDrawParams` de AUDIT-REFAC-06.
 
 **AUDIT-REFAC-05** — RESUELTO (2026-05-11). Todos los monolitos convertidos a directorios-módulo con subarchivos por responsabilidad. Antes → ahora (mayor archivo del grupo): `renderer.rs` 4024 → `renderer/{mod,terminal,chat,overlay}.rs` max 1483; `mod.rs` 3663 → `mod+frame+app_state+layout.rs` max 1921; `ui.rs` 1986 → `ui/{mod,git,providers}.rs` max 1579; `chat_panel.rs` 1188 → `chat_panel/{mod,picker}.rs` max 919; `mux.rs` 1147 → `mux/{mod,workspace}.rs` max 981. 101/101 tests pasan.
 
@@ -151,6 +158,8 @@ Watch
 **AUDIT-CLEAN-01** — RESUELTO (2026-05-05). Función `idx_or_default<T>` añadida en `renderer.rs`. 7 ocurrencias de `.cloned().unwrap_or_default()` reemplazadas.
 
 **AUDIT-CLEAN-02** — WATCH (2026-05-05). `ContextAction` sigue por debajo del umbral para justificar un dispatch table; reevaluar solo si el enum/match crece de forma material.
+
+**AUDIT-PERF-10** — WATCH (2026-05-22). La revalidación de Criterion no mostró fallos graves, pero sí micro-regresiones repetidas de ~1-2% en shaping/rasterize/build instances (`shape_line_ascii` 284.68 ns +1.54%, `shape_line_ascii_cached` 277.03 ns +1.39%, `shape_line_ligatures_cached` 546.21 ns +1.57%, `rasterize_glyph_ascii` 1.3094 µs +1.67%, `build_row_miss` 857.77 ns +1.58%, `build_frame_hit` 792.79 ns +1.13%). No bloquea, pero conviene volver a medir tras el próximo pase de optimización de hot paths.
 
 ---
 
@@ -175,5 +184,6 @@ Wave 3: AUDIT-THEME-02, AUDIT-REFAC-05
 Wave 4: AUDIT-PERF-08, AUDIT-PERF-09, AUDIT-RESP-01
 Wave 5: AUDIT-ENERGY-05, AUDIT-MEM-04, AUDIT-MEM-05, AUDIT-REFAC-06
 Wave 6: AUDIT-REFAC-07, AUDIT-CLEAN-03
-Watch: AUDIT-CLEAN-02
+Wave 7: AUDIT-REFAC-08
+Watch: AUDIT-CLEAN-02, AUDIT-PERF-10
 ```
