@@ -1447,19 +1447,12 @@ impl ApplicationHandler<()> for App {
             }
         }
 
-        // AI events are low-frequency; render immediately.
-        let panel_ai = self.ui.poll_ai_events();
-        let block_ai = self.ui.poll_ai_block_events();
-        if panel_ai.completed {
-            self.fire_lua_event("ai_response");
-        }
-        let ai_needs_redraw = panel_ai.changed || block_ai.changed;
         self.flush_pending_pty_run();
         self.flush_pending_agent_action();
         self.flush_pending_paste();
         let scan_ready = self.ui.poll_file_scan();
         let branch_ready = self.ui.poll_branch_scan();
-        if ai_needs_redraw || scan_ready || branch_ready {
+        if scan_ready || branch_ready {
             self.request_redraw();
         }
     }
@@ -1691,11 +1684,9 @@ impl ApplicationHandler<()> for App {
         if panel_ai.completed {
             self.fire_lua_event("ai_response");
         }
-        let had_panel_ai = panel_ai.changed;
-        let had_ai_block = block_ai.changed;
-        let had_ai = had_panel_ai || had_ai_block;
+        let had_ai = panel_ai.changed || block_ai.changed;
         let scan_ready = self.ui.poll_file_scan();
-        if had_ai || scan_ready {
+        if had_ai || scan_ready || panel_ai.more || block_ai.more {
             self.request_redraw();
         }
         self.flush_pending_pty_run();
@@ -1793,7 +1784,7 @@ impl ApplicationHandler<()> for App {
         let panel_overlay_active = self.ui.is_panel_visible() && self.ui.panel_focused;
         let block_overlay_active = self.ui.is_block_visible();
         let visible_ai_activity =
-            (had_panel_ai && panel_overlay_active) || (had_ai_block && block_overlay_active);
+            (panel_ai.changed && panel_overlay_active) || (block_ai.changed && block_overlay_active);
         let any_overlay = panel_overlay_active
             || self.ui.palette.visible
             || self.ui.context_menu.visible
@@ -1889,48 +1880,28 @@ impl ApplicationHandler<()> for App {
             None
         };
 
-        // Helper: fold an optional deadline into a base deadline.
-        let with_opt = |base: std::time::Instant, opt: Option<std::time::Instant>| match opt {
-            Some(t) => base.min(t),
-            None => base,
+        // Compute the wakeup deadline once. The base differs by mode:
+        // - Active (focused, not battery-saver, not idle): blink timer drives minimum wakeup.
+        // - Everything else (idle, unfocused, battery-saver): park for up to 1 hour; real
+        //   events (PTY data, user input) arrive via winit wakeups without a spin.
+        let active = self.window_focused && !self.battery_saver_active && !idle;
+        let base_deadline = if active {
+            self.input.cursor_last_blink + std::time::Duration::from_millis(530)
+        } else {
+            std::time::Instant::now() + std::time::Duration::from_secs(3600)
         };
 
-        if idle || !self.window_focused {
-            // Fully idle or window not focused: park the thread.
-            // PTY data still arrives via user_event (winit wakes us), so background processes run.
-            let far = std::time::Instant::now() + std::time::Duration::from_secs(3600);
-            let mut wake = with_opt(far, next_minute_wake);
-            if self.pending_pty_redraw {
-                wake = wake.min(pty_deadline);
-            }
-            if let Some(fd) = frame_deadline {
-                wake = wake.min(fd);
-            }
-            event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(wake));
-        } else if self.battery_saver_active {
-            // On battery: no blink timer — cursor stays solid, thread parks until
-            // PTY data, user input, or the minute boundary for the status bar clock.
-            let far = std::time::Instant::now() + std::time::Duration::from_secs(3600);
-            let mut wake = with_opt(far, next_minute_wake);
-            if self.pending_pty_redraw {
-                wake = wake.min(pty_deadline);
-            }
-            if let Some(fd) = frame_deadline {
-                wake = wake.min(fd);
-            }
-            event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(wake));
-        } else {
-            let blink_deadline =
-                self.input.cursor_last_blink + std::time::Duration::from_millis(530);
-            let mut wake = with_opt(blink_deadline, next_minute_wake);
-            if self.pending_pty_redraw {
-                wake = wake.min(pty_deadline);
-            }
-            if let Some(fd) = frame_deadline {
-                wake = wake.min(fd);
-            }
-            event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(wake));
+        let mut wake = match next_minute_wake {
+            Some(t) => base_deadline.min(t),
+            None => base_deadline,
+        };
+        if self.pending_pty_redraw {
+            wake = wake.min(pty_deadline);
         }
+        if let Some(fd) = frame_deadline {
+            wake = wake.min(fd);
+        }
+        event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(wake));
     }
 }
 

@@ -2,7 +2,6 @@ use super::*;
 
 impl RenderContext {
     #[allow(clippy::too_many_arguments)]
-    #[allow(clippy::too_many_arguments)]
     pub fn build_workspace_sidebar_instances(
         &mut self,
         workspaces: &[Workspace],

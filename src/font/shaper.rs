@@ -230,7 +230,7 @@ pub struct ShapedRun {
     pub line_height: f32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct ShapedGlyph {
     pub col: usize,
     #[allow(dead_code)]
@@ -653,29 +653,23 @@ impl TextShaper {
         let mut all_glyphs: Vec<ShapedGlyph> = Vec::with_capacity(text.len());
         let mut ascent = 0.0f32;
 
+        // Helper: apply real col offset and colors to a cached glyph.
+        let apply = |g: &ShapedGlyph, col_offset: usize, colors: &[([f32; 4], [f32; 4])]| {
+            let abs_col = col_offset + g.col;
+            let (fg, bg) = colors
+                .get(abs_col)
+                .copied()
+                .unwrap_or(([1.0; 4], [0.0, 0.0, 0.0, 1.0]));
+            ShapedGlyph { col: abs_col, fg, bg, ..*g }
+        };
+
         if all_cached {
             // Pure cache-hit path: assemble from cache only.
             for (col_offset, word) in &tokens {
-                let key = Self::word_hash(word, font_size_bits);
-                let cached = self.word_cache.get(&key)?;
+                let cached = self.word_cache.get(&Self::word_hash(word, font_size_bits))?;
                 ascent = cached.ascent;
                 for g in &cached.glyphs {
-                    let abs_col = col_offset + g.col;
-                    let (fg, bg) = colors
-                        .get(abs_col)
-                        .copied()
-                        .unwrap_or(([1.0; 4], [0.0, 0.0, 0.0, 1.0]));
-                    all_glyphs.push(ShapedGlyph {
-                        col: abs_col,
-                        span: g.span,
-                        ch: g.ch,
-                        cache_key: g.cache_key,
-                        advance: g.advance,
-                        bearing_x: g.bearing_x,
-                        bearing_y: g.bearing_y,
-                        fg,
-                        bg,
-                    });
+                    all_glyphs.push(apply(g, *col_offset, colors));
                 }
             }
             return Some(ShapedRun {
@@ -686,65 +680,31 @@ impl TextShaper {
         }
 
         // Mixed path: shape uncached tokens, use cache for the rest.
-        // We need to collect what to insert after borrowing self mutably.
-        let mut to_insert: Vec<(String, ShapedRun)> = Vec::new();
+        // Collect (word_str, run) pairs as &str (lifetime tied to `text`) to avoid String allocs.
+        let mut to_insert: Vec<(&str, ShapedRun)> = Vec::new();
 
         for (col_offset, word) in &tokens {
             let key = Self::word_hash(word, font_size_bits);
             if let Some(cached) = self.word_cache.get(&key) {
                 ascent = cached.ascent;
                 for g in &cached.glyphs {
-                    let abs_col = col_offset + g.col;
-                    let (fg, bg) = colors
-                        .get(abs_col)
-                        .copied()
-                        .unwrap_or(([1.0; 4], [0.0, 0.0, 0.0, 1.0]));
-                    all_glyphs.push(ShapedGlyph {
-                        col: abs_col,
-                        span: g.span,
-                        ch: g.ch,
-                        cache_key: g.cache_key,
-                        advance: g.advance,
-                        bearing_x: g.bearing_x,
-                        bearing_y: g.bearing_y,
-                        fg,
-                        bg,
-                    });
+                    all_glyphs.push(apply(g, *col_offset, colors));
                 }
             } else {
-                // Shape this word individually through HarfBuzz.
-                // Use uniform dummy colors for caching (colors don't affect glyph geometry).
-                let dummy_colors: Vec<([f32; 4], [f32; 4])> =
-                    vec![([1.0; 4], [0.0, 0.0, 0.0, 1.0]); word.len()];
-                let word_run = self.shape_word_harfbuzz(word, &dummy_colors, font_config);
+                // Shape through HarfBuzz. Pass empty colors slice — geometry is color-independent;
+                // real colors are applied via `apply` when assembling into all_glyphs.
+                let word_run = self.shape_word_harfbuzz(word, &[], font_config);
                 ascent = word_run.ascent;
-
-                // Apply real colors and adjusted col offsets.
                 for g in &word_run.glyphs {
-                    let abs_col = col_offset + g.col;
-                    let (fg, bg) = colors
-                        .get(abs_col)
-                        .copied()
-                        .unwrap_or(([1.0; 4], [0.0, 0.0, 0.0, 1.0]));
-                    all_glyphs.push(ShapedGlyph {
-                        col: abs_col,
-                        span: g.span,
-                        ch: g.ch,
-                        cache_key: g.cache_key,
-                        advance: g.advance,
-                        bearing_x: g.bearing_x,
-                        bearing_y: g.bearing_y,
-                        fg,
-                        bg,
-                    });
+                    all_glyphs.push(apply(g, *col_offset, colors));
                 }
-                to_insert.push((word.to_string(), word_run));
+                to_insert.push((word, word_run));
             }
         }
 
         // Insert newly shaped words into cache.
         for (word, run) in to_insert {
-            self.word_cache_insert(&word, font_size_bits, run);
+            self.word_cache_insert(word, font_size_bits, run);
         }
 
         Some(ShapedRun {

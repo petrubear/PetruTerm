@@ -562,7 +562,6 @@ pub(super) fn resolve_span_fg(
         SpanKind::Syntax(TokenKind::Comment) => colors.ui_muted,
         SpanKind::Syntax(TokenKind::Number) => colors.ansi[6], // cyan
         SpanKind::Syntax(TokenKind::Operator) => dim(line_fg, 0.1),
-        SpanKind::Syntax(TokenKind::Default) => line_fg,
     }
 }
 

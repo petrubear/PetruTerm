@@ -443,22 +443,25 @@ impl GpuRenderer {
                 let overlay_end = self.cell_count as u32;
                 let overlay_start = main_end;
 
+                // Bind shared resources once; bg_pipeline and cell_pipeline share
+                // the same layouts at slots 0/1 and the same vertex buffer.
+                // Pipeline switches within the same pass do not invalidate bind groups.
+                pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                pass.set_bind_group(1, &self.atlas_bind_group, &[]);
+                pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
+
                 // ── Main pass: terminal + static UI ──────────────────────────────
                 if main_end > 0 {
                     pass.set_pipeline(&self.pipeline.bg_pipeline);
-                    pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                    pass.set_bind_group(1, &self.atlas_bind_group, &[]);
-                    pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
                     pass.draw(0..6, 0..main_end);
 
                     pass.set_pipeline(&self.pipeline.cell_pipeline);
-                    pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                    pass.set_bind_group(1, &self.atlas_bind_group, &[]);
-                    pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
                     pass.draw(0..6, 0..main_end);
                 }
 
                 // ── LCD pass (terminal glyphs) — drawn BEFORE overlay so overlay bg covers them ──
+                // The LCD pass changes slots 0/1 and vertex slot 0; restore them afterward
+                // so the overlay pass can draw without re-specifying all shared state.
                 if self.lcd_instance_count > 0 {
                     if let Some(ref lcd_pipeline) = self.lcd_pipeline {
                         pass.set_pipeline(&lcd_pipeline.lcd_pipeline);
@@ -467,6 +470,10 @@ impl GpuRenderer {
                         pass.set_bind_group(2, &self.lcd_atlas_bind_group, &[]);
                         pass.set_vertex_buffer(0, self.lcd_instance_buffer.slice(..));
                         pass.draw(0..6, 0..self.lcd_instance_count as u32);
+
+                        pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                        pass.set_bind_group(1, &self.atlas_bind_group, &[]);
+                        pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
                     }
                 }
 
@@ -475,15 +482,9 @@ impl GpuRenderer {
                 // cover all terminal text underneath.
                 if overlay_start < overlay_end {
                     pass.set_pipeline(&self.pipeline.bg_pipeline);
-                    pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                    pass.set_bind_group(1, &self.atlas_bind_group, &[]);
-                    pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
                     pass.draw(0..6, overlay_start..overlay_end);
 
                     pass.set_pipeline(&self.pipeline.cell_pipeline);
-                    pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                    pass.set_bind_group(1, &self.atlas_bind_group, &[]);
-                    pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
                     pass.draw(0..6, overlay_start..overlay_end);
                 }
             }

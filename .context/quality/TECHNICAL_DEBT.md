@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-05-11
-**Open Items:** 0
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Watch:** 1
+**Last Updated:** 2026-05-22
+**Open Items:** 1
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 1 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Watch:** 1
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -39,6 +39,21 @@ Wave 3 — Consistencia visual y mantenibilidad
   AUDIT-THEME-02 ──────────────────────────────────────┐
   AUDIT-REFAC-05 ──────────────────────────────────────┘
 
+Wave 4 — Hot paths (CPU/GPU/CPI)
+  AUDIT-PERF-08  ──────────────────────────────────────┐
+  AUDIT-PERF-09  ──────────────────────────────────────┤
+  AUDIT-RESP-01  ──────────────────────────────────────┘─► Wave 5
+
+Wave 5 — Scheduling, memoria y energía
+  AUDIT-ENERGY-05──────────────────────────────────────┐
+  AUDIT-MEM-04   ──────────────────────────────────────┤
+  AUDIT-MEM-05   ──────────────────────────────────────┤─► Wave 6
+  AUDIT-REFAC-06 ──────────────────────────────────────┘
+
+Wave 6 — Limpieza estructural
+  AUDIT-REFAC-07 ──────────────────────────────────────┐
+  AUDIT-CLEAN-03 ──────────────────────────────────────┘
+
 Watch
   AUDIT-CLEAN-02 (sin cambio; reevaluar si ContextAction crece)
 ```
@@ -47,6 +62,9 @@ Watch
 - `AUDIT-SEC-02` y `AUDIT-ENERGY-03` tocan el boot path de `UiManager`/MCP → separar trust gate de lazy-init.
 - `AUDIT-ENERGY-02` y `AUDIT-ENERGY-04` tocan `about_to_wait()` → resolver el bug de polling infinito antes de retocar más timers.
 - `AUDIT-THEME-01` y `AUDIT-THEME-02` deben compartir un único diseño de tokens semánticos para evitar re-hardcodear colores.
+- `AUDIT-PERF-08` y `AUDIT-MEM-05` tocan el renderer/atlas path → reducir rebinding sin mezclarlo con cambios de packing/eviction en la misma PR.
+- `AUDIT-RESP-01`, `AUDIT-ENERGY-05` y `AUDIT-MEM-04` tocan scheduling/background work → primero capar drenados y unificar wakeups, luego mover trabajo a un manager/threadpool.
+- `AUDIT-REFAC-06` no debe abrirse antes de cerrar `AUDIT-PERF-08/09` y `AUDIT-RESP-01`; si no, se mezcla refactor estructural con hot paths.
 
 ---
 
@@ -59,6 +77,12 @@ Watch
 ---
 
 ## P1 — Alta prioridad
+
+**AUDIT-PERF-08** — RESUELTO (2026-05-22). `GpuRenderer::render()` re-bindea `uniform_bind_group`, `atlas_bind_group` y `instance_buffer` para `bg_pipeline` y `cell_pipeline` tanto en main como en overlay aunque los recursos no cambian dentro del mismo render pass. `src/renderer/gpu.rs:448-457, 477-486`. Esto aumenta validación del driver, tráfico de comandos GPU y CPI del render loop; conviene encapsular el draw en un helper que haga bind una sola vez por bloque.
+
+**AUDIT-PERF-09** — RESUELTO (2026-05-22). `try_word_cached_shape()` duplica tres veces la reconstrucción de `ShapedGlyph`, repite `colors.get(abs_col).copied().unwrap_or(...)` por glifo y aloca `dummy_colors` + `String` por palabra con cache miss. `src/font/shaper.rs:656-748`. Es hot path puro de shaping: eleva allocs, empeora locality de CPU/cache y sube el CPI en frames con texto nuevo.
+
+**AUDIT-RESP-01** — RESUELTO (2026-05-22). `poll_ai_events()` / `poll_ai_block_events()` drenan canales sin límite con `while let Ok(...)` y se invocan en más de una fase del loop (`src/app/mod.rs:1451-1452, 1689-1690`; `src/app/frame.rs:173-174`). Bajo streaming intenso, una sola iteración puede quedar dominada por eventos AI y retrasar PTY/input/redraw. Hace falta batch cap por iteración y una fase única de polling.
 
 **AUDIT-ENERGY-02** — RESUELTO (2026-05-11). `battery_polled: bool` reemplaza `battery_status.is_none()` como guarda de primera ejecución; en desktop (sin batería) el poll ocurre una vez al arranque y luego cada 30 s. `src/app/mod.rs`.
 
@@ -79,6 +103,12 @@ Watch
 ---
 
 ## P2 — Prioridad media
+
+**AUDIT-ENERGY-05** — RESUELTO (2026-05-22). `about_to_wait()` mezcla battery poll, git poll, blink, PTY coalescing y clock wake en el thread UI, además de duplicar el cálculo de `ControlFlow::WaitUntil` en ramas idle/battery-saver/normal. `src/app/mod.rs:1705-1933`. El coste no es sólo mantenibilidad: cada iteración recalcula deadlines de distinta prioridad y mantiene trabajo de baja frecuencia acoplado al camino crítico de responsividad/energía.
+
+**AUDIT-MEM-04** — DIFERIDO (2026-05-22). Los 16 spawns ad-hoc son de baja frecuencia (clipboard, file scan, git). El coste de migrar a tokio::spawn_blocking o un BackgroundTaskManager es alto y el impacto en RSS medible es bajo en sesiones normales. Reevaluar si se observan picos de RSS bajo carga. Hay al menos 16 `std::thread::spawn` ad-hoc para clipboard, file scan, branch scan, PATH checks y `open`, sin pool ni backpressure. `src/app/mod.rs:823-889, 1221-1223`; `src/app/ui/mod.rs:496-533, 650-652`; `src/app/ui/git.rs:77-80`; `src/app/input/mod.rs:542-545, 790-793`; `src/term/tokenizer.rs:279-287`. Esto aumenta RSS, wakeups y jitter; conviene centralizar en `tokio::spawn_blocking` o un `BackgroundTaskManager`.
+
+**AUDIT-MEM-05** — RESUELTO (2026-05-22). El atlas usa shelf packing y `evict_cold()` sólo limpia el mapa lógico; no recupera espacio físico y el cursor sigue avanzando hasta `AtlasError::Full`. `src/renderer/atlas.rs:153-158, 195-202`. Resultado: más clears completos del atlas, re-rasterización/upload extra y desperdicio de memoria GPU/CPU cuando la fragmentación crece.
 
 **AUDIT-ENERGY-04** — RESUELTO (2026-05-11). (a) Git poll guard extendido a 60 s en battery saver mode (coincide con TTL). (b) `next_minute_wake` solo se computa cuando `status_bar.enabled`. (c) Battery poll condicionado a `window_focused`. `src/app/mod.rs`.
 
@@ -101,6 +131,12 @@ Watch
 ---
 
 ## P3 — Prioridad baja / Backlog
+
+**AUDIT-REFAC-06** — Abierto (2026-05-22). `App`, `UiManager` y `RenderContext` concentran demasiadas responsabilidades/fields públicos, y `build_workspace_sidebar_instances()` sigue con 20 parámetros y cuerpo monolítico. `src/app/mod.rs:37-127`; `src/app/ui/mod.rs:65-155`; `src/app/renderer/mod.rs:48-153`; `src/app/renderer/overlay.rs:4-26`. Esto rompe la convención interna de módulos pequeños, dificulta preservar invariantes y vuelve más riesgoso tocar hot paths.
+
+**AUDIT-REFAC-07** — RESUELTO (2026-05-22). Hay duplicación clara en el renombrado tab/workspace (`src/app/input/mod.rs:234-282`) y en el parser markdown para headings y spans delimitados (`src/llm/markdown.rs:79-106, 224-309`). Extraer helpers/traits reduciría ramas repetidas, bajaría mantenimiento y eliminaría trabajo redundante del parser.
+
+**AUDIT-CLEAN-03** — RESUELTO (2026-05-22). El análisis estático muestra suppressions demasiado amplias: `#![allow(dead_code)]` global en `src/llm/markdown.rs:1` pese a que el módulo está activo, y `#[allow(clippy::too_many_arguments)]` duplicado en `src/app/renderer/overlay.rs:4-5`. Estas excepciones ocultan señal útil de clippy/dead code y conviene reemplazarlas por suppressions locales o por extracción de helpers/context structs.
 
 **AUDIT-REFAC-05** — RESUELTO (2026-05-11). Todos los monolitos convertidos a directorios-módulo con subarchivos por responsabilidad. Antes → ahora (mayor archivo del grupo): `renderer.rs` 4024 → `renderer/{mod,terminal,chat,overlay}.rs` max 1483; `mod.rs` 3663 → `mod+frame+app_state+layout.rs` max 1921; `ui.rs` 1986 → `ui/{mod,git,providers}.rs` max 1579; `chat_panel.rs` 1188 → `chat_panel/{mod,picker}.rs` max 919; `mux.rs` 1147 → `mux/{mod,workspace}.rs` max 981. 101/101 tests pasan.
 
@@ -136,5 +172,8 @@ Ningún fix P2/P3 debe implementarse sin profiling previo. El HUD F12 + benches 
 Wave 1: AUDIT-SEC-01, AUDIT-SEC-02, AUDIT-ENERGY-02, AUDIT-PERF-06
 Wave 2: AUDIT-ENERGY-03, AUDIT-SEC-03, AUDIT-ENERGY-04, AUDIT-THEME-01, AUDIT-PERF-07
 Wave 3: AUDIT-THEME-02, AUDIT-REFAC-05
+Wave 4: AUDIT-PERF-08, AUDIT-PERF-09, AUDIT-RESP-01
+Wave 5: AUDIT-ENERGY-05, AUDIT-MEM-04, AUDIT-MEM-05, AUDIT-REFAC-06
+Wave 6: AUDIT-REFAC-07, AUDIT-CLEAN-03
 Watch: AUDIT-CLEAN-02
 ```

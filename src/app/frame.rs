@@ -177,6 +177,9 @@ impl App {
         }
         let had_ai = panel_ai.changed;
         let had_ai_block = block_ai.changed;
+        if panel_ai.more || block_ai.more {
+            self.request_redraw();
+        }
         self.flush_pending_pty_run();
         self.flush_pending_agent_action();
         self.flush_pending_paste();
@@ -290,25 +293,23 @@ impl App {
             if rc.renderer.atlas.is_near_full() {
                 let evicted = rc.renderer.atlas.evict_cold(60);
                 if evicted > 0 {
-                    // evict_cold() removes logical entries but the physical texture
-                    // is unchanged — cached UV coordinates in row caches remain valid.
-                    // Only flush row caches after an actual clear() (TD-PERF-07).
                     log::debug!("Atlas eviction: removed {} stale glyphs", evicted);
-                    // If the physical cursor is still >75% full after logical eviction,
-                    // the next uploads would fail quickly. Clear the texture now and
-                    // invalidate all row caches (UVs now point to wiped data).
-                    if rc.renderer.atlas.cursor_fill_ratio() > 0.75 {
-                        rc.renderer.atlas.clear(&rc.renderer.device());
-                        rc.renderer.color_atlas.clear(&rc.renderer.device());
-                        if let Some(lcd) = rc.renderer.get_lcd_atlas() {
-                            lcd.borrow_mut().clear(&rc.renderer.device());
-                            rc.shaper.clear_lcd_rasterizer_cache();
-                        }
-                        rc.renderer.rebuild_atlas_bind_groups();
-                        rc.atlas_generation += 1;
-                        rc.clear_all_row_caches();
-                        log::debug!("Atlas: cursor still high after eviction — preemptive clear");
+                }
+                // Check cursor position unconditionally — evict_cold() only clears the
+                // logical map; the physical cursor does not move back. If the cursor is
+                // still near the atlas boundary (whether or not eviction freed anything),
+                // a full clear is necessary to avoid an imminent AtlasError::Full stutter.
+                if rc.renderer.atlas.cursor_fill_ratio() > 0.75 {
+                    rc.renderer.atlas.clear(&rc.renderer.device());
+                    rc.renderer.color_atlas.clear(&rc.renderer.device());
+                    if let Some(lcd) = rc.renderer.get_lcd_atlas() {
+                        lcd.borrow_mut().clear(&rc.renderer.device());
+                        rc.shaper.clear_lcd_rasterizer_cache();
                     }
+                    rc.renderer.rebuild_atlas_bind_groups();
+                    rc.atlas_generation += 1;
+                    rc.clear_all_row_caches();
+                    log::debug!("Atlas: preemptive clear (cursor_fill_ratio > 0.75)");
                 }
             }
 
@@ -325,12 +326,22 @@ impl App {
                 }
             }
 
-            // Proactive eviction for the LCD atlas (TD-MEM-02).
+            // Proactive eviction for the LCD atlas.
+            // is_near_full() for LCD is cursor-based (>80% of height); evict_cold()
+            // only clears the logical map, so the cursor stays put. If still near full
+            // after eviction, a clear is necessary to prevent AtlasError::Full.
             if let Some(lcd) = rc.renderer.get_lcd_atlas() {
                 if lcd.borrow().is_near_full() {
                     let evicted = lcd.borrow_mut().evict_cold(60);
                     if evicted > 0 {
                         log::debug!("LCD atlas: evicted {} cold glyphs", evicted);
+                    }
+                    if lcd.borrow().is_near_full() {
+                        lcd.borrow_mut().clear(&rc.renderer.device());
+                        rc.shaper.clear_lcd_rasterizer_cache();
+                        rc.renderer.rebuild_atlas_bind_groups();
+                        rc.clear_all_row_caches();
+                        log::debug!("LCD atlas: preemptive clear (cursor still near full after eviction)");
                     }
                 }
             }

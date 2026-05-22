@@ -154,10 +154,15 @@ pub struct UiManager {
     pub mcp_manager: std::sync::Arc<McpManager>,
 }
 
+const AI_POLL_CAP: usize = 64;
+
 #[derive(Default, Clone, Copy)]
 pub struct AiPollResult {
     pub changed: bool,
     pub completed: bool,
+    /// True when the channel still had events after the batch cap was hit.
+    /// Callers should request another redraw to drain the remainder.
+    pub more: bool,
 }
 
 impl UiManager {
@@ -340,8 +345,11 @@ impl UiManager {
     /// not the currently active panel — so tab-switching during streaming is safe.
     pub fn poll_ai_events(&mut self) -> AiPollResult {
         let mut result = AiPollResult::default();
-        while let Ok((_panel_id, event)) = self.ai_rx.try_recv() {
+        let mut count = 0;
+        while count < AI_POLL_CAP {
+            let Ok((_panel_id, event)) = self.ai_rx.try_recv() else { break };
             result.changed = true;
+            count += 1;
             let panel = &mut self.chat_panel;
             match event {
                 AiEvent::Token(tok) => panel.append_token(&tok),
@@ -391,14 +399,18 @@ impl UiManager {
                 }
             }
         }
+        result.more = count == AI_POLL_CAP;
         result
     }
 
     /// Poll streaming tokens for the inline AI block. Returns true if content changed.
     pub fn poll_ai_block_events(&mut self) -> AiPollResult {
         let mut result = AiPollResult::default();
-        while let Ok(event) = self.block_rx.try_recv() {
+        let mut count = 0;
+        while count < AI_POLL_CAP {
+            let Ok(event) = self.block_rx.try_recv() else { break };
             result.changed = true;
+            count += 1;
             match event {
                 AiEvent::Token(tok) => self.ai_block.append_token(&tok),
                 AiEvent::Done => {
@@ -416,6 +428,7 @@ impl UiManager {
                 | AiEvent::Usage { .. } => {} // AI block doesn't handle these
             }
         }
+        result.more = count == AI_POLL_CAP;
         result
     }
 
@@ -613,8 +626,51 @@ impl UiManager {
         self.workspace_rename_input = None;
     }
 
-    pub fn is_renaming_workspace(&self) -> bool {
-        self.workspace_rename_input.is_some()
+    /// Handle a key event while either rename prompt is active.
+    /// Returns true if the event was consumed (caller should return immediately).
+    pub fn handle_rename_key(
+        &mut self,
+        mux: &mut Mux,
+        key: &winit::keyboard::Key,
+        cmd: bool,
+        ctrl: bool,
+    ) -> bool {
+        use winit::keyboard::NamedKey;
+        if self.tab_rename_input.is_some() {
+            match key {
+                winit::keyboard::Key::Named(NamedKey::Escape) => self.tab_rename_cancel(),
+                winit::keyboard::Key::Named(NamedKey::Enter) => self.tab_rename_confirm(mux),
+                winit::keyboard::Key::Named(NamedKey::Backspace) => self.tab_rename_backspace(),
+                winit::keyboard::Key::Named(NamedKey::Space) => self.tab_rename_type(' '),
+                winit::keyboard::Key::Character(s) if !cmd && !ctrl => {
+                    for ch in s.chars() {
+                        self.tab_rename_type(ch);
+                    }
+                }
+                _ => {}
+            }
+            return true;
+        }
+        if self.workspace_rename_input.is_some() {
+            match key {
+                winit::keyboard::Key::Named(NamedKey::Escape) => self.workspace_rename_cancel(),
+                winit::keyboard::Key::Named(NamedKey::Enter) => {
+                    self.workspace_rename_confirm(mux)
+                }
+                winit::keyboard::Key::Named(NamedKey::Backspace) => {
+                    self.workspace_rename_backspace()
+                }
+                winit::keyboard::Key::Named(NamedKey::Space) => self.workspace_rename_type(' '),
+                winit::keyboard::Key::Character(s) if !cmd && !ctrl => {
+                    for ch in s.chars() {
+                        self.workspace_rename_type(ch);
+                    }
+                }
+                _ => {}
+            }
+            return true;
+        }
+        false
     }
 
     // ── Chat panel operations ─────────────────────────────────────────────────

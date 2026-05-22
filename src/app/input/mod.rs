@@ -231,53 +231,8 @@ impl InputHandler {
             }
         }
 
-        // ── Tab rename prompt ────────────────────────────────────────────────
-        if ui.is_renaming_tab() {
-            match &event.logical_key {
-                Key::Named(NamedKey::Escape) => {
-                    ui.tab_rename_cancel();
-                }
-                Key::Named(NamedKey::Enter) => {
-                    ui.tab_rename_confirm(mux);
-                }
-                Key::Named(NamedKey::Backspace) => {
-                    ui.tab_rename_backspace();
-                }
-                Key::Named(NamedKey::Space) => {
-                    ui.tab_rename_type(' ');
-                }
-                Key::Character(s) if !cmd && !ctrl => {
-                    for ch in s.chars() {
-                        ui.tab_rename_type(ch);
-                    }
-                }
-                _ => {}
-            }
-            return;
-        }
-
-        // ── Workspace rename prompt ──────────────────────────────────────────
-        if ui.is_renaming_workspace() {
-            match &event.logical_key {
-                Key::Named(NamedKey::Escape) => {
-                    ui.workspace_rename_cancel();
-                }
-                Key::Named(NamedKey::Enter) => {
-                    ui.workspace_rename_confirm(mux);
-                }
-                Key::Named(NamedKey::Backspace) => {
-                    ui.workspace_rename_backspace();
-                }
-                Key::Named(NamedKey::Space) => {
-                    ui.workspace_rename_type(' ');
-                }
-                Key::Character(s) if !cmd && !ctrl => {
-                    for ch in s.chars() {
-                        ui.workspace_rename_type(ch);
-                    }
-                }
-                _ => {}
-            }
+        // ── Rename prompts (tab / workspace) ────────────────────────────────
+        if ui.handle_rename_key(mux, &event.logical_key, cmd, ctrl) {
             return;
         }
 

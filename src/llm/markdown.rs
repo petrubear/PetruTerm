@@ -1,13 +1,11 @@
-#![allow(dead_code)]
 use crate::llm::chat_panel::word_wrap;
 
 #[derive(Debug, Clone)]
 pub enum BlockKind {
     Normal,
     Heading(u8),
-    CodeBlock {
-        lang: String,
-    },
+    CodeBlock,
+    #[allow(dead_code)]
     ListItem {
         indent: u8,
         ordered: bool,
@@ -22,7 +20,6 @@ pub enum TokenKind {
     Comment,
     Number,
     Operator,
-    Default,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -57,13 +54,7 @@ pub fn parse_markdown(content: &str, width: usize, state: &mut ParseState) -> Ve
             } else {
                 let display: String = line.chars().take(width).collect();
                 let spans = highlight_code(&state.fence_lang, &display);
-                out.push(AnnotatedLine {
-                    display,
-                    kind: BlockKind::CodeBlock {
-                        lang: state.fence_lang.clone(),
-                    },
-                    spans,
-                });
+                out.push(AnnotatedLine { display, kind: BlockKind::CodeBlock, spans });
             }
             continue;
         }
@@ -77,31 +68,12 @@ pub fn parse_markdown(content: &str, width: usize, state: &mut ParseState) -> Ve
         }
 
         // headings
-        if let Some(rest) = line.strip_prefix("### ") {
+        let heading = [("### ", 3u8), ("## ", 2), ("# ", 1)]
+            .iter()
+            .find_map(|(prefix, level)| line.strip_prefix(prefix).map(|r| (r, *level)));
+        if let Some((rest, level)) = heading {
             let (display, spans) = parse_inline(rest);
-            out.push(AnnotatedLine {
-                display,
-                kind: BlockKind::Heading(3),
-                spans,
-            });
-            continue;
-        }
-        if let Some(rest) = line.strip_prefix("## ") {
-            let (display, spans) = parse_inline(rest);
-            out.push(AnnotatedLine {
-                display,
-                kind: BlockKind::Heading(2),
-                spans,
-            });
-            continue;
-        }
-        if let Some(rest) = line.strip_prefix("# ") {
-            let (display, spans) = parse_inline(rest);
-            out.push(AnnotatedLine {
-                display,
-                kind: BlockKind::Heading(1),
-                spans,
-            });
+            out.push(AnnotatedLine { display, kind: BlockKind::Heading(level), spans });
             continue;
         }
 
