@@ -99,19 +99,29 @@ impl RenamePrompt {
             winit::keyboard::Key::Named(NamedKey::Enter) => {
                 let raw = self.input.take().unwrap_or_default();
                 let trimmed = raw.trim().to_string();
-                if trimmed.is_empty() { None } else { Some(trimmed) }
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed)
+                }
             }
             winit::keyboard::Key::Named(NamedKey::Backspace) => {
-                if let Some(s) = &mut self.input { s.pop(); }
+                if let Some(s) = &mut self.input {
+                    s.pop();
+                }
                 None
             }
             winit::keyboard::Key::Named(NamedKey::Space) => {
-                if let Some(s) = &mut self.input { s.push(' '); }
+                if let Some(s) = &mut self.input {
+                    s.push(' ');
+                }
                 None
             }
             winit::keyboard::Key::Character(s) if !cmd && !ctrl => {
                 if let Some(input) = &mut self.input {
-                    for ch in s.chars() { input.push(ch); }
+                    for ch in s.chars() {
+                        input.push(ch);
+                    }
                 }
                 None
             }
@@ -649,12 +659,16 @@ impl UiManager {
     ) -> bool {
         let (consumed, confirm) = self.tab_rename.handle_key(key, cmd, ctrl);
         if consumed {
-            if let Some(name) = confirm { mux.tabs.rename_active(name); }
+            if let Some(name) = confirm {
+                mux.tabs.rename_active(name);
+            }
             return true;
         }
         let (consumed, confirm) = self.workspace_rename.handle_key(key, cmd, ctrl);
         if consumed {
-            if let Some(name) = confirm { mux.cmd_rename_workspace(name); }
+            if let Some(name) = confirm {
+                mux.cmd_rename_workspace(name);
+            }
             return true;
         }
         false

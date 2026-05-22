@@ -963,7 +963,15 @@ impl RenderContext {
                 let pad = panel_cols.saturating_sub(1) / 2;
                 let mut row_text = " ".repeat(pad);
                 row_text.push('✦');
-                self.push_shaped_row(&row_text, config.colors.ui_accent, panel_bg, r, co, panel_cols, font);
+                self.push_shaped_row(
+                    &row_text,
+                    config.colors.ui_accent,
+                    panel_bg,
+                    r,
+                    co,
+                    panel_cols,
+                    font,
+                );
             } else if r == text_row {
                 let msg = "Ask a question below";
                 let msg_w = msg.chars().count();
@@ -971,7 +979,15 @@ impl RenderContext {
                 fmt_buf.clear();
                 fmt_buf.extend(std::iter::repeat_n(' ', pad));
                 fmt_buf.push_str(msg);
-                self.push_shaped_row(fmt_buf, config.colors.ui_muted, panel_bg, r, co, panel_cols, font);
+                self.push_shaped_row(
+                    fmt_buf,
+                    config.colors.ui_muted,
+                    panel_bg,
+                    r,
+                    co,
+                    panel_cols,
+                    font,
+                );
             } else if r == pill1_row || r == pill2_row {
                 let (label, hover_idx) = if r == pill1_row {
                     ("[ Fix last error ]", 0u8)
@@ -986,15 +1002,28 @@ impl RenderContext {
 
                 let is_hovered = panel.zero_state_hover == Some(hover_idx);
                 let (border_color, fill_color, text_fg) = if is_hovered {
-                    (config.colors.ui_accent, config.colors.ui_surface_active, config.colors.foreground)
+                    (
+                        config.colors.ui_accent,
+                        config.colors.ui_surface_active,
+                        config.colors.foreground,
+                    )
                 } else {
-                    (config.colors.ui_muted, config.colors.ui_surface, dim(config.colors.foreground, 0.15))
+                    (
+                        config.colors.ui_muted,
+                        config.colors.ui_surface,
+                        dim(config.colors.foreground, 0.15),
+                    )
                 };
                 let pill_x = px + pill_margin;
                 let pill_y = pad_y + r as f32 * ch;
                 let pill_w = pw - 2.0 * pill_margin;
                 self.rect_instances.push(RoundedRectInstance {
-                    rect: [pill_x - pill_border, pill_y - pill_border, pill_w + 2.0 * pill_border, ch + 2.0 * pill_border],
+                    rect: [
+                        pill_x - pill_border,
+                        pill_y - pill_border,
+                        pill_w + 2.0 * pill_border,
+                        ch + 2.0 * pill_border,
+                    ],
                     color: border_color,
                     radius: pill_radius + pill_border,
                     border_width: 0.0,
@@ -1049,15 +1078,28 @@ impl RenderContext {
 
             let is_hovered = panel.suggestion_hover == Some(hover_idx as u8);
             let (border_color, fill_color, text_fg) = if is_hovered {
-                (config.colors.ui_accent, config.colors.ui_surface_active, config.colors.foreground)
+                (
+                    config.colors.ui_accent,
+                    config.colors.ui_surface_active,
+                    config.colors.foreground,
+                )
             } else {
-                (config.colors.ui_muted, config.colors.ui_surface, dim(config.colors.foreground, 0.15))
+                (
+                    config.colors.ui_muted,
+                    config.colors.ui_surface,
+                    dim(config.colors.foreground, 0.15),
+                )
             };
             let pill_x = px + pill_margin;
             let pill_y = pad_y + r as f32 * ch;
             let pill_w = pw - 2.0 * pill_margin;
             self.rect_instances.push(RoundedRectInstance {
-                rect: [pill_x - pill_border, pill_y - pill_border, pill_w + 2.0 * pill_border, ch + 2.0 * pill_border],
+                rect: [
+                    pill_x - pill_border,
+                    pill_y - pill_border,
+                    pill_w + 2.0 * pill_border,
+                    ch + 2.0 * pill_border,
+                ],
                 color: border_color,
                 radius: pill_radius + pill_border,
                 border_width: 0.0,
