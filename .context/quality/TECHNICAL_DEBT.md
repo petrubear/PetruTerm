@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-05-22
-**Open Items:** 1
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 1 | **P3:** 0 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 3 | **Watch:** 2
+**Open Items:** 0
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 2
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -109,7 +109,7 @@ Watch
 
 ## P2 — Prioridad media
 
-**AUDIT-ENERGY-05** — PARCIAL (2026-05-22). La duplicación de `ControlFlow::WaitUntil` sí fue eliminada con un único cálculo de wakeup (`src/app/mod.rs:1883-1904`), pero `about_to_wait()` todavía concentra battery poll, git poll, blink, PTY coalescing y clock wake en el mismo camino crítico (`src/app/mod.rs:1696-1904`). El issue baja de severidad, pero no está completamente cerrado mientras el trabajo de baja frecuencia siga acoplado al loop principal.
+**AUDIT-ENERGY-05** — RESUELTO (2026-05-22). `poll_low_freq_tasks()` en `impl App` extrae battery poll + git poll (74 líneas) de `about_to_wait()`. Este último queda en 217 líneas, enfocado en scheduling/wakeup. `about_to_wait` sigue siendo llamado por winit pero ya no mezcla lógica de baja frecuencia con la de scheduling.
 
 **AUDIT-MEM-04** — DIFERIDO (2026-05-22). Los 16 spawns ad-hoc son de baja frecuencia (clipboard, file scan, git). El coste de migrar a tokio::spawn_blocking o un BackgroundTaskManager es alto y el impacto en RSS medible es bajo en sesiones normales. Reevaluar si se observan picos de RSS bajo carga. Hay al menos 16 `std::thread::spawn` ad-hoc para clipboard, file scan, branch scan, PATH checks y `open`, sin pool ni backpressure. `src/app/mod.rs:823-889, 1221-1223`; `src/app/ui/mod.rs:496-533, 650-652`; `src/app/ui/git.rs:77-80`; `src/app/input/mod.rs:542-545, 790-793`; `src/term/tokenizer.rs:279-287`. Esto aumenta RSS, wakeups y jitter; conviene centralizar en `tokio::spawn_blocking` o un `BackgroundTaskManager`.
 

@@ -1413,6 +1413,84 @@ impl App {
             }
         }
     }
+
+    // ── Low-frequency background tasks (battery + git) ───────────────────────
+    // Each sub-poll has its own TTL guard; separation keeps about_to_wait focused
+    // on scheduling / wakeup logic.
+    fn poll_low_freq_tasks(&mut self) {
+        // Battery status: immediately on first frame, then every 30 s.
+        // Skipped when unfocused — IOKit call is unnecessary in background.
+        // battery_polled guards against re-entry on desktops where query() always returns None.
+        if self.window_focused
+            && (!self.battery_polled
+                || self.battery_last_poll.elapsed() >= std::time::Duration::from_secs(30))
+        {
+            self.battery_polled = true;
+            self.battery_last_poll = std::time::Instant::now();
+            if let Some(status) = crate::platform::battery::query() {
+                use crate::config::schema::BatterySaverMode;
+                let active = match self.config.battery_saver {
+                    BatterySaverMode::Always => true,
+                    BatterySaverMode::Never => false,
+                    BatterySaverMode::Auto => status.on_battery,
+                };
+                let changed = self.battery_saver_active != active
+                    || self
+                        .battery_status
+                        .as_ref()
+                        .map(|s| s.percent != status.percent || s.on_battery != status.on_battery)
+                        .unwrap_or(true);
+                self.battery_status = Some(status);
+                self.battery_saver_active = active;
+                if changed {
+                    if let Some(rc) = &mut self.render_ctx {
+                        rc.status_bar_key = 0;
+                        // Switch present mode: Fifo (vsync) on battery; best available on AC.
+                        let modes = rc.renderer.surface_caps_present_modes();
+                        let mode = if active {
+                            wgpu::PresentMode::Fifo
+                        } else if modes.contains(&wgpu::PresentMode::Mailbox) {
+                            wgpu::PresentMode::Mailbox
+                        } else if modes.contains(&wgpu::PresentMode::FifoRelaxed) {
+                            wgpu::PresentMode::FifoRelaxed
+                        } else {
+                            wgpu::PresentMode::Fifo
+                        };
+                        rc.renderer.set_present_mode(mode);
+                    }
+                    self.request_redraw();
+                }
+            }
+        }
+
+        // Git branch poll (TD-PERF-19): at most once per second (60 s in battery-saver).
+        let git_poll_interval = if self.battery_saver_active {
+            std::time::Duration::from_secs(60)
+        } else {
+            std::time::Duration::from_secs(1)
+        };
+        if self.config.status_bar.enabled
+            && self.window_focused
+            && self.ui.git_branch_last_poll.elapsed() >= git_poll_interval
+        {
+            self.ui.git_branch_last_poll = std::time::Instant::now();
+            let git_ttl = if self.battery_saver_active {
+                std::time::Duration::from_secs(60)
+            } else {
+                std::time::Duration::from_secs(15)
+            };
+            let git_dirty = self.config.status_bar.git_dirty_check && !self.battery_saver_active;
+            let git_updated =
+                self.ui
+                    .poll_git_branch(self.cached_cwd.as_deref(), git_dirty, git_ttl);
+            if git_updated {
+                if let Some(rc) = &mut self.render_ctx {
+                    rc.status_bar_key = 0;
+                }
+                self.request_redraw();
+            }
+        }
+    }
 }
 
 impl ApplicationHandler<()> for App {
@@ -1693,83 +1771,7 @@ impl ApplicationHandler<()> for App {
         self.flush_pending_agent_action();
         self.flush_pending_paste();
 
-        // ── Battery status poll (immediately on first frame, then every 30 s) ─
-        // battery_polled guards against infinite re-entry on desktops where
-        // query() always returns None and battery_status stays None forever.
-        // Skipped when the window is unfocused — IOKit call is unnecessary in background.
-        if self.window_focused
-            && (!self.battery_polled
-                || self.battery_last_poll.elapsed() >= std::time::Duration::from_secs(30))
-        {
-            self.battery_polled = true;
-            self.battery_last_poll = std::time::Instant::now();
-            if let Some(status) = crate::platform::battery::query() {
-                use crate::config::schema::BatterySaverMode;
-                let active = match self.config.battery_saver {
-                    BatterySaverMode::Always => true,
-                    BatterySaverMode::Never => false,
-                    BatterySaverMode::Auto => status.on_battery,
-                };
-                let changed = self.battery_saver_active != active
-                    || self
-                        .battery_status
-                        .as_ref()
-                        .map(|s| s.percent != status.percent || s.on_battery != status.on_battery)
-                        .unwrap_or(true);
-                self.battery_status = Some(status);
-                self.battery_saver_active = active;
-                if changed {
-                    if let Some(rc) = &mut self.render_ctx {
-                        rc.status_bar_key = 0;
-                        // Switch present mode immediately: Fifo (vsync) on battery to
-                        // reduce GPU wakeup frequency; best available mode on AC power.
-                        let modes = rc.renderer.surface_caps_present_modes();
-                        let mode = if active {
-                            wgpu::PresentMode::Fifo
-                        } else if modes.contains(&wgpu::PresentMode::Mailbox) {
-                            wgpu::PresentMode::Mailbox
-                        } else if modes.contains(&wgpu::PresentMode::FifoRelaxed) {
-                            wgpu::PresentMode::FifoRelaxed
-                        } else {
-                            wgpu::PresentMode::Fifo
-                        };
-                        rc.renderer.set_present_mode(mode);
-                    }
-                    self.request_redraw();
-                }
-            }
-        }
-
-        // ── Independent git branch poll (TD-PERF-19) ────────────────────────
-        // In normal mode: runs at most once per second to pick up async git results promptly.
-        // In battery-saver mode: poll interval matches the 60 s TTL — wakeup cost reduced.
-        let git_poll_interval = if self.battery_saver_active {
-            std::time::Duration::from_secs(60)
-        } else {
-            std::time::Duration::from_secs(1)
-        };
-        if self.config.status_bar.enabled
-            && self.window_focused
-            && self.ui.git_branch_last_poll.elapsed() >= git_poll_interval
-        {
-            self.ui.git_branch_last_poll = std::time::Instant::now();
-            let git_ttl = if self.battery_saver_active {
-                std::time::Duration::from_secs(60)
-            } else {
-                std::time::Duration::from_secs(15)
-            };
-            let git_dirty = self.config.status_bar.git_dirty_check && !self.battery_saver_active;
-            let git_updated =
-                self.ui
-                    .poll_git_branch(self.cached_cwd.as_deref(), git_dirty, git_ttl);
-            if git_updated {
-                // Invalidate status bar key so it rebuilds on the next frame.
-                if let Some(rc) = &mut self.render_ctx {
-                    rc.status_bar_key = 0;
-                }
-                self.request_redraw();
-            }
-        }
+        self.poll_low_freq_tasks();
 
         // ── Idle detection ───────────────────────────────────────────────────
         // The frame is "idle" when there is no PTY data, no AI events, no active

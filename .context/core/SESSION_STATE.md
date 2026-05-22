@@ -8,10 +8,15 @@
 ## Estado actual
 
 **Phases 1–7 COMPLETAS. Deuda técnica Wave 7 cerrada.**
-**Deuda técnica: 1 item abierto (AUDIT-ENERGY-05 PARCIAL P2). Watch: AUDIT-CLEAN-02, AUDIT-PERF-10. Diferidos: TD-PERF-03, TD-PERF-05, AUDIT-MEM-04.**
+**Deuda técnica: 0 items abiertos. Watch: AUDIT-CLEAN-02, AUDIT-PERF-10. Diferidos: TD-PERF-03, TD-PERF-05, AUDIT-MEM-04.**
 **ci-local.sh: PASA (clippy + fmt + tests + audit).**
 
 ## Esta sesión (2026-05-22) — Wave 7 deuda técnica — continuación
+
+### AUDIT-ENERGY-05 — RESUELTO
+- `poll_low_freq_tasks()` en `impl App` extrae battery poll + git poll (74 líneas) de `about_to_wait()`.
+- `about_to_wait` reducido de 291 a 217 líneas. Enfocado en scheduling/wakeup.
+- 102 tests pasan. clippy limpio.
 
 ### AUDIT-REFAC-07 — RESUELTO
 - `RenamePrompt` struct privado en `src/app/ui/mod.rs` elimina 8 métodos duplicados (`tab_rename_*`/`workspace_rename_*`).
