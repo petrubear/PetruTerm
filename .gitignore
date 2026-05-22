@@ -74,3 +74,4 @@ dist/
 # RTK
 .github/hooks/rtk-rewrite.json
 .github/copilot-instructions.md
+.antigravitycli
