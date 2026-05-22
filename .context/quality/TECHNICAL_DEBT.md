@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-05-22
-**Open Items:** 1
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 1 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Watch:** 1
+**Open Items:** 0
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 1 | **Watch:** 1
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -130,9 +130,9 @@ Watch
 
 ---
 
-## P3 — Prioridad baja / Backlog
+## P3 — Prioridad baja / Backlog (vacío)
 
-**AUDIT-REFAC-06** — Abierto (2026-05-22). `App`, `UiManager` y `RenderContext` concentran demasiadas responsabilidades/fields públicos, y `build_workspace_sidebar_instances()` sigue con 20 parámetros y cuerpo monolítico. `src/app/mod.rs:37-127`; `src/app/ui/mod.rs:65-155`; `src/app/renderer/mod.rs:48-153`; `src/app/renderer/overlay.rs:4-26`. Esto rompe la convención interna de módulos pequeños, dificulta preservar invariantes y vuelve más riesgoso tocar hot paths.
+**AUDIT-REFAC-06** — RESUELTO (2026-05-22). `build_workspace_sidebar_instances()` tenía 18 parámetros con `#[allow(clippy::too_many_arguments)]`. Resuelto con `SidebarDrawParams<'a>` en `src/app/renderer/mod.rs`; call site en `frame.rs` construye el struct; función en `overlay.rs` destructura al inicio — cuerpo sin cambios, supresión eliminada.
 
 **AUDIT-REFAC-07** — RESUELTO (2026-05-22). Hay duplicación clara en el renombrado tab/workspace (`src/app/input/mod.rs:234-282`) y en el parser markdown para headings y spans delimitados (`src/llm/markdown.rs:79-106, 224-309`). Extraer helpers/traits reduciría ramas repetidas, bajaría mantenimiento y eliminaría trabajo redundante del parser.
 

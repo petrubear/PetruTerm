@@ -744,7 +744,7 @@ impl RenderContext {
             let prefix = "        "; // 8 spaces — keeps msg_inner_w (sub 8) correct
             let prefix_len = 8usize;
             for ann in panel.wrapped_message(msg_idx).iter() {
-                let is_code = matches!(ann.kind, BlockKind::CodeBlock { .. });
+                let is_code = matches!(ann.kind, BlockKind::CodeBlock);
                 if is_code && !in_code {
                     in_code = true;
                     code_start = line_idx;
@@ -823,7 +823,7 @@ impl RenderContext {
 
             // Stable annotated lines
             for ann in self.streaming_stable_lines.iter() {
-                let is_code = matches!(ann.kind, BlockKind::CodeBlock { .. });
+                let is_code = matches!(ann.kind, BlockKind::CodeBlock);
                 if is_code && !in_code {
                     in_code = true;
                     code_start = line_idx;

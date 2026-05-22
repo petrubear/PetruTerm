@@ -152,6 +152,29 @@ pub struct RenderContext {
     pub pane_infos: Vec<crate::ui::PaneInfo>,
 }
 
+/// Bundled draw parameters for `build_workspace_sidebar_instances`.
+/// Groups the 18 per-frame inputs so the function signature stays within clippy limits.
+pub struct SidebarDrawParams<'a> {
+    pub workspaces: &'a [Workspace],
+    pub active_workspace_id: usize,
+    pub nav_cursor: usize,
+    pub rename_input: Option<&'a str>,
+    pub sidebar_cols: usize,
+    pub counts: &'a [(usize, usize)],
+    pub sidebar_left_px: f32,
+    pub sidebar_top_px: f32,
+    pub sidebar_bottom_pad_px: f32,
+    pub font: &'a crate::config::schema::FontConfig,
+    pub colors: &'a crate::config::schema::ColorScheme,
+    pub active_section: u8,
+    pub mcp_servers: &'a [(String, Vec<String>)],
+    pub mcp_scroll: usize,
+    pub skills: &'a [crate::llm::skills::SkillMeta],
+    pub skills_scroll: usize,
+    pub steering_files: &'a [(String, String)],
+    pub steering_scroll: usize,
+}
+
 impl RenderContext {
     pub async fn new(window: Arc<Window>, config: &Config) -> Result<Self> {
         let renderer = GpuRenderer::new(window.clone(), config).await?;
@@ -543,7 +566,7 @@ pub(super) fn resolve_line_fg(
         BlockKind::Heading(1) => colors.ui_accent,
         BlockKind::Heading(2) => colors.ansi[6], // cyan
         BlockKind::Heading(_) => colors.ansi[3], // yellow
-        BlockKind::CodeBlock { .. } => colors.ansi[2], // green
+        BlockKind::CodeBlock => colors.ansi[2],  // green
         _ => base_fg,
     }
 }

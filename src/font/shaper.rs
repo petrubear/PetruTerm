@@ -660,13 +660,20 @@ impl TextShaper {
                 .get(abs_col)
                 .copied()
                 .unwrap_or(([1.0; 4], [0.0, 0.0, 0.0, 1.0]));
-            ShapedGlyph { col: abs_col, fg, bg, ..*g }
+            ShapedGlyph {
+                col: abs_col,
+                fg,
+                bg,
+                ..*g
+            }
         };
 
         if all_cached {
             // Pure cache-hit path: assemble from cache only.
             for (col_offset, word) in &tokens {
-                let cached = self.word_cache.get(&Self::word_hash(word, font_size_bits))?;
+                let cached = self
+                    .word_cache
+                    .get(&Self::word_hash(word, font_size_bits))?;
                 ascent = cached.ascent;
                 for g in &cached.glyphs {
                     all_glyphs.push(apply(g, *col_offset, colors));

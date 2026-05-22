@@ -54,7 +54,11 @@ pub fn parse_markdown(content: &str, width: usize, state: &mut ParseState) -> Ve
             } else {
                 let display: String = line.chars().take(width).collect();
                 let spans = highlight_code(&state.fence_lang, &display);
-                out.push(AnnotatedLine { display, kind: BlockKind::CodeBlock, spans });
+                out.push(AnnotatedLine {
+                    display,
+                    kind: BlockKind::CodeBlock,
+                    spans,
+                });
             }
             continue;
         }
@@ -73,7 +77,11 @@ pub fn parse_markdown(content: &str, width: usize, state: &mut ParseState) -> Ve
             .find_map(|(prefix, level)| line.strip_prefix(prefix).map(|r| (r, *level)));
         if let Some((rest, level)) = heading {
             let (display, spans) = parse_inline(rest);
-            out.push(AnnotatedLine { display, kind: BlockKind::Heading(level), spans });
+            out.push(AnnotatedLine {
+                display,
+                kind: BlockKind::Heading(level),
+                spans,
+            });
             continue;
         }
 

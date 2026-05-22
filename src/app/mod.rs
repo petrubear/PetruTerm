@@ -1783,8 +1783,8 @@ impl ApplicationHandler<()> for App {
         // the blink timer alive between events.
         let panel_overlay_active = self.ui.is_panel_visible() && self.ui.panel_focused;
         let block_overlay_active = self.ui.is_block_visible();
-        let visible_ai_activity =
-            (panel_ai.changed && panel_overlay_active) || (block_ai.changed && block_overlay_active);
+        let visible_ai_activity = (panel_ai.changed && panel_overlay_active)
+            || (block_ai.changed && block_overlay_active);
         let any_overlay = panel_overlay_active
             || self.ui.palette.visible
             || self.ui.context_menu.visible

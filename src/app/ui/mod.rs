@@ -347,7 +347,9 @@ impl UiManager {
         let mut result = AiPollResult::default();
         let mut count = 0;
         while count < AI_POLL_CAP {
-            let Ok((_panel_id, event)) = self.ai_rx.try_recv() else { break };
+            let Ok((_panel_id, event)) = self.ai_rx.try_recv() else {
+                break;
+            };
             result.changed = true;
             count += 1;
             let panel = &mut self.chat_panel;
@@ -408,7 +410,9 @@ impl UiManager {
         let mut result = AiPollResult::default();
         let mut count = 0;
         while count < AI_POLL_CAP {
-            let Ok(event) = self.block_rx.try_recv() else { break };
+            let Ok(event) = self.block_rx.try_recv() else {
+                break;
+            };
             result.changed = true;
             count += 1;
             match event {
@@ -654,9 +658,7 @@ impl UiManager {
         if self.workspace_rename_input.is_some() {
             match key {
                 winit::keyboard::Key::Named(NamedKey::Escape) => self.workspace_rename_cancel(),
-                winit::keyboard::Key::Named(NamedKey::Enter) => {
-                    self.workspace_rename_confirm(mux)
-                }
+                winit::keyboard::Key::Named(NamedKey::Enter) => self.workspace_rename_confirm(mux),
                 winit::keyboard::Key::Named(NamedKey::Backspace) => {
                     self.workspace_rename_backspace()
                 }

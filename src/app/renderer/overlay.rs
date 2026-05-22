@@ -1,28 +1,47 @@
 use super::*;
 
 impl RenderContext {
-    #[allow(clippy::too_many_arguments)]
-    pub fn build_workspace_sidebar_instances(
-        &mut self,
-        workspaces: &[Workspace],
-        active_workspace_id: usize,
-        nav_cursor: usize,
-        rename_input: Option<&str>,
-        sidebar_cols: usize,
-        counts: &[(usize, usize)],
-        sidebar_left_px: f32,
-        sidebar_top_px: f32,
-        sidebar_bottom_pad_px: f32,
-        font: &crate::config::schema::FontConfig,
-        colors: &crate::config::schema::ColorScheme,
-        active_section: u8,
-        mcp_servers: &[(String, Vec<String>)],
-        mcp_scroll: usize,
-        skills: &[crate::llm::skills::SkillMeta],
-        skills_scroll: usize,
-        steering_files: &[(String, String)],
-        steering_scroll: usize,
-    ) {
+    pub fn build_workspace_sidebar_instances(&mut self, params: &SidebarDrawParams<'_>) {
+        let SidebarDrawParams {
+            workspaces,
+            active_workspace_id,
+            nav_cursor,
+            rename_input,
+            sidebar_cols,
+            counts,
+            sidebar_left_px,
+            sidebar_top_px,
+            sidebar_bottom_pad_px,
+            font,
+            colors,
+            active_section,
+            mcp_servers,
+            mcp_scroll,
+            skills,
+            skills_scroll,
+            steering_files,
+            steering_scroll,
+        } = params;
+        let (
+            active_workspace_id,
+            nav_cursor,
+            sidebar_cols,
+            active_section,
+            mcp_scroll,
+            skills_scroll,
+            steering_scroll,
+        ) = (
+            *active_workspace_id,
+            *nav_cursor,
+            *sidebar_cols,
+            *active_section,
+            *mcp_scroll,
+            *skills_scroll,
+            *steering_scroll,
+        );
+        let (sidebar_left_px, sidebar_top_px, sidebar_bottom_pad_px) =
+            (*sidebar_left_px, *sidebar_top_px, *sidebar_bottom_pad_px);
+        let rename_input = *rename_input;
         if sidebar_cols == 0 {
             return;
         }

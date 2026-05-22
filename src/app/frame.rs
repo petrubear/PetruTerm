@@ -2,7 +2,7 @@ use anyhow::Result;
 use winit::event_loop::ActiveEventLoop;
 
 use super::mux::{FlagHintOverlay, GhostOverlay, Mux, SyntaxOverlay};
-use super::renderer::RenderContext;
+use super::renderer::{RenderContext, SidebarDrawParams};
 use super::App;
 use crate::ui::PaneInfo;
 
@@ -341,7 +341,9 @@ impl App {
                         rc.shaper.clear_lcd_rasterizer_cache();
                         rc.renderer.rebuild_atlas_bind_groups();
                         rc.clear_all_row_caches();
-                        log::debug!("LCD atlas: preemptive clear (cursor still near full after eviction)");
+                        log::debug!(
+                            "LCD atlas: preemptive clear (cursor still near full after eviction)"
+                        );
                     }
                 }
             }
@@ -820,26 +822,26 @@ impl App {
 
             if self.sidebar.visible {
                 let counts = self.mux.workspace_tab_pane_counts();
-                rc.build_workspace_sidebar_instances(
-                    self.mux.workspaces(),
-                    self.mux.active_workspace_id,
-                    self.sidebar.nav_cursor,
-                    self.sidebar.rename_input.as_deref(),
-                    super::SIDEBAR_COLS,
-                    &counts,
-                    self.config.window.padding.left as f32,
-                    sb_pad_y,
-                    self.config.window.padding.bottom as f32,
-                    &scaled_font,
-                    &self.config.colors,
-                    self.sidebar.active_section,
-                    &self.mcp_tools_cache,
-                    self.sidebar.mcp_scroll,
-                    self.ui.skill_manager.skills(),
-                    self.sidebar.skills_scroll,
-                    self.ui.steering_manager.files(),
-                    self.sidebar.steering_scroll,
-                );
+                rc.build_workspace_sidebar_instances(&SidebarDrawParams {
+                    workspaces: self.mux.workspaces(),
+                    active_workspace_id: self.mux.active_workspace_id,
+                    nav_cursor: self.sidebar.nav_cursor,
+                    rename_input: self.sidebar.rename_input.as_deref(),
+                    sidebar_cols: super::SIDEBAR_COLS,
+                    counts: &counts,
+                    sidebar_left_px: self.config.window.padding.left as f32,
+                    sidebar_top_px: sb_pad_y,
+                    sidebar_bottom_pad_px: self.config.window.padding.bottom as f32,
+                    font: &scaled_font,
+                    colors: &self.config.colors,
+                    active_section: self.sidebar.active_section,
+                    mcp_servers: &self.mcp_tools_cache,
+                    mcp_scroll: self.sidebar.mcp_scroll,
+                    skills: self.ui.skill_manager.skills(),
+                    skills_scroll: self.sidebar.skills_scroll,
+                    steering_files: self.ui.steering_manager.files(),
+                    steering_scroll: self.sidebar.steering_scroll,
+                });
                 let sidebar_sep_x = self.config.window.padding.left as f32
                     + super::SIDEBAR_COLS as f32 * rc.shaper.cell_width;
                 let sidebar_sep_y = sb_pad_y;
