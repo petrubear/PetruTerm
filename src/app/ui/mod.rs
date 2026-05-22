@@ -61,6 +61,66 @@ fn classify_llm_error(e: &str) -> String {
     }
 }
 
+// Inline text prompt shared by tab rename and workspace rename.
+#[derive(Default)]
+struct RenamePrompt {
+    input: Option<String>,
+}
+
+impl RenamePrompt {
+    fn start(&mut self, current: &str) {
+        self.input = Some(current.to_string());
+    }
+
+    fn is_active(&self) -> bool {
+        self.input.is_some()
+    }
+
+    fn as_deref(&self) -> Option<&str> {
+        self.input.as_deref()
+    }
+
+    // Returns (consumed, confirmed_name). `consumed` is false when not active.
+    fn handle_key(
+        &mut self,
+        key: &winit::keyboard::Key,
+        cmd: bool,
+        ctrl: bool,
+    ) -> (bool, Option<String>) {
+        if !self.is_active() {
+            return (false, None);
+        }
+        use winit::keyboard::NamedKey;
+        let confirm = match key {
+            winit::keyboard::Key::Named(NamedKey::Escape) => {
+                self.input = None;
+                None
+            }
+            winit::keyboard::Key::Named(NamedKey::Enter) => {
+                let raw = self.input.take().unwrap_or_default();
+                let trimmed = raw.trim().to_string();
+                if trimmed.is_empty() { None } else { Some(trimmed) }
+            }
+            winit::keyboard::Key::Named(NamedKey::Backspace) => {
+                if let Some(s) = &mut self.input { s.pop(); }
+                None
+            }
+            winit::keyboard::Key::Named(NamedKey::Space) => {
+                if let Some(s) = &mut self.input { s.push(' '); }
+                None
+            }
+            winit::keyboard::Key::Character(s) if !cmd && !ctrl => {
+                if let Some(input) = &mut self.input {
+                    for ch in s.chars() { input.push(ch); }
+                }
+                None
+            }
+            _ => None,
+        };
+        (true, confirm)
+    }
+}
+
 // Manages UI overlays: command palette, context menu, per-pane chat panels, and the inline AI block.
 pub struct UiManager {
     pub palette: CommandPalette,
@@ -118,11 +178,9 @@ pub struct UiManager {
     /// Handle for the in-flight LLM streaming task. Aborted on panel close or new query (TD-MEM-12).
     pub(super) streaming_handle: Option<tokio::task::JoinHandle<()>>,
 
-    // ── Tab rename prompt ─────────────────────────────────────────────────────
-    /// When `Some`, the user is typing a new name for the active tab.
-    pub tab_rename_input: Option<String>,
-    /// When `Some`, the user is typing a new name for the active workspace.
-    pub workspace_rename_input: Option<String>,
+    // ── Tab / workspace rename prompts ───────────────────────────────────────
+    tab_rename: RenamePrompt,
+    workspace_rename: RenamePrompt,
 
     // ── Text search (Cmd+F) ───────────────────────────────────────────────────
     pub search_bar: SearchBar,
@@ -292,8 +350,8 @@ impl UiManager {
             git_rx: git_rx_init,
             git_branch_cwd: None,
             streaming_handle: None,
-            tab_rename_input: None,
-            workspace_rename_input: None,
+            tab_rename: RenamePrompt::default(),
+            workspace_rename: RenamePrompt::default(),
             search_bar: SearchBar::default(),
             file_scan_rx: None,
             pending_paste_rx: None,
@@ -562,72 +620,22 @@ impl UiManager {
         }
     }
 
-    // ── Tab rename prompt ─────────────────────────────────────────────────────
+    // ── Tab / workspace rename prompts ───────────────────────────────────────
 
-    /// Start the inline rename prompt, pre-filling with the current tab title.
     pub fn start_tab_rename(&mut self, current_title: &str) {
-        self.tab_rename_input = Some(current_title.to_string());
+        self.tab_rename.start(current_title);
     }
 
-    pub fn tab_rename_type(&mut self, ch: char) {
-        if let Some(s) = &mut self.tab_rename_input {
-            s.push(ch);
-        }
-    }
-
-    pub fn tab_rename_backspace(&mut self) {
-        if let Some(s) = &mut self.tab_rename_input {
-            s.pop();
-        }
-    }
-
-    /// Confirm the rename: applies to `mux` and clears the prompt.
-    pub fn tab_rename_confirm(&mut self, mux: &mut Mux) {
-        if let Some(input) = self.tab_rename_input.take() {
-            let trimmed = input.trim().to_string();
-            if !trimmed.is_empty() {
-                mux.tabs.rename_active(trimmed);
-            }
-        }
-    }
-
-    pub fn tab_rename_cancel(&mut self) {
-        self.tab_rename_input = None;
+    pub fn start_workspace_rename(&mut self, current_name: &str) {
+        self.workspace_rename.start(current_name);
     }
 
     pub fn is_renaming_tab(&self) -> bool {
-        self.tab_rename_input.is_some()
+        self.tab_rename.is_active()
     }
 
-    // ── Workspace rename prompt ───────────────────────────────────────────────
-
-    pub fn start_workspace_rename(&mut self, current_name: &str) {
-        self.workspace_rename_input = Some(current_name.to_string());
-    }
-
-    pub fn workspace_rename_type(&mut self, ch: char) {
-        if let Some(s) = &mut self.workspace_rename_input {
-            s.push(ch);
-        }
-    }
-
-    pub fn workspace_rename_backspace(&mut self) {
-        if let Some(s) = &mut self.workspace_rename_input {
-            s.pop();
-        }
-    }
-
-    pub fn workspace_rename_confirm(&mut self, mux: &mut Mux) {
-        if let Some(input) = self.workspace_rename_input.take() {
-            let trimmed = input.trim().to_string();
-            if !trimmed.is_empty() {
-                mux.cmd_rename_workspace(trimmed);
-            }
-        }
-    }
-
-    pub fn workspace_rename_cancel(&mut self) {
-        self.workspace_rename_input = None;
+    pub fn tab_rename_text(&self) -> Option<&str> {
+        self.tab_rename.as_deref()
     }
 
     /// Handle a key event while either rename prompt is active.
@@ -639,37 +647,14 @@ impl UiManager {
         cmd: bool,
         ctrl: bool,
     ) -> bool {
-        use winit::keyboard::NamedKey;
-        if self.tab_rename_input.is_some() {
-            match key {
-                winit::keyboard::Key::Named(NamedKey::Escape) => self.tab_rename_cancel(),
-                winit::keyboard::Key::Named(NamedKey::Enter) => self.tab_rename_confirm(mux),
-                winit::keyboard::Key::Named(NamedKey::Backspace) => self.tab_rename_backspace(),
-                winit::keyboard::Key::Named(NamedKey::Space) => self.tab_rename_type(' '),
-                winit::keyboard::Key::Character(s) if !cmd && !ctrl => {
-                    for ch in s.chars() {
-                        self.tab_rename_type(ch);
-                    }
-                }
-                _ => {}
-            }
+        let (consumed, confirm) = self.tab_rename.handle_key(key, cmd, ctrl);
+        if consumed {
+            if let Some(name) = confirm { mux.tabs.rename_active(name); }
             return true;
         }
-        if self.workspace_rename_input.is_some() {
-            match key {
-                winit::keyboard::Key::Named(NamedKey::Escape) => self.workspace_rename_cancel(),
-                winit::keyboard::Key::Named(NamedKey::Enter) => self.workspace_rename_confirm(mux),
-                winit::keyboard::Key::Named(NamedKey::Backspace) => {
-                    self.workspace_rename_backspace()
-                }
-                winit::keyboard::Key::Named(NamedKey::Space) => self.workspace_rename_type(' '),
-                winit::keyboard::Key::Character(s) if !cmd && !ctrl => {
-                    for ch in s.chars() {
-                        self.workspace_rename_type(ch);
-                    }
-                }
-                _ => {}
-            }
+        let (consumed, confirm) = self.workspace_rename.handle_key(key, cmd, ctrl);
+        if consumed {
+            if let Some(name) = confirm { mux.cmd_rename_workspace(name); }
             return true;
         }
         false
@@ -1575,8 +1560,8 @@ mod tests {
             git_rx,
             git_branch_cwd: None,
             streaming_handle: None,
-            tab_rename_input: None,
-            workspace_rename_input: None,
+            tab_rename: RenamePrompt::default(),
+            workspace_rename: RenamePrompt::default(),
             search_bar: SearchBar::default(),
             file_scan_rx: None,
             pending_paste_rx: None,
@@ -1647,8 +1632,8 @@ mod tests {
             git_rx,
             git_branch_cwd: Some(std::path::PathBuf::from("/tmp/test")),
             streaming_handle: None,
-            tab_rename_input: None,
-            workspace_rename_input: None,
+            tab_rename: RenamePrompt::default(),
+            workspace_rename: RenamePrompt::default(),
             search_bar: SearchBar::default(),
             file_scan_rx: None,
             pending_paste_rx: None,

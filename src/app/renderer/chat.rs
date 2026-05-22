@@ -1,6 +1,30 @@
 use super::*;
 use rust_i18n::t;
 
+// Bundles the geometry + color parameters shared by build_panel_messages and its helpers.
+struct PanelMsgParams<'a> {
+    panel_id: usize,
+    history_start_row: usize,
+    sep_row: usize,
+    config: &'a Config,
+    font: &'a crate::config::schema::FontConfig,
+    co: usize,
+    panel_cols: usize,
+    panel_bg: [f32; 4],
+    actual_panel_bg: [f32; 4],
+    user_fg: [f32; 4],
+    asst_fg: [f32; 4],
+    stream_fg: [f32; 4],
+    err_fg: [f32; 4],
+    sep_fg: [f32; 4],
+    pad_x: f32,
+    pad_y: f32,
+    cw: f32,
+    ch: f32,
+    px: f32,
+    pw: f32,
+}
+
 impl RenderContext {
     #[allow(clippy::too_many_arguments)]
     pub fn build_chat_panel_instances(
@@ -352,8 +376,7 @@ impl RenderContext {
                 panel_cols,
                 &mut fmt_buf,
             );
-            self.build_panel_messages(
-                panel,
+            let msg_params = PanelMsgParams {
                 panel_id,
                 history_start_row,
                 sep_row,
@@ -374,8 +397,8 @@ impl RenderContext {
                 ch,
                 px,
                 pw,
-                &mut fmt_buf,
-            );
+            };
+            self.build_panel_messages(panel, &msg_params, &mut fmt_buf);
         }
 
         // Separator row is intentionally empty — the card's rounded top edge
@@ -544,137 +567,43 @@ impl RenderContext {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn build_panel_messages(
         &mut self,
         panel: &ChatPanel,
-        panel_id: usize,
-        history_start_row: usize,
-        sep_row: usize,
-        config: &Config,
-        font: &crate::config::schema::FontConfig,
-        co: usize,
-        panel_cols: usize,
-        panel_bg: [f32; 4],
-        actual_panel_bg: [f32; 4],
-        user_fg: [f32; 4],
-        asst_fg: [f32; 4],
-        stream_fg: [f32; 4],
-        err_fg: [f32; 4],
-        sep_fg: [f32; 4],
-        pad_x: f32,
-        pad_y: f32,
-        cw: f32,
-        ch: f32,
-        px: f32,
-        pw: f32,
+        p: &PanelMsgParams,
         fmt_buf: &mut String,
     ) {
         use crate::llm::chat_panel::{word_wrap, PanelState};
         use std::fmt::Write as _;
 
+        let PanelMsgParams {
+            panel_id,
+            history_start_row,
+            sep_row,
+            config,
+            font,
+            co,
+            panel_cols,
+            panel_bg,
+            actual_panel_bg,
+            user_fg,
+            asst_fg,
+            stream_fg,
+            err_fg,
+            sep_fg,
+            pad_x,
+            pad_y,
+            cw,
+            ch,
+            px,
+            pw,
+        } = *p;
+
         let history_rows = sep_row.saturating_sub(history_start_row);
 
         // W-5: Zero state — empty panel, idle
         if panel.messages.is_empty() && matches!(panel.state, PanelState::Idle) {
-            // Layout: icon gets extra breathing room above and below.
-            let center = (history_start_row + sep_row) / 2;
-            let icon_row = center.saturating_sub(3); // ✦ with 1 empty row below it
-            let text_row = center.saturating_sub(1); // subtitle
-                                                     // center row = empty gap between subtitle and pills
-            let pill1_row = center + 2;
-            let pill2_row = center + 3;
-
-            let pill_margin = 8.0 * cw;
-            let pill_radius = 4.0 * self.scale_factor;
-            let pill_border = 1.0 * self.scale_factor;
-
-            for r in history_start_row..sep_row {
-                if r == icon_row {
-                    let pad = panel_cols.saturating_sub(1) / 2;
-                    let mut row_text = " ".repeat(pad);
-                    row_text.push('✦');
-                    self.push_shaped_row(
-                        &row_text,
-                        config.colors.ui_accent,
-                        panel_bg,
-                        r,
-                        co,
-                        panel_cols,
-                        font,
-                    );
-                } else if r == text_row {
-                    let msg = "Ask a question below";
-                    let msg_w = msg.chars().count();
-                    let pad = panel_cols.saturating_sub(msg_w) / 2;
-                    fmt_buf.clear();
-                    fmt_buf.extend(std::iter::repeat_n(' ', pad));
-                    fmt_buf.push_str(msg);
-                    self.push_shaped_row(
-                        fmt_buf,
-                        config.colors.ui_muted,
-                        panel_bg,
-                        r,
-                        co,
-                        panel_cols,
-                        font,
-                    );
-                } else if r == pill1_row || r == pill2_row {
-                    let (label, hover_idx) = if r == pill1_row {
-                        ("[ Fix last error ]", 0u8)
-                    } else {
-                        ("[ Explain command ]", 1u8)
-                    };
-                    let label_w = label.chars().count();
-                    let pad = panel_cols.saturating_sub(label_w) / 2;
-                    fmt_buf.clear();
-                    fmt_buf.extend(std::iter::repeat_n(' ', pad));
-                    fmt_buf.push_str(label);
-
-                    let is_hovered = panel.zero_state_hover == Some(hover_idx);
-                    // Two-rect pill: border outer + fill inner (same pattern as W-2 card).
-                    let (border_color, fill_color, text_fg) = if is_hovered {
-                        (
-                            config.colors.ui_accent,
-                            config.colors.ui_surface_active,
-                            config.colors.foreground,
-                        )
-                    } else {
-                        (
-                            config.colors.ui_muted,
-                            config.colors.ui_surface,
-                            dim(config.colors.foreground, 0.15),
-                        )
-                    };
-                    let pill_x = px + pill_margin;
-                    let pill_y = pad_y + r as f32 * ch;
-                    let pill_w = pw - 2.0 * pill_margin;
-                    // Border rect (slightly larger).
-                    self.rect_instances.push(RoundedRectInstance {
-                        rect: [
-                            pill_x - pill_border,
-                            pill_y - pill_border,
-                            pill_w + 2.0 * pill_border,
-                            ch + 2.0 * pill_border,
-                        ],
-                        color: border_color,
-                        radius: pill_radius + pill_border,
-                        border_width: 0.0,
-                        _pad: [0.0; 2],
-                    });
-                    // Fill rect.
-                    self.rect_instances.push(RoundedRectInstance {
-                        rect: [pill_x, pill_y, pill_w, ch],
-                        color: fill_color,
-                        radius: pill_radius,
-                        border_width: 0.0,
-                        _pad: [0.0; 2],
-                    });
-                    self.push_shaped_row(fmt_buf, text_fg, panel_bg, r, co, panel_cols, font);
-                } else {
-                    self.push_shaped_row("", sep_fg, panel_bg, r, co, panel_cols, font);
-                }
-            }
+            self.draw_panel_zero_state(panel, p, fmt_buf);
             return;
         }
 
@@ -989,42 +918,83 @@ impl RenderContext {
 
         // W-7: suggestion pill rows just above sep_row.
         if suggestion_rows > 0 {
-            let pill_margin = 8.0 * cw;
-            let pill_radius = 4.0 * self.scale_factor;
-            let pill_border = 1.0 * self.scale_factor;
-            let pill_labels = ["[ Fix last error ]", "[ Explain more ]"];
-            for (hover_idx, label) in pill_labels.iter().enumerate() {
-                let r = sep_row - suggestion_rows + hover_idx;
+            self.draw_suggestion_pills(panel, suggestion_rows, p, fmt_buf);
+        }
+
+        self.scratch_lines = all_lines;
+    }
+
+    // W-5: Zero state rendering — empty panel, idle.
+    fn draw_panel_zero_state(
+        &mut self,
+        panel: &ChatPanel,
+        p: &PanelMsgParams,
+        fmt_buf: &mut String,
+    ) {
+        let PanelMsgParams {
+            history_start_row,
+            sep_row,
+            config,
+            font,
+            co,
+            panel_cols,
+            panel_bg,
+            sep_fg,
+            pad_y,
+            cw,
+            ch,
+            px,
+            pw,
+            ..
+        } = *p;
+
+        let center = (history_start_row + sep_row) / 2;
+        let icon_row = center.saturating_sub(3);
+        let text_row = center.saturating_sub(1);
+        let pill1_row = center + 2;
+        let pill2_row = center + 3;
+
+        let pill_margin = 8.0 * cw;
+        let pill_radius = 4.0 * self.scale_factor;
+        let pill_border = 1.0 * self.scale_factor;
+
+        for r in history_start_row..sep_row {
+            if r == icon_row {
+                let pad = panel_cols.saturating_sub(1) / 2;
+                let mut row_text = " ".repeat(pad);
+                row_text.push('✦');
+                self.push_shaped_row(&row_text, config.colors.ui_accent, panel_bg, r, co, panel_cols, font);
+            } else if r == text_row {
+                let msg = "Ask a question below";
+                let msg_w = msg.chars().count();
+                let pad = panel_cols.saturating_sub(msg_w) / 2;
+                fmt_buf.clear();
+                fmt_buf.extend(std::iter::repeat_n(' ', pad));
+                fmt_buf.push_str(msg);
+                self.push_shaped_row(fmt_buf, config.colors.ui_muted, panel_bg, r, co, panel_cols, font);
+            } else if r == pill1_row || r == pill2_row {
+                let (label, hover_idx) = if r == pill1_row {
+                    ("[ Fix last error ]", 0u8)
+                } else {
+                    ("[ Explain command ]", 1u8)
+                };
                 let label_w = label.chars().count();
                 let pad = panel_cols.saturating_sub(label_w) / 2;
                 fmt_buf.clear();
                 fmt_buf.extend(std::iter::repeat_n(' ', pad));
                 fmt_buf.push_str(label);
 
-                let is_hovered = panel.suggestion_hover == Some(hover_idx as u8);
+                let is_hovered = panel.zero_state_hover == Some(hover_idx);
                 let (border_color, fill_color, text_fg) = if is_hovered {
-                    (
-                        config.colors.ui_accent,
-                        config.colors.ui_surface_active,
-                        config.colors.foreground,
-                    )
+                    (config.colors.ui_accent, config.colors.ui_surface_active, config.colors.foreground)
                 } else {
-                    (
-                        config.colors.ui_muted,
-                        config.colors.ui_surface,
-                        dim(config.colors.foreground, 0.15),
-                    )
+                    (config.colors.ui_muted, config.colors.ui_surface, dim(config.colors.foreground, 0.15))
                 };
                 let pill_x = px + pill_margin;
                 let pill_y = pad_y + r as f32 * ch;
                 let pill_w = pw - 2.0 * pill_margin;
                 self.rect_instances.push(RoundedRectInstance {
-                    rect: [
-                        pill_x - pill_border,
-                        pill_y - pill_border,
-                        pill_w + 2.0 * pill_border,
-                        ch + 2.0 * pill_border,
-                    ],
+                    rect: [pill_x - pill_border, pill_y - pill_border, pill_w + 2.0 * pill_border, ch + 2.0 * pill_border],
                     color: border_color,
                     radius: pill_radius + pill_border,
                     border_width: 0.0,
@@ -1037,11 +1007,71 @@ impl RenderContext {
                     border_width: 0.0,
                     _pad: [0.0; 2],
                 });
-                self.push_shaped_row(fmt_buf, text_fg, fill_color, r, co, panel_cols, font);
+                self.push_shaped_row(fmt_buf, text_fg, panel_bg, r, co, panel_cols, font);
+            } else {
+                self.push_shaped_row("", sep_fg, panel_bg, r, co, panel_cols, font);
             }
         }
+    }
 
-        self.scratch_lines = all_lines;
+    // W-7: Suggestion pill rows just above sep_row.
+    fn draw_suggestion_pills(
+        &mut self,
+        panel: &ChatPanel,
+        suggestion_rows: usize,
+        p: &PanelMsgParams,
+        fmt_buf: &mut String,
+    ) {
+        let PanelMsgParams {
+            sep_row,
+            config,
+            font,
+            co,
+            panel_cols,
+            pad_y,
+            cw,
+            ch,
+            px,
+            pw,
+            ..
+        } = *p;
+        let pill_margin = 8.0 * cw;
+        let pill_radius = 4.0 * self.scale_factor;
+        let pill_border = 1.0 * self.scale_factor;
+        let pill_labels = ["[ Fix last error ]", "[ Explain more ]"];
+        for (hover_idx, label) in pill_labels.iter().enumerate() {
+            let r = sep_row - suggestion_rows + hover_idx;
+            let label_w = label.chars().count();
+            let pad = panel_cols.saturating_sub(label_w) / 2;
+            fmt_buf.clear();
+            fmt_buf.extend(std::iter::repeat_n(' ', pad));
+            fmt_buf.push_str(label);
+
+            let is_hovered = panel.suggestion_hover == Some(hover_idx as u8);
+            let (border_color, fill_color, text_fg) = if is_hovered {
+                (config.colors.ui_accent, config.colors.ui_surface_active, config.colors.foreground)
+            } else {
+                (config.colors.ui_muted, config.colors.ui_surface, dim(config.colors.foreground, 0.15))
+            };
+            let pill_x = px + pill_margin;
+            let pill_y = pad_y + r as f32 * ch;
+            let pill_w = pw - 2.0 * pill_margin;
+            self.rect_instances.push(RoundedRectInstance {
+                rect: [pill_x - pill_border, pill_y - pill_border, pill_w + 2.0 * pill_border, ch + 2.0 * pill_border],
+                color: border_color,
+                radius: pill_radius + pill_border,
+                border_width: 0.0,
+                _pad: [0.0; 2],
+            });
+            self.rect_instances.push(RoundedRectInstance {
+                rect: [pill_x, pill_y, pill_w, ch],
+                color: fill_color,
+                radius: pill_radius,
+                border_width: 0.0,
+                _pad: [0.0; 2],
+            });
+            self.push_shaped_row(fmt_buf, text_fg, fill_color, r, co, panel_cols, font);
+        }
     }
 
     /// Build only the input field and key-hint row for the chat panel.

@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-05-22
-**Open Items:** 3
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 1 | **P3:** 2 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 1 | **Watch:** 2
+**Open Items:** 1
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 1 | **P3:** 0 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 3 | **Watch:** 2
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -139,11 +139,11 @@ Watch
 
 **AUDIT-REFAC-06** — RESUELTO (2026-05-22). `build_workspace_sidebar_instances()` tenía 18 parámetros con `#[allow(clippy::too_many_arguments)]`. Resuelto con `SidebarDrawParams<'a>` en `src/app/renderer/mod.rs`; call site en `frame.rs` construye el struct; función en `overlay.rs` destructura al inicio — cuerpo sin cambios, supresión eliminada.
 
-**AUDIT-REFAC-07** — REABIERTO (2026-05-22). El dispatch de rename se consolidó en `handle_rename_key()` (`src/app/input/mod.rs:234-236`), pero sigue habiendo lógica duplicada en `tab_rename_*` vs `workspace_rename_*` y en el parser markdown (`src/app/ui/mod.rs:572-631`; `src/llm/markdown.rs:198-289`). Se avanzó, pero la deduplicación reportada no quedó completa.
+**AUDIT-REFAC-07** — RESUELTO (2026-05-22). `RenamePrompt` struct privado en `src/app/ui/mod.rs` unifica la lógica de los 8 métodos duplicados (`tab_rename_*` / `workspace_rename_*`). Los campos `tab_rename_input`/`workspace_rename_input` reemplazados por `tab_rename: RenamePrompt` / `workspace_rename: RenamePrompt`. `handle_rename_key` reducido a 10 líneas usando `RenamePrompt::handle_key`. Método `tab_rename_text()` añadido; `frame.rs` actualizado. 4 métodos públicos quedan (start/is_renaming/text + handle_key wrapper).
 
 **AUDIT-CLEAN-03** — RESUELTO (2026-05-22). Se eliminó `#![allow(dead_code)]` global de `markdown.rs` y la supresión duplicada de `overlay.rs`. Los archivos `freetype_lcd.rs`, `pipeline.rs`, `tabs.rs` y `panes.rs` verificados: ninguno tiene `#![allow(dead_code)]` global. Reapertura de Copilot rechazada por falsa.
 
-**AUDIT-REFAC-08** — Abierto (2026-05-22). `build_panel_messages()` tiene 505 líneas (`src/app/renderer/chat.rs:548-1052`), por encima del límite de 400. `build_chat_panel_instances()` tiene 382 líneas (dentro de límite). `App`, `UiManager` y `RenderContext` siguen concentrando muchos fields; la refactorización estructural mayor queda pendiente tras el `SidebarDrawParams` de AUDIT-REFAC-06.
+**AUDIT-REFAC-08** — RESUELTO (2026-05-22). `build_panel_messages` reducido de 505 a 357 líneas. `PanelMsgParams<'a>` struct en `chat.rs` reemplaza los 22 parámetros posicionales. Zero state extraído a `draw_panel_zero_state` (89 líneas); suggestion pills a `draw_suggestion_pills` (64 líneas). Supresión `too_many_arguments` eliminada de `build_panel_messages`. `App`, `UiManager` y `RenderContext` siguen concentrando muchos fields; la refactorización estructural mayor queda como deuda futura.
 
 **AUDIT-REFAC-05** — RESUELTO (2026-05-11). Todos los monolitos convertidos a directorios-módulo con subarchivos por responsabilidad. Antes → ahora (mayor archivo del grupo): `renderer.rs` 4024 → `renderer/{mod,terminal,chat,overlay}.rs` max 1483; `mod.rs` 3663 → `mod+frame+app_state+layout.rs` max 1921; `ui.rs` 1986 → `ui/{mod,git,providers}.rs` max 1579; `chat_panel.rs` 1188 → `chat_panel/{mod,picker}.rs` max 919; `mux.rs` 1147 → `mux/{mod,workspace}.rs` max 981. 101/101 tests pasan.
 

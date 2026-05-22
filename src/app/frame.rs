@@ -509,7 +509,7 @@ impl App {
                     } else {
                         0
                     };
-                let rename_input = self.ui.tab_rename_input.as_deref();
+                let rename_input = self.ui.tab_rename_text();
                 let active_idx = self.mux.tabs.active_index();
 
                 // Fast comparison: check copiable inputs before hashing (TD-PERF-16).

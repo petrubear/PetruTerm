@@ -1,17 +1,30 @@
 # Session State
 
 **Last Updated:** 2026-05-22
-**Session Focus:** Deuda técnica Wave 7 + validación ci-local.sh.
+**Session Focus:** Deuda técnica Wave 7 — cierre de AUDIT-REFAC-07 y AUDIT-REFAC-08.
 
 ## Branch: `master`
 
 ## Estado actual
 
 **Phases 1–7 COMPLETAS. Deuda técnica Wave 7 cerrada.**
-**Deuda técnica: 3 items abiertos (AUDIT-ENERGY-05 PARCIAL, AUDIT-REFAC-07, AUDIT-REFAC-08). Watch: AUDIT-CLEAN-02, AUDIT-PERF-10. Diferidos: TD-PERF-03, TD-PERF-05, AUDIT-MEM-04.**
+**Deuda técnica: 1 item abierto (AUDIT-ENERGY-05 PARCIAL P2). Watch: AUDIT-CLEAN-02, AUDIT-PERF-10. Diferidos: TD-PERF-03, TD-PERF-05, AUDIT-MEM-04.**
 **ci-local.sh: PASA (clippy + fmt + tests + audit).**
 
-## Esta sesión (2026-05-22) — Wave 7 deuda técnica
+## Esta sesión (2026-05-22) — Wave 7 deuda técnica — continuación
+
+### AUDIT-REFAC-07 — RESUELTO
+- `RenamePrompt` struct privado en `src/app/ui/mod.rs` elimina 8 métodos duplicados (`tab_rename_*`/`workspace_rename_*`).
+- Campos `Option<String>` reemplazados por `tab_rename: RenamePrompt` / `workspace_rename: RenamePrompt`.
+- `handle_rename_key` reducido a 10 líneas con `RenamePrompt::handle_key`.
+- `tab_rename_text()` añadido; `frame.rs:512` actualizado.
+
+### AUDIT-REFAC-08 — RESUELTO
+- `PanelMsgParams<'a>` struct en `chat.rs` reemplaza los 22 parámetros posicionales de `build_panel_messages`.
+- Zero state extraído a `draw_panel_zero_state` (89 líneas).
+- Suggestion pills extraídas a `draw_suggestion_pills` (64 líneas).
+- `build_panel_messages`: 505 → 357 líneas. Supresión `too_many_arguments` eliminada.
+- 102 tests pasan. clippy limpio.
 
 ### AUDIT-REFAC-06 — RESUELTO
 - `SidebarDrawParams<'a>` en `src/app/renderer/mod.rs` elimina los 18 parámetros de `build_workspace_sidebar_instances`.
