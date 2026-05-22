@@ -15,8 +15,11 @@ A developer-first GPU-accelerated terminal emulator written in Rust. Built for s
 - **Font ligatures** — HarfBuzz shaping with `calt`, `liga`, `dlig` OpenType features; per-word shape cache
 - **Emoji & color glyphs** — full RGBA emoji rendering via Apple Color Emoji (and any color font)
 - **Tabs & split panes** — tmux-style keybinds, binary-tree layout; each pane has an independent PTY; exiting a shell closes only that pane
+- **Workspaces** — named workspaces with independent tab sets; save and restore layouts with `Leader+W+s` / `Leader+W+L`; auto-save on exit configurable
 - **Status bar** — configurable plain or powerline bottom bar with leader mode, CWD, git branch, exit code, and time
-- **AI agent panel** — context-aware chat with file attachment, NL→command, explain output, fix errors, write files
+- **Input decoration** — syntax highlighting for shell commands (valid command = green, flags = cyan, strings = yellow), ghost text from shell history, inline flag hints on the row below the cursor
+- **Kitty keyboard protocol** — `Shift+Enter`, `Ctrl+Enter`, and other disambiguated key sequences work correctly in Neovim, Claude Code CLI, and other KKP-aware apps
+- **AI agent panel** — context-aware chat with file attachment, NL→command, explain output, fix errors, write files; agent can propose and run commands with confirmation
 - **LLM tool use** — AI agent can read files, list directories, write files, and run commands (sandboxed to CWD, with confirmation)
 - **Inline AI block** — `Ctrl+Space` for quick NL→shell command without leaving the terminal
 - **Multiple LLM providers** — OpenRouter, Ollama, LM Studio, GitHub Copilot; per-pane independent chat history
@@ -228,7 +231,6 @@ config.status_bar = {
 | `config.scrollback_lines` | number | `5000` | Maximum scrollback buffer depth per pane. |
 | `config.enable_scroll_bar` | bool | `true` | Show the 6 px scroll bar on the right edge when scrollback is active. |
 | `config.max_fps` | number | `60` | Target render frame rate. |
-| `config.animation_fps` | number | `1` | Animation frame rate for lightweight UI motion. |
 | `config.gpu_preference` | string | `"low_power"` | GPU selection preference: `"high_performance"`, `"low_power"`, or `"none"`. |
 | `config.status_bar.git_dirty_check` | bool | `false` | Poll `git status --porcelain` for a dirty marker in the status bar. |
 | `config.battery_saver` | string | `"auto"` | Battery saver policy: `"auto"`, `"always"`, or `"never"`. |
@@ -240,6 +242,7 @@ config.enable_scroll_bar = true
 config.max_fps           = 120
 config.gpu_preference    = "high_performance"
 config.battery_saver     = "never"
+config.shell_integration = true
 ```
 
 ---
@@ -284,6 +287,8 @@ Press `Ctrl+F`, release, then press the bound key within `timeout_ms` millisecon
 | `Leader+W+,` | Rename workspace |
 | `Leader+W+j` | Next workspace |
 | `Leader+W+k` | Previous workspace |
+| `Leader+W+s` | Save current workspace layout |
+| `Leader+W+L` | Open saved workspaces palette |
 | `Leader+c` | New tab |
 | `Leader+&` | Close tab |
 | `Leader+n` | Next tab |
@@ -610,7 +615,10 @@ Place an `AGENTS.md` file in your project root to give the AI panel automatic co
 - Row cache: unchanged terminal rows are served from a per-pane shape cache — HarfBuzz runs only on dirty rows.
 - Damage tracking: alacritty's `TermDamage` API skips grid reads for undamaged rows when no selection or search is active.
 - Cursor overlay: cursor blink updates a single GPU vertex without rebuilding the cell buffer.
+- Split glyph atlas: grayscale glyphs in a 16 MiB R8 texture; color/emoji in a separate 4 MiB RGBA texture (68% VRAM reduction vs. the previous single 64 MiB atlas).
+- Search parallelism: scrollback search uses rayon to fan out across rows — 8–9× faster on large buffers.
 - Idle: event loop parks when the window loses focus — no timer wakeups, no git polling, no redraws.
+- Battery saver: present mode switches to vsync-locked Fifo on battery; git poll interval extends to 60 s; cursor blink disabled.
 
 ---
 
