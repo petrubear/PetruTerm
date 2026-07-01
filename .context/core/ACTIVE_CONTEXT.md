@@ -3,7 +3,8 @@
 **Current Focus:** Phase 8 — ACP Integration (Agent Client Protocol)
 **Last Active:** 2026-07-01
 **Branch:** `acp`
-**Próxima tarea:** Phase 8 COMPLETA y verificada manualmente con Claude — preparar merge a master
+**Commits:** `beee958` (feat: backend ACP) + `bb63df0` (chore: docs/llm.lua/fmt) — working tree limpio, `ci-local.sh` en verde
+**Próxima tarea:** Decidir push de `acp` a remoto y/o PR hacia `master` (no hecho todavía — requiere confirmación explícita)
 
 ## Estado actual del proyecto
 
@@ -60,6 +61,14 @@ completa (ver [`session_state`](SESSION_STATE.md) para detalle por archivo):
 `src/llm/acp/mod.rs` (456 líneas) dividido en `mod.rs` (132, ciclo de vida) +
 `session.rs` (340, cadena de handlers del protocolo) para cumplir el límite
 de 400 líneas/módulo de `AGENTS.md`.
+
+**Cerrado y commiteado:** `scripts/ci-local.sh` completo en verde (clippy -D
+warnings + fmt --check + test --lib + audit) tras aplicar `cargo fmt` a dos
+líneas que excedían el ancho. `cargo test --bin petruterm` (93 tests) también
+limpio. Commits: `beee958` (feature) + `bb63df0` (docs + llm.lua + fmt).
+`cargo audit` reporta 3 advisories no bloqueantes (`ttf-parser`, `anyhow`,
+`memmap2`) en dependencias transitivas de terceros — no accionables desde
+este repo, `cargo audit` sale con código 0 igual.
 
 ## Decisiones de implementación no obvias (ACP-0..ACP-2)
 

@@ -10,7 +10,8 @@
 **Phases 1–7 COMPLETAS. Deuda técnica Wave 7 cerrada.**
 **Deuda técnica: 0 items abiertos. Watch: AUDIT-CLEAN-02, AUDIT-PERF-10. Diferidos: TD-PERF-03, TD-PERF-05, AUDIT-MEM-04.**
 **Phase 8 (ACP) COMPLETA — probada manualmente con Claude vía `@agentclientprotocol/claude-agent-acp`.**
-**ci-local.sh: PASA en master. Branch `acp`: ver resultado de esta sesión más abajo.**
+**ci-local.sh: PASA en master y en `acp` (clippy -D warnings + fmt --check + test --lib + audit, verificado 2026-07-01).**
+**Branch `acp` commiteada (`beee958`, `bb63df0`), working tree limpio. NO pusheada ni mergeada a master todavía.**
 
 ## Esta sesión (2026-07-01) — Phase 8: ACP-6, fixes de code review + prueba manual
 
@@ -59,6 +60,23 @@ agent = {
 Verificado manualmente: streaming de tokens, header `◈ Claude`, `/agent` sin
 argumentos, `terminal/create` (split real ejecutando el comando), confirm de
 escritura + undo restaurando el contenido original.
+
+### Cierre de sesión — commits + ci-local.sh
+
+- `cargo fmt` aplicó 2 cambios (`src/app/app_state.rs`, `src/app/ui/mod.rs`)
+  tras los fixes de ACP-6; sin eso `fmt --check` fallaba.
+- `scripts/ci-local.sh` completo en verde: clippy -D warnings, fmt --check,
+  test --lib (9 tests), cargo audit (3 advisories no bloqueantes en
+  dependencias transitivas: `ttf-parser`, `anyhow` vía la cadena de
+  `agent-client-protocol`→`wit-parser`, `memmap2` — ninguno accionable desde
+  este repo, exit code 0 igual).
+- `cargo test --bin petruterm` (suite completa, 93 tests) también limpio.
+- Commit 1 `beee958`: feature completa (módulo `src/llm/acp/`, wiring en
+  `UiManager`, header UI, slash commands, los 6 fixes de code review).
+- Commit 2 `bb63df0`: docs (`.context/`, `build_phases.md`), ejemplo corregido
+  en `config/default/llm.lua`, los 2 archivos de `cargo fmt`.
+- Working tree limpio. Rama `acp` NO pusheada a remoto ni mergeada a
+  `master` — pendiente de decisión explícita del usuario.
 
 ## Esta sesión (2026-06-12) — Phase 8: ACP-3 implementado
 
