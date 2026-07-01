@@ -301,12 +301,7 @@ impl UiManager {
                 crate::config::schema::LlmBackend::Agent => {
                     let pending = config.llm.agent.as_ref().map(|agent_cfg| {
                         let cwd = std::env::current_dir().unwrap_or_default();
-                        spawn_acp_connect(
-                            &tokio_rt,
-                            agent_cfg.clone(),
-                            cwd,
-                            wakeup_proxy.clone(),
-                        )
+                        spawn_acp_connect(&tokio_rt, agent_cfg.clone(), cwd, wakeup_proxy.clone())
                     });
                     (None, None, pending)
                 }

@@ -416,3 +416,18 @@ En Warp son `ModelCommand` y `Harness` — aquí los exponemos como slash comman
 - [x] En Provider mode: mensaje informativo `"Use /model in provider mode"`
 
 - [x] Añadir `/model` y `/agent` al mensaje de comando desconocido: `"Try /clear, /skills, /mcp, /model, /agent or /quit"`
+
+### ACP-6: Code review + conexión async + verificación manual ✓ COMPLETA (2026-07-01)
+
+Antes del commit se hizo un code-review completo del diff (8 ángulos,
+recall-biased) y se probó manualmente contra un agente ACP real
+(`@agentclientprotocol/claude-agent-acp` corriendo Claude).
+
+- [x] `Mux.terminal_final_output: HashMap<usize, String>` — cachea el output en `close_terminal` para que `terminal/output` no vea `""` tras el auto-close del pane
+- [x] `fs/write_text_file`: leer contenido original ANTES de escribir (no después) para `AiEvent::UndoState`
+- [x] `validate_path`: canonicaliza el ancestro existente más cercano antes del check `starts_with($HOME)` (mismo patrón que `tools.rs`), cierra bypass de `..`
+- [x] `open_terminal_for_acp`: `shell_quote()` por token en vez de `args.join(" ")` crudo
+- [x] `AcpSession::connect` ya no bloquea el hilo de UI: `spawn_acp_connect()` + `UiManager::poll_acp_connect()` (polling no bloqueante, despierta el event loop vía `wakeup_proxy`)
+- [x] `handle_slash_command`: resetear `input_cursor = 0` junto al `input.clear()` (evita panic de `String::remove` en el siguiente backspace)
+- [x] Split `src/llm/acp/mod.rs` (456 líneas) → `mod.rs` (132) + `session.rs` (340) para cumplir el límite de 400 líneas/módulo
+- [x] Verificación manual: `cargo check` + `cargo clippy` + `cargo test --bin petruterm` (93 tests) limpios; prueba real en la app con Claude vía npx (streaming, terminal split, confirm write + undo)

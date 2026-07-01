@@ -147,7 +147,8 @@ impl App {
                 self.ui.ai_block.dirty = true;
                 self.ui.palette.rebuild_keybinds(&self.config);
                 self.ui.palette.rebuild_snippets(&self.config.snippets);
-                self.ui.rewire_backend(&self.config, self.wakeup_proxy.clone());
+                self.ui
+                    .rewire_backend(&self.config, self.wakeup_proxy.clone());
                 self.request_redraw();
                 log::info!("Config hot-reloaded.");
             }

@@ -11,14 +11,22 @@ function module.apply_to_config(config)
     -- Default: "provider". When set to "agent", the fields below are used instead of provider/model.
     backend  = "provider",
 
-    -- ACP agent config (used when backend = "agent").
-    -- command: executable to spawn ("claude", "codex", absolute path, …).
+    -- ACP agent config (used when backend = "agent"). Requires Node.js/npx installed.
+    -- Test the adapter standalone first: `npx -y @agentclientprotocol/claude-agent-acp`
+    -- should hang waiting on stdin (Ctrl+C to kill) — if that fails, it's a
+    -- Node/network problem, not a PetruTerm one.
     -- agent = {
-    --   command      = "claude",
-    --   args         = {},          -- extra CLI args passed to the agent
-    --   env          = {},          -- extra env vars: { ANTHROPIC_API_KEY = "sk-..." }
+    --   command      = "npx",
+    --   args         = { "-y", "@agentclientprotocol/claude-agent-acp" },
+    --   -- Auth: if `claude` (Claude Code CLI) is already logged in via OAuth on
+    --   -- this machine, the SDK reuses those credentials and env can stay empty.
+    --   -- Otherwise set your key here (or export ANTHROPIC_API_KEY in your shell).
+    --   env          = {},          -- e.g. { ANTHROPIC_API_KEY = "sk-ant-..." }
     --   display_name = nil,         -- override label in chat panel header (nil = command basename)
     -- },
+    -- Fallback package name if the one above fails to resolve via npx:
+    -- "@zed-industries/claude-code-acp" (older name, still the hardcoded
+    -- default in the agent-client-protocol-tokio crate this project vendors).
 
     provider = "openrouter",                               -- "openrouter" | "ollama" | "lmstudio" | "copilot"
     model    = "meta-llama/llama-3.1-8b-instruct:free",   -- Free model for testing

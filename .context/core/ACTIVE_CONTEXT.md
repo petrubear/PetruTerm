@@ -1,9 +1,9 @@
 # Active Context
 
 **Current Focus:** Phase 8 — ACP Integration (Agent Client Protocol)
-**Last Active:** 2026-06-12
+**Last Active:** 2026-07-01
 **Branch:** `acp`
-**Próxima tarea:** Phase 8 COMPLETA — preparar commit y merge a master
+**Próxima tarea:** Phase 8 COMPLETA y verificada manualmente con Claude — preparar merge a master
 
 ## Estado actual del proyecto
 
@@ -16,19 +16,55 @@
 |----|-------|--------|
 | ACP-0 | Dependencias (`cargo add`) | **COMPLETA** |
 | ACP-1 | Config schema (`LlmBackend`, `AcpAgentConfig`) | **COMPLETA** |
-| ACP-2a | `src/llm/acp/mod.rs` — ciclo de vida sesión | **COMPLETA** |
+| ACP-2a | `src/llm/acp/mod.rs` + `session.rs` — ciclo de vida sesión | **COMPLETA** |
 | ACP-2b | `src/llm/acp/terminal.rs` — integración PTY | **COMPLETA** |
 | ACP-2c | `src/llm/acp/fs.rs` — operaciones archivo | **COMPLETA** |
 | ACP-3 | `UiManager` wiring + dispatch | **COMPLETA** |
 | ACP-4 | Header UI (`◈` agente, `✦` provider) | **COMPLETA** |
 | ACP-5 | Slash commands `/model` + `/agent` | **COMPLETA** |
+| ACP-6 | Code review fixes + conexión async + prueba manual con Claude | **COMPLETA** (2026-07-01) |
 
 Spec completo con pasos detallados en [`.context/specs/build_phases.md`](../specs/build_phases.md) — Phase 8.
+
+## ACP-6 — Fixes de code review + verificación manual (2026-07-01)
+
+Probado end-to-end con `agent-client-protocol` real: `backend = "agent"`,
+`command = "npx"`, `args = { "-y", "@agentclientprotocol/claude-agent-acp" }`.
+Funciona: streaming de tokens, `terminal/create` (split real), confirm de
+escritura + undo.
+
+Bugs encontrados por code-review y corregidos antes de dar la feature por
+completa (ver [`session_state`](SESSION_STATE.md) para detalle por archivo):
+
+1. `terminal_output_text` devolvía `""` tras exit — el pane se auto-cerraba
+   antes de que el agente pudiera leer `terminal/output`. Fix: cache
+   `terminal_final_output: HashMap<usize, String>` poblado en `close_terminal`.
+2. `fs/write_text_file` leía el archivo **después** de escribirlo para el
+   `AiEvent::UndoState` → undo restauraba el contenido nuevo (no-op). Fix:
+   leer antes de escribir, igual que el path Provider.
+3. `validate_path` (`src/llm/acp/fs.rs`) no canonicalizaba antes del check
+   `starts_with($HOME)` → bypass de `..`. Fix: mismo patrón que
+   `src/llm/tools.rs` (camina al ancestro existente más cercano y canonicaliza).
+4. `open_terminal_for_acp` unía `command`+`args` con espacios crudos antes de
+   escribir al PTY → argumentos con espacios/metacaracteres se rompían. Fix:
+   `shell_quote()` (comillas simples POSIX) por token.
+5. `AcpSession::connect` bloqueaba el hilo de UI vía `block_on` en `new()`,
+   `rewire_backend()` y `/agent`. Fix: `spawn_acp_connect()` lanza la conexión
+   en background; `UiManager::poll_acp_connect()` la recoge sin bloquear
+   (pollea cada frame vía `wakeup_proxy`).
+6. `handle_slash_command` limpiaba `input` sin resetear `input_cursor` →
+   panic (`String::remove` fuera de rango) en el siguiente backspace tras usar
+   cualquier slash command (`/model`, `/agent`, etc.). Fix: resetear
+   `input_cursor = 0` junto al `clear()`, como en el resto del archivo.
+
+`src/llm/acp/mod.rs` (456 líneas) dividido en `mod.rs` (132, ciclo de vida) +
+`session.rs` (340, cadena de handlers del protocolo) para cumplir el límite
+de 400 líneas/módulo de `AGENTS.md`.
 
 ## Decisiones de implementación no obvias (ACP-0..ACP-2)
 
 - **Versión ACP**: `agent-client-protocol = "0.11"` (NO 0.14). El wrapper tokio (`agent-client-protocol-tokio = "0.11.1"`) solo implementa `ConnectTo` para la v0.11 del core. Usar 0.14 del core da error de trait en `connect_with`.
-- **`AcpSession::connect()`** bloquea hasta que `initialize` + `new_session` completan — oneshot channel `ready_tx` señaliza cuando el agente está listo. Primera llamada a `prompt()` no espera handshake.
+- **`AcpSession::connect()`** (async, dentro de la tarea tokio) bloquea hasta que `initialize` + `new_session` completan — oneshot channel `ready_tx` señaliza cuando el agente está listo. Primera llamada a `prompt()` no espera handshake. Los *callers* (`UiManager::new`, `rewire_backend`) NO llaman `block_on` sobre esto — ver ACP-6: se lanza en background vía `spawn_acp_connect()` y se recoge con `poll_acp_connect()` para no congelar la UI mientras el proceso agente arranca.
 - **Routing de contexto**: `QueryCtx = Arc<Mutex<Option<Sender<AiEvent>>>>` y `TermCtx = Arc<Mutex<Option<Sender<AcpTerminalRequest>>>>` compartidos entre los handlers (`on_receive_notification`, `on_receive_request`) y el loop de prompts en `connect_with`. Se setean antes de cada `send_request(PromptRequest)` y se borran después.
 - **Guard drop antes de await**: Los handlers de `on_receive_notification` extraen el `Sender<AiEvent>` del Mutex y sueltan el guard antes de hacer `.send(...).await` — necesario para que el Future sea `Send`.
 - **`terminal/output`**: No es "escribir al terminal" — es polling del output del proceso. `AcpTerminalRequest::GetOutput` pregunta al main thread por el scrollback del pane + exit code.
@@ -51,8 +87,9 @@ Spec completo con pasos detallados en [`.context/specs/build_phases.md`](../spec
 | `src/config/schema.rs` | `LlmBackend`, `AcpAgentConfig`, cambios en `LlmConfig` |
 | `src/config/lua.rs` | Parsing Lua del nuevo backend y agent config |
 | `src/llm/acp/mod.rs` | `AcpSession` — spawn, init, session, prompt, idle timeout |
+| `src/llm/acp/session.rs` | Cadena de handlers ACP (`on_receive_request`/`notification`) + loop de prompts |
 | `src/llm/acp/terminal.rs` | `AcpTerminalRequest` — puente ACP↔Mux PTY |
-| `src/llm/acp/fs.rs` | `fs/read_text_file`, `fs/write_text_file` con confirm |
+| `src/llm/acp/fs.rs` | `fs/read_text_file`, `fs/write_text_file` con confirm, `validate_path` canonicalizado |
 | `src/app/ui/providers.rs` | `rewire_backend()`, `/model`, `/agent` slash commands |
 | `src/app/ui/mod.rs` | `acp_session`, `acp_terminal_tx`, dispatch en `send_query()` |
 | `src/app/renderer/chat.rs` | `build_panel_header` — diferenciación visual ◈/✦ |

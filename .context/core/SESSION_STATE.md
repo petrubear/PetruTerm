@@ -1,6 +1,6 @@
 # Session State
 
-**Last Updated:** 2026-06-12
+**Last Updated:** 2026-07-01
 **Session Focus:** Phase 8 — ACP Integration (Agent Client Protocol)
 
 ## Branch: `acp`
@@ -9,7 +9,56 @@
 
 **Phases 1–7 COMPLETAS. Deuda técnica Wave 7 cerrada.**
 **Deuda técnica: 0 items abiertos. Watch: AUDIT-CLEAN-02, AUDIT-PERF-10. Diferidos: TD-PERF-03, TD-PERF-05, AUDIT-MEM-04.**
-**ci-local.sh: PASA en master. Branch `acp`: cargo check + fmt + test --lib limpios.**
+**Phase 8 (ACP) COMPLETA — probada manualmente con Claude vía `@agentclientprotocol/claude-agent-acp`.**
+**ci-local.sh: PASA en master. Branch `acp`: ver resultado de esta sesión más abajo.**
+
+## Esta sesión (2026-07-01) — Phase 8: ACP-6, fixes de code review + prueba manual
+
+Todo el trabajo de Phase 8 (ACP-0..ACP-5) seguía sin commitear al empezar esta
+sesión. Se hizo code review (recall-biased, 8 ángulos) del diff completo antes
+de darlo por terminado; se encontraron y corrigieron 6 problemas reales (ver
+detalle en [`ACTIVE_CONTEXT.md`](ACTIVE_CONTEXT.md) sección ACP-6). Resumen
+de los cambios de arquitectura respecto a lo descrito en la sesión 2026-06-12:
+
+- **Conexión ACP ya NO bloquea el hilo de UI.** `UiManager::new()` y
+  `rewire_backend()` ya NO hacen `tokio_rt.block_on(AcpSession::connect(...))`.
+  En su lugar: `spawn_acp_connect(rt, agent_cfg, cwd, wakeup_proxy)` lanza la
+  tarea en background y devuelve un `oneshot::Receiver` guardado en
+  `UiManager.acp_pending_connect`. `UiManager::poll_acp_connect()` (llamado
+  cada frame junto a `handle_acp_terminal_requests()`) hace `try_recv()` no
+  bloqueante y resuelve `acp_session`/`llm_init_error` cuando llega. El
+  `wakeup_proxy` se propagó como parámetro nuevo a `UiManager::new`,
+  `rewire_backend`, `handle_slash_command` y sus call sites.
+- **`Mux.terminal_final_output: HashMap<usize, String>`** nuevo — cachea el
+  texto visible del terminal en `close_terminal()` antes de anular el slot,
+  para que `terminal_output_text()` siga devolviendo el output real después
+  de que el pane se auto-cierre al salir el proceso.
+- **`open_terminal_for_acp`** ahora usa `shell_quote()` (comillas simples
+  POSIX) por cada token de `command`/`args` en vez de un `join(" ")` crudo.
+- **`src/llm/acp/mod.rs` dividido**: `mod.rs` (132 líneas, ciclo de vida
+  `AcpSession`) + `src/llm/acp/session.rs` (340 líneas, la cadena
+  `on_receive_request`/`on_receive_notification` + loop de prompts). El
+  archivo original tenía 456 líneas, por encima del límite de 400 de
+  `AGENTS.md`.
+- **`src/app/ui/providers.rs::handle_slash_command`** ahora resetea
+  `input_cursor = 0` junto al `input.clear()` — sin esto, cualquier slash
+  command dejaba el cursor desincronizado y el siguiente backspace
+  paniqueaba (`String::remove` fuera de rango, panic-in-panic porque ocurre
+  dentro de un handler que no puede unwind → aborta el proceso).
+
+### Config de prueba usada (backend = "agent")
+
+```lua
+agent = {
+  command = "npx",
+  args    = { "-y", "@agentclientprotocol/claude-agent-acp" },
+  env     = {},  -- reutiliza el login OAuth de `claude` CLI si ya existe
+}
+```
+
+Verificado manualmente: streaming de tokens, header `◈ Claude`, `/agent` sin
+argumentos, `terminal/create` (split real ejecutando el comando), confirm de
+escritura + undo restaurando el contenido original.
 
 ## Esta sesión (2026-06-12) — Phase 8: ACP-3 implementado
 
@@ -53,9 +102,9 @@
 - **`open_terminal_for_acp` usa shell**: en lugar de modificar `Pty::spawn` para soporte de comando custom, se abre un pane normal y se escribe el comando al PTY (`cmd args\r`). El agente ve un terminal real con la shell corriendo el comando.
 - **`terminal_exit_code` vs `terminals[id]`**: si el slot es `Some(...)` el proceso aún corre → devuelve `None`. Si es `None` Y `terminal_exit_codes` tiene entrada → devuelve `Some(code)`. Cubre el gap entre exit y cleanup.
 
-### Pendiente
-- ACP-4: Header UI `◈`/`✦` en `src/app/renderer/chat.rs::build_panel_header`.
-- ACP-5: Slash commands `/model` y `/agent` en `src/app/ui/providers.rs::handle_slash_command`.
+### Pendiente (resuelto en sesión 2026-07-01, ver ACP-6 arriba)
+- ~~ACP-4: Header UI `◈`/`✦` en `src/app/renderer/chat.rs::build_panel_header`.~~ COMPLETA.
+- ~~ACP-5: Slash commands `/model` y `/agent` en `src/app/ui/providers.rs::handle_slash_command`.~~ COMPLETA.
 
 ## Esta sesión (2026-06-11) — Phase 8: ACP planning
 
