@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.2.1] — 2026-07-01
+
+### Added
+- ACP (Agent Client Protocol) backend for the AI chat panel: `llm.backend = "agent"` lets an external ACP agent process (e.g. Claude Code via `@agentclientprotocol/claude-agent-acp`) drive the panel instead of a direct LLM provider. Same `AiEvent` stream as the provider backend, so the chat UI doesn't need to distinguish between them.
+- `terminal/create` support: an ACP agent can open a real terminal pane (split) to run commands, and read back its output/exit code via `terminal/output` and `terminal/wait_for_exit`.
+- `fs/read_text_file` and `fs/write_text_file` support, with the existing write-confirmation UI and undo stack (`Leader a z`).
+- `/model` and `/agent` slash commands in the chat panel to switch LLM provider/model or ACP agent on the fly.
+- Chat panel header now shows `◈ <agent>` for the agent backend vs `✦ <model>` for the provider backend.
+
+### Fixed
+- `terminal/output` no longer returns an empty string once the underlying command has exited — output is now cached at pane-close time instead of being lost when the pane auto-closes.
+- Undo (`Leader a z`) after an agent-driven file write now restores the actual original content instead of a no-op (the original was being read back *after* the write instead of before).
+- Path validation for ACP filesystem requests now canonicalizes before checking the `$HOME` boundary, closing a `..` traversal bypass.
+- Commands/arguments passed to `terminal/create` are now shell-quoted instead of joined with raw spaces, so arguments containing spaces or shell metacharacters are passed through literally.
+- Connecting to an ACP agent (startup, config hot-reload, `/agent`) no longer blocks the UI thread — the connection is established in the background and polled without blocking.
+- Fixed a crash (`String::remove` past the end of the input buffer) that could happen on the next backspace after using any slash command in the chat panel.
+
+---
+
 ## [0.1.5] — 2026-05-05
 
 ### Changed
