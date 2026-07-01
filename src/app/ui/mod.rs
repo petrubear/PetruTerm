@@ -1,6 +1,7 @@
 use crate::app::mux::Mux;
 use crate::app::renderer::RenderContext;
 use crate::config::{self, Config};
+use crate::llm::acp::terminal::AcpTerminalRequest;
 use crate::llm::ai_block::AiBlock;
 use crate::llm::chat_panel::{AiEvent, ChatPanel, ConfirmDisplay};
 use crate::llm::mcp::config as mcp_config;
@@ -21,6 +22,26 @@ use winit::window::Window;
 
 mod git;
 mod providers;
+
+/// Spawn `AcpSession::connect` on the tokio runtime instead of blocking the
+/// calling (UI) thread. `wakeup` nudges the winit event loop so `poll_acp_connect`
+/// runs promptly once the connect finishes, even with no other pending events.
+fn spawn_acp_connect(
+    rt: &tokio::runtime::Runtime,
+    agent_cfg: crate::config::schema::AcpAgentConfig,
+    cwd: PathBuf,
+    wakeup: EventLoopProxy<()>,
+) -> tokio::sync::oneshot::Receiver<Result<crate::llm::acp::AcpSession, String>> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    rt.spawn(async move {
+        let result = crate::llm::acp::AcpSession::connect(&agent_cfg, &cwd)
+            .await
+            .map_err(|e| format!("{e:#}"));
+        let _ = tx.send(result);
+        let _ = wakeup.send_event(());
+    });
+    rx
+}
 
 // Convert a raw LLM error string into an actionable user message (TD-038).
 fn classify_llm_error(e: &str) -> String {
@@ -220,6 +241,20 @@ pub struct UiManager {
 
     // ── MCP (D-1/D-2/D-3) ────────────────────────────────────────────────────
     pub mcp_manager: std::sync::Arc<McpManager>,
+
+    // ── ACP agent session (Phase 8) ───────────────────────────────────────────
+    /// Active ACP session when `backend = Agent`. Dropped on `close_panel`.
+    pub(super) acp_session: Option<crate::llm::acp::AcpSession>,
+    /// Crossbeam sender — ACP tokio tasks forward `AcpTerminalRequest`s here.
+    pub acp_terminal_tx: crossbeam_channel::Sender<AcpTerminalRequest>,
+    /// Main-thread receiver for ACP terminal requests.
+    pub acp_terminal_rx: crossbeam_channel::Receiver<AcpTerminalRequest>,
+    /// Pending `terminal/wait_for_exit` responses: (pane_id, oneshot_sender).
+    pub(super) pending_acp_wait_for_exit: Vec<(usize, tokio::sync::oneshot::Sender<i32>)>,
+    /// In-flight background ACP connect, started by `new`/`rewire_backend`.
+    /// Polled every frame via `poll_acp_connect` — connecting never blocks the UI thread.
+    pub(super) acp_pending_connect:
+        Option<tokio::sync::oneshot::Receiver<Result<crate::llm::acp::AcpSession, String>>>,
 }
 
 const AI_POLL_CAP: usize = 64;
@@ -234,7 +269,7 @@ pub struct AiPollResult {
 }
 
 impl UiManager {
-    pub fn new(config: &Config) -> Self {
+    pub fn new(config: &Config, wakeup_proxy: EventLoopProxy<()>) -> Self {
         let (ai_tx, ai_rx) = crossbeam_channel::bounded(256);
         let (block_tx, block_rx) = crossbeam_channel::bounded(64);
         // Use a 2-thread runtime when LLM is enabled; single-threaded otherwise.
@@ -252,13 +287,32 @@ impl UiManager {
                 .expect("Failed to build tokio runtime")
         };
 
-        let (llm_provider, llm_init_error) = if config.llm.enabled {
-            match crate::llm::build_provider(&config.llm) {
-                Ok(p) => (Some(p), None),
-                Err(e) => (None, Some(format!("{e:#}"))),
+        let (acp_terminal_tx, acp_terminal_rx) =
+            crossbeam_channel::bounded::<AcpTerminalRequest>(32);
+
+        let (llm_provider, llm_init_error, acp_pending_connect) = if config.llm.enabled {
+            match config.llm.backend {
+                crate::config::schema::LlmBackend::Provider => {
+                    match crate::llm::build_provider(&config.llm) {
+                        Ok(p) => (Some(p), None, None),
+                        Err(e) => (None, Some(format!("{e:#}")), None),
+                    }
+                }
+                crate::config::schema::LlmBackend::Agent => {
+                    let pending = config.llm.agent.as_ref().map(|agent_cfg| {
+                        let cwd = std::env::current_dir().unwrap_or_default();
+                        spawn_acp_connect(
+                            &tokio_rt,
+                            agent_cfg.clone(),
+                            cwd,
+                            wakeup_proxy.clone(),
+                        )
+                    });
+                    (None, None, pending)
+                }
             }
         } else {
-            (None, None)
+            (None, None, None)
         };
 
         let (git_tx_init, git_rx_init) = crossbeam_channel::bounded::<String>(1);
@@ -371,6 +425,36 @@ impl UiManager {
             skill_manager,
             steering_manager,
             mcp_manager,
+            acp_session: None,
+            acp_terminal_tx,
+            acp_terminal_rx,
+            pending_acp_wait_for_exit: Vec::new(),
+            acp_pending_connect,
+        }
+    }
+
+    /// Poll the in-flight background ACP connect started by `new`/`rewire_backend`.
+    /// Non-blocking — call every frame while a connect is outstanding.
+    pub fn poll_acp_connect(&mut self) {
+        let Some(rx) = &mut self.acp_pending_connect else {
+            return;
+        };
+        match rx.try_recv() {
+            Ok(Ok(session)) => {
+                self.acp_session = Some(session);
+                self.llm_init_error = None;
+                self.acp_pending_connect = None;
+            }
+            Ok(Err(e)) => {
+                log::error!("ACP connect: {e}");
+                self.llm_init_error = Some(e);
+                self.acp_pending_connect = None;
+            }
+            Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {}
+            Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
+                self.llm_init_error = Some("ACP connect task ended unexpectedly".to_string());
+                self.acp_pending_connect = None;
+            }
         }
     }
 
@@ -691,6 +775,7 @@ impl UiManager {
         self.panel_mut().close();
         self.panel_focused = false;
         self.file_picker_focused = false;
+        self.acp_session = None; // drop agent process
     }
 
     pub fn restart_chat_panel(&mut self) {
@@ -718,6 +803,54 @@ impl UiManager {
         let Some(user_content) = self.panel_mut().submit_input() else {
             return;
         };
+
+        // ── ACP agent backend ─────────────────────────────────────────────────
+        if self.acp_session.is_some() {
+            let (ai_mpsc_tx, ai_mpsc_rx) = tokio::sync::mpsc::channel::<AiEvent>(256);
+            let (term_mpsc_tx, term_mpsc_rx) = tokio::sync::mpsc::channel::<AcpTerminalRequest>(16);
+
+            let send_result = self.acp_session.as_mut().unwrap().try_send_prompt(
+                user_content,
+                ai_mpsc_tx,
+                term_mpsc_tx,
+            );
+
+            if let Err(e) = send_result {
+                self.acp_session = None;
+                self.panel_mut()
+                    .mark_error(format!("ACP agent disconnected: {e:#}"));
+                return;
+            }
+
+            let ai_tx_cb = self.ai_tx.clone();
+            let term_tx_cb = self.acp_terminal_tx.clone();
+            let wakeup = wakeup_proxy.clone();
+
+            if let Some(h) = self.streaming_handle.take() {
+                h.abort();
+            }
+            self.streaming_handle = Some(self.tokio_rt.spawn(async move {
+                let mut ai_rx = ai_mpsc_rx;
+                let mut term_rx = term_mpsc_rx;
+                loop {
+                    tokio::select! {
+                        ev = ai_rx.recv() => match ev {
+                            Some(event) => {
+                                let _ = ai_tx_cb.send((panel_id, event));
+                                let _ = wakeup.send_event(());
+                            }
+                            None => break,
+                        },
+                        req = term_rx.recv() => if let Some(r) = req {
+                            let _ = term_tx_cb.send(r);
+                        },
+                    }
+                }
+            }));
+            return;
+        }
+
+        // ── Provider backend ──────────────────────────────────────────────────
         let Some(provider) = self.llm_provider.clone() else {
             let msg = self
                 .llm_init_error
@@ -1235,7 +1368,7 @@ impl UiManager {
                         .update_bg_color(config.colors.background_wgpu());
                     self.palette.rebuild_keybinds(config);
                     self.palette.rebuild_snippets(&config.snippets);
-                    self.rewire_llm_provider(config);
+                    self.rewire_backend(config, wakeup_proxy);
                 }
             }
             Action::OpenConfigFile => {
@@ -1546,6 +1679,7 @@ mod tests {
         let (block_tx, block_rx) = crossbeam_channel::bounded::<AiEvent>(1);
         let (ai_tx, ai_rx) = crossbeam_channel::bounded::<(usize, AiEvent)>(1);
 
+        let (acp_tx, acp_rx) = crossbeam_channel::bounded::<AcpTerminalRequest>(1);
         let ui = UiManager {
             palette: CommandPalette::new(&config),
             context_menu: ContextMenu::new(),
@@ -1585,6 +1719,11 @@ mod tests {
             skill_manager: SkillManager::new(),
             steering_manager: SteeringManager::new(),
             mcp_manager: std::sync::Arc::new(McpManager::new()),
+            acp_session: None,
+            acp_terminal_tx: acp_tx,
+            acp_terminal_rx: acp_rx,
+            pending_acp_wait_for_exit: Vec::new(),
+            acp_pending_connect: None,
         };
 
         // Simulate an in-flight fetch by setting the flag and spawn time.
@@ -1615,6 +1754,7 @@ mod tests {
         let (block_tx, block_rx) = crossbeam_channel::bounded::<AiEvent>(1);
         let (ai_tx, ai_rx) = crossbeam_channel::bounded::<(usize, AiEvent)>(1);
 
+        let (acp_tx2, acp_rx2) = crossbeam_channel::bounded::<AcpTerminalRequest>(1);
         let mut ui = UiManager {
             palette: CommandPalette::new(&config),
             context_menu: ContextMenu::new(),
@@ -1657,6 +1797,11 @@ mod tests {
             skill_manager: SkillManager::new(),
             steering_manager: SteeringManager::new(),
             mcp_manager: std::sync::Arc::new(McpManager::new()),
+            acp_session: None,
+            acp_terminal_tx: acp_tx2,
+            acp_terminal_rx: acp_rx2,
+            pending_acp_wait_for_exit: Vec::new(),
+            acp_pending_connect: None,
         };
 
         // Cache should still be "main" before the call.

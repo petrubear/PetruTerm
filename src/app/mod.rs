@@ -145,7 +145,7 @@ impl App {
             window: None,
             render_ctx: None,
             mux: Mux::new(),
-            ui: UiManager::new(&config),
+            ui: UiManager::new(&config, wakeup_proxy.clone()),
             input: InputHandler::new(&config),
             menu: AppMenu::build(),
             wakeup_proxy,
@@ -1757,6 +1757,8 @@ impl ApplicationHandler<()> for App {
             }
         }
 
+        self.handle_acp_terminal_requests();
+        self.ui.poll_acp_connect();
         let panel_ai = self.ui.poll_ai_events();
         let block_ai = self.ui.poll_ai_block_events();
         if panel_ai.completed {

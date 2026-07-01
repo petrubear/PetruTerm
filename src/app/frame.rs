@@ -62,6 +62,69 @@ impl App {
         self.ui.panel_mut().dirty = true;
     }
 
+    /// Drain `acp_terminal_rx` and handle each `AcpTerminalRequest` from the agent.
+    /// Also resolves any pending `WaitForExit` requests for terminals that have since exited.
+    pub(super) fn handle_acp_terminal_requests(&mut self) {
+        use crate::llm::acp::terminal::AcpTerminalRequest;
+
+        loop {
+            let Ok(req) = self.ui.acp_terminal_rx.try_recv() else {
+                break;
+            };
+            match req {
+                AcpTerminalRequest::Create {
+                    command,
+                    args,
+                    cwd,
+                    tx,
+                } => {
+                    let (cols, rows) = self.mux.active_terminal_size();
+                    let (cell_w, cell_h) = self.cell_dims();
+                    let pane_id = self.mux.open_terminal_for_acp(
+                        &self.config,
+                        cols as u16,
+                        rows as u16,
+                        cell_w,
+                        cell_h,
+                        self.wakeup_proxy.clone(),
+                        cwd,
+                        &command,
+                        &args,
+                    );
+                    let _ = tx.send(pane_id);
+                    self.apply_tab_bar_padding();
+                    self.resize_terminals_for_panel();
+                }
+                AcpTerminalRequest::GetOutput { pane_id, tx } => {
+                    let output = self.mux.terminal_output_text(pane_id);
+                    let exit_code = self.mux.terminal_exit_code(pane_id);
+                    let _ = tx.send((output, exit_code));
+                }
+                AcpTerminalRequest::WaitForExit { pane_id, tx } => {
+                    if let Some(code) = self.mux.terminal_exit_code(pane_id) {
+                        let _ = tx.send(code);
+                    } else {
+                        self.ui.pending_acp_wait_for_exit.push((pane_id, tx));
+                    }
+                }
+                AcpTerminalRequest::Kill { pane_id } => {
+                    self.mux.kill_terminal(pane_id);
+                }
+            }
+        }
+
+        // Resolve pending WaitForExit for terminals that have now exited.
+        let pending = std::mem::take(&mut self.ui.pending_acp_wait_for_exit);
+        for (pane_id, tx) in pending {
+            match self.mux.terminal_exit_code(pane_id) {
+                Some(code) => {
+                    let _ = tx.send(code);
+                }
+                None => self.ui.pending_acp_wait_for_exit.push((pane_id, tx)),
+            }
+        }
+    }
+
     pub(super) fn flush_pending_pty_run(&mut self) {
         if let Some(cmd) = self.ui.pending_pty_run.take() {
             if let Some(terminal) = self.mux.active_terminal() {

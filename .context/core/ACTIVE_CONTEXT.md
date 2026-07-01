@@ -1,12 +1,61 @@
 # Active Context
 
-**Current Focus:** Release prep v0.1.9 + context menu regression fix
-**Last Active:** 2026-05-12
+**Current Focus:** Phase 8 — ACP Integration (Agent Client Protocol)
+**Last Active:** 2026-06-12
+**Branch:** `acp`
+**Próxima tarea:** Phase 8 COMPLETA — preparar commit y merge a master
 
 ## Estado actual del proyecto
 
-**Phases 1–7 COMPLETAS. Workspace persistence COMPLETA (2026-05-12).** Release prep v0.1.9 en curso.
-**Deuda técnica: Waves 1–3 resueltas. Watch: AUDIT-CLEAN-02. Diferidos: TD-PERF-03, TD-PERF-05.**
+**Phases 1–7 COMPLETAS. Deuda técnica cerrada. Branch `acp` creado (2026-06-11).**
+**Deuda técnica: 0 items abiertos. Watch: AUDIT-CLEAN-02.**
+
+## Phase 8: ACP — Estado de tareas
+
+| ID | Tarea | Estado |
+|----|-------|--------|
+| ACP-0 | Dependencias (`cargo add`) | **COMPLETA** |
+| ACP-1 | Config schema (`LlmBackend`, `AcpAgentConfig`) | **COMPLETA** |
+| ACP-2a | `src/llm/acp/mod.rs` — ciclo de vida sesión | **COMPLETA** |
+| ACP-2b | `src/llm/acp/terminal.rs` — integración PTY | **COMPLETA** |
+| ACP-2c | `src/llm/acp/fs.rs` — operaciones archivo | **COMPLETA** |
+| ACP-3 | `UiManager` wiring + dispatch | **COMPLETA** |
+| ACP-4 | Header UI (`◈` agente, `✦` provider) | **COMPLETA** |
+| ACP-5 | Slash commands `/model` + `/agent` | **COMPLETA** |
+
+Spec completo con pasos detallados en [`.context/specs/build_phases.md`](../specs/build_phases.md) — Phase 8.
+
+## Decisiones de implementación no obvias (ACP-0..ACP-2)
+
+- **Versión ACP**: `agent-client-protocol = "0.11"` (NO 0.14). El wrapper tokio (`agent-client-protocol-tokio = "0.11.1"`) solo implementa `ConnectTo` para la v0.11 del core. Usar 0.14 del core da error de trait en `connect_with`.
+- **`AcpSession::connect()`** bloquea hasta que `initialize` + `new_session` completan — oneshot channel `ready_tx` señaliza cuando el agente está listo. Primera llamada a `prompt()` no espera handshake.
+- **Routing de contexto**: `QueryCtx = Arc<Mutex<Option<Sender<AiEvent>>>>` y `TermCtx = Arc<Mutex<Option<Sender<AcpTerminalRequest>>>>` compartidos entre los handlers (`on_receive_notification`, `on_receive_request`) y el loop de prompts en `connect_with`. Se setean antes de cada `send_request(PromptRequest)` y se borran después.
+- **Guard drop antes de await**: Los handlers de `on_receive_notification` extraen el `Sender<AiEvent>` del Mutex y sueltan el guard antes de hacer `.send(...).await` — necesario para que el Future sea `Send`.
+- **`terminal/output`**: No es "escribir al terminal" — es polling del output del proceso. `AcpTerminalRequest::GetOutput` pregunta al main thread por el scrollback del pane + exit code.
+- **`terminal_id` ↔ `pane_id`**: Se usa `TerminalId::new(pane_id.to_string())`. Requests posteriores parsean `terminal_id.0.parse::<usize>()`. No se necesita mapa extra.
+- **`ToolCallUpdate.fields`** es `ToolCallUpdateFields` (no `Option`); `.title` dentro sí es `Option<String>`.
+
+## Decisiones de diseño clave (Phase 8)
+
+- **Backend, no mode**: campo `llm.backend = "provider" | "agent"` (alineado con Harness de Warp)
+- **Sesión persistente**: `AcpSession` vive mientras el panel está abierto; idle timeout 300s; reconexión automática
+- **Terminal dedicado**: `terminal/create` → nuevo pane real via `Mux` (killer feature — somos un terminal nativo)
+- **Mismos `AiEvent`**: ambos backends (Provider y Agent) producen los mismos eventos; `ChatPanel` no distingue
+- **Comandos separados**: `/model` para LLM provider, `/agent` para ACP agent (alineado con Warp)
+- **Header**: `◈` + display_name para Agent, `✦` + short_model para Provider
+
+## Archivos centrales de Phase 8
+
+| Archivo | Rol |
+|---------|-----|
+| `src/config/schema.rs` | `LlmBackend`, `AcpAgentConfig`, cambios en `LlmConfig` |
+| `src/config/lua.rs` | Parsing Lua del nuevo backend y agent config |
+| `src/llm/acp/mod.rs` | `AcpSession` — spawn, init, session, prompt, idle timeout |
+| `src/llm/acp/terminal.rs` | `AcpTerminalRequest` — puente ACP↔Mux PTY |
+| `src/llm/acp/fs.rs` | `fs/read_text_file`, `fs/write_text_file` con confirm |
+| `src/app/ui/providers.rs` | `rewire_backend()`, `/model`, `/agent` slash commands |
+| `src/app/ui/mod.rs` | `acp_session`, `acp_terminal_tx`, dispatch en `send_query()` |
+| `src/app/renderer/chat.rs` | `build_panel_header` — diferenciación visual ◈/✦ |
 
 ## Release prep v0.1.9 — EN CURSO (2026-05-12)
 

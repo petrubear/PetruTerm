@@ -297,3 +297,122 @@ el flujo PTY. OSC 133 (B-1) provee los límites de prompt/command que hacen esto
 - [x] Hint format: `"<flag>  <description>"` en color `ui_muted`
 - [x] Aparece cuando el último token es `TokenKind::Flag` y `lookup_flag` retorna Some
 - [x] Cierra solo (el último token deja de ser Flag cuando el usuario sigue tipeando; Esc limpia el buf)
+
+---
+
+## Phase 8: ACP — Agent Client Protocol Integration
+
+> Branch: `acp`
+> Inspiración directa: código fuente de Warp (`app/src/ai/agent_sdk/`, `crates/warp_cli/src/agent.rs`, `app/src/ai/harness_display.rs`).
+> Protocolo: [agentclientprotocol.com](https://agentclientprotocol.com) — JSON-RPC sobre stdio/WebSocket.
+> SDK Rust oficial: `agent-client-protocol` + `agent-client-protocol-tokio` (crates.io).
+>
+> **Objetivo:** PetruTerm actúa como ACP *client* (el editor), conectándose a cualquier ACP *agent*
+> (Claude Code CLI, Codex CLI, Kiro, Gemini CLI, OpenCode, etc.) desde el panel de chat existente.
+> La UI del panel no cambia — ambos backends (Provider y Agent) producen los mismos `AiEvent`.
+> Alineado con la arquitectura Harness de Warp: agente = proceso externo, no proveedor LLM directo.
+
+### ACP-0: Dependencias ✓ COMPLETA
+
+- [x] `agent-client-protocol = "0.11"` y `agent-client-protocol-tokio = "0.11"` en `Cargo.toml`
+- [x] Versiones deben coincidir: tokio wrapper 0.11.1 implementa `ConnectTo` solo para core 0.11.x
+- [x] `cargo check` limpio
+
+### ACP-1: Config schema ✓ COMPLETA
+
+**Archivos:** `src/config/schema.rs`, `src/config/lua.rs`, `config/default/llm.lua`
+
+- [x] `LlmBackend` enum con `#[serde(rename_all = "snake_case")]` y `Default = Provider`
+- [x] `AcpAgentConfig` struct con `Serialize/Deserialize`
+- [x] Campos `backend` y `agent` añadidos a `LlmConfig` con `#[serde(default)]`
+- [x] `lua.rs`: parsea `llm.backend` y `llm.agent.*`; `env` como dict Lua `{KEY="val"}`
+- [x] `config/default/llm.lua`: nuevas claves documentadas con ejemplo comentado
+- [x] `cargo check` limpio
+
+### ACP-2: Módulo `src/llm/acp/` ✓ COMPLETA
+
+**Archivos nuevos:** `src/llm/acp/mod.rs`, `src/llm/acp/terminal.rs`, `src/llm/acp/fs.rs`
+**Archivo modificado:** `src/llm/mod.rs` — `pub mod acp;`
+
+#### ACP-2a: `mod.rs` ✓
+
+- [x] `AcpSession::connect()` — spawna tarea tokio, initialize + new_session, señaliza ready via oneshot
+- [x] `AcpSession::prompt()` — envía `PromptMsg` al loop interno; actualiza `last_prompt_at`
+- [x] `SessionNotification::AgentMessageChunk` → `AiEvent::Token`; `ToolCall` → `AiEvent::ToolStatus`
+- [x] `RequestPermissionRequest` → `AiEvent::ConfirmRun` con oneshot
+- [x] `is_idle()` — 300s sin prompts
+- [x] Reconexión: si `prompt_tx.send()` falla el task murió → caller (ACP-3) reconecta
+
+Arquitectura real: `AcpSession` tiene `prompt_tx: mpsc::Sender<PromptMsg>` + `_task: JoinHandle`.
+`QueryCtx/TermCtx = Arc<Mutex<Option<Sender>>>` compartidos entre handlers y loop de `connect_with`.
+
+#### ACP-2b: `terminal.rs` ✓
+
+```rust
+pub enum AcpTerminalRequest {
+    Create { command, args, cwd, env, tx: oneshot::Sender<usize> },
+    GetOutput { pane_id, tx: oneshot::Sender<(String, Option<i32>)> },
+    WaitForExit { pane_id, tx: oneshot::Sender<i32> },
+    Kill { pane_id },
+}
+```
+
+`terminal_id` = `pane_id.to_string()` — no se necesita mapa extra.
+
+- [x] `AcpTerminalRequest` enum en `terminal.rs` (Create/GetOutput/WaitForExit/Kill)
+- [x] Handler `terminal/create` → `AcpTerminalRequest::Create` → main thread → `pane_id` como `TerminalId`
+- [x] Handler `terminal/output` → `AcpTerminalRequest::GetOutput` → scrollback + exit code
+- [x] Handler `terminal/wait_for_exit` → `AcpTerminalRequest::WaitForExit`
+- [x] Handler `terminal/kill` → `AcpTerminalRequest::Kill`
+- [x] `terminal/release` → no-op
+
+#### ACP-2c: `fs.rs` ✓
+
+- [x] `fs/read_text_file` → `tokio::fs::read_to_string` — sin confirmación
+- [x] `fs/write_text_file` → `AiEvent::ConfirmWrite` + write + `AiEvent::UndoState`
+- [x] `validate_path()`: ruta debe estar dentro de `$HOME`
+
+### ACP-3: `UiManager` wiring
+
+**Archivos:** `src/app/ui/mod.rs`, `src/app/ui/providers.rs`, `src/app/app_state.rs`
+
+Equivalente Warp: `AgentDriver` vive en el contexto de la conversación; se crea/destruye
+con el panel. `rewire_llm_provider` es el punto de entrada para ambos backends.
+
+- [x] Campo `acp_session: Option<AcpSession>` en `UiManager` (junto a `llm_provider`)
+- [x] Campo `acp_terminal_tx/rx: crossbeam Sender/Receiver<AcpTerminalRequest>` + `pending_acp_wait_for_exit`
+- [x] `rewire_backend()` — rama `LlmBackend::Agent`: spawn `AcpSession`, limpiar `llm_provider`; rama `Provider`: comportamiento actual, limpiar `acp_session`
+- [x] Dispatch en `submit_ai_query()`: si `acp_session.is_some()` → path ACP (try_send_prompt + bridge task); else → path Provider
+- [x] `handle_acp_terminal_requests()` en `App` (frame.rs) — Create/GetOutput/WaitForExit/Kill; llamado en `about_to_wait`
+- [x] `close_panel()`: drop `acp_session` explícitamente (libera el proceso hijo)
+- [x] `PtyEvent::Exit(i32)` + `Mux.terminal_exit_codes` + `terminal_output_text/exit_code/kill_terminal/open_terminal_for_acp`
+
+### ACP-4: Header UI
+
+**Archivo:** `src/app/renderer/chat.rs` — función `build_panel_header` (~línea 424)
+
+Equivalente Warp: `harness_display.rs` mapea cada harness a icono + color.
+`◈` para agente ACP, `✦` para provider LLM — diferenciación visual inmediata.
+
+- [x] `left_label`: `" ◈ {display_name}"` cuando `backend = Agent`, `" ✦ {short_model}"` cuando `Provider`
+- [x] `center_label`: `"agent:{agent_name}"` cuando `Agent`, `"{provider}:{model}"` cuando `Provider`
+- [x] Color del glifo izquierdo: `ui_accent` en ambos casos (sin cambio de lógica de color)
+- [x] `short_chat_header_model_name()` no se llama en modo Agent (no hay model ID)
+
+### ACP-5: Slash commands `/model` y `/agent`
+
+**Archivo:** `src/app/ui/providers.rs` — función `handle_slash_command`
+
+Alineado con Warp: comandos separados por concepto (`/model` para LLM, `/agent` para harness).
+En Warp son `ModelCommand` y `Harness` — aquí los exponemos como slash commands en el panel.
+
+#### `/model` (funciona en ambos backends)
+- [x] Sin args: muestra provider+model activo (Provider) o `"Agent mode: use /agent to switch"` (Agent)
+- [x] `/model <id>`: en Provider mode, cambia `config.llm.model` en caliente y llama `rewire_backend()`; en Agent mode, mensaje de error explicativo
+
+#### `/agent` (solo relevante en Agent backend)
+- [x] Sin args: muestra agente activo, lista agentes conocidos del config (`llm.agent.*`)
+- [x] `/agent <command>`: cambia `config.llm.agent.command`, cierra sesión ACP activa, reconecta con el nuevo agente
+- [x] En Provider mode: mensaje informativo `"Use /model in provider mode"`
+
+- [x] Añadir `/model` y `/agent` al mensaje de comando desconocido: `"Try /clear, /skills, /mcp, /model, /agent or /quit"`

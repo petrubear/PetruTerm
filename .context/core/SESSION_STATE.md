@@ -1,15 +1,68 @@
 # Session State
 
-**Last Updated:** 2026-05-22
-**Session Focus:** Deuda técnica Wave 7 — cierre de AUDIT-REFAC-07 y AUDIT-REFAC-08.
+**Last Updated:** 2026-06-12
+**Session Focus:** Phase 8 — ACP Integration (Agent Client Protocol)
 
-## Branch: `master`
+## Branch: `acp`
 
 ## Estado actual
 
 **Phases 1–7 COMPLETAS. Deuda técnica Wave 7 cerrada.**
 **Deuda técnica: 0 items abiertos. Watch: AUDIT-CLEAN-02, AUDIT-PERF-10. Diferidos: TD-PERF-03, TD-PERF-05, AUDIT-MEM-04.**
-**ci-local.sh: PASA (clippy + fmt + tests + audit).**
+**ci-local.sh: PASA en master. Branch `acp`: cargo check + fmt + test --lib limpios.**
+
+## Esta sesión (2026-06-12) — Phase 8: ACP-3 implementado
+
+### ACP-3 — `UiManager` wiring + dispatch
+
+**`src/term/pty.rs`:**
+- `PtyEvent::Exit` → `PtyEvent::Exit(i32)`. El child monitor thread pasa el código de `waitpid`. `EventListener` emite `Exit(0)` para `Event::Exit`, `Exit(code)` para `Event::ChildExit(code)`.
+
+**`src/app/mux/mod.rs`:**
+- `terminal_exit_codes: HashMap<usize, i32>` — se llena en `poll_pty_events` al recibir `Exit(code)`.
+- `terminal_output_text(pane_id)` — texto visible del terminal para `terminal/output`.
+- `terminal_exit_code(pane_id)` — `None` si aún corre, `Some(code)` si ya salió.
+- `kill_terminal(pane_id)` — llama `pty.shutdown()` (SIGHUP).
+- `open_terminal_for_acp(...)` — split horizontal + escribe el comando al shell del pane nuevo.
+
+**`src/llm/acp/mod.rs`:**
+- `try_send_prompt(content, ai_tx, terminal_tx)` — variante sync via `try_send`. Callable desde el main thread sin `.await`.
+
+**`src/app/ui/mod.rs`:**
+- Campos: `acp_session: Option<AcpSession>`, `acp_terminal_tx/rx: crossbeam Sender/Receiver<AcpTerminalRequest>`, `pending_acp_wait_for_exit: Vec<(usize, oneshot::Sender<i32>)>`.
+- `new()`: detecta `LlmBackend::Agent` → `block_on(AcpSession::connect(...))` al arrancar.
+- `close_panel()`: `self.acp_session = None` — dropea el proceso hijo.
+- `submit_ai_query()`: branch ACP antes del path Provider — crea canales tokio mpsc, llama `try_send_prompt`, bridge tokio→crossbeam en task spawneada.
+
+**`src/app/ui/providers.rs`:**
+- `rewire_backend(config)`: rama `Provider` → `rewire_llm_provider`; rama `Agent` → `block_on(AcpSession::connect(...))`.
+- Mensaje de comando desconocido incluye `/model` y `/agent`.
+
+**`src/app/app_state.rs`:** `rewire_llm_provider` → `rewire_backend`.
+
+**`src/app/frame.rs`:**
+- `handle_acp_terminal_requests()`: drena `acp_terminal_rx`, maneja Create/GetOutput/WaitForExit/Kill. WaitForExit pendientes se resuelven en cada llamada al comprobar `terminal_exit_code`.
+
+**`src/app/mod.rs`:** llama `handle_acp_terminal_requests()` en `about_to_wait`.
+
+### Decisiones de implementación (ACP-3)
+
+- **`PtyEvent::Exit(i32)` doble dispatch**: tanto `EventListener` (alacritty) como el child monitor thread pueden emitir `Exit`. `poll_pty_events` usa `!exited.contains(&id)` para evitar duplicados. El child monitor tiene el código real de `waitpid`; el listener emite 0.
+- **`try_send_prompt` en lugar de `prompt` async**: el main thread (winit) no puede `.await`. `mpsc::Sender::try_send` es sync y no bloquea cuando hay espacio en el canal (cap=4).
+- **Bridge tokio→crossbeam en task spawneada**: `submit_ai_query` crea canales tokio mpsc para `AiEvent` y `AcpTerminalRequest`, pasa los senders a `try_send_prompt`, y spawna una task que hace `tokio::select!` bridgeando ambos al crossbeam. La `streaming_handle` cancela la task si hay nueva query.
+- **`open_terminal_for_acp` usa shell**: en lugar de modificar `Pty::spawn` para soporte de comando custom, se abre un pane normal y se escribe el comando al PTY (`cmd args\r`). El agente ve un terminal real con la shell corriendo el comando.
+- **`terminal_exit_code` vs `terminals[id]`**: si el slot es `Some(...)` el proceso aún corre → devuelve `None`. Si es `None` Y `terminal_exit_codes` tiene entrada → devuelve `Some(code)`. Cubre el gap entre exit y cleanup.
+
+### Pendiente
+- ACP-4: Header UI `◈`/`✦` en `src/app/renderer/chat.rs::build_panel_header`.
+- ACP-5: Slash commands `/model` y `/agent` en `src/app/ui/providers.rs::handle_slash_command`.
+
+## Esta sesión (2026-06-11) — Phase 8: ACP planning
+
+- Analizadas fuentes de Warp (`app/src/ai/agent_sdk/`, `crates/warp_cli/src/agent.rs`, `app/src/ai/harness_display.rs`).
+- Protocolo ACP documentado: JSON-RPC stdio/WebSocket, SDK Rust oficial en crates.io.
+- Branch `acp` creado desde master.
+- Plan detallado escrito en `build_phases.md` como Phase 8 (ACP-0 a ACP-5).
 
 ## Esta sesión (2026-05-22) — Wave 7 deuda técnica — continuación
 

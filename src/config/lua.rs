@@ -6,7 +6,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
 
-use super::schema::{ColorScheme, Config, TitleBarStyle};
+use super::schema::{AcpAgentConfig, ColorScheme, Config, LlmBackend, TitleBarStyle};
 
 fn parse_hex_linear(s: &str) -> [f32; 4] {
     let s = s.trim_start_matches('#');
@@ -605,6 +605,38 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
         if let Ok(ui_table) = llm_table.get::<LuaTable>("ui") {
             if let Ok(w) = ui_table.get::<u16>("width_cols") {
                 config.llm.ui.width_cols = w;
+            }
+        }
+
+        if let Ok(b) = llm_table.get::<String>("backend") {
+            config.llm.backend = match b.as_str() {
+                "agent" | "Agent" => LlmBackend::Agent,
+                _ => LlmBackend::Provider,
+            };
+        }
+
+        if let Ok(agent_table) = llm_table.get::<LuaTable>("agent") {
+            let command: String = agent_table.get("command").unwrap_or_default();
+            if !command.is_empty() {
+                let mut args = Vec::new();
+                if let Ok(args_table) = agent_table.get::<LuaTable>("args") {
+                    for v in args_table.sequence_values::<String>().flatten() {
+                        args.push(v);
+                    }
+                }
+                let mut env = Vec::new();
+                if let Ok(env_table) = agent_table.get::<LuaTable>("env") {
+                    for pair in env_table.pairs::<String, String>().flatten() {
+                        env.push(pair);
+                    }
+                }
+                let display_name: Option<String> = agent_table.get("display_name").ok();
+                config.llm.agent = Some(AcpAgentConfig {
+                    command,
+                    args,
+                    env,
+                    display_name,
+                });
             }
         }
     }

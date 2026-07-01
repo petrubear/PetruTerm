@@ -599,7 +599,7 @@ impl InputHandler {
                         if input.is_empty() {
                             ui.chat_panel_run_command(mux);
                         } else if input.starts_with('/') {
-                            ui.handle_slash_command(&input);
+                            ui.handle_slash_command(&input, config, wakeup_proxy);
                         } else {
                             let cwd = mux
                                 .active_cwd()

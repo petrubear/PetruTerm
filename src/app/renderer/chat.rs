@@ -419,15 +419,34 @@ impl RenderContext {
         panel_cols: usize,
         fmt_buf: &mut String,
     ) {
+        use crate::config::schema::LlmBackend;
         use std::fmt::Write as _;
 
-        let provider = &config.llm.provider;
-        let model = &config.llm.model;
-        let short_model = short_chat_header_model_name(model);
-        let left_w = (3 + short_model.chars().count()).min(panel_cols);
-        fmt_buf.clear();
-        let _ = write!(fmt_buf, "{provider}:{model}");
-        let center_full = fmt_buf.clone();
+        let (left_label, center_full) = match &config.llm.backend {
+            LlmBackend::Agent => {
+                let agent = config.llm.agent.as_ref();
+                let cmd = agent.map(|a| a.command.as_str()).unwrap_or("agent");
+                let name = agent
+                    .and_then(|a| a.display_name.as_deref())
+                    .unwrap_or_else(|| {
+                        std::path::Path::new(cmd)
+                            .file_name()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or(cmd)
+                    });
+                (format!(" \u{25c8} {name}"), format!("agent:{name}"))
+            }
+            LlmBackend::Provider => {
+                let provider = &config.llm.provider;
+                let model = &config.llm.model;
+                let short_model = short_chat_header_model_name(model);
+                (
+                    format!(" \u{2726} {short_model}"),
+                    format!("{provider}:{model}"),
+                )
+            }
+        };
+        let left_w = left_label.chars().count().min(panel_cols);
         fmt_buf.clear();
         let _ = write!(
             fmt_buf,
@@ -450,10 +469,8 @@ impl RenderContext {
         let center_w = center.chars().count();
         let center_start = center_slot_start + center_slot_w.saturating_sub(center_w) / 2;
 
-        fmt_buf.clear();
-        let _ = write!(fmt_buf, " ✦ {short_model}");
         self.push_shaped_row(
-            fmt_buf,
+            &left_label,
             config.colors.ui_accent,
             panel_bg,
             0,

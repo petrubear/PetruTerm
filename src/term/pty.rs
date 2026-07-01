@@ -18,8 +18,8 @@ use crate::term::osc133::{EraseScanner, Osc133Marker, Osc133Scanner};
 pub enum PtyEvent {
     /// New data arrived; terminal grid has been updated.
     DataReady,
-    /// The shell process exited.
-    Exit,
+    /// The shell process exited with the given code.
+    Exit(i32),
     /// Terminal title changed (OSC 0/2).
     TitleChanged(String),
     /// Bell character received.
@@ -80,7 +80,8 @@ impl EventListener for PtyEventProxy {
 
         let pty_event = match event {
             Event::Wakeup => PtyEvent::DataReady,
-            Event::Exit | Event::ChildExit(_) => PtyEvent::Exit,
+            Event::Exit => PtyEvent::Exit(0),
+            Event::ChildExit(code) => PtyEvent::Exit(code),
             Event::Title(t) => PtyEvent::TitleChanged(t),
             Event::Bell => PtyEvent::Bell,
             Event::ClipboardStore(_, text) => PtyEvent::ClipboardStore(text),
@@ -199,7 +200,7 @@ impl Pty {
                 };
                 log::info!("PTY child exited with code {code}");
                 drop(child); // explicit: ensures child is cleaned up
-                let _ = tx_clone2.try_send(PtyEvent::Exit);
+                let _ = tx_clone2.try_send(PtyEvent::Exit(code));
                 let _ = wakeup_clone2.send_event(());
             })
             .context("failed to spawn pty child monitor")?;

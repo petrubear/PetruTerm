@@ -97,6 +97,23 @@ fn push_search_match(
     false
 }
 
+/// POSIX single-quote a token so it reaches the shell as one literal argument,
+/// regardless of embedded spaces or shell metacharacters (ACP `terminal/create`
+/// passes `command`/`args` with argv semantics, not shell semantics).
+fn shell_quote(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('\'');
+    for c in s.chars() {
+        if c == '\'' {
+            out.push_str("'\\''");
+        } else {
+            out.push(c);
+        }
+    }
+    out.push('\'');
+    out
+}
+
 /// Manages multiple terminal instances, tabs, panes, and workspaces.
 pub struct Mux {
     /// Active workspace's tab manager (direct field — all existing callers unchanged).
@@ -120,6 +137,14 @@ pub struct Mux {
     pub zoomed_pane: Option<usize>,
     /// OSC 133 markers received this cycle: (terminal_id, marker).
     pub osc133_events: Vec<(usize, Osc133Marker)>,
+    /// Exit codes for terminals that have exited, keyed by terminal_id.
+    /// Retained after close so ACP `terminal/wait_for_exit` handlers can read them.
+    pub terminal_exit_codes: std::collections::HashMap<usize, i32>,
+    /// Final output text captured at close time, keyed by terminal_id.
+    /// The pane (and its grid) is torn down as soon as the shell exits, so
+    /// ACP `terminal/output` requests arriving after that point would
+    /// otherwise always see an empty terminal. Retained after close.
+    pub terminal_final_output: std::collections::HashMap<usize, String>,
 }
 
 impl Mux {
@@ -140,6 +165,8 @@ impl Mux {
             inactive_workspaces: Vec::new(),
             zoomed_pane: None,
             osc133_events: Vec::new(),
+            terminal_exit_codes: std::collections::HashMap::new(),
+            terminal_final_output: std::collections::HashMap::new(),
         }
     }
 
@@ -259,9 +286,12 @@ impl Mux {
                         PtyEvent::TitleChanged(t) => {
                             log::debug!("PTY title: {t}");
                         }
-                        PtyEvent::Exit => {
-                            log::info!("PTY shell exited (terminal {id}).");
-                            exited.push(id);
+                        PtyEvent::Exit(code) => {
+                            log::info!("PTY shell exited (terminal {id}, code {code}).");
+                            self.terminal_exit_codes.insert(id, code);
+                            if !exited.contains(&id) {
+                                exited.push(id);
+                            }
                         }
                         PtyEvent::Bell => {}
                         PtyEvent::ClipboardStore(text) => {
@@ -357,6 +387,10 @@ impl Mux {
                 }
                 self.panes.remove(tab_idx);
             }
+            // Capture the final output text before the pane (and its grid) is
+            // discarded, so ACP `terminal/output` can still return it after exit.
+            self.terminal_final_output
+                .insert(terminal_id, self.terminal_output_text(terminal_id));
             if let Some(slot) = self.terminals.get_mut(terminal_id) {
                 *slot = None;
             }
@@ -479,6 +513,105 @@ impl Mux {
             }
             lines.join("\n")
         })
+    }
+
+    /// Return all visible rows of a specific terminal as plain text.
+    /// Falls back to the output captured at close time if the terminal has
+    /// already exited and been torn down (see `close_terminal`).
+    pub fn terminal_output_text(&self, pane_id: usize) -> String {
+        let Some(terminal) = self.terminals.get(pane_id).and_then(|s| s.as_ref()) else {
+            return self
+                .terminal_final_output
+                .get(&pane_id)
+                .cloned()
+                .unwrap_or_default();
+        };
+        terminal.with_term(|term| {
+            let rows = term.screen_lines();
+            let cols = term.columns();
+            let mut lines: Vec<String> = (0..rows)
+                .map(|row| {
+                    let mut text = String::new();
+                    for col in 0..cols {
+                        let cell = &term.grid()[alacritty_terminal::index::Line(row as i32)]
+                            [alacritty_terminal::index::Column(col)];
+                        text.push(if cell.c == '\0' { ' ' } else { cell.c });
+                    }
+                    text.trim_end().to_string()
+                })
+                .collect();
+            while lines.last().is_some_and(|l| l.is_empty()) {
+                lines.pop();
+            }
+            lines.join("\n")
+        })
+    }
+
+    /// Return the exit code of a terminal that has exited, or `None` if still running.
+    pub fn terminal_exit_code(&self, pane_id: usize) -> Option<i32> {
+        if self
+            .terminals
+            .get(pane_id)
+            .and_then(|s| s.as_ref())
+            .is_some()
+        {
+            return None;
+        }
+        self.terminal_exit_codes.get(&pane_id).copied()
+    }
+
+    /// Send SIGHUP to a terminal's child process (ACP `terminal/kill`).
+    pub fn kill_terminal(&mut self, pane_id: usize) {
+        if let Some(Some(term)) = self.terminals.get_mut(pane_id) {
+            term.pty.shutdown();
+        }
+    }
+
+    /// Open a new pane (horizontal split) for an ACP agent command.
+    /// Creates a real visible shell pane and immediately writes the command to it.
+    #[allow(clippy::too_many_arguments)]
+    pub fn open_terminal_for_acp(
+        &mut self,
+        config: &Config,
+        cols: u16,
+        rows: u16,
+        cell_w: u16,
+        cell_h: u16,
+        wakeup: EventLoopProxy<()>,
+        cwd: Option<std::path::PathBuf>,
+        command: &str,
+        args: &[String],
+    ) -> usize {
+        match Terminal::new(config, cols, rows, cell_w, cell_h, wakeup, cwd) {
+            Ok(terminal) => {
+                let new_id = self.next_terminal_id;
+                self.next_terminal_id += 1;
+                if self.terminals.len() <= new_id {
+                    self.terminals.resize_with(new_id + 1, || None);
+                }
+                self.terminals[new_id] = Some(terminal);
+                let active = self.tabs.active_index();
+                if let Some(pane_mgr) = self.panes.get_mut(active) {
+                    pane_mgr.split(crate::ui::SplitDir::Horizontal, new_id);
+                }
+                self.zoomed_pane = None;
+                self.pending_lua_events.push("pane_split");
+                if let Some(Some(term)) = self.terminals.get(new_id) {
+                    let mut cmd_str = shell_quote(command);
+                    for arg in args {
+                        cmd_str.push(' ');
+                        cmd_str.push_str(&shell_quote(arg));
+                    }
+                    cmd_str.push('\r');
+                    term.write_input(cmd_str.as_bytes());
+                }
+                new_id
+            }
+            Err(e) => {
+                log::error!("ACP terminal/create: {e:#}");
+                0
+            }
+        }
     }
 
     #[allow(clippy::too_many_arguments)]

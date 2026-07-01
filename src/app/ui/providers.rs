@@ -1,4 +1,5 @@
 use super::UiManager;
+use crate::config::schema::LlmBackend;
 use crate::config::Config;
 use crate::llm::mcp::config as mcp_config;
 use crate::llm::mcp::manager::McpManager;
@@ -40,6 +41,49 @@ impl UiManager {
         log::info!("MCP hot-reloaded: {connected} server(s) connected.");
     }
 
+    /// Re-wire the active backend from a fresh config.
+    /// Handles both `LlmBackend::Provider` and `LlmBackend::Agent`.
+    /// Call on every config reload (hot-reload or palette action).
+    /// Never blocks: the ACP connect (subprocess spawn + protocol handshake)
+    /// runs in the background and is picked up later by `poll_acp_connect`.
+    pub fn rewire_backend(
+        &mut self,
+        config: &Config,
+        wakeup_proxy: winit::event_loop::EventLoopProxy<()>,
+    ) {
+        self.acp_pending_connect = None;
+        match config.llm.backend {
+            LlmBackend::Provider => {
+                self.acp_session = None;
+                self.rewire_llm_provider(config);
+            }
+            LlmBackend::Agent => {
+                self.llm_provider = None;
+                self.llm_init_error = None;
+                self.acp_session = None;
+                self.panel_width_cols = config.llm.ui.width_cols;
+                self.system_prompt = crate::config::load_system_prompt();
+                if let Ok(cwd) = std::env::current_dir() {
+                    let trusted = crate::llm::mcp::trust::is_trusted(&cwd);
+                    self.skill_manager.load(&cwd, trusted);
+                    self.steering_manager.load(&cwd, trusted);
+                }
+                if let Some(agent_cfg) = &config.llm.agent {
+                    let cwd = std::env::current_dir().unwrap_or_default();
+                    self.acp_pending_connect = Some(super::spawn_acp_connect(
+                        &self.tokio_rt,
+                        agent_cfg.clone(),
+                        cwd,
+                        wakeup_proxy,
+                    ));
+                } else {
+                    self.llm_init_error =
+                        Some("llm.agent config is required when backend = \"agent\"".into());
+                }
+            }
+        }
+    }
+
     /// TD-020: Re-wire the LLM provider and panel width from a fresh config.
     /// Call this on every config reload (both hot-reload and palette-triggered).
     pub fn rewire_llm_provider(&mut self, config: &Config) {
@@ -65,8 +109,14 @@ impl UiManager {
     /// Handle a slash command entered in the AI panel input.
     /// Returns true if the command was recognized, false if unknown.
     /// The input field is cleared on entry regardless of outcome.
-    pub fn handle_slash_command(&mut self, input: &str) -> bool {
+    pub fn handle_slash_command(
+        &mut self,
+        input: &str,
+        config: &mut Config,
+        wakeup_proxy: winit::event_loop::EventLoopProxy<()>,
+    ) -> bool {
         self.panel_mut().input.clear();
+        self.panel_mut().input_cursor = 0;
         self.panel_mut().dirty = true;
 
         let trimmed = input.trim_start_matches('/');
@@ -156,8 +206,84 @@ impl UiManager {
                 self.panel_mut().dirty = true;
                 true
             }
+            "model" => {
+                let msg = match &config.llm.backend {
+                    LlmBackend::Agent => {
+                        if args.is_empty() {
+                            "Agent mode: use /agent to switch agents.".to_string()
+                        } else {
+                            "Cannot set model in agent mode. Switch to provider backend first."
+                                .to_string()
+                        }
+                    }
+                    LlmBackend::Provider => {
+                        if args.is_empty() {
+                            format!("Active: {}:{}", config.llm.provider, config.llm.model)
+                        } else {
+                            config.llm.model = args.to_string();
+                            self.rewire_backend(config, wakeup_proxy.clone());
+                            format!("Model set to '{args}'.")
+                        }
+                    }
+                };
+                self.panel_mut()
+                    .messages
+                    .push(crate::llm::ChatMessage::assistant(msg));
+                self.panel_mut().dirty = true;
+                true
+            }
+            "agent" => {
+                let msg = match &config.llm.backend {
+                    LlmBackend::Provider => {
+                        "Provider mode active. Use /model to change models.".to_string()
+                    }
+                    LlmBackend::Agent => {
+                        if args.is_empty() {
+                            let name = config
+                                .llm
+                                .agent
+                                .as_ref()
+                                .and_then(|a| a.display_name.as_deref())
+                                .or_else(|| {
+                                    config.llm.agent.as_ref().map(|a| {
+                                        std::path::Path::new(&a.command)
+                                            .file_name()
+                                            .and_then(|s| s.to_str())
+                                            .unwrap_or(&a.command)
+                                    })
+                                });
+                            match name {
+                                Some(n) => format!("Active agent: {n}"),
+                                None => "No agent configured. Set llm.agent.command in config."
+                                    .to_string(),
+                            }
+                        } else {
+                            if let Some(agent_cfg) = config.llm.agent.as_mut() {
+                                agent_cfg.command = args.to_string();
+                            } else {
+                                config.llm.agent = Some(crate::config::schema::AcpAgentConfig {
+                                    command: args.to_string(),
+                                    args: vec![],
+                                    env: vec![],
+                                    display_name: None,
+                                });
+                            }
+                            self.acp_session = None;
+                            self.rewire_backend(config, wakeup_proxy.clone());
+                            format!("Agent set to '{args}'. Reconnecting...")
+                        }
+                    }
+                };
+                self.panel_mut()
+                    .messages
+                    .push(crate::llm::ChatMessage::assistant(msg));
+                self.panel_mut().dirty = true;
+                true
+            }
             _ => {
-                let msg = format!("Unknown command: /{cmd}. Try /clear, /skills, /mcp or /quit.");
+                let msg = format!(
+                    "Unknown command: /{cmd}. Try /clear, /skills, /mcp, /model, /agent or /quit."
+                );
                 self.panel_mut()
                     .messages
                     .push(crate::llm::ChatMessage::assistant(msg));

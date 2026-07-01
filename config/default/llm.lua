@@ -7,6 +7,19 @@ function module.apply_to_config(config)
   config.llm = {
     enabled  = false,    -- Set to true to enable AI features
 
+    -- Backend: "provider" (direct LLM API) or "agent" (ACP agent process like Claude Code CLI).
+    -- Default: "provider". When set to "agent", the fields below are used instead of provider/model.
+    backend  = "provider",
+
+    -- ACP agent config (used when backend = "agent").
+    -- command: executable to spawn ("claude", "codex", absolute path, …).
+    -- agent = {
+    --   command      = "claude",
+    --   args         = {},          -- extra CLI args passed to the agent
+    --   env          = {},          -- extra env vars: { ANTHROPIC_API_KEY = "sk-..." }
+    --   display_name = nil,         -- override label in chat panel header (nil = command basename)
+    -- },
+
     provider = "openrouter",                               -- "openrouter" | "ollama" | "lmstudio" | "copilot"
     model    = "meta-llama/llama-3.1-8b-instruct:free",   -- Free model for testing
     api_key  = os.getenv("OPENROUTER_API_KEY"),            -- Or paste key directly (not recommended)

@@ -508,9 +508,38 @@ pub struct KeyBind {
     pub action: String,
 }
 
+/// Which backend drives the AI panel: a direct LLM provider or an ACP agent process.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum LlmBackend {
+    #[default]
+    Provider,
+    Agent,
+}
+
+/// Configuration for an ACP agent process (Phase 8).
+/// `command` is the executable (e.g. `"claude"`, `"codex"`, absolute path).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AcpAgentConfig {
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    /// Extra environment variables passed to the agent process as (KEY, VALUE) pairs.
+    #[serde(default)]
+    pub env: Vec<(String, String)>,
+    /// Override label shown in the chat panel header. Defaults to the command basename.
+    pub display_name: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlmConfig {
     pub enabled: bool,
+    /// Which backend to use: `"provider"` (direct LLM) or `"agent"` (ACP process).
+    #[serde(default)]
+    pub backend: LlmBackend,
+    /// ACP agent config — used when `backend = "agent"`.
+    #[serde(default)]
+    pub agent: Option<AcpAgentConfig>,
     pub provider: String,
     pub model: String,
     #[serde(skip_serializing)]
@@ -525,6 +554,8 @@ impl Default for LlmConfig {
     fn default() -> Self {
         Self {
             enabled: false,
+            backend: LlmBackend::Provider,
+            agent: None,
             provider: "openrouter".into(),
             model: "meta-llama/llama-3.1-8b-instruct:free".into(),
             api_key: None,
