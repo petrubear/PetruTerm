@@ -1414,6 +1414,45 @@ impl App {
         }
     }
 
+    /// V-1: toggle the render view's CAMetalLayer opacity. wgpu leaves the layer
+    /// opaque by default, which discards the clear-color alpha; setting it
+    /// non-opaque lets the translucent background and blur composite through.
+    #[cfg(target_os = "macos")]
+    unsafe fn set_metal_layer_opaque(window: &Window, opaque: bool) {
+        use objc2::msg_send;
+        use objc2::runtime::{AnyObject, Bool};
+        use winit::raw_window_handle::HasWindowHandle;
+
+        let Ok(h) = window.window_handle() else {
+            return;
+        };
+        let winit::raw_window_handle::RawWindowHandle::AppKit(h) = h.as_raw() else {
+            return;
+        };
+        let ns_view: &AnyObject = &*(h.ns_view.as_ptr() as *const AnyObject);
+        let layer_ptr: *mut AnyObject = msg_send![ns_view, layer];
+        if layer_ptr.is_null() {
+            return;
+        }
+        let flag = if opaque { Bool::YES } else { Bool::NO };
+        // wgpu (raw-window-metal) hosts the CAMetalLayer as a sublayer, so the
+        // real drawable is not [ns_view layer]. Set opacity on the host layer and
+        // every sublayer so the actual Metal layer is covered.
+        let layer: &AnyObject = &*layer_ptr;
+        let () = msg_send![layer, setOpaque: flag];
+        let sublayers_ptr: *mut AnyObject = msg_send![layer, sublayers];
+        if !sublayers_ptr.is_null() {
+            let count: usize = msg_send![sublayers_ptr, count];
+            for i in 0..count {
+                let sub_ptr: *mut AnyObject = msg_send![sublayers_ptr, objectAtIndex: i];
+                if !sub_ptr.is_null() {
+                    let sub: &AnyObject = &*sub_ptr;
+                    let () = msg_send![sub, setOpaque: flag];
+                }
+            }
+        }
+    }
+
     /// V-2: insert an NSVisualEffectView behind the (transparent) render view so
     /// the window content sits over a blurred vibrancy layer. Uses the WezTerm
     /// approach: the blur view becomes the window's contentView and the original
@@ -1664,6 +1703,15 @@ impl ApplicationHandler<()> for App {
                 return;
             }
         };
+
+        // V-1: wgpu's CAMetalLayer defaults to opaque, which ignores the clear
+        // alpha. Make it non-opaque so translucency/blur show through.
+        #[cfg(target_os = "macos")]
+        if want_transparent {
+            unsafe {
+                Self::set_metal_layer_opaque(&window, false);
+            }
+        }
 
         // Register the native menu bar with the macOS application and window manager.
         #[cfg(target_os = "macos")]
