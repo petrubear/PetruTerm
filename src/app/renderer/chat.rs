@@ -69,8 +69,10 @@ impl RenderContext {
         let co = term_cols; // grid column where panel begins
 
         // ── Background Rect ──────────────────────────────────────────────────
-        let radius = 10.0 * self.scale_factor;
-        let border = 1.0 * self.scale_factor;
+        let st = self.ui_style();
+        let radius = st.r_panel;
+        let border = st.border;
+        let border_color = config.colors.ui_border;
         let cw = self.shaper.cell_width;
         let ch = self.shaper.cell_height;
         let px = pad_x + co as f32 * cw;
@@ -81,7 +83,7 @@ impl RenderContext {
         self.rect_instances
             .push(crate::renderer::rounded_rect::RoundedRectInstance {
                 rect: [px - border, py, pw + 2.0 * border, ph],
-                color: sep_fg, // border
+                color: border_color,
                 radius: radius + border,
                 border_width: 0.0,
                 _pad: [0.0; 2],
