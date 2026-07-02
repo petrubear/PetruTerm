@@ -1414,6 +1414,68 @@ impl App {
         }
     }
 
+    /// V-2: insert an NSVisualEffectView behind the (transparent) render view so
+    /// the window content sits over a blurred vibrancy layer. Uses the WezTerm
+    /// approach: the blur view becomes the window's contentView and the original
+    /// render view is re-parented on top of it. Only called when blur is enabled.
+    #[cfg(target_os = "macos")]
+    unsafe fn apply_macos_blur(&self, window: &Window) {
+        use objc2::runtime::{AnyObject, Bool};
+        use objc2::{class, msg_send};
+        use objc2_foundation::{NSRect, NSString};
+        use winit::raw_window_handle::HasWindowHandle;
+
+        let Ok(h) = window.window_handle() else {
+            return;
+        };
+        let winit::raw_window_handle::RawWindowHandle::AppKit(h) = h.as_raw() else {
+            return;
+        };
+        let ns_view: &AnyObject = &*(h.ns_view.as_ptr() as *const AnyObject);
+        let ns_win_ptr: *mut AnyObject = msg_send![ns_view, window];
+        if ns_win_ptr.is_null() {
+            return;
+        }
+        let ns_win: &AnyObject = &*ns_win_ptr;
+
+        let content_ptr: *mut AnyObject = msg_send![ns_win, contentView];
+        if content_ptr.is_null() {
+            return;
+        }
+        let content: &AnyObject = &*content_ptr;
+        let bounds: NSRect = msg_send![content, bounds];
+
+        let blur_ptr: *mut AnyObject = msg_send![class!(NSVisualEffectView), alloc];
+        let blur_ptr: *mut AnyObject = msg_send![blur_ptr, initWithFrame: bounds];
+        if blur_ptr.is_null() {
+            return;
+        }
+        let blur: &AnyObject = &*blur_ptr;
+        // material 13 = UnderWindowBackground; blendingMode 0 = BehindWindow; state 1 = Active.
+        let () = msg_send![blur, setMaterial: 13_i64];
+        let () = msg_send![blur, setBlendingMode: 0_i64];
+        let () = msg_send![blur, setState: 1_i64];
+        let () = msg_send![blur, setAutoresizingMask: 18_usize]; // width|height sizable
+
+        // Light/dark vibrancy appearance.
+        let name = match self.config.window.blur {
+            crate::config::schema::WindowBlur::Light => "NSAppearanceNameAqua",
+            _ => "NSAppearanceNameDarkAqua",
+        };
+        let ns_name = NSString::from_str(name);
+        let appearance: *mut AnyObject = msg_send![class!(NSAppearance), appearanceNamed: &*ns_name];
+        if !appearance.is_null() {
+            let () = msg_send![blur, setAppearance: appearance];
+        }
+
+        // Swap the content view and re-parent the render view on top.
+        let () = msg_send![ns_win, setContentView: blur];
+        let () = msg_send![blur, addSubview: content];
+        let () = msg_send![content, setFrame: bounds];
+        let () = msg_send![content, setAutoresizingMask: 18_usize];
+        let () = msg_send![ns_win, setOpaque: Bool::NO];
+    }
+
     // ── Low-frequency background tasks (battery + git) ───────────────────────
     // Each sub-poll has its own TTL guard; separation keeps about_to_wait focused
     // on scheduling / wakeup logic.
@@ -1574,6 +1636,12 @@ impl ApplicationHandler<()> for App {
         if self.config.window.title_bar_style == TitleBarStyle::Custom {
             unsafe {
                 self.apply_macos_custom_titlebar(&window);
+            }
+        }
+        #[cfg(target_os = "macos")]
+        if self.config.window.blur != crate::config::schema::WindowBlur::None {
+            unsafe {
+                self.apply_macos_blur(&window);
             }
         }
 
