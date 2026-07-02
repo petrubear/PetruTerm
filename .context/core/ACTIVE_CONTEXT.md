@@ -10,11 +10,11 @@
 
 | ID | Tarea | Fase | Estado |
 |----|-------|------|--------|
-| R-1 | Tokens de estilo UI (espaciado + radios) | 1 | Pendiente |
-| R-2 | Tonos de superficie con contraste (5 temas) | 1 | Pendiente |
+| R-1 | Tokens de estilo UI (espaciado + radios) | 1 | **COMPLETA** |
+| R-2 | Tonos de superficie con contraste (5 temas) | 1 | En curso (verificación visual pendiente) |
 | R-3 | Sidebar izquierda — restyle | 1 | Pendiente |
 | R-4 | Command palette — restyle | 1 | Pendiente |
-| R-5 | Chat panel — restyle | 1 | Pendiente |
+| R-5 | Chat panel — restyle | 1 | Casi (tono propio + pills hechos; float inset en R-8) |
 | R-6 | Tab bar — restyle | 1 | Pendiente |
 | R-7 | Status bar — restyle | 1 | Pendiente |
 | R-8 | Float layout de la ventana (inset global) | 1 | Pendiente |

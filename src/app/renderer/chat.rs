@@ -50,7 +50,9 @@ impl RenderContext {
         }
 
         // ── Colors (from active theme) ────────────────────────────────────────
-        let actual_panel_bg = config.colors.background;
+        // R-5: the panel is a floating surface with its own tone, distinct from
+        // the terminal background behind it.
+        let actual_panel_bg = config.colors.ui_surface;
         let panel_bg = [0.0; 4]; // transparent
 
         let user_fg = config.colors.ansi[6];
@@ -973,9 +975,10 @@ impl RenderContext {
         let pill1_row = center + 2;
         let pill2_row = center + 3;
 
+        let st = self.ui_style();
         let pill_margin = 8.0 * cw;
-        let pill_radius = 4.0 * self.scale_factor;
-        let pill_border = 1.0 * self.scale_factor;
+        let pill_radius = st.r_pill;
+        let pill_border = st.border;
 
         for r in history_start_row..sep_row {
             if r == icon_row {
@@ -1009,9 +1012,9 @@ impl RenderContext {
                 );
             } else if r == pill1_row || r == pill2_row {
                 let (label, hover_idx) = if r == pill1_row {
-                    ("[ Fix last error ]", 0u8)
+                    ("Fix last error", 0u8)
                 } else {
-                    ("[ Explain command ]", 1u8)
+                    ("Explain command", 1u8)
                 };
                 let label_w = label.chars().count();
                 let pad = panel_cols.saturating_sub(label_w) / 2;
@@ -1028,8 +1031,8 @@ impl RenderContext {
                     )
                 } else {
                     (
-                        config.colors.ui_muted,
-                        config.colors.ui_surface,
+                        config.colors.ui_border,
+                        config.colors.ui_surface_hover,
                         dim(config.colors.foreground, 0.15),
                     )
                 };
@@ -1083,10 +1086,11 @@ impl RenderContext {
             pw,
             ..
         } = *p;
+        let st = self.ui_style();
         let pill_margin = 8.0 * cw;
-        let pill_radius = 4.0 * self.scale_factor;
-        let pill_border = 1.0 * self.scale_factor;
-        let pill_labels = ["[ Fix last error ]", "[ Explain more ]"];
+        let pill_radius = st.r_pill;
+        let pill_border = st.border;
+        let pill_labels = ["Fix last error", "Explain more"];
         for (hover_idx, label) in pill_labels.iter().enumerate() {
             let r = sep_row - suggestion_rows + hover_idx;
             let label_w = label.chars().count();
@@ -1104,8 +1108,8 @@ impl RenderContext {
                 )
             } else {
                 (
-                    config.colors.ui_muted,
-                    config.colors.ui_surface,
+                    config.colors.ui_border,
+                    config.colors.ui_surface_hover,
                     dim(config.colors.foreground, 0.15),
                 )
             };
