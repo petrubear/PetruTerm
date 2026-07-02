@@ -215,6 +215,20 @@ pub struct WindowConfig {
     pub title_bar_style: TitleBarStyle,
     pub padding: Padding,
     pub opacity: f32,
+    /// macOS window vibrancy/blur behind the content (Phase 9 V-2).
+    #[serde(default)]
+    pub blur: WindowBlur,
+}
+
+/// macOS vibrancy material drawn behind the (transparent) window content.
+/// `None` disables blur; `Dark`/`Light` pick the NSVisualEffectView material.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WindowBlur {
+    #[default]
+    None,
+    Dark,
+    Light,
 }
 
 impl Default for WindowConfig {
@@ -232,6 +246,7 @@ impl Default for WindowConfig {
                 bottom: 10,
             },
             opacity: 1.0,
+            blur: WindowBlur::None,
         }
     }
 }
@@ -408,6 +423,21 @@ impl ColorScheme {
             b: b as f64,
             a: a as f64,
         }
+    }
+
+    /// Surface clear color honoring window translucency (Phase 9 V-1).
+    /// Alpha comes from `window.opacity`; if opacity is 1.0 but blur is enabled,
+    /// falls back to 0.82 so the vibrancy behind the surface stays visible.
+    pub fn clear_color(&self, window: &WindowConfig) -> wgpu::Color {
+        let mut c = self.background_wgpu();
+        c.a = if window.opacity < 1.0 {
+            window.opacity as f64
+        } else if window.blur != WindowBlur::None {
+            0.82
+        } else {
+            1.0
+        };
+        c
     }
 
     /// Map a terminal color index (0-15) to RGBA.

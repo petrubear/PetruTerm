@@ -1360,7 +1360,7 @@ impl UiManager {
                     *config = new_cfg;
                     render_ctx
                         .renderer
-                        .update_bg_color(config.colors.background_wgpu());
+                        .update_bg_color(config.colors.clear_color(&config.window));
                     self.palette.rebuild_keybinds(config);
                     self.palette.rebuild_snippets(&config.snippets);
                     self.rewire_backend(config, wakeup_proxy);
@@ -1649,7 +1649,7 @@ impl UiManager {
                         );
                         render_ctx
                             .renderer
-                            .update_bg_color(scheme.background_wgpu());
+                            .update_bg_color(scheme.clear_color(&config.window));
                         config.colors = scheme;
                         // Hash-based row cache auto-invalidates on color change — no manual dirty needed.
                     }

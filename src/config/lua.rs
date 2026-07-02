@@ -528,6 +528,14 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
         if let Ok(o) = win.get::<f32>("opacity") {
             config.window.opacity = o;
         }
+        // blur = "dark" | "light" | false/nil (Phase 9 V-2).
+        if let Ok(blur) = win.get::<String>("blur") {
+            config.window.blur = match blur.as_str() {
+                "dark" | "Dark" => crate::config::schema::WindowBlur::Dark,
+                "light" | "Light" => crate::config::schema::WindowBlur::Light,
+                _ => crate::config::schema::WindowBlur::None,
+            };
+        }
         if let Ok(w) = win.get::<u32>("initial_width") {
             config.window.initial_width = Some(w);
         }

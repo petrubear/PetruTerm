@@ -1543,6 +1543,14 @@ impl ApplicationHandler<()> for App {
         if self.config.window.title_bar_style == TitleBarStyle::None {
             attrs = attrs.with_decorations(false);
         }
+        // V-1: a translucent window (opacity < 1 or blur) needs a transparent
+        // surface so the clear-color alpha and the vibrancy behind it show.
+        let want_transparent = self.config.window.blur
+            != crate::config::schema::WindowBlur::None
+            || self.config.window.opacity < 1.0;
+        if want_transparent {
+            attrs = attrs.with_transparent(true);
+        }
         if let Some(w) = self.config.window.initial_width {
             if let Some(h) = self.config.window.initial_height {
                 attrs = attrs.with_inner_size(winit::dpi::LogicalSize::new(w, h));

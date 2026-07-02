@@ -136,7 +136,7 @@ impl App {
                 self.lua = Some(new_lua);
                 if let Some(rc) = &mut self.render_ctx {
                     rc.renderer
-                        .update_bg_color(self.config.colors.background_wgpu());
+                        .update_bg_color(self.config.colors.clear_color(&self.config.window));
                     if let Err(err) = rc.refresh_text_metrics(&self.config, rc.scale_factor) {
                         log::warn!("Failed to rebuild text metrics after config reload: {err}");
                     }
