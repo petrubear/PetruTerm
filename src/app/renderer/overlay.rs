@@ -469,16 +469,17 @@ impl RenderContext {
         let fg = colors.foreground;
         let highlight_bg = colors.ui_surface_active;
         let prompt_fg = colors.ui_accent;
-        let border_color = colors.ui_muted;
+        let border_color = colors.ui_border;
 
+        let st = self.ui_style();
         let cw = self.shaper.cell_width;
         let ch = self.shaper.cell_height;
         let px = pad_x + start_col as f32 * cw;
         let py = pad_y + start_row as f32 * ch;
         let pw = palette_width as f32 * cw;
         let ph = palette_height as f32 * ch;
-        let radius = 12.0 * self.scale_factor;
-        let border = 1.0 * self.scale_factor;
+        let radius = st.r_panel;
+        let border = st.border;
 
         // Border rect (drawn first — behind panel bg)
         self.rect_instances.push(RoundedRectInstance {
@@ -537,13 +538,13 @@ impl RenderContext {
                     // Highlight row: pill-style rect with padding
                     self.rect_instances.push(RoundedRectInstance {
                         rect: [
-                            px + 6.0 * self.scale_factor,
+                            px + st.sp2,
                             pad_y + row as f32 * ch,
-                            pw - 12.0 * self.scale_factor,
+                            pw - 2.0 * st.sp2,
                             ch,
                         ],
                         color: highlight_bg,
-                        radius: 6.0 * self.scale_factor,
+                        radius: st.r_pill,
                         border_width: 0.0,
                         _pad: [0.0; 2],
                     });
