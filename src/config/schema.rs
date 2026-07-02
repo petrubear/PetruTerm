@@ -389,13 +389,13 @@ impl ColorScheme {
                 hex("#ffffff"),
             ],
             ui_accent: hex("#9580ff"),         // purple — matches cursor_bg
-            ui_surface: hex("#131316"),        // panel bg
+            ui_surface: hex("#1a1a22"),        // panel bg — elevated, slight cool tint
             ui_surface_active: hex("#454158"), // selection_bg
-            ui_surface_hover: hex("#1a1a1e"),  // background +8%
+            ui_surface_hover: hex("#232330"),  // one step above the surface
             ui_muted: hexa("#e0e0e8", 0.35),   // foreground at 35% alpha
             ui_success: hex("#8aff80"),        // ansi green
-            ui_overlay: hexa("#131316", 0.95), // panel bg near-opaque
-            ui_border: hex("#2a2a2f"),         // pane separator
+            ui_overlay: hexa("#1a1a22", 0.95), // panel bg near-opaque
+            ui_border: hex("#33333f"),         // subtle outline on surfaces
         }
     }
 
