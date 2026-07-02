@@ -1438,12 +1438,21 @@ impl App {
         }
         let ns_win: &AnyObject = &*ns_win_ptr;
 
+        // winit's WinitView (the content view) owns ivars we must not disturb, so
+        // do NOT replace it. Insert the blur view as a sibling *behind* it, as a
+        // child of the window's frame view. Transparent clear pixels then reveal
+        // the vibrancy instead of the desktop.
         let content_ptr: *mut AnyObject = msg_send![ns_win, contentView];
         if content_ptr.is_null() {
             return;
         }
         let content: &AnyObject = &*content_ptr;
-        let bounds: NSRect = msg_send![content, bounds];
+        let frame_ptr: *mut AnyObject = msg_send![content, superview];
+        if frame_ptr.is_null() {
+            return; // no frame view yet — skip rather than risk the hierarchy
+        }
+        let frame_view: &AnyObject = &*frame_ptr;
+        let bounds: NSRect = msg_send![frame_view, bounds];
 
         let blur_ptr: *mut AnyObject = msg_send![class!(NSVisualEffectView), alloc];
         let blur_ptr: *mut AnyObject = msg_send![blur_ptr, initWithFrame: bounds];
@@ -1468,11 +1477,8 @@ impl App {
             let () = msg_send![blur, setAppearance: appearance];
         }
 
-        // Swap the content view and re-parent the render view on top.
-        let () = msg_send![ns_win, setContentView: blur];
-        let () = msg_send![blur, addSubview: content];
-        let () = msg_send![content, setFrame: bounds];
-        let () = msg_send![content, setAutoresizingMask: 18_usize];
+        // NSWindowBelow = -1: place the blur behind the winit content view.
+        let () = msg_send![frame_view, addSubview: blur, positioned: -1_i64, relativeTo: content];
         let () = msg_send![ns_win, setOpaque: Bool::NO];
     }
 
