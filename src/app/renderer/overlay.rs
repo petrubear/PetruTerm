@@ -539,12 +539,7 @@ impl RenderContext {
                 if is_selected {
                     // Highlight row: pill-style rect with padding
                     self.rect_instances.push(RoundedRectInstance {
-                        rect: [
-                            px + st.sp2,
-                            pad_y + row as f32 * ch,
-                            pw - 2.0 * st.sp2,
-                            ch,
-                        ],
+                        rect: [px + st.sp2, pad_y + row as f32 * ch, pw - 2.0 * st.sp2, ch],
                         color: highlight_bg,
                         radius: st.r_pill,
                         border_width: 0.0,

@@ -442,17 +442,17 @@ recall-biased) y se probó manualmente contra un agente ACP real
 > Sin cambios de funcionalidad; se conservan todas las herramientas actuales.
 
 ### Fase 1 — Theming & spacing (sin plataforma)
-- [ ] R-1: Tokens de estilo UI (espaciado + radios) centralizados
-- [ ] R-2: Tonos de superficie con contraste real en los 5 temas
-- [ ] R-3: Sidebar izquierda — restyle (mantiene 4 secciones)
-- [ ] R-4: Command palette — restyle
-- [ ] R-5: Chat panel — restyle
-- [ ] R-6: Tab bar — restyle
-- [ ] R-7: Status bar — restyle
-- [ ] R-8: Float layout de la ventana (inset global)
+- [x] R-1: Tokens de estilo UI (espaciado + radios) centralizados
+- [x] R-2: Tonos de superficie con contraste real en los 5 temas
+- [x] R-3: Sidebar izquierda — restyle (mantiene 4 secciones)
+- [x] R-4: Command palette — restyle
+- [x] R-5: Chat panel — restyle
+- [x] R-6: Tab bar — restyle (ya coherente con el token set)
+- [x] R-7: Status bar — restyle (ya coherente con el token set)
+- [x] R-8: Float layout de la ventana (inset global SP_2; titlebar y status bar full-bleed)
 
 ### Fase 2 — Ventana translúcida & blur (macOS)
-- [ ] V-1: Ventana transparente + `window.opacity`
-- [ ] V-2: Blur/vibrancy nativo (NSVisualEffectView) + `window.blur`
+- [x] V-1: Ventana transparente + `window.opacity`
+- [x] V-2: Blur/vibrancy nativo (NSVisualEffectView) + `window.blur`
 - [ ] V-3: Esquinas redondeadas de ventana
 - [ ] V-4: Tokens de superficie translúcidos cuando blur activo

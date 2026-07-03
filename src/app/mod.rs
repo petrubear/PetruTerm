@@ -741,9 +741,13 @@ impl App {
                         .map(|rc| rc.scale_factor as f64)
                         .unwrap_or(1.0);
                     // Sidebar occupies the visual column area only (not the margin).
+                    // R-8: the sidebar floats by the content inset, so shift the hit
+                    // box right by the same amount.
+                    let inset = self.content_inset() as f64;
                     let sidebar_visual_right = self.config.window.padding.left as f64
+                        + inset
                         + SIDEBAR_COLS as f64 * self.cell_dims().0 as f64;
-                    let sidebar_left = self.config.window.padding.left as f64;
+                    let sidebar_left = self.config.window.padding.left as f64 + inset;
                     // Only intercept clicks that are (a) inside the visual sidebar area
                     // and (b) below the titlebar so that the titlebar toggle button
                     // remains reachable.
@@ -753,8 +757,9 @@ impl App {
                         && self.input.mouse_pos.1 >= titlebar_bottom
                     {
                         let (_, cell_h) = self.cell_dims();
-                        let sidebar_top =
-                            self.config.window.padding.top as f64 + self.tab_bar_height_px() as f64;
+                        let sidebar_top = self.config.window.padding.top as f64
+                            + self.tab_bar_height_px() as f64
+                            + inset;
                         let header_bottom = sidebar_top + cell_h as f64;
                         // Click in the header row → create new workspace.
                         if self.input.mouse_pos.1 < header_bottom {
@@ -1511,7 +1516,8 @@ impl App {
             _ => "NSAppearanceNameDarkAqua",
         };
         let ns_name = NSString::from_str(name);
-        let appearance: *mut AnyObject = msg_send![class!(NSAppearance), appearanceNamed: &*ns_name];
+        let appearance: *mut AnyObject =
+            msg_send![class!(NSAppearance), appearanceNamed: &*ns_name];
         if !appearance.is_null() {
             let () = msg_send![blur, setAppearance: appearance];
         }
@@ -1652,8 +1658,7 @@ impl ApplicationHandler<()> for App {
         }
         // V-1: a translucent window (opacity < 1 or blur) needs a transparent
         // surface so the clear-color alpha and the vibrancy behind it show.
-        let want_transparent = self.config.window.blur
-            != crate::config::schema::WindowBlur::None
+        let want_transparent = self.config.window.blur != crate::config::schema::WindowBlur::None
             || self.config.window.opacity < 1.0;
         if want_transparent {
             attrs = attrs.with_transparent(true);

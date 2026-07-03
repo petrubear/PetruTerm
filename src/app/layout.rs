@@ -53,8 +53,12 @@ impl App {
             } else {
                 0.0
             };
-            rc.renderer
-                .set_padding(pad.left as f32 + sidebar_px, pad.top as f32 + title_h);
+            // R-8: float the content by the uniform inset (matches viewport_rect).
+            let inset = crate::renderer::ui_style::SP_2 * rc.scale_factor;
+            rc.renderer.set_padding(
+                pad.left as f32 + sidebar_px + inset,
+                pad.top as f32 + title_h + inset,
+            );
         }
     }
 
@@ -71,12 +75,19 @@ impl App {
             let sidebar_px = self.sidebar_width_px();
             let tab_h = self.tab_bar_height_px();
             let sb_h = self.status_bar_height_px();
-            let cols = ((w as f32 - pad.left as f32 - pad.right as f32 - panel_px - sidebar_px)
+            let inset = self.content_inset();
+            let cols = ((w as f32
+                - pad.left as f32
+                - pad.right as f32
+                - panel_px
+                - sidebar_px
+                - 2.0 * inset)
                 / cell_w as f32)
                 .max(1.0) as u16;
-            let rows = ((h as f32 - pad.top as f32 - pad.bottom as f32 - tab_h - sb_h)
-                / cell_h as f32)
-                .max(1.0) as u16;
+            let rows =
+                ((h as f32 - pad.top as f32 - pad.bottom as f32 - tab_h - sb_h - 2.0 * inset)
+                    / cell_h as f32)
+                    .max(1.0) as u16;
             (cols, rows)
         } else {
             (120, 40)
@@ -102,6 +113,18 @@ impl App {
             .as_ref()
             .map(|rc| (rc.shaper.cell_width as u16, rc.shaper.cell_height as u16))
             .unwrap_or((8, 16))
+    }
+
+    /// R-8: uniform float gap (logical `SP_2` × scale) between the content area
+    /// (terminal + panels + sidebar) and the window edges / titlebar / status
+    /// bar. Titlebar and status bar stay full-bleed; only the content floats.
+    pub(super) fn content_inset(&self) -> f32 {
+        let sf = self
+            .render_ctx
+            .as_ref()
+            .map(|rc| rc.scale_factor)
+            .unwrap_or(1.0);
+        crate::renderer::ui_style::SP_2 * sf
     }
 
     pub(super) fn open_initial_tab(&mut self) -> Result<()> {
@@ -131,11 +154,19 @@ impl App {
                 0.0
             };
             let sidebar_px = self.sidebar_width_px();
+            let inset = self.content_inset();
             Rect {
-                x: pad.left as f32 + sidebar_px,
-                y: pad.top as f32 + tab_h,
-                w: (w as f32 - pad.left as f32 - pad.right as f32 - panel_px - sidebar_px).max(0.0),
-                h: (h as f32 - pad.top as f32 - pad.bottom as f32 - tab_h - sb_h).max(0.0),
+                x: pad.left as f32 + sidebar_px + inset,
+                y: pad.top as f32 + tab_h + inset,
+                w: (w as f32
+                    - pad.left as f32
+                    - pad.right as f32
+                    - panel_px
+                    - sidebar_px
+                    - 2.0 * inset)
+                    .max(0.0),
+                h: (h as f32 - pad.top as f32 - pad.bottom as f32 - tab_h - sb_h - 2.0 * inset)
+                    .max(0.0),
             }
         } else {
             let sidebar_px = self.sidebar_width_px();
@@ -151,9 +182,11 @@ impl App {
     pub(super) fn pixel_to_cell(&self, x: f64, y: f64) -> (usize, usize) {
         // Subtract tab bar height so y is relative to the content viewport top.
         let tab_h = self.tab_bar_height_px() as f64;
+        // R-8: also subtract the float inset so pixels map back to grid cells.
+        let inset = self.content_inset() as f64;
         let (raw_col, raw_row) = self.input.pixel_to_cell(
-            x - self.sidebar_width_px() as f64,
-            y - tab_h,
+            x - self.sidebar_width_px() as f64 - inset,
+            y - tab_h - inset,
             &self.config,
             &self.render_ctx,
         );
@@ -343,7 +376,9 @@ impl App {
             let pad_bottom = self.config.window.padding.bottom as f32;
             let tab_h = self.tab_bar_height_px();
             let sb_h = self.status_bar_height_px();
-            ((h as f32 - pad_top - pad_bottom - tab_h - sb_h) / cell_h as f32).floor() as usize
+            let inset = self.content_inset();
+            ((h as f32 - pad_top - pad_bottom - tab_h - sb_h - 2.0 * inset) / cell_h as f32).floor()
+                as usize
         } else {
             return None;
         };
@@ -381,7 +416,9 @@ impl App {
             let pad_bottom = self.config.window.padding.bottom as f32;
             let tab_h = self.tab_bar_height_px();
             let sb_h = self.status_bar_height_px();
-            ((h as f32 - pad_top - pad_bottom - tab_h - sb_h) / cell_h as f32).floor() as usize
+            let inset = self.content_inset();
+            ((h as f32 - pad_top - pad_bottom - tab_h - sb_h - 2.0 * inset) / cell_h as f32).floor()
+                as usize
         } else {
             return None;
         };
