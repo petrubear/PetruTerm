@@ -84,7 +84,12 @@ impl RenderContext {
 
         self.rect_instances
             .push(crate::renderer::rounded_rect::RoundedRectInstance {
-                rect: [px - border, py, pw + 2.0 * border, ph],
+                rect: [
+                    px - border,
+                    py - border,
+                    pw + 2.0 * border,
+                    ph + 2.0 * border,
+                ],
                 color: border_color,
                 radius: radius + border,
                 border_width: 0.0,
