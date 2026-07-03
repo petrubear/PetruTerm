@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-07-03
-**Open Items:** 6
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 2 | **P3:** 4 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 3
+**Open Items:** 5
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 1 | **P3:** 4 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 3
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -58,12 +58,12 @@ Wave 7 — Deuda estructural remanente
   AUDIT-REFAC-08 ──────────────────────────────────────┘
 
 Phase 9 — UI Restyle (abierto; branch ui-restyle)
-  TD-P9-01 (verificación visual R-8/V-3/V-4) ─┐
-  TD-P9-02 (tab-bar hit-test vs render)       │
-  TD-P9-03 (status bar sub-cell pin)          ├─► verificar/mergear a master
-  TD-P9-04 (borde inferior panel chat)        │
-  TD-P9-05 (inset con titlebar no-Custom)     │
-  TD-P9-06 (tuning visual V-4 bajo blur)      ┘
+  TD-P9-01 (verificación visual V-3/V-4; R-8 ya OK) ─┐
+  TD-P9-02 (tab-bar hit-test vs render)              │
+  TD-P9-03 (status bar sub-cell pin en resize)       ├─► verificar/mergear a master
+  TD-P9-05 (inset con titlebar no-Custom)            │
+  TD-P9-06 (tuning visual V-4 bajo blur)             ┘
+  TD-P9-04 (borde panel chat) ── VERIFICADO 2026-07-03
 
 Watch
   AUDIT-CLEAN-02 (sin cambio; reevaluar si ContextAction crece)
@@ -182,16 +182,14 @@ Watch
 > todo se validó por razonamiento estático + build/clippy/test. Ver
 > [[project_phase9_ui_restyle]].
 
-**TD-P9-01 — P2 — Verificación visual pendiente de R-8/V-3/V-4.**
-El float layout (R-8), las esquinas redondeadas borderless (V-3) y las
-superficies translúcidas con blur (V-4) además del cierre del borde del panel
-de chat nunca se vieron renderizados. La única captura del usuario cubrió R-8 +
-header, pero no V-3/V-4 (no-op en la config por defecto: `blur=None`,
-`opacity=1.0`) ni el borde del panel. Acción: correr con `window.blur="dark"`
-(y `title_bar_style="none"` para V-3) y confirmar visualmente antes de mergear a
-master. Riesgo: regresiones visuales no detectadas. `src/app/layout.rs`,
-`src/app/frame.rs`, `src/app/renderer/chat.rs`, `src/app/mod.rs`,
-`src/config/schema.rs`.
+**TD-P9-01 — P3 — Verificación visual pendiente de V-3/V-4.**
+PARCIALMENTE VERIFICADO (2026-07-03): capturas del usuario confirman R-8 (float
+layout: sidebar/panel/terminal flotan, titlebar/status bar full-bleed), el header
+del chat y la card del panel en la config por defecto (Custom titlebar, sin blur).
+Falta verificar **V-3** (esquinas borderless — requiere `title_bar_style="none"`)
+y **V-4** (superficies translúcidas — requiere `window.blur="dark"`), que son
+no-op en la config por defecto. Acción: correr con esas configs y confirmar antes
+de mergear. `src/app/mod.rs` (V-3), `src/config/schema.rs` (V-4).
 
 **TD-P9-02 — P2 — `hit_test_tab_bar` diverge del origen de render de las tabs.**
 El render ancla las tabs a `effective_tabs_start = max(tabs_start_x, content_pad_x)`
@@ -209,11 +207,11 @@ puede caer en una fila entera; se asumió que el error ≤½ celda lo absorben
 `SB_EXTRA_PX` + `pad.bottom`, pero no se confirmó que no deje una costura fina ni
 que no salte una celda a ciertas alturas de ventana. Verificar en resize.
 
-**TD-P9-04 — P3 — El borde cerrado del panel de chat asume que su fondo flota.**
-`build_chat_panel_instances` (`chat.rs`) ahora dibuja el borde en los 4 lados
-asumiendo que `py+ph` (alto = `total_rows*ch`) queda por encima de la status bar.
-Si el panel se extiende más abajo de lo previsto, el borde inferior podría
-recortarse o colisionar con la status bar. Verificar visualmente.
+**TD-P9-04 — VERIFICADO (2026-07-03).** El borde cerrado del panel de chat
+(`build_chat_panel_instances`, `chat.rs`) se confirmó en captura: el panel se lee
+como card completa, su borde inferior flota por encima de la status bar sin
+recorte ni colisión. `py+ph` (alto = `total_rows*ch`) queda correctamente en el
+gap sobre la status bar.
 
 **TD-P9-05 — P3 — Coherencia del inset con titlebar no-Custom.**
 El modelo de origen de grid único se validó para `title_bar_style=Custom`. En
@@ -250,6 +248,6 @@ Wave 4: AUDIT-PERF-08, AUDIT-PERF-09, AUDIT-RESP-01
 Wave 5: AUDIT-ENERGY-05, AUDIT-MEM-04, AUDIT-MEM-05, AUDIT-REFAC-06
 Wave 6: AUDIT-REFAC-07, AUDIT-CLEAN-03
 Wave 7: AUDIT-REFAC-08
-Phase 9 (abierto): TD-P9-01, TD-P9-02, TD-P9-03, TD-P9-04, TD-P9-05, TD-P9-06
+Phase 9 (abierto): TD-P9-01 (V-3/V-4), TD-P9-02, TD-P9-03, TD-P9-05, TD-P9-06 | verificado: TD-P9-04
 Watch: AUDIT-CLEAN-02, AUDIT-PERF-10, TD-P9-07
 ```
