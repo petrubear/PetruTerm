@@ -232,32 +232,78 @@ impl App {
         Some((panel_col, panel_row))
     }
 
-    /// Given a pixel x coordinate, return which tab index is under the cursor in the tab bar.
+    /// Given a pixel x coordinate, return which tab index is under the cursor in
+    /// the tab bar.
+    ///
+    /// This mirrors the column layout in `build_tab_bar_instances` exactly — same
+    /// `pad_left` grid origin (content_pad_x, floated by the R-8 inset), same
+    /// start/end columns, and the same per-tab label via `tab_display_label`. Any
+    /// change to the render loop's geometry must be reflected here (TD-P9-02).
     pub(super) fn hit_test_tab_bar(&self, x_px: f64) -> Option<usize> {
-        let (cell_w, _) = self.cell_dims();
-        let sf = self
-            .render_ctx
-            .as_ref()
-            .map(|rc| rc.scale_factor as f64)
-            .unwrap_or(1.0);
-        let tabs_start_x = if self.config.window.title_bar_style == TitleBarStyle::Custom {
-            158.0 * sf
-        } else {
-            self.config.window.padding.left as f64
-        };
-        if x_px < tabs_start_x {
-            return None; // click in the buttons zone, not a tab
+        let tabs = self.mux.tabs.tabs();
+        // The renderer only draws individual pills when there are 2+ tabs.
+        if tabs.len() <= 1 {
+            return None;
         }
-        let click_col = ((x_px - tabs_start_x) / cell_w as f64).floor() as usize;
-        let mut col = 0usize;
-        for (i, tab) in self.mux.tabs.tabs().iter().enumerate() {
+        let rc = self.render_ctx.as_ref()?;
+        let sf = rc.scale_factor as f64;
+        let cell_w = rc.shaper.cell_width as f64;
+        if cell_w <= 0.0 {
+            return None;
+        }
+        let win_w = rc.renderer.size().0 as f64;
+
+        // Same origin as the renderer's `pad_left` argument.
+        let pad_left = self.config.window.padding.left as f64
+            + self.sidebar_width_px() as f64
+            + self.content_inset() as f64;
+
+        // Layout constants from build_tab_bar_instances (logical px × scale):
+        // tabs_start_x = traffic(76) + gap(4) + btn(22) + gap(4) + btn(22) + gap(4).
+        let tabs_start_x = 132.0 * sf;
+        let right_reserve = 100.0 * sf;
+        let effective_tabs_start = tabs_start_x.max(pad_left);
+        let tabs_start_col = ((effective_tabs_start - pad_left) / cell_w).ceil().max(0.0) as usize;
+        let tab_end_col = {
+            let avail_w = (win_w - right_reserve).max(effective_tabs_start);
+            ((avail_w - pad_left) / cell_w).max(0.0) as usize
+        };
+        // total_cols = base viewport cols + the chat panel's cols when it is open
+        // (the renderer receives `tab_total_cols`).
+        let viewport = self.viewport_rect();
+        let base_cols = (viewport.w as f64 / cell_w).floor() as usize;
+        let total_cols = base_cols
+            + if self.ui.is_panel_visible() {
+                self.ui.panel().width_cols as usize
+            } else {
+                0
+            };
+        let max_cols = tab_end_col.min(total_cols);
+
+        let click_col_f = ((x_px - pad_left) / cell_w).floor();
+        if click_col_f < 0.0 {
+            return None;
+        }
+        let click_col = click_col_f as usize;
+
+        let active_idx = self.mux.tabs.active_index();
+        let rename_input = self.ui.tab_rename_text();
+        let mut col = tabs_start_col;
+        for (i, tab) in tabs.iter().enumerate() {
+            if col >= max_cols {
+                break;
+            }
             col += 1; // gap before pill
-            col += format!(" {} ", i + 1).chars().count(); // badge
-            let raw = format!(" {} ", tab.title);
-            col += raw.chars().take(14).count();
-            if click_col < col {
+            if col >= max_cols {
+                break;
+            }
+            let label =
+                crate::ui::tabs::tab_display_label(&tab.title, i, i == active_idx, rename_input);
+            let label_w = label.chars().count().min(max_cols - col);
+            if label_w > 0 && click_col >= col && click_col < col + label_w {
                 return Some(i);
             }
+            col += label_w;
         }
         None
     }

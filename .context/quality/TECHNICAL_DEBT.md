@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-07-03
-**Open Items:** 4
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 1 | **P3:** 3 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 3
+**Open Items:** 3
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 3 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 3
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -59,10 +59,9 @@ Wave 7 — Deuda estructural remanente
 
 Phase 9 — UI Restyle (abierto; branch ui-restyle)
   TD-P9-01 (verificación visual V-3/V-4; R-8 ya OK) ─┐
-  TD-P9-02 (tab-bar hit-test vs render)              ├─► verificar/mergear a master
-  TD-P9-05 (inset con titlebar no-Custom)            │
+  TD-P9-05 (inset con titlebar no-Custom)            ├─► verificar/mergear a master
   TD-P9-06 (tuning visual V-4 bajo blur)             ┘
-  RESUELTOS: TD-P9-03 (padding status bar), TD-P9-04 (borde panel), TD-P9-08 (deadlock cierre)
+  RESUELTOS: TD-P9-02 (tab hit-test), TD-P9-03 (padding status bar), TD-P9-04 (borde panel), TD-P9-08 (deadlock cierre)
 
 Watch
   AUDIT-CLEAN-02 (sin cambio; reevaluar si ContextAction crece)
@@ -190,14 +189,17 @@ y **V-4** (superficies translúcidas — requiere `window.blur="dark"`), que son
 no-op en la config por defecto. Acción: correr con esas configs y confirmar antes
 de mergear. `src/app/mod.rs` (V-3), `src/config/schema.rs` (V-4).
 
-**TD-P9-02 — P2 — `hit_test_tab_bar` diverge del origen de render de las tabs.**
-El render ancla las tabs a `effective_tabs_start = max(tabs_start_x, content_pad_x)`
-(`build_tab_bar_instances` en `overlay.rs`), pero `hit_test_tab_bar`
-(`src/app/layout.rs`) usa `158.0*sf` (Custom) o `pad.left` fijo. Con el sidebar
-abierto `content_pad_x` incluye `sidebar_px` y las tabs se dibujan mucho más a la
-derecha que donde el hit-test las espera → clic mapea a la tab equivocada.
-Preexistente (discrepancia 132 vs 158 px), pero el inset de R-8 suma ~8px más.
-Fix: derivar el hit-test del mismo `effective_tabs_start` que el render.
+**TD-P9-02 — RESUELTO (2026-07-03).** `hit_test_tab_bar` (`src/app/layout.rs`)
+divergía del render en DOS cosas: (1) origen — usaba `158.0*sf` fijo en vez del
+grid `content_pad_x` (que incluye sidebar_px + inset R-8); (2) ancho por tab —
+usaba `" N " + " title "` (take 14) mientras el render usa `" title: N "`
+(take 18). El drift del formato de label era la causa original; el inset de R-8 lo
+empeoró. Fix: (a) `tab_display_label()` en `src/ui/tabs.rs` — formato de label
+compartido por el render (`build_tab_bar_instances`) y el hit-test (test unit
+`tab_label_tests`); (b) `hit_test_tab_bar` reescrito para replicar exactamente el
+loop de columnas del render (mismo `pad_left`, `tabs_start_x=132*sf`,
+`right_reserve`, `tabs_start_col`, `max_cols`). Verificación visual del clic con
+sidebar abierto pendiente del usuario.
 
 **TD-P9-03 — RESUELTO (2026-07-03).** Era un `round()` en `status_row`
 (`frame.rs`) que podía bajar la status bar hasta ½ celda **más allá** de
@@ -263,6 +265,6 @@ Wave 4: AUDIT-PERF-08, AUDIT-PERF-09, AUDIT-RESP-01
 Wave 5: AUDIT-ENERGY-05, AUDIT-MEM-04, AUDIT-MEM-05, AUDIT-REFAC-06
 Wave 6: AUDIT-REFAC-07, AUDIT-CLEAN-03
 Wave 7: AUDIT-REFAC-08
-Phase 9 (abierto): TD-P9-01 (V-3/V-4), TD-P9-02, TD-P9-05, TD-P9-06 | resueltos: TD-P9-03, TD-P9-04, TD-P9-08
+Phase 9 (abierto): TD-P9-01 (V-3/V-4), TD-P9-05, TD-P9-06 | resueltos: TD-P9-02, TD-P9-03, TD-P9-04, TD-P9-08
 Watch: AUDIT-CLEAN-02, AUDIT-PERF-10, TD-P9-07
 ```

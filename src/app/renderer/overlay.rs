@@ -1116,17 +1116,9 @@ impl RenderContext {
                 break;
             }
 
-            // Combined flat label: "title: N" (e.g. "zsh: 1")
-            let raw_label = if is_active {
-                if let Some(input) = rename_input {
-                    format!(" {}▌ ", input)
-                } else {
-                    format!(" {}: {} ", tab.title, i + 1)
-                }
-            } else {
-                format!(" {}: {} ", tab.title, i + 1)
-            };
-            let label: String = raw_label.chars().take(18).collect();
+            // Combined flat label: "title: N" (e.g. "zsh: 1"). Shared with the
+            // click hit-test so pill widths stay in sync (TD-P9-02).
+            let label = crate::ui::tabs::tab_display_label(&tab.title, i, is_active, rename_input);
             let label_w = label.chars().count().min(max_cols - col);
 
             let tab_x = pad_left + col as f32 * cell_w;
