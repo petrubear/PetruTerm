@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-05-22
-**Open Items:** 0
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 2
+**Last Updated:** 2026-07-03
+**Open Items:** 6
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 2 | **P3:** 4 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 3
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -57,9 +57,18 @@ Wave 6 — Limpieza estructural
 Wave 7 — Deuda estructural remanente
   AUDIT-REFAC-08 ──────────────────────────────────────┘
 
+Phase 9 — UI Restyle (abierto; branch ui-restyle)
+  TD-P9-01 (verificación visual R-8/V-3/V-4) ─┐
+  TD-P9-02 (tab-bar hit-test vs render)       │
+  TD-P9-03 (status bar sub-cell pin)          ├─► verificar/mergear a master
+  TD-P9-04 (borde inferior panel chat)        │
+  TD-P9-05 (inset con titlebar no-Custom)     │
+  TD-P9-06 (tuning visual V-4 bajo blur)      ┘
+
 Watch
   AUDIT-CLEAN-02 (sin cambio; reevaluar si ContextAction crece)
   AUDIT-PERF-10 (micro-regresiones de benchmark; reevaluar tras el próximo pase de perf)
+  TD-P9-07 (ignore de cargo audit quick-xml; quitar cuando winit bumpee Wayland)
 ```
 
 **Conflictos a evitar:**
@@ -161,7 +170,63 @@ Watch
 
 **AUDIT-PERF-10** — WATCH (2026-05-22). La revalidación de Criterion no mostró fallos graves, pero sí micro-regresiones repetidas de ~1-2% en shaping/rasterize/build instances (`shape_line_ascii` 284.68 ns +1.54%, `shape_line_ascii_cached` 277.03 ns +1.39%, `shape_line_ligatures_cached` 546.21 ns +1.57%, `rasterize_glyph_ascii` 1.3094 µs +1.67%, `build_row_miss` 857.77 ns +1.58%, `build_frame_hit` 792.79 ns +1.13%). No bloquea, pero conviene volver a medir tras el próximo pase de optimización de hot paths.
 
+**TD-P9-07** — WATCH (2026-07-03). `cargo audit` ignora `RUSTSEC-2026-0194` y `RUSTSEC-2026-0195` (quick-xml 0.39.2, DoS/quadratic) en `.cargo/audit.toml`. Entran transitivamente por `winit → smithay-client-toolkit → wayland-scanner` (Wayland, solo Linux; el target macOS nunca las compila). El fix 0.41 no satisface `wayland-scanner 0.31.9` (`quick-xml = "^0.39"`), así que requiere bump de winit upstream. Quitar el ignore cuando winit actualice su cadena Wayland.
+
 ---
+
+## Phase 9 — UI Restyle (abierto, 2026-07-03)
+
+> Introducidos por el trabajo de restyle en la branch `ui-restyle` (R-8 float
+> layout + V-3/V-4). El denominador común es que **ninguno pudo verificarse
+> visualmente** en el entorno de desarrollo (no hay captura de la ventana GPU);
+> todo se validó por razonamiento estático + build/clippy/test. Ver
+> [[project_phase9_ui_restyle]].
+
+**TD-P9-01 — P2 — Verificación visual pendiente de R-8/V-3/V-4.**
+El float layout (R-8), las esquinas redondeadas borderless (V-3) y las
+superficies translúcidas con blur (V-4) además del cierre del borde del panel
+de chat nunca se vieron renderizados. La única captura del usuario cubrió R-8 +
+header, pero no V-3/V-4 (no-op en la config por defecto: `blur=None`,
+`opacity=1.0`) ni el borde del panel. Acción: correr con `window.blur="dark"`
+(y `title_bar_style="none"` para V-3) y confirmar visualmente antes de mergear a
+master. Riesgo: regresiones visuales no detectadas. `src/app/layout.rs`,
+`src/app/frame.rs`, `src/app/renderer/chat.rs`, `src/app/mod.rs`,
+`src/config/schema.rs`.
+
+**TD-P9-02 — P2 — `hit_test_tab_bar` diverge del origen de render de las tabs.**
+El render ancla las tabs a `effective_tabs_start = max(tabs_start_x, content_pad_x)`
+(`build_tab_bar_instances` en `overlay.rs`), pero `hit_test_tab_bar`
+(`src/app/layout.rs`) usa `158.0*sf` (Custom) o `pad.left` fijo. Con el sidebar
+abierto `content_pad_x` incluye `sidebar_px` y las tabs se dibujan mucho más a la
+derecha que donde el hit-test las espera → clic mapea a la tab equivocada.
+Preexistente (discrepancia 132 vs 158 px), pero el inset de R-8 suma ~8px más.
+Fix: derivar el hit-test del mismo `effective_tabs_start` que el render.
+
+**TD-P9-03 — P3 — Sub-cell rounding del pin de la status bar (R-8).**
+`status_row = round((win_h - pad.bottom - sb_h - sb_pad_y)/cell_h)` en
+`frame.rs`. El inset (8px) no es múltiplo de `cell_h`, así que la status bar solo
+puede caer en una fila entera; se asumió que el error ≤½ celda lo absorben
+`SB_EXTRA_PX` + `pad.bottom`, pero no se confirmó que no deje una costura fina ni
+que no salte una celda a ciertas alturas de ventana. Verificar en resize.
+
+**TD-P9-04 — P3 — El borde cerrado del panel de chat asume que su fondo flota.**
+`build_chat_panel_instances` (`chat.rs`) ahora dibuja el borde en los 4 lados
+asumiendo que `py+ph` (alto = `total_rows*ch`) queda por encima de la status bar.
+Si el panel se extiende más abajo de lo previsto, el borde inferior podría
+recortarse o colisionar con la status bar. Verificar visualmente.
+
+**TD-P9-05 — P3 — Coherencia del inset con titlebar no-Custom.**
+El modelo de origen de grid único se validó para `title_bar_style=Custom`. En
+modo `Native`/`None` con 2+ tabs, `gpu_pad_y` usa `TITLEBAR_HEIGHT*sf` mientras
+`tab_h`/`sb_pad_y` usan `cell_height`; el back-compute de la tab bar podría
+descuadrar. No probado. `src/app/frame.rs`, `src/app/layout.rs`.
+
+**TD-P9-06 — P3 — Tuning visual de V-4 bajo blur.**
+El alpha fijo `0.85` de `ui_surface`/`ui_surface_hover`
+(`ColorScheme::apply_blur_translucency`, `schema.rs`) y el apilado de tints de
+fila de mensaje + code-block bg (`ui_surface_active`) + selección sobre el panel
+translúcido no se ajustaron con blur real. Puede verse desigual/parcheado.
+Reevaluar el factor y qué tokens participan una vez verificado en pantalla.
 
 ## Deferred — Requieren hardware/profiling específico
 
@@ -185,5 +250,6 @@ Wave 4: AUDIT-PERF-08, AUDIT-PERF-09, AUDIT-RESP-01
 Wave 5: AUDIT-ENERGY-05, AUDIT-MEM-04, AUDIT-MEM-05, AUDIT-REFAC-06
 Wave 6: AUDIT-REFAC-07, AUDIT-CLEAN-03
 Wave 7: AUDIT-REFAC-08
-Watch: AUDIT-CLEAN-02, AUDIT-PERF-10
+Phase 9 (abierto): TD-P9-01, TD-P9-02, TD-P9-03, TD-P9-04, TD-P9-05, TD-P9-06
+Watch: AUDIT-CLEAN-02, AUDIT-PERF-10, TD-P9-07
 ```
