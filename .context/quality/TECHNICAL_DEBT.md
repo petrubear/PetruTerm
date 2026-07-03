@@ -198,8 +198,8 @@ empeoró. Fix: (a) `tab_display_label()` en `src/ui/tabs.rs` — formato de labe
 compartido por el render (`build_tab_bar_instances`) y el hit-test (test unit
 `tab_label_tests`); (b) `hit_test_tab_bar` reescrito para replicar exactamente el
 loop de columnas del render (mismo `pad_left`, `tabs_start_x=132*sf`,
-`right_reserve`, `tabs_start_col`, `max_cols`). Verificación visual del clic con
-sidebar abierto pendiente del usuario.
+`right_reserve`, `tabs_start_col`, `max_cols`). VERIFICADO visualmente por el
+usuario: el clic de tab selecciona la tab correcta con los sidebars abiertos.
 
 **TD-P9-03 — RESUELTO (2026-07-03).** Era un `round()` en `status_row`
 (`frame.rs`) que podía bajar la status bar hasta ½ celda **más allá** de
