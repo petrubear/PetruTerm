@@ -1458,6 +1458,50 @@ impl App {
         }
     }
 
+    /// V-3: round the corners of a borderless window (`title_bar_style = "none"`).
+    /// Native and custom titlebars already inherit the system window shape; a
+    /// decorations-off window is a square NSWindow, so we clip the content view's
+    /// layer to a rounded rect and clear the window background so the corners are
+    /// transparent. `masksToBounds` + `cornerRadius` also clips the wgpu
+    /// CAMetalLayer sublayer, so the GPU content respects the radius.
+    #[cfg(target_os = "macos")]
+    unsafe fn apply_macos_rounded_corners(window: &Window, radius: f64) {
+        use objc2::runtime::{AnyObject, Bool};
+        use objc2::{class, msg_send};
+        use winit::raw_window_handle::HasWindowHandle;
+
+        let Ok(h) = window.window_handle() else {
+            return;
+        };
+        let winit::raw_window_handle::RawWindowHandle::AppKit(h) = h.as_raw() else {
+            return;
+        };
+        let ns_view: &AnyObject = &*(h.ns_view.as_ptr() as *const AnyObject);
+        let ns_win_ptr: *mut AnyObject = msg_send![ns_view, window];
+        if ns_win_ptr.is_null() {
+            return;
+        }
+        let ns_win: &AnyObject = &*ns_win_ptr;
+        let () = msg_send![ns_win, setOpaque: Bool::NO];
+        let clear: *mut AnyObject = msg_send![class!(NSColor), clearColor];
+        if !clear.is_null() {
+            let () = msg_send![ns_win, setBackgroundColor: clear];
+        }
+        let content_ptr: *mut AnyObject = msg_send![ns_win, contentView];
+        if content_ptr.is_null() {
+            return;
+        }
+        let content: &AnyObject = &*content_ptr;
+        let () = msg_send![content, setWantsLayer: Bool::YES];
+        let layer_ptr: *mut AnyObject = msg_send![content, layer];
+        if layer_ptr.is_null() {
+            return;
+        }
+        let layer: &AnyObject = &*layer_ptr;
+        let () = msg_send![layer, setCornerRadius: radius];
+        let () = msg_send![layer, setMasksToBounds: Bool::YES];
+    }
+
     /// V-2: insert an NSVisualEffectView behind the (transparent) render view so
     /// the window content sits over a blurred vibrancy layer. Uses the WezTerm
     /// approach: the blur view becomes the window's contentView and the original
@@ -1715,6 +1759,17 @@ impl ApplicationHandler<()> for App {
         if want_transparent {
             unsafe {
                 Self::set_metal_layer_opaque(&window, false);
+            }
+        }
+
+        // V-3: a borderless window is square; round it to match the floating look.
+        // Custom/Native titlebars already inherit the system window shape.
+        #[cfg(target_os = "macos")]
+        if self.config.window.title_bar_style == TitleBarStyle::None {
+            // cornerRadius is in points (Core Animation applies the backing scale).
+            let radius = crate::renderer::ui_style::R_PANEL as f64;
+            unsafe {
+                Self::apply_macos_rounded_corners(&window, radius);
             }
         }
 

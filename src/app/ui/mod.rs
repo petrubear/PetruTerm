@@ -1651,6 +1651,8 @@ impl UiManager {
                             .renderer
                             .update_bg_color(scheme.clear_color(&config.window));
                         config.colors = scheme;
+                        // V-4: re-soften chrome surfaces for the new theme under blur.
+                        config.colors.apply_blur_translucency(&config.window);
                         // Hash-based row cache auto-invalidates on color change — no manual dirty needed.
                     }
                     Err(e) => log::error!("Failed to load theme '{name}': {e}"),

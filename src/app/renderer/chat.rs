@@ -685,18 +685,20 @@ impl RenderContext {
         let asst_accent = [0.306, 0.788, 0.690, 1.0]; // Teal/green accent for AI
 
         // W-1: full-width message background tints (15% warm for user, 10% cool for assistant).
+        // V-4: inherit the panel surface alpha so message rows stay in sync with a
+        // translucent panel under blur (no opaque bands over the vibrancy).
         let b = actual_panel_bg;
         let user_bg: Option<[f32; 4]> = Some([
             b[0] * 0.85 + user_fg[0] * 0.15,
             b[1] * 0.85 + user_fg[1] * 0.15,
             b[2] * 0.85 + user_fg[2] * 0.15,
-            1.0,
+            b[3],
         ]);
         let asst_bg: Option<[f32; 4]> = Some([
             b[0] * 0.90 + asst_accent[0] * 0.10,
             b[1] * 0.90 + asst_accent[1] * 0.10,
             b[2] * 0.90 + asst_accent[2] * 0.10,
-            1.0,
+            b[3],
         ]);
 
         // W-3: track code block spans (start, end) in all_lines index space.

@@ -454,5 +454,5 @@ recall-biased) y se probó manualmente contra un agente ACP real
 ### Fase 2 — Ventana translúcida & blur (macOS)
 - [x] V-1: Ventana transparente + `window.opacity`
 - [x] V-2: Blur/vibrancy nativo (NSVisualEffectView) + `window.blur`
-- [ ] V-3: Esquinas redondeadas de ventana
-- [ ] V-4: Tokens de superficie translúcidos cuando blur activo
+- [x] V-3: Esquinas redondeadas de ventana (borderless → cornerRadius; Custom/Native nativas)
+- [x] V-4: Tokens de superficie translúcidos cuando blur activo (ui_surface/hover alpha)

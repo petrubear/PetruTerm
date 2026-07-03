@@ -440,6 +440,26 @@ impl ColorScheme {
         c
     }
 
+    /// V-4: when the window is translucent (blur enabled or `opacity < 1`), drop
+    /// the alpha of the chrome card surfaces so the vibrancy / wallpaper filters
+    /// subtly through panels, sidebar, palette and menus. Terminal translucency
+    /// is handled separately by [`clear_color`]. Borders, selection/active fills
+    /// and the status bar stay opaque for legibility and crisp edges.
+    ///
+    /// Safe to call once per (re)load: it starts from freshly-derived opaque
+    /// tokens, so it is not cumulative across theme reloads.
+    pub fn apply_blur_translucency(&mut self, window: &WindowConfig) {
+        let a = if window.opacity < 1.0 {
+            window.opacity.clamp(0.5, 1.0)
+        } else if window.blur != WindowBlur::None {
+            0.85
+        } else {
+            return;
+        };
+        self.ui_surface[3] = a;
+        self.ui_surface_hover[3] = a;
+    }
+
     /// Map a terminal color index (0-15) to RGBA.
     pub fn index_color(&self, idx: u8) -> [f32; 4] {
         match idx {
@@ -624,5 +644,39 @@ impl Default for LlmFeatures {
             fix_last_error: true,
             context_chat: true,
         }
+    }
+}
+
+#[cfg(test)]
+mod v4_tests {
+    use super::*;
+
+    #[test]
+    fn blur_translucency_only_when_translucent() {
+        // Opaque, no blur → surfaces stay solid.
+        let mut c = ColorScheme::dracula_pro();
+        let mut w = WindowConfig::default();
+        c.apply_blur_translucency(&w);
+        assert_eq!(c.ui_surface[3], 1.0);
+        assert_eq!(c.ui_surface_hover[3], 1.0);
+
+        // Blur enabled → surfaces softened to 0.85.
+        let mut c = ColorScheme::dracula_pro();
+        w.blur = WindowBlur::Dark;
+        c.apply_blur_translucency(&w);
+        assert_eq!(c.ui_surface[3], 0.85);
+        assert_eq!(c.ui_surface_hover[3], 0.85);
+
+        // Explicit opacity wins and is clamped to [0.5, 1.0].
+        let mut c = ColorScheme::dracula_pro();
+        w.blur = WindowBlur::None;
+        w.opacity = 0.7;
+        c.apply_blur_translucency(&w);
+        assert_eq!(c.ui_surface[3], 0.7);
+
+        let mut c = ColorScheme::dracula_pro();
+        w.opacity = 0.2;
+        c.apply_blur_translucency(&w);
+        assert_eq!(c.ui_surface[3], 0.5);
     }
 }

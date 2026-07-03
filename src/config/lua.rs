@@ -718,5 +718,8 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
         }
     }
 
+    // V-4: soften the chrome surfaces when the window is translucent/blurred.
+    config.colors.apply_blur_translucency(&config.window);
+
     Ok(config)
 }
