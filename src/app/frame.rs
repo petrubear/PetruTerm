@@ -302,9 +302,20 @@ impl App {
         let total_rows = (viewport.h / cell_h as f32).floor() as usize;
         // Capture status bar layout values before the mutable borrow of render_ctx.
         let tab_bar_vis = self.tab_bar_visible();
-        let sb_pad_y = self.config.window.padding.top as f32 + self.tab_bar_height_px();
+        // R-8: uniform float inset for the content area (terminal + panels).
+        let content_inset_px = self.content_inset();
+        let sb_pad_y =
+            self.config.window.padding.top as f32 + self.tab_bar_height_px() + content_inset_px;
         // Capture sidebar width before render_ctx is mutably borrowed.
         let sidebar_px_snapshot = self.sidebar_width_px();
+        // Content-area left origin (grid col 0), floated by the inset. Matches
+        // `set_padding` in apply_tab_bar_padding and viewport_rect.x.
+        let content_pad_x =
+            self.config.window.padding.left as f32 + sidebar_px_snapshot + content_inset_px;
+        // Status bar stays pinned to the window bottom (full-bleed); snapshot the
+        // pieces needed to back-compute its grid row after the inset shift.
+        let sb_bottom_pad = self.config.window.padding.bottom as f32;
+        let sb_h_px = self.status_bar_height_px();
         // Snapshot the active pane's shell context before the render_ctx borrow.
         let sb_exit_code = self.active_shell_ctx().and_then(|c| {
             if c.last_exit_code != 0 {
@@ -330,7 +341,7 @@ impl App {
                 let cw = cell_w as f32;
                 let ch = cell_h as f32;
                 let (col_off, row_off) = self.mux.focused_pane_offset(viewport, cw, ch);
-                let pad_x = self.config.window.padding.left as f32 + sidebar_px_snapshot;
+                let pad_x = content_pad_x;
                 let x = pad_x + (col_off + link.col_start) as f32 * cw;
                 let y = sb_pad_y + (row_off + link.row) as f32 * ch + ch - 1.5 * scale;
                 let w = (link.col_end - link.col_start) as f32 * cw;
@@ -528,7 +539,7 @@ impl App {
             }
 
             // Pane separator lines (hidden when a pane is zoomed).
-            let sep_pad_x = self.config.window.padding.left as f32 + sidebar_px_snapshot;
+            let sep_pad_x = content_pad_x;
             if self.mux.zoomed_pane.is_none() {
                 rc.build_pane_separators(
                     &self.separator_snapshot,
@@ -611,15 +622,19 @@ impl App {
                     let inst_start = rc.instances.len();
                     let rect_start = rc.rect_instances.len();
                     let win_w = rc.renderer.size().0 as f32;
+                    // gpu_pad_y must equal the global grid origin y so the tab
+                    // titles (which back-compute their fractional row from it)
+                    // stay anchored in the titlebar despite the content inset.
                     let gpu_pad_y = super::TITLEBAR_HEIGHT * rc.scale_factor
-                        + self.config.window.padding.top as f32;
+                        + self.config.window.padding.top as f32
+                        + content_inset_px;
                     rc.build_tab_bar_instances(
                         self.mux.tabs.tabs(),
                         active_idx,
                         &scaled_font,
                         tab_total_cols,
                         win_w,
-                        self.config.window.padding.left as f32 + sidebar_px_snapshot,
+                        content_pad_x,
                         gpu_pad_y,
                         self.config.colors.background,
                         self.sidebar.visible,
@@ -713,7 +728,7 @@ impl App {
                         total_cols,
                         total_rows,
                         blink,
-                        self.config.window.padding.left as f32 + sidebar_px_snapshot,
+                        content_pad_x,
                         sb_pad_y,
                     );
                     rc.panel_instances_cache.clear();
@@ -738,7 +753,7 @@ impl App {
                     total_cols,
                     total_rows,
                     blink,
-                    self.config.window.padding.left as f32 + sidebar_px_snapshot,
+                    content_pad_x,
                     sb_pad_y,
                 );
                 // W-8: resize handle — thin accent line on panel left edge when
@@ -793,6 +808,15 @@ impl App {
                         0
                     };
                 let sb_win_w = rc.renderer.size().0 as f32;
+                // R-8: pin the status bar near the window bottom (full-bleed) by
+                // back-computing its grid row from the inset content origin.
+                // `floor` (not `round`) so the bar never drops past
+                // `win_h - pad.bottom`, preserving the bottom padding — matches the
+                // pre-R-8 placement. `round` could eat `pad.bottom` on some heights.
+                let sb_win_h = rc.renderer.size().1 as f32;
+                let status_row = ((sb_win_h - sb_bottom_pad - sb_h_px - sb_pad_y) / cell_h as f32)
+                    .floor()
+                    .max(0.0) as usize;
                 // Key: all inputs that affect segment text + layout (TD-PERF-10).
                 // Include current minute so the time widget invalidates the cache
                 // at each minute boundary (the WaitUntil in about_to_wait wakes us).
@@ -868,7 +892,7 @@ impl App {
                         &bar,
                         &scaled_font,
                         sb_total_cols,
-                        total_rows,
+                        status_row,
                         sb_pad_y,
                         sb_win_w,
                         &self.config.colors,
@@ -892,7 +916,7 @@ impl App {
                     rename_input: self.sidebar.rename_input.as_deref(),
                     sidebar_cols: super::SIDEBAR_COLS,
                     counts: &counts,
-                    sidebar_left_px: self.config.window.padding.left as f32,
+                    sidebar_left_px: self.config.window.padding.left as f32 + content_inset_px,
                     sidebar_top_px: sb_pad_y,
                     sidebar_bottom_pad_px: self.config.window.padding.bottom as f32,
                     font: &scaled_font,
@@ -906,6 +930,7 @@ impl App {
                     steering_scroll: self.sidebar.steering_scroll,
                 });
                 let sidebar_sep_x = self.config.window.padding.left as f32
+                    + content_inset_px
                     + super::SIDEBAR_COLS as f32 * rc.shaper.cell_width;
                 let sidebar_sep_y = sb_pad_y;
                 let sidebar_sep_h = (rc.renderer.size().1 as f32
@@ -946,7 +971,7 @@ impl App {
                     &scaled_font,
                     palette_cols,
                     total_rows,
-                    self.config.window.padding.left as f32 + sidebar_px_snapshot,
+                    content_pad_x,
                     sb_pad_y,
                     &self.config.colors,
                 );
@@ -966,7 +991,7 @@ impl App {
                     &scaled_font,
                     total_cols,
                     total_rows,
-                    self.config.window.padding.left as f32 + sidebar_px_snapshot,
+                    content_pad_x,
                     sb_pad_y,
                     &self.config.colors,
                 );
@@ -979,7 +1004,7 @@ impl App {
                 .is_some_and(|(_, deadline)| std::time::Instant::now() < *deadline);
             if toast_active {
                 if let Some((msg, _)) = &self.toast {
-                    let pad_x = self.config.window.padding.left as f32 + sidebar_px_snapshot;
+                    let pad_x = content_pad_x;
                     rc.build_toast_instances(
                         msg,
                         &scaled_font,

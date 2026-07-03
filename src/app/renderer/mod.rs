@@ -176,6 +176,13 @@ pub struct SidebarDrawParams<'a> {
 }
 
 impl RenderContext {
+    /// Scaled UI style tokens (spacing, radii, border) for the current DPI.
+    /// Single source of geometry for all chrome surfaces (Phase 9 R-1).
+    #[inline]
+    pub fn ui_style(&self) -> crate::renderer::ui_style::UiStyle {
+        crate::renderer::ui_style::UiStyle::new(self.scale_factor)
+    }
+
     pub async fn new(window: Arc<Window>, config: &Config) -> Result<Self> {
         let renderer = GpuRenderer::new(window.clone(), config).await?;
         let scale_factor = window.scale_factor() as f32;

@@ -2,6 +2,12 @@
 # GTK3 warnings (RUSTSEC-2024-04xx) come from muda 0.18 on Linux only.
 # PetruTerm targets macOS in Phase 1 — these crates are never compiled.
 # muda 0.18.0 is the latest release; no fix is available upstream.
+#
+# quick-xml (RUSTSEC-2026-019x) is pulled transitively by winit's Wayland
+# backend (winit → smithay-client-toolkit → wayland-scanner), which is only
+# compiled on Linux. wayland-scanner 0.31.9 pins `quick-xml = "^0.39"`, so the
+# 0.41 fix cannot be selected without a winit upstream bump. Not reachable on
+# the macOS target. Remove when winit updates its Wayland dependency chain.
 [advisories]
 ignore = [
     "RUSTSEC-2024-0412", # gdk
@@ -13,4 +19,6 @@ ignore = [
     "RUSTSEC-2024-0420", # gtk-sys
     "RUSTSEC-2024-0370", # proc-macro-error (transitive via gtk3-macros)
     "RUSTSEC-2024-0429", # glib unsound Iterator (transitive via muda → gtk)
+    "RUSTSEC-2026-0194", # quick-xml quadratic dup-attr check (Wayland, Linux)
+    "RUSTSEC-2026-0195", # quick-xml unbounded ns alloc DoS (Wayland, Linux)
 ]

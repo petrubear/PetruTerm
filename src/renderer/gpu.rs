@@ -139,6 +139,23 @@ impl GpuRenderer {
         };
         log::info!("Surface present mode: {:?}", present_mode);
 
+        // V-1: when the window is translucent (opacity < 1) or blur is enabled,
+        // pick a transparency-capable composite alpha mode so the clear alpha and
+        // the NSVisualEffectView behind the surface show through.
+        let want_transparent = config.window.blur != crate::config::schema::WindowBlur::None
+            || config.window.opacity < 1.0;
+        let alpha_mode = if want_transparent {
+            [
+                wgpu::CompositeAlphaMode::PostMultiplied,
+                wgpu::CompositeAlphaMode::PreMultiplied,
+            ]
+            .into_iter()
+            .find(|m| caps.alpha_modes.contains(m))
+            .unwrap_or(caps.alpha_modes[0])
+        } else {
+            caps.alpha_modes[0]
+        };
+
         let available_present_modes = caps.present_modes.clone();
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -146,13 +163,14 @@ impl GpuRenderer {
             width: inner.width.max(1),
             height: inner.height.max(1),
             present_mode,
-            alpha_mode: caps.alpha_modes[0],
+            alpha_mode,
             view_formats: vec![],
             desired_maximum_frame_latency: 1,
         };
         surface.configure(&device, &surface_config);
 
-        let bg = config.colors.background_wgpu();
+        // Clear-color alpha honors window translucency (V-1).
+        let bg = config.colors.clear_color(&config.window);
 
         // Build pipeline and atlases
         let pipeline = CellPipeline::new(&device, format);

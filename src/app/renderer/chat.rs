@@ -50,7 +50,9 @@ impl RenderContext {
         }
 
         // ── Colors (from active theme) ────────────────────────────────────────
-        let actual_panel_bg = config.colors.background;
+        // R-5: the panel is a floating surface with its own tone, distinct from
+        // the terminal background behind it.
+        let actual_panel_bg = config.colors.ui_surface;
         let panel_bg = [0.0; 4]; // transparent
 
         let user_fg = config.colors.ansi[6];
@@ -69,8 +71,10 @@ impl RenderContext {
         let co = term_cols; // grid column where panel begins
 
         // ── Background Rect ──────────────────────────────────────────────────
-        let radius = 10.0 * self.scale_factor;
-        let border = 1.0 * self.scale_factor;
+        let st = self.ui_style();
+        let radius = st.r_panel;
+        let border = st.border;
+        let border_color = config.colors.ui_border;
         let cw = self.shaper.cell_width;
         let ch = self.shaper.cell_height;
         let px = pad_x + co as f32 * cw;
@@ -80,8 +84,13 @@ impl RenderContext {
 
         self.rect_instances
             .push(crate::renderer::rounded_rect::RoundedRectInstance {
-                rect: [px - border, py, pw + 2.0 * border, ph],
-                color: sep_fg, // border
+                rect: [
+                    px - border,
+                    py - border,
+                    pw + 2.0 * border,
+                    ph + 2.0 * border,
+                ],
+                color: border_color,
                 radius: radius + border,
                 border_width: 0.0,
                 _pad: [0.0; 2],
@@ -94,6 +103,23 @@ impl RenderContext {
                 border_width: 0.0,
                 _pad: [0.0; 2],
             });
+
+        // ── Header band (row 0) ──────────────────────────────────────────────
+        // Reference style: a flat header band whose title ("◈ Claude │ agent:…")
+        // reads left-aligned, separated from the message area by a thin rule —
+        // not a floating filled pill nested inside the panel's rounded corners.
+        {
+            let hx = px + st.sp2;
+            let hw = (pw - 2.0 * st.sp2).max(0.0);
+            self.rect_instances
+                .push(crate::renderer::rounded_rect::RoundedRectInstance {
+                    rect: [hx, py + ch, hw, st.border],
+                    color: config.colors.ui_border,
+                    radius: 0.0,
+                    border_width: 0.0,
+                    _pad: [0.0; 2],
+                });
+        }
 
         // ── Fixed bottom rows (always present) ───────────────────────────────
         // input_row1..4 and hints_row are rendered by build_chat_panel_input_rows (TD-PERF-10).
@@ -462,12 +488,12 @@ impl RenderContext {
         } else {
             fmt_buf.chars().count()
         };
-        let center_slot_start = (left_w + 1).min(panel_cols);
-        let center_slot_end = right_start.saturating_sub(1);
-        let center_slot_w = center_slot_end.saturating_sub(center_slot_start);
-        let center = truncate_chars(&center_full, center_slot_w);
-        let center_w = center.chars().count();
-        let center_start = center_slot_start + center_slot_w.saturating_sub(center_w) / 2;
+        // Detail sits left-aligned right after the title ("◈ Claude │ agent:…"),
+        // matching the reference "Label │ detail" header rather than a centered
+        // floating string.
+        let detail_start = (left_w + 1).min(panel_cols);
+        let detail_end = right_start.saturating_sub(1);
+        let detail_slot_w = detail_end.saturating_sub(detail_start);
 
         self.push_shaped_row(
             &left_label,
@@ -478,14 +504,17 @@ impl RenderContext {
             panel_cols,
             font,
         );
-        if center_w > 0 {
+        if detail_slot_w > 2 {
+            fmt_buf.clear();
+            let _ = write!(fmt_buf, "\u{2502} {center_full}");
+            let detail = truncate_chars(fmt_buf, detail_slot_w);
             self.push_shaped_row(
-                &center,
+                &detail,
                 config.colors.ui_muted,
                 panel_bg,
                 0,
-                co + center_start,
-                panel_cols.saturating_sub(center_start),
+                co + detail_start,
+                panel_cols.saturating_sub(detail_start),
                 font,
             );
         }
@@ -661,18 +690,20 @@ impl RenderContext {
         let asst_accent = [0.306, 0.788, 0.690, 1.0]; // Teal/green accent for AI
 
         // W-1: full-width message background tints (15% warm for user, 10% cool for assistant).
+        // V-4: inherit the panel surface alpha so message rows stay in sync with a
+        // translucent panel under blur (no opaque bands over the vibrancy).
         let b = actual_panel_bg;
         let user_bg: Option<[f32; 4]> = Some([
             b[0] * 0.85 + user_fg[0] * 0.15,
             b[1] * 0.85 + user_fg[1] * 0.15,
             b[2] * 0.85 + user_fg[2] * 0.15,
-            1.0,
+            b[3],
         ]);
         let asst_bg: Option<[f32; 4]> = Some([
             b[0] * 0.90 + asst_accent[0] * 0.10,
             b[1] * 0.90 + asst_accent[1] * 0.10,
             b[2] * 0.90 + asst_accent[2] * 0.10,
-            1.0,
+            b[3],
         ]);
 
         // W-3: track code block spans (start, end) in all_lines index space.
@@ -971,9 +1002,10 @@ impl RenderContext {
         let pill1_row = center + 2;
         let pill2_row = center + 3;
 
+        let st = self.ui_style();
         let pill_margin = 8.0 * cw;
-        let pill_radius = 4.0 * self.scale_factor;
-        let pill_border = 1.0 * self.scale_factor;
+        let pill_radius = st.r_pill;
+        let pill_border = st.border;
 
         for r in history_start_row..sep_row {
             if r == icon_row {
@@ -1007,9 +1039,9 @@ impl RenderContext {
                 );
             } else if r == pill1_row || r == pill2_row {
                 let (label, hover_idx) = if r == pill1_row {
-                    ("[ Fix last error ]", 0u8)
+                    ("Fix last error", 0u8)
                 } else {
-                    ("[ Explain command ]", 1u8)
+                    ("Explain command", 1u8)
                 };
                 let label_w = label.chars().count();
                 let pad = panel_cols.saturating_sub(label_w) / 2;
@@ -1026,8 +1058,8 @@ impl RenderContext {
                     )
                 } else {
                     (
-                        config.colors.ui_muted,
-                        config.colors.ui_surface,
+                        config.colors.ui_border,
+                        config.colors.ui_surface_hover,
                         dim(config.colors.foreground, 0.15),
                     )
                 };
@@ -1081,10 +1113,11 @@ impl RenderContext {
             pw,
             ..
         } = *p;
+        let st = self.ui_style();
         let pill_margin = 8.0 * cw;
-        let pill_radius = 4.0 * self.scale_factor;
-        let pill_border = 1.0 * self.scale_factor;
-        let pill_labels = ["[ Fix last error ]", "[ Explain more ]"];
+        let pill_radius = st.r_pill;
+        let pill_border = st.border;
+        let pill_labels = ["Fix last error", "Explain more"];
         for (hover_idx, label) in pill_labels.iter().enumerate() {
             let r = sep_row - suggestion_rows + hover_idx;
             let label_w = label.chars().count();
@@ -1102,8 +1135,8 @@ impl RenderContext {
                 )
             } else {
                 (
-                    config.colors.ui_muted,
-                    config.colors.ui_surface,
+                    config.colors.ui_border,
+                    config.colors.ui_surface_hover,
                     dim(config.colors.foreground, 0.15),
                 )
             };
@@ -1177,24 +1210,21 @@ impl RenderContext {
 
         // ── W-2: Input card background + border ──────────────────────────────
         {
+            let st = self.ui_style();
             let cw = self.shaper.cell_width;
             let ch = self.shaper.cell_height;
             let px = pad_x + co as f32 * cw;
             let card_y = pad_y + input_row1 as f32 * ch;
             let pw = panel_cols as f32 * cw;
             let card_h = 4.0 * ch;
-            let radius = 4.0 * self.scale_factor;
-            let border = 1.0 * self.scale_factor;
+            let radius = st.r_inner;
+            let border = st.border;
 
-            // Subtle card: slightly lighter than the panel bg, not the purple selection color.
-            let b = config.colors.background;
-            let card_bg = [
-                (b[0] + 0.06).min(1.0),
-                (b[1] + 0.06).min(1.0),
-                (b[2] + 0.06).min(1.0),
-                1.0,
-            ];
-            let border_color = config.colors.ui_muted;
+            // Nested input field: a subtle elevation of the panel surface with the
+            // same hairline border as the panel — matches the reference rather than
+            // a bright-bordered card floating on a mismatched fill.
+            let card_bg = config.colors.ui_surface_hover;
+            let border_color = config.colors.ui_border;
 
             // Border rect (slightly larger, drawn first).
             self.rect_instances.push(RoundedRectInstance {

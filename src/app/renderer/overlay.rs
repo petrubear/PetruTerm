@@ -54,6 +54,7 @@ impl RenderContext {
         let sidebar_dim_fg = colors.ui_muted;
         let sidebar_dot_active = colors.ui_accent;
         let sidebar_sep_fg = colors.ui_muted;
+        let sidebar_border = colors.ui_border;
 
         let cw = self.shaper.cell_width;
         let ch = self.shaper.cell_height;
@@ -106,9 +107,10 @@ impl RenderContext {
         let inst_start = self.instances.len();
         let rect_start = self.rect_instances.len();
 
-        let radius = 10.0 * self.scale_factor;
-        let border = 1.0 * self.scale_factor;
-        let visible_sidebar_px = sidebar_px - (8.0 * self.scale_factor);
+        let st = self.ui_style();
+        let radius = st.r_panel;
+        let border = st.border;
+        let visible_sidebar_px = sidebar_px - st.sp2;
 
         // Outer border + background.
         self.rect_instances.push(RoundedRectInstance {
@@ -118,7 +120,7 @@ impl RenderContext {
                 visible_sidebar_px + 2.0 * border,
                 visible_h + 2.0 * border,
             ],
-            color: sidebar_sep_fg,
+            color: sidebar_border,
             radius: radius + border,
             border_width: 0.0,
             _pad: [0.0; 2],
@@ -191,8 +193,8 @@ impl RenderContext {
                 } else {
                     sidebar_item_hover_bg
                 };
-                let margin_x = 8.0 * self.scale_factor;
-                let margin_y = 2.0 * self.scale_factor;
+                let margin_x = st.sp2;
+                let margin_y = st.sp1 * 0.5;
                 let pill_px = sidebar_left_px + margin_x;
                 let pill_py = sidebar_top_px + (base_row as f32 * ch) + margin_y;
                 let pill_pw = visible_sidebar_px - 2.0 * margin_x;
@@ -200,7 +202,7 @@ impl RenderContext {
                 self.rect_instances.push(RoundedRectInstance {
                     rect: [pill_px, pill_py, pill_pw, pill_ph],
                     color: row_bg,
-                    radius: 6.0 * self.scale_factor,
+                    radius: st.r_pill,
                     border_width: 0.0,
                     _pad: [0.0; 2],
                 });
@@ -296,7 +298,7 @@ impl RenderContext {
                 let trimmed: String = label.chars().take(sidebar_cols).collect();
                 let is_cursor = active_section == 1 && i == 0;
                 if is_cursor {
-                    let margin = 4.0 * self.scale_factor;
+                    let margin = st.sp1;
                     self.rect_instances.push(RoundedRectInstance {
                         rect: [
                             sidebar_left_px + margin,
@@ -305,7 +307,7 @@ impl RenderContext {
                             ch - margin,
                         ],
                         color: sidebar_item_active_bg,
-                        radius: 4.0 * self.scale_factor,
+                        radius: st.r_pill,
                         border_width: 0.0,
                         _pad: [0.0; 2],
                     });
@@ -349,7 +351,7 @@ impl RenderContext {
                 let trimmed: String = label.chars().take(sidebar_cols).collect();
                 let is_cursor = active_section == 2 && i == 0;
                 if is_cursor {
-                    let margin = 4.0 * self.scale_factor;
+                    let margin = st.sp1;
                     self.rect_instances.push(RoundedRectInstance {
                         rect: [
                             sidebar_left_px + margin,
@@ -358,7 +360,7 @@ impl RenderContext {
                             ch - margin,
                         ],
                         color: sidebar_item_active_bg,
-                        radius: 4.0 * self.scale_factor,
+                        radius: st.r_pill,
                         border_width: 0.0,
                         _pad: [0.0; 2],
                     });
@@ -409,7 +411,7 @@ impl RenderContext {
                 let trimmed: String = label.chars().take(sidebar_cols).collect();
                 let is_cursor = active_section == 3 && i == 0;
                 if is_cursor {
-                    let margin = 4.0 * self.scale_factor;
+                    let margin = st.sp1;
                     self.rect_instances.push(RoundedRectInstance {
                         rect: [
                             sidebar_left_px + margin,
@@ -418,7 +420,7 @@ impl RenderContext {
                             ch - margin,
                         ],
                         color: sidebar_item_active_bg,
-                        radius: 4.0 * self.scale_factor,
+                        radius: st.r_pill,
                         border_width: 0.0,
                         _pad: [0.0; 2],
                     });
@@ -469,16 +471,17 @@ impl RenderContext {
         let fg = colors.foreground;
         let highlight_bg = colors.ui_surface_active;
         let prompt_fg = colors.ui_accent;
-        let border_color = colors.ui_muted;
+        let border_color = colors.ui_border;
 
+        let st = self.ui_style();
         let cw = self.shaper.cell_width;
         let ch = self.shaper.cell_height;
         let px = pad_x + start_col as f32 * cw;
         let py = pad_y + start_row as f32 * ch;
         let pw = palette_width as f32 * cw;
         let ph = palette_height as f32 * ch;
-        let radius = 12.0 * self.scale_factor;
-        let border = 1.0 * self.scale_factor;
+        let radius = st.r_panel;
+        let border = st.border;
 
         // Border rect (drawn first — behind panel bg)
         self.rect_instances.push(RoundedRectInstance {
@@ -536,14 +539,9 @@ impl RenderContext {
                 if is_selected {
                     // Highlight row: pill-style rect with padding
                     self.rect_instances.push(RoundedRectInstance {
-                        rect: [
-                            px + 6.0 * self.scale_factor,
-                            pad_y + row as f32 * ch,
-                            pw - 12.0 * self.scale_factor,
-                            ch,
-                        ],
+                        rect: [px + st.sp2, pad_y + row as f32 * ch, pw - 2.0 * st.sp2, ch],
                         color: highlight_bg,
-                        radius: 6.0 * self.scale_factor,
+                        radius: st.r_pill,
                         border_width: 0.0,
                         _pad: [0.0; 2],
                     });
@@ -610,17 +608,18 @@ impl RenderContext {
         };
         let transparent = [0.0f32; 4];
         let fg = colors.foreground;
-        let border_color = colors.ui_muted;
+        let border_color = colors.ui_border;
         let accent = colors.ui_accent;
 
+        let st = self.ui_style();
         let cw = self.shaper.cell_width;
         let ch = self.shaper.cell_height;
         let px = pad_x + start_col as f32 * cw;
         let py = pad_y + start_row as f32 * ch;
         let pw = ow as f32 * cw;
         let ph = oh as f32 * ch;
-        let radius = 12.0 * self.scale_factor;
-        let border = 1.0 * self.scale_factor;
+        let radius = st.r_panel;
+        let border = st.border;
 
         // Border + background
         self.rect_instances.push(RoundedRectInstance {
@@ -1117,17 +1116,9 @@ impl RenderContext {
                 break;
             }
 
-            // Combined flat label: "title: N" (e.g. "zsh: 1")
-            let raw_label = if is_active {
-                if let Some(input) = rename_input {
-                    format!(" {}▌ ", input)
-                } else {
-                    format!(" {}: {} ", tab.title, i + 1)
-                }
-            } else {
-                format!(" {}: {} ", tab.title, i + 1)
-            };
-            let label: String = raw_label.chars().take(18).collect();
+            // Combined flat label: "title: N" (e.g. "zsh: 1"). Shared with the
+            // click hit-test so pill widths stay in sync (TD-P9-02).
+            let label = crate::ui::tabs::tab_display_label(&tab.title, i, is_active, rename_input);
             let label_w = label.chars().count().min(max_cols - col);
 
             let tab_x = pad_left + col as f32 * cell_w;

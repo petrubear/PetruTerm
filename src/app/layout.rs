@@ -53,8 +53,12 @@ impl App {
             } else {
                 0.0
             };
-            rc.renderer
-                .set_padding(pad.left as f32 + sidebar_px, pad.top as f32 + title_h);
+            // R-8: float the content by the uniform inset (matches viewport_rect).
+            let inset = crate::renderer::ui_style::SP_2 * rc.scale_factor;
+            rc.renderer.set_padding(
+                pad.left as f32 + sidebar_px + inset,
+                pad.top as f32 + title_h + inset,
+            );
         }
     }
 
@@ -71,12 +75,19 @@ impl App {
             let sidebar_px = self.sidebar_width_px();
             let tab_h = self.tab_bar_height_px();
             let sb_h = self.status_bar_height_px();
-            let cols = ((w as f32 - pad.left as f32 - pad.right as f32 - panel_px - sidebar_px)
+            let inset = self.content_inset();
+            let cols = ((w as f32
+                - pad.left as f32
+                - pad.right as f32
+                - panel_px
+                - sidebar_px
+                - 2.0 * inset)
                 / cell_w as f32)
                 .max(1.0) as u16;
-            let rows = ((h as f32 - pad.top as f32 - pad.bottom as f32 - tab_h - sb_h)
-                / cell_h as f32)
-                .max(1.0) as u16;
+            let rows =
+                ((h as f32 - pad.top as f32 - pad.bottom as f32 - tab_h - sb_h - 2.0 * inset)
+                    / cell_h as f32)
+                    .max(1.0) as u16;
             (cols, rows)
         } else {
             (120, 40)
@@ -102,6 +113,18 @@ impl App {
             .as_ref()
             .map(|rc| (rc.shaper.cell_width as u16, rc.shaper.cell_height as u16))
             .unwrap_or((8, 16))
+    }
+
+    /// R-8: uniform float gap (logical `SP_2` × scale) between the content area
+    /// (terminal + panels + sidebar) and the window edges / titlebar / status
+    /// bar. Titlebar and status bar stay full-bleed; only the content floats.
+    pub(super) fn content_inset(&self) -> f32 {
+        let sf = self
+            .render_ctx
+            .as_ref()
+            .map(|rc| rc.scale_factor)
+            .unwrap_or(1.0);
+        crate::renderer::ui_style::SP_2 * sf
     }
 
     pub(super) fn open_initial_tab(&mut self) -> Result<()> {
@@ -131,11 +154,19 @@ impl App {
                 0.0
             };
             let sidebar_px = self.sidebar_width_px();
+            let inset = self.content_inset();
             Rect {
-                x: pad.left as f32 + sidebar_px,
-                y: pad.top as f32 + tab_h,
-                w: (w as f32 - pad.left as f32 - pad.right as f32 - panel_px - sidebar_px).max(0.0),
-                h: (h as f32 - pad.top as f32 - pad.bottom as f32 - tab_h - sb_h).max(0.0),
+                x: pad.left as f32 + sidebar_px + inset,
+                y: pad.top as f32 + tab_h + inset,
+                w: (w as f32
+                    - pad.left as f32
+                    - pad.right as f32
+                    - panel_px
+                    - sidebar_px
+                    - 2.0 * inset)
+                    .max(0.0),
+                h: (h as f32 - pad.top as f32 - pad.bottom as f32 - tab_h - sb_h - 2.0 * inset)
+                    .max(0.0),
             }
         } else {
             let sidebar_px = self.sidebar_width_px();
@@ -151,9 +182,11 @@ impl App {
     pub(super) fn pixel_to_cell(&self, x: f64, y: f64) -> (usize, usize) {
         // Subtract tab bar height so y is relative to the content viewport top.
         let tab_h = self.tab_bar_height_px() as f64;
+        // R-8: also subtract the float inset so pixels map back to grid cells.
+        let inset = self.content_inset() as f64;
         let (raw_col, raw_row) = self.input.pixel_to_cell(
-            x - self.sidebar_width_px() as f64,
-            y - tab_h,
+            x - self.sidebar_width_px() as f64 - inset,
+            y - tab_h - inset,
             &self.config,
             &self.render_ctx,
         );
@@ -199,32 +232,78 @@ impl App {
         Some((panel_col, panel_row))
     }
 
-    /// Given a pixel x coordinate, return which tab index is under the cursor in the tab bar.
+    /// Given a pixel x coordinate, return which tab index is under the cursor in
+    /// the tab bar.
+    ///
+    /// This mirrors the column layout in `build_tab_bar_instances` exactly — same
+    /// `pad_left` grid origin (content_pad_x, floated by the R-8 inset), same
+    /// start/end columns, and the same per-tab label via `tab_display_label`. Any
+    /// change to the render loop's geometry must be reflected here (TD-P9-02).
     pub(super) fn hit_test_tab_bar(&self, x_px: f64) -> Option<usize> {
-        let (cell_w, _) = self.cell_dims();
-        let sf = self
-            .render_ctx
-            .as_ref()
-            .map(|rc| rc.scale_factor as f64)
-            .unwrap_or(1.0);
-        let tabs_start_x = if self.config.window.title_bar_style == TitleBarStyle::Custom {
-            158.0 * sf
-        } else {
-            self.config.window.padding.left as f64
-        };
-        if x_px < tabs_start_x {
-            return None; // click in the buttons zone, not a tab
+        let tabs = self.mux.tabs.tabs();
+        // The renderer only draws individual pills when there are 2+ tabs.
+        if tabs.len() <= 1 {
+            return None;
         }
-        let click_col = ((x_px - tabs_start_x) / cell_w as f64).floor() as usize;
-        let mut col = 0usize;
-        for (i, tab) in self.mux.tabs.tabs().iter().enumerate() {
+        let rc = self.render_ctx.as_ref()?;
+        let sf = rc.scale_factor as f64;
+        let cell_w = rc.shaper.cell_width as f64;
+        if cell_w <= 0.0 {
+            return None;
+        }
+        let win_w = rc.renderer.size().0 as f64;
+
+        // Same origin as the renderer's `pad_left` argument.
+        let pad_left = self.config.window.padding.left as f64
+            + self.sidebar_width_px() as f64
+            + self.content_inset() as f64;
+
+        // Layout constants from build_tab_bar_instances (logical px × scale):
+        // tabs_start_x = traffic(76) + gap(4) + btn(22) + gap(4) + btn(22) + gap(4).
+        let tabs_start_x = 132.0 * sf;
+        let right_reserve = 100.0 * sf;
+        let effective_tabs_start = tabs_start_x.max(pad_left);
+        let tabs_start_col = ((effective_tabs_start - pad_left) / cell_w).ceil().max(0.0) as usize;
+        let tab_end_col = {
+            let avail_w = (win_w - right_reserve).max(effective_tabs_start);
+            ((avail_w - pad_left) / cell_w).max(0.0) as usize
+        };
+        // total_cols = base viewport cols + the chat panel's cols when it is open
+        // (the renderer receives `tab_total_cols`).
+        let viewport = self.viewport_rect();
+        let base_cols = (viewport.w as f64 / cell_w).floor() as usize;
+        let total_cols = base_cols
+            + if self.ui.is_panel_visible() {
+                self.ui.panel().width_cols as usize
+            } else {
+                0
+            };
+        let max_cols = tab_end_col.min(total_cols);
+
+        let click_col_f = ((x_px - pad_left) / cell_w).floor();
+        if click_col_f < 0.0 {
+            return None;
+        }
+        let click_col = click_col_f as usize;
+
+        let active_idx = self.mux.tabs.active_index();
+        let rename_input = self.ui.tab_rename_text();
+        let mut col = tabs_start_col;
+        for (i, tab) in tabs.iter().enumerate() {
+            if col >= max_cols {
+                break;
+            }
             col += 1; // gap before pill
-            col += format!(" {} ", i + 1).chars().count(); // badge
-            let raw = format!(" {} ", tab.title);
-            col += raw.chars().take(14).count();
-            if click_col < col {
+            if col >= max_cols {
+                break;
+            }
+            let label =
+                crate::ui::tabs::tab_display_label(&tab.title, i, i == active_idx, rename_input);
+            let label_w = label.chars().count().min(max_cols - col);
+            if label_w > 0 && click_col >= col && click_col < col + label_w {
                 return Some(i);
             }
+            col += label_w;
         }
         None
     }
@@ -343,7 +422,9 @@ impl App {
             let pad_bottom = self.config.window.padding.bottom as f32;
             let tab_h = self.tab_bar_height_px();
             let sb_h = self.status_bar_height_px();
-            ((h as f32 - pad_top - pad_bottom - tab_h - sb_h) / cell_h as f32).floor() as usize
+            let inset = self.content_inset();
+            ((h as f32 - pad_top - pad_bottom - tab_h - sb_h - 2.0 * inset) / cell_h as f32).floor()
+                as usize
         } else {
             return None;
         };
@@ -381,7 +462,9 @@ impl App {
             let pad_bottom = self.config.window.padding.bottom as f32;
             let tab_h = self.tab_bar_height_px();
             let sb_h = self.status_bar_height_px();
-            ((h as f32 - pad_top - pad_bottom - tab_h - sb_h) / cell_h as f32).floor() as usize
+            let inset = self.content_inset();
+            ((h as f32 - pad_top - pad_bottom - tab_h - sb_h - 2.0 * inset) / cell_h as f32).floor()
+                as usize
         } else {
             return None;
         };

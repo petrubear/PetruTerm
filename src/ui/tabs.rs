@@ -1,5 +1,28 @@
 #![allow(dead_code)]
 
+/// Max glyph width of a tab pill label.
+pub const TAB_LABEL_MAX_CHARS: usize = 18;
+
+/// The visible label for a tab pill: `" title: N "` (1-based), or the rename
+/// buffer with a cursor when that tab is being renamed. Truncated to
+/// [`TAB_LABEL_MAX_CHARS`].
+///
+/// Shared by the tab-bar renderer (`build_tab_bar_instances`) and the click
+/// hit-test (`hit_test_tab_bar`) so both agree on each pill's column width —
+/// they diverged before, which made tab clicks land on the wrong tab (TD-P9-02).
+pub fn tab_display_label(
+    title: &str,
+    index: usize,
+    is_active: bool,
+    rename_input: Option<&str>,
+) -> String {
+    let raw = match (is_active, rename_input) {
+        (true, Some(input)) => format!(" {input}\u{258c} "),
+        _ => format!(" {title}: {} ", index + 1),
+    };
+    raw.chars().take(TAB_LABEL_MAX_CHARS).collect()
+}
+
 /// A single terminal tab.
 #[derive(Debug)]
 pub struct Tab {
@@ -125,5 +148,27 @@ impl TabManager {
 impl Default for TabManager {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tab_label_tests {
+    use super::{tab_display_label, TAB_LABEL_MAX_CHARS};
+
+    #[test]
+    fn label_format_and_truncation() {
+        // Normal label: " title: N " (1-based index).
+        assert_eq!(tab_display_label("zsh", 0, false, None), " zsh: 1 ");
+        assert_eq!(tab_display_label("zsh", 1, true, None), " zsh: 2 ");
+        // Rename buffer on the active tab shows the input + cursor.
+        assert_eq!(
+            tab_display_label("zsh", 0, true, Some("newname")),
+            " newname\u{258c} "
+        );
+        // Rename is ignored on inactive tabs.
+        assert_eq!(tab_display_label("zsh", 0, false, Some("x")), " zsh: 1 ");
+        // Truncated to the pill max width.
+        let long = tab_display_label("a-very-long-tab-title-indeed", 0, false, None);
+        assert_eq!(long.chars().count(), TAB_LABEL_MAX_CHARS);
     }
 }

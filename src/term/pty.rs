@@ -251,8 +251,16 @@ impl Pty {
 
     /// Cleanly shut down the PTY: close master fd, signal child, join threads.
     pub fn shutdown(&mut self) {
-        self.close_master();
-        // SIGHUP triggers PTY hangup, causing shell to exit.
+        // Order matters. SIGHUP the child FIRST so the shell exits and its
+        // slave-side PTY closes; that makes the reader's blocking
+        // `read(master_fd)` return EIO and the reader loop break. Only after the
+        // reader thread has joined (no longer touching the fd) do we close the
+        // master.
+        //
+        // Closing the master *before* the reader has stopped deadlocks on
+        // macOS/BSD: `close()` blocks until the in-flight `read()` on the same
+        // fd completes, but that `read()` cannot complete until the slave closes
+        // — which needs the SIGHUP we would otherwise send afterwards.
         unsafe {
             libc::kill(self.child_pid_libc, libc::SIGHUP);
         }
@@ -262,6 +270,7 @@ impl Pty {
         if let Some(h) = self.child_thread.take() {
             let _ = h.join();
         }
+        self.close_master();
     }
 
     fn close_master(&mut self) {

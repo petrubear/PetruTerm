@@ -741,9 +741,13 @@ impl App {
                         .map(|rc| rc.scale_factor as f64)
                         .unwrap_or(1.0);
                     // Sidebar occupies the visual column area only (not the margin).
+                    // R-8: the sidebar floats by the content inset, so shift the hit
+                    // box right by the same amount.
+                    let inset = self.content_inset() as f64;
                     let sidebar_visual_right = self.config.window.padding.left as f64
+                        + inset
                         + SIDEBAR_COLS as f64 * self.cell_dims().0 as f64;
-                    let sidebar_left = self.config.window.padding.left as f64;
+                    let sidebar_left = self.config.window.padding.left as f64 + inset;
                     // Only intercept clicks that are (a) inside the visual sidebar area
                     // and (b) below the titlebar so that the titlebar toggle button
                     // remains reachable.
@@ -753,8 +757,9 @@ impl App {
                         && self.input.mouse_pos.1 >= titlebar_bottom
                     {
                         let (_, cell_h) = self.cell_dims();
-                        let sidebar_top =
-                            self.config.window.padding.top as f64 + self.tab_bar_height_px() as f64;
+                        let sidebar_top = self.config.window.padding.top as f64
+                            + self.tab_bar_height_px() as f64
+                            + inset;
                         let header_bottom = sidebar_top + cell_h as f64;
                         // Click in the header row → create new workspace.
                         if self.input.mouse_pos.1 < header_bottom {
@@ -1414,6 +1419,158 @@ impl App {
         }
     }
 
+    /// V-1: toggle the render view's CAMetalLayer opacity. wgpu leaves the layer
+    /// opaque by default, which discards the clear-color alpha; setting it
+    /// non-opaque lets the translucent background and blur composite through.
+    #[cfg(target_os = "macos")]
+    unsafe fn set_metal_layer_opaque(window: &Window, opaque: bool) {
+        use objc2::msg_send;
+        use objc2::runtime::{AnyObject, Bool};
+        use winit::raw_window_handle::HasWindowHandle;
+
+        let Ok(h) = window.window_handle() else {
+            return;
+        };
+        let winit::raw_window_handle::RawWindowHandle::AppKit(h) = h.as_raw() else {
+            return;
+        };
+        let ns_view: &AnyObject = &*(h.ns_view.as_ptr() as *const AnyObject);
+        let layer_ptr: *mut AnyObject = msg_send![ns_view, layer];
+        if layer_ptr.is_null() {
+            return;
+        }
+        let flag = if opaque { Bool::YES } else { Bool::NO };
+        // wgpu (raw-window-metal) hosts the CAMetalLayer as a sublayer, so the
+        // real drawable is not [ns_view layer]. Set opacity on the host layer and
+        // every sublayer so the actual Metal layer is covered.
+        let layer: &AnyObject = &*layer_ptr;
+        let () = msg_send![layer, setOpaque: flag];
+        let sublayers_ptr: *mut AnyObject = msg_send![layer, sublayers];
+        if !sublayers_ptr.is_null() {
+            let count: usize = msg_send![sublayers_ptr, count];
+            for i in 0..count {
+                let sub_ptr: *mut AnyObject = msg_send![sublayers_ptr, objectAtIndex: i];
+                if !sub_ptr.is_null() {
+                    let sub: &AnyObject = &*sub_ptr;
+                    let () = msg_send![sub, setOpaque: flag];
+                }
+            }
+        }
+    }
+
+    /// V-3: round the corners of a borderless window (`title_bar_style = "none"`).
+    /// Native and custom titlebars already inherit the system window shape; a
+    /// decorations-off window is a square NSWindow, so we clip the content view's
+    /// layer to a rounded rect and clear the window background so the corners are
+    /// transparent. `masksToBounds` + `cornerRadius` also clips the wgpu
+    /// CAMetalLayer sublayer, so the GPU content respects the radius.
+    #[cfg(target_os = "macos")]
+    unsafe fn apply_macos_rounded_corners(window: &Window, radius: f64) {
+        use objc2::runtime::{AnyObject, Bool};
+        use objc2::{class, msg_send};
+        use winit::raw_window_handle::HasWindowHandle;
+
+        let Ok(h) = window.window_handle() else {
+            return;
+        };
+        let winit::raw_window_handle::RawWindowHandle::AppKit(h) = h.as_raw() else {
+            return;
+        };
+        let ns_view: &AnyObject = &*(h.ns_view.as_ptr() as *const AnyObject);
+        let ns_win_ptr: *mut AnyObject = msg_send![ns_view, window];
+        if ns_win_ptr.is_null() {
+            return;
+        }
+        let ns_win: &AnyObject = &*ns_win_ptr;
+        let () = msg_send![ns_win, setOpaque: Bool::NO];
+        let clear: *mut AnyObject = msg_send![class!(NSColor), clearColor];
+        if !clear.is_null() {
+            let () = msg_send![ns_win, setBackgroundColor: clear];
+        }
+        let content_ptr: *mut AnyObject = msg_send![ns_win, contentView];
+        if content_ptr.is_null() {
+            return;
+        }
+        let content: &AnyObject = &*content_ptr;
+        let () = msg_send![content, setWantsLayer: Bool::YES];
+        let layer_ptr: *mut AnyObject = msg_send![content, layer];
+        if layer_ptr.is_null() {
+            return;
+        }
+        let layer: &AnyObject = &*layer_ptr;
+        let () = msg_send![layer, setCornerRadius: radius];
+        let () = msg_send![layer, setMasksToBounds: Bool::YES];
+    }
+
+    /// V-2: insert an NSVisualEffectView behind the (transparent) render view so
+    /// the window content sits over a blurred vibrancy layer. Uses the WezTerm
+    /// approach: the blur view becomes the window's contentView and the original
+    /// render view is re-parented on top of it. Only called when blur is enabled.
+    #[cfg(target_os = "macos")]
+    unsafe fn apply_macos_blur(&self, window: &Window) {
+        use objc2::runtime::{AnyObject, Bool};
+        use objc2::{class, msg_send};
+        use objc2_foundation::{NSRect, NSString};
+        use winit::raw_window_handle::HasWindowHandle;
+
+        let Ok(h) = window.window_handle() else {
+            return;
+        };
+        let winit::raw_window_handle::RawWindowHandle::AppKit(h) = h.as_raw() else {
+            return;
+        };
+        let ns_view: &AnyObject = &*(h.ns_view.as_ptr() as *const AnyObject);
+        let ns_win_ptr: *mut AnyObject = msg_send![ns_view, window];
+        if ns_win_ptr.is_null() {
+            return;
+        }
+        let ns_win: &AnyObject = &*ns_win_ptr;
+
+        // winit's WinitView (the content view) owns ivars we must not disturb, so
+        // do NOT replace it. Insert the blur view as a sibling *behind* it, as a
+        // child of the window's frame view. Transparent clear pixels then reveal
+        // the vibrancy instead of the desktop.
+        let content_ptr: *mut AnyObject = msg_send![ns_win, contentView];
+        if content_ptr.is_null() {
+            return;
+        }
+        let content: &AnyObject = &*content_ptr;
+        let frame_ptr: *mut AnyObject = msg_send![content, superview];
+        if frame_ptr.is_null() {
+            return; // no frame view yet — skip rather than risk the hierarchy
+        }
+        let frame_view: &AnyObject = &*frame_ptr;
+        let bounds: NSRect = msg_send![frame_view, bounds];
+
+        let blur_ptr: *mut AnyObject = msg_send![class!(NSVisualEffectView), alloc];
+        let blur_ptr: *mut AnyObject = msg_send![blur_ptr, initWithFrame: bounds];
+        if blur_ptr.is_null() {
+            return;
+        }
+        let blur: &AnyObject = &*blur_ptr;
+        // material 13 = UnderWindowBackground; blendingMode 0 = BehindWindow; state 1 = Active.
+        let () = msg_send![blur, setMaterial: 13_i64];
+        let () = msg_send![blur, setBlendingMode: 0_i64];
+        let () = msg_send![blur, setState: 1_i64];
+        let () = msg_send![blur, setAutoresizingMask: 18_usize]; // width|height sizable
+
+        // Light/dark vibrancy appearance.
+        let name = match self.config.window.blur {
+            crate::config::schema::WindowBlur::Light => "NSAppearanceNameAqua",
+            _ => "NSAppearanceNameDarkAqua",
+        };
+        let ns_name = NSString::from_str(name);
+        let appearance: *mut AnyObject =
+            msg_send![class!(NSAppearance), appearanceNamed: &*ns_name];
+        if !appearance.is_null() {
+            let () = msg_send![blur, setAppearance: appearance];
+        }
+
+        // NSWindowBelow = -1: place the blur behind the winit content view.
+        let () = msg_send![frame_view, addSubview: blur, positioned: -1_i64, relativeTo: content];
+        let () = msg_send![ns_win, setOpaque: Bool::NO];
+    }
+
     // ── Low-frequency background tasks (battery + git) ───────────────────────
     // Each sub-poll has its own TTL guard; separation keeps about_to_wait focused
     // on scheduling / wakeup logic.
@@ -1543,6 +1700,13 @@ impl ApplicationHandler<()> for App {
         if self.config.window.title_bar_style == TitleBarStyle::None {
             attrs = attrs.with_decorations(false);
         }
+        // V-1: a translucent window (opacity < 1 or blur) needs a transparent
+        // surface so the clear-color alpha and the vibrancy behind it show.
+        let want_transparent = self.config.window.blur != crate::config::schema::WindowBlur::None
+            || self.config.window.opacity < 1.0;
+        if want_transparent {
+            attrs = attrs.with_transparent(true);
+        }
         if let Some(w) = self.config.window.initial_width {
             if let Some(h) = self.config.window.initial_height {
                 attrs = attrs.with_inner_size(winit::dpi::LogicalSize::new(w, h));
@@ -1568,6 +1732,12 @@ impl ApplicationHandler<()> for App {
                 self.apply_macos_custom_titlebar(&window);
             }
         }
+        #[cfg(target_os = "macos")]
+        if self.config.window.blur != crate::config::schema::WindowBlur::None {
+            unsafe {
+                self.apply_macos_blur(&window);
+            }
+        }
 
         if self.config.window.start_maximized {
             window.set_maximized(true);
@@ -1582,6 +1752,26 @@ impl ApplicationHandler<()> for App {
                 return;
             }
         };
+
+        // V-1: wgpu's CAMetalLayer defaults to opaque, which ignores the clear
+        // alpha. Make it non-opaque so translucency/blur show through.
+        #[cfg(target_os = "macos")]
+        if want_transparent {
+            unsafe {
+                Self::set_metal_layer_opaque(&window, false);
+            }
+        }
+
+        // V-3: a borderless window is square; round it to match the floating look.
+        // Custom/Native titlebars already inherit the system window shape.
+        #[cfg(target_os = "macos")]
+        if self.config.window.title_bar_style == TitleBarStyle::None {
+            // cornerRadius is in points (Core Animation applies the backing scale).
+            let radius = crate::renderer::ui_style::R_PANEL as f64;
+            unsafe {
+                Self::apply_macos_rounded_corners(&window, radius);
+            }
+        }
 
         // Register the native menu bar with the macOS application and window manager.
         #[cfg(target_os = "macos")]

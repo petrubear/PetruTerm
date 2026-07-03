@@ -73,6 +73,11 @@ function module.apply_to_config(config)
 		padding = { left = 20, right = 20, top = 5, bottom = 10 },
 		-- Window background opacity (0.0 = fully transparent, 1.0 = opaque).
 		opacity = 1.0,
+		-- macOS vibrancy/blur behind the window content (Phase 9).
+		--   false (or omit) = disabled; "dark" or "light" = NSVisualEffectView material.
+		-- For the blur to be visible through the terminal, also lower `opacity`
+		-- (e.g. 0.85). With blur on and opacity = 1.0, a 0.82 fallback is used.
+		-- blur = "dark",
 	}
 
 	config.enable_tab_bar     = true

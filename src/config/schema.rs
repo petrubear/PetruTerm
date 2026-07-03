@@ -215,6 +215,20 @@ pub struct WindowConfig {
     pub title_bar_style: TitleBarStyle,
     pub padding: Padding,
     pub opacity: f32,
+    /// macOS window vibrancy/blur behind the content (Phase 9 V-2).
+    #[serde(default)]
+    pub blur: WindowBlur,
+}
+
+/// macOS vibrancy material drawn behind the (transparent) window content.
+/// `None` disables blur; `Dark`/`Light` pick the NSVisualEffectView material.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WindowBlur {
+    #[default]
+    None,
+    Dark,
+    Light,
 }
 
 impl Default for WindowConfig {
@@ -232,6 +246,7 @@ impl Default for WindowConfig {
                 bottom: 10,
             },
             opacity: 1.0,
+            blur: WindowBlur::None,
         }
     }
 }
@@ -389,13 +404,13 @@ impl ColorScheme {
                 hex("#ffffff"),
             ],
             ui_accent: hex("#9580ff"),         // purple — matches cursor_bg
-            ui_surface: hex("#131316"),        // panel bg
+            ui_surface: hex("#1a1a22"),        // panel bg — elevated, slight cool tint
             ui_surface_active: hex("#454158"), // selection_bg
-            ui_surface_hover: hex("#1a1a1e"),  // background +8%
+            ui_surface_hover: hex("#232330"),  // one step above the surface
             ui_muted: hexa("#e0e0e8", 0.35),   // foreground at 35% alpha
             ui_success: hex("#8aff80"),        // ansi green
-            ui_overlay: hexa("#131316", 0.95), // panel bg near-opaque
-            ui_border: hex("#2a2a2f"),         // pane separator
+            ui_overlay: hexa("#1a1a22", 0.95), // panel bg near-opaque
+            ui_border: hex("#33333f"),         // subtle outline on surfaces
         }
     }
 
@@ -408,6 +423,41 @@ impl ColorScheme {
             b: b as f64,
             a: a as f64,
         }
+    }
+
+    /// Surface clear color honoring window translucency (Phase 9 V-1).
+    /// Alpha comes from `window.opacity`; if opacity is 1.0 but blur is enabled,
+    /// falls back to 0.82 so the vibrancy behind the surface stays visible.
+    pub fn clear_color(&self, window: &WindowConfig) -> wgpu::Color {
+        let mut c = self.background_wgpu();
+        c.a = if window.opacity < 1.0 {
+            window.opacity as f64
+        } else if window.blur != WindowBlur::None {
+            0.82
+        } else {
+            1.0
+        };
+        c
+    }
+
+    /// V-4: when the window is translucent (blur enabled or `opacity < 1`), drop
+    /// the alpha of the chrome card surfaces so the vibrancy / wallpaper filters
+    /// subtly through panels, sidebar, palette and menus. Terminal translucency
+    /// is handled separately by [`clear_color`]. Borders, selection/active fills
+    /// and the status bar stay opaque for legibility and crisp edges.
+    ///
+    /// Safe to call once per (re)load: it starts from freshly-derived opaque
+    /// tokens, so it is not cumulative across theme reloads.
+    pub fn apply_blur_translucency(&mut self, window: &WindowConfig) {
+        let a = if window.opacity < 1.0 {
+            window.opacity.clamp(0.5, 1.0)
+        } else if window.blur != WindowBlur::None {
+            0.85
+        } else {
+            return;
+        };
+        self.ui_surface[3] = a;
+        self.ui_surface_hover[3] = a;
     }
 
     /// Map a terminal color index (0-15) to RGBA.
@@ -594,5 +644,39 @@ impl Default for LlmFeatures {
             fix_last_error: true,
             context_chat: true,
         }
+    }
+}
+
+#[cfg(test)]
+mod v4_tests {
+    use super::*;
+
+    #[test]
+    fn blur_translucency_only_when_translucent() {
+        // Opaque, no blur → surfaces stay solid.
+        let mut c = ColorScheme::dracula_pro();
+        let mut w = WindowConfig::default();
+        c.apply_blur_translucency(&w);
+        assert_eq!(c.ui_surface[3], 1.0);
+        assert_eq!(c.ui_surface_hover[3], 1.0);
+
+        // Blur enabled → surfaces softened to 0.85.
+        let mut c = ColorScheme::dracula_pro();
+        w.blur = WindowBlur::Dark;
+        c.apply_blur_translucency(&w);
+        assert_eq!(c.ui_surface[3], 0.85);
+        assert_eq!(c.ui_surface_hover[3], 0.85);
+
+        // Explicit opacity wins and is clamped to [0.5, 1.0].
+        let mut c = ColorScheme::dracula_pro();
+        w.blur = WindowBlur::None;
+        w.opacity = 0.7;
+        c.apply_blur_translucency(&w);
+        assert_eq!(c.ui_surface[3], 0.7);
+
+        let mut c = ColorScheme::dracula_pro();
+        w.opacity = 0.2;
+        c.apply_blur_translucency(&w);
+        assert_eq!(c.ui_surface[3], 0.5);
     }
 }

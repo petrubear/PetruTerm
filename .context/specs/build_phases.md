@@ -431,3 +431,28 @@ recall-biased) y se probó manualmente contra un agente ACP real
 - [x] `handle_slash_command`: resetear `input_cursor = 0` junto al `input.clear()` (evita panic de `String::remove` en el siguiente backspace)
 - [x] Split `src/llm/acp/mod.rs` (456 líneas) → `mod.rs` (132) + `session.rs` (340) para cumplir el límite de 400 líneas/módulo
 - [x] Verificación manual: `cargo check` + `cargo clippy` + `cargo test --bin petruterm` (93 tests) limpios; prueba real en la app con Claude vía npx (streaming, terminal split, confirm write + undo)
+
+---
+
+## Phase 9: UI Restyle — Floating Surfaces & Vibrancy
+
+> Spec completo en [`.context/specs/ui_restyle.md`](./ui_restyle.md). Aprobado (diseño) 2026-07-02.
+> Restyle de la chrome (sidebars, command palette, chat panel, tabs, status bar, ventana)
+> al estilo de la imagen de referencia: superficies redondeadas flotantes + (Fase 2) blur nativo.
+> Sin cambios de funcionalidad; se conservan todas las herramientas actuales.
+
+### Fase 1 — Theming & spacing (sin plataforma)
+- [x] R-1: Tokens de estilo UI (espaciado + radios) centralizados
+- [x] R-2: Tonos de superficie con contraste real en los 5 temas
+- [x] R-3: Sidebar izquierda — restyle (mantiene 4 secciones)
+- [x] R-4: Command palette — restyle
+- [x] R-5: Chat panel — restyle
+- [x] R-6: Tab bar — restyle (ya coherente con el token set)
+- [x] R-7: Status bar — restyle (ya coherente con el token set)
+- [x] R-8: Float layout de la ventana (inset global SP_2; titlebar y status bar full-bleed)
+
+### Fase 2 — Ventana translúcida & blur (macOS)
+- [x] V-1: Ventana transparente + `window.opacity`
+- [x] V-2: Blur/vibrancy nativo (NSVisualEffectView) + `window.blur`
+- [x] V-3: Esquinas redondeadas de ventana (borderless → cornerRadius; Custom/Native nativas)
+- [x] V-4: Tokens de superficie translúcidos cuando blur activo (ui_surface/hover alpha)

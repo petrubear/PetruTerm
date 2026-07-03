@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-05-22
+**Last Updated:** 2026-07-03
 **Open Items:** 0
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 2
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 3
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -57,9 +57,13 @@ Wave 6 — Limpieza estructural
 Wave 7 — Deuda estructural remanente
   AUDIT-REFAC-08 ──────────────────────────────────────┘
 
+Phase 9 — UI Restyle (COMPLETA; branch ui-restyle, verificada visualmente 2026-07-03)
+  R-1..R-8, V-1..V-4 + fixes (TD-P9-02/03/04/08) DONE. Lista para merge a master.
+
 Watch
   AUDIT-CLEAN-02 (sin cambio; reevaluar si ContextAction crece)
   AUDIT-PERF-10 (micro-regresiones de benchmark; reevaluar tras el próximo pase de perf)
+  TD-P9-07 (ignore de cargo audit quick-xml; quitar cuando winit bumpee Wayland)
 ```
 
 **Conflictos a evitar:**
@@ -161,7 +165,77 @@ Watch
 
 **AUDIT-PERF-10** — WATCH (2026-05-22). La revalidación de Criterion no mostró fallos graves, pero sí micro-regresiones repetidas de ~1-2% en shaping/rasterize/build instances (`shape_line_ascii` 284.68 ns +1.54%, `shape_line_ascii_cached` 277.03 ns +1.39%, `shape_line_ligatures_cached` 546.21 ns +1.57%, `rasterize_glyph_ascii` 1.3094 µs +1.67%, `build_row_miss` 857.77 ns +1.58%, `build_frame_hit` 792.79 ns +1.13%). No bloquea, pero conviene volver a medir tras el próximo pase de optimización de hot paths.
 
+**TD-P9-07** — WATCH (2026-07-03). `cargo audit` ignora `RUSTSEC-2026-0194` y `RUSTSEC-2026-0195` (quick-xml 0.39.2, DoS/quadratic) en `.cargo/audit.toml`. Entran transitivamente por `winit → smithay-client-toolkit → wayland-scanner` (Wayland, solo Linux; el target macOS nunca las compila). El fix 0.41 no satisface `wayland-scanner 0.31.9` (`quick-xml = "^0.39"`), así que requiere bump de winit upstream. Quitar el ignore cuando winit actualice su cadena Wayland.
+
 ---
+
+## Phase 9 — UI Restyle (abierto, 2026-07-03)
+
+> Introducidos por el trabajo de restyle en la branch `ui-restyle` (R-8 float
+> layout + V-3/V-4). El denominador común es que **ninguno pudo verificarse
+> visualmente** en el entorno de desarrollo (no hay captura de la ventana GPU);
+> todo se validó por razonamiento estático + build/clippy/test. Ver
+> [[project_phase9_ui_restyle]].
+
+**TD-P9-01 — VERIFICADO (2026-07-03).** Toda la Phase 9 verificada visualmente.
+R-8/header/panel confirmados en config default. **V-3** confirmado con captura en
+`title_bar_style="none"`: la ventana borderless muestra esquinas redondeadas en
+los 4 lados y el contenido se recorta al radio. **V-4** confirmado con
+`window.blur="dark"` (usuario: "funciona"): superficies de chrome translúcidas
+sobre la vibrancy. Config de verificación revertida al setup normal del usuario
+(custom titlebar + maximizado, sin blur).
+
+**TD-P9-02 — RESUELTO (2026-07-03).** `hit_test_tab_bar` (`src/app/layout.rs`)
+divergía del render en DOS cosas: (1) origen — usaba `158.0*sf` fijo en vez del
+grid `content_pad_x` (que incluye sidebar_px + inset R-8); (2) ancho por tab —
+usaba `" N " + " title "` (take 14) mientras el render usa `" title: N "`
+(take 18). El drift del formato de label era la causa original; el inset de R-8 lo
+empeoró. Fix: (a) `tab_display_label()` en `src/ui/tabs.rs` — formato de label
+compartido por el render (`build_tab_bar_instances`) y el hit-test (test unit
+`tab_label_tests`); (b) `hit_test_tab_bar` reescrito para replicar exactamente el
+loop de columnas del render (mismo `pad_left`, `tabs_start_x=132*sf`,
+`right_reserve`, `tabs_start_col`, `max_cols`). VERIFICADO visualmente por el
+usuario: el clic de tab selecciona la tab correcta con los sidebars abiertos.
+
+**TD-P9-03 — RESUELTO (2026-07-03).** Era un `round()` en `status_row`
+(`frame.rs`) que podía bajar la status bar hasta ½ celda **más allá** de
+`win_h - pad.bottom`, comiéndose el padding inferior (regresión visible reportada
+por el usuario; se veía o no según la altura de ventana por el redondeo).
+Cambiado a `floor()`: la barra nunca baja de `win_h - pad.bottom`, así el padding
+se conserva siempre — reproduce el placement pre-R-8. El gap inferior varía entre
+`pad.bottom` y `pad.bottom + cell_h` (inherente al snap a fila de grid, igual que
+antes de R-8), pero nunca es menor.
+
+**TD-P9-08 — RESUELTO (2026-07-03).** Deadlock al cerrar la ventana (colgaba tras
+tener 2+ tabs y que `run_app` retornara, ejecutando `App::drop`). **Bug
+preexistente** en el orden de `Pty::shutdown` (`src/term/pty.rs`), no de R-8.
+Se cerraba el master fd (`close(master_fd)`) **antes** de mandar SIGHUP al shell.
+En macOS/BSD `close()` bloquea hasta que el `read(master_fd)` en curso del hilo
+lector termine, pero ese `read()` no termina hasta que el slave cierre — lo que
+requería el SIGHUP posterior → deadlock. Encontrado por instrumentación del path
+de cierre (el log paraba justo en `close_master`). Fix: reordenar a **SIGHUP →
+join(reader) → join(child) → close(master)**. Verificado con reproducción real:
+el log llega a `reader joined`/`child joined`/`App::drop end` y el proceso cierra
+limpio. Nota: en cierre normal de 1 tab, macOS winit suele salir con
+`process::exit` dentro de `run_app` (no corre `App::drop`), por eso el bug solo
+aparecía intermitentemente.
+
+**TD-P9-04 — VERIFICADO (2026-07-03).** El borde cerrado del panel de chat
+(`build_chat_panel_instances`, `chat.rs`) se confirmó en captura: el panel se lee
+como card completa, su borde inferior flota por encima de la status bar sin
+recorte ni colisión. `py+ph` (alto = `total_rows*ch`) queda correctamente en el
+gap sobre la status bar.
+
+**TD-P9-05 — VERIFICADO (2026-07-03).** Captura en `title_bar_style="none"`
+(borderless) muestra el contenido flotado con el inset de R-8 coherente (prompt
+arriba, status bar abajo full-bleed, sin descuadres) y esquinas redondeadas. El
+back-compute de la tab bar en modo no-Custom no mostró problemas. `src/app/frame.rs`,
+`src/app/layout.rs`.
+
+**TD-P9-06 — VERIFICADO (2026-07-03).** V-4 bajo blur real confirmado por el
+usuario ("funciona"): el alpha `0.85` de `ui_surface`/`ui_surface_hover`
+(`ColorScheme::apply_blur_translucency`, `schema.rs`) se ve bien; sin apilado
+parcheado reportado. Si en uso prolongado se ve desigual, reevaluar el factor.
 
 ## Deferred — Requieren hardware/profiling específico
 
@@ -185,5 +259,6 @@ Wave 4: AUDIT-PERF-08, AUDIT-PERF-09, AUDIT-RESP-01
 Wave 5: AUDIT-ENERGY-05, AUDIT-MEM-04, AUDIT-MEM-05, AUDIT-REFAC-06
 Wave 6: AUDIT-REFAC-07, AUDIT-CLEAN-03
 Wave 7: AUDIT-REFAC-08
-Watch: AUDIT-CLEAN-02, AUDIT-PERF-10
+Phase 9: COMPLETA y verificada — TD-P9-01..08 cerrados. Lista para merge a master.
+Watch: AUDIT-CLEAN-02, AUDIT-PERF-10, TD-P9-07
 ```
