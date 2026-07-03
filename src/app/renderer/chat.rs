@@ -99,6 +99,23 @@ impl RenderContext {
                 _pad: [0.0; 2],
             });
 
+        // ── Header band (row 0) ──────────────────────────────────────────────
+        // Reference style: a flat header band whose title ("◈ Claude │ agent:…")
+        // reads left-aligned, separated from the message area by a thin rule —
+        // not a floating filled pill nested inside the panel's rounded corners.
+        {
+            let hx = px + st.sp2;
+            let hw = (pw - 2.0 * st.sp2).max(0.0);
+            self.rect_instances
+                .push(crate::renderer::rounded_rect::RoundedRectInstance {
+                    rect: [hx, py + ch, hw, st.border],
+                    color: config.colors.ui_border,
+                    radius: 0.0,
+                    border_width: 0.0,
+                    _pad: [0.0; 2],
+                });
+        }
+
         // ── Fixed bottom rows (always present) ───────────────────────────────
         // input_row1..4 and hints_row are rendered by build_chat_panel_input_rows (TD-PERF-10).
         let sep_row = screen_rows - 6;
@@ -466,12 +483,12 @@ impl RenderContext {
         } else {
             fmt_buf.chars().count()
         };
-        let center_slot_start = (left_w + 1).min(panel_cols);
-        let center_slot_end = right_start.saturating_sub(1);
-        let center_slot_w = center_slot_end.saturating_sub(center_slot_start);
-        let center = truncate_chars(&center_full, center_slot_w);
-        let center_w = center.chars().count();
-        let center_start = center_slot_start + center_slot_w.saturating_sub(center_w) / 2;
+        // Detail sits left-aligned right after the title ("◈ Claude │ agent:…"),
+        // matching the reference "Label │ detail" header rather than a centered
+        // floating string.
+        let detail_start = (left_w + 1).min(panel_cols);
+        let detail_end = right_start.saturating_sub(1);
+        let detail_slot_w = detail_end.saturating_sub(detail_start);
 
         self.push_shaped_row(
             &left_label,
@@ -482,14 +499,17 @@ impl RenderContext {
             panel_cols,
             font,
         );
-        if center_w > 0 {
+        if detail_slot_w > 2 {
+            fmt_buf.clear();
+            let _ = write!(fmt_buf, "\u{2502} {center_full}");
+            let detail = truncate_chars(fmt_buf, detail_slot_w);
             self.push_shaped_row(
-                &center,
+                &detail,
                 config.colors.ui_muted,
                 panel_bg,
                 0,
-                co + center_start,
-                panel_cols.saturating_sub(center_start),
+                co + detail_start,
+                panel_cols.saturating_sub(detail_start),
                 font,
             );
         }
@@ -1183,24 +1203,21 @@ impl RenderContext {
 
         // ── W-2: Input card background + border ──────────────────────────────
         {
+            let st = self.ui_style();
             let cw = self.shaper.cell_width;
             let ch = self.shaper.cell_height;
             let px = pad_x + co as f32 * cw;
             let card_y = pad_y + input_row1 as f32 * ch;
             let pw = panel_cols as f32 * cw;
             let card_h = 4.0 * ch;
-            let radius = 4.0 * self.scale_factor;
-            let border = 1.0 * self.scale_factor;
+            let radius = st.r_inner;
+            let border = st.border;
 
-            // Subtle card: slightly lighter than the panel bg, not the purple selection color.
-            let b = config.colors.background;
-            let card_bg = [
-                (b[0] + 0.06).min(1.0),
-                (b[1] + 0.06).min(1.0),
-                (b[2] + 0.06).min(1.0),
-                1.0,
-            ];
-            let border_color = config.colors.ui_muted;
+            // Nested input field: a subtle elevation of the panel surface with the
+            // same hairline border as the panel — matches the reference rather than
+            // a bright-bordered card floating on a mismatched fill.
+            let card_bg = config.colors.ui_surface_hover;
+            let border_color = config.colors.ui_border;
 
             // Border rect (slightly larger, drawn first).
             self.rect_instances.push(RoundedRectInstance {
