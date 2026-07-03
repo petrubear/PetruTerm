@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-07-03
-**Open Items:** 3
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 3 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 3
+**Open Items:** 0
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 3
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -57,11 +57,8 @@ Wave 6 — Limpieza estructural
 Wave 7 — Deuda estructural remanente
   AUDIT-REFAC-08 ──────────────────────────────────────┘
 
-Phase 9 — UI Restyle (abierto; branch ui-restyle)
-  TD-P9-01 (verificación visual V-3/V-4; R-8 ya OK) ─┐
-  TD-P9-05 (inset con titlebar no-Custom)            ├─► verificar/mergear a master
-  TD-P9-06 (tuning visual V-4 bajo blur)             ┘
-  RESUELTOS: TD-P9-02 (tab hit-test), TD-P9-03 (padding status bar), TD-P9-04 (borde panel), TD-P9-08 (deadlock cierre)
+Phase 9 — UI Restyle (COMPLETA; branch ui-restyle, verificada visualmente 2026-07-03)
+  R-1..R-8, V-1..V-4 + fixes (TD-P9-02/03/04/08) DONE. Lista para merge a master.
 
 Watch
   AUDIT-CLEAN-02 (sin cambio; reevaluar si ContextAction crece)
@@ -180,14 +177,13 @@ Watch
 > todo se validó por razonamiento estático + build/clippy/test. Ver
 > [[project_phase9_ui_restyle]].
 
-**TD-P9-01 — P3 — Verificación visual pendiente de V-3/V-4.**
-PARCIALMENTE VERIFICADO (2026-07-03): capturas del usuario confirman R-8 (float
-layout: sidebar/panel/terminal flotan, titlebar/status bar full-bleed), el header
-del chat y la card del panel en la config por defecto (Custom titlebar, sin blur).
-Falta verificar **V-3** (esquinas borderless — requiere `title_bar_style="none"`)
-y **V-4** (superficies translúcidas — requiere `window.blur="dark"`), que son
-no-op en la config por defecto. Acción: correr con esas configs y confirmar antes
-de mergear. `src/app/mod.rs` (V-3), `src/config/schema.rs` (V-4).
+**TD-P9-01 — VERIFICADO (2026-07-03).** Toda la Phase 9 verificada visualmente.
+R-8/header/panel confirmados en config default. **V-3** confirmado con captura en
+`title_bar_style="none"`: la ventana borderless muestra esquinas redondeadas en
+los 4 lados y el contenido se recorta al radio. **V-4** confirmado con
+`window.blur="dark"` (usuario: "funciona"): superficies de chrome translúcidas
+sobre la vibrancy. Config de verificación revertida al setup normal del usuario
+(custom titlebar + maximizado, sin blur).
 
 **TD-P9-02 — RESUELTO (2026-07-03).** `hit_test_tab_bar` (`src/app/layout.rs`)
 divergía del render en DOS cosas: (1) origen — usaba `158.0*sf` fijo en vez del
@@ -230,18 +226,16 @@ como card completa, su borde inferior flota por encima de la status bar sin
 recorte ni colisión. `py+ph` (alto = `total_rows*ch`) queda correctamente en el
 gap sobre la status bar.
 
-**TD-P9-05 — P3 — Coherencia del inset con titlebar no-Custom.**
-El modelo de origen de grid único se validó para `title_bar_style=Custom`. En
-modo `Native`/`None` con 2+ tabs, `gpu_pad_y` usa `TITLEBAR_HEIGHT*sf` mientras
-`tab_h`/`sb_pad_y` usan `cell_height`; el back-compute de la tab bar podría
-descuadrar. No probado. `src/app/frame.rs`, `src/app/layout.rs`.
+**TD-P9-05 — VERIFICADO (2026-07-03).** Captura en `title_bar_style="none"`
+(borderless) muestra el contenido flotado con el inset de R-8 coherente (prompt
+arriba, status bar abajo full-bleed, sin descuadres) y esquinas redondeadas. El
+back-compute de la tab bar en modo no-Custom no mostró problemas. `src/app/frame.rs`,
+`src/app/layout.rs`.
 
-**TD-P9-06 — P3 — Tuning visual de V-4 bajo blur.**
-El alpha fijo `0.85` de `ui_surface`/`ui_surface_hover`
-(`ColorScheme::apply_blur_translucency`, `schema.rs`) y el apilado de tints de
-fila de mensaje + code-block bg (`ui_surface_active`) + selección sobre el panel
-translúcido no se ajustaron con blur real. Puede verse desigual/parcheado.
-Reevaluar el factor y qué tokens participan una vez verificado en pantalla.
+**TD-P9-06 — VERIFICADO (2026-07-03).** V-4 bajo blur real confirmado por el
+usuario ("funciona"): el alpha `0.85` de `ui_surface`/`ui_surface_hover`
+(`ColorScheme::apply_blur_translucency`, `schema.rs`) se ve bien; sin apilado
+parcheado reportado. Si en uso prolongado se ve desigual, reevaluar el factor.
 
 ## Deferred — Requieren hardware/profiling específico
 
@@ -265,6 +259,6 @@ Wave 4: AUDIT-PERF-08, AUDIT-PERF-09, AUDIT-RESP-01
 Wave 5: AUDIT-ENERGY-05, AUDIT-MEM-04, AUDIT-MEM-05, AUDIT-REFAC-06
 Wave 6: AUDIT-REFAC-07, AUDIT-CLEAN-03
 Wave 7: AUDIT-REFAC-08
-Phase 9 (abierto): TD-P9-01 (V-3/V-4), TD-P9-05, TD-P9-06 | resueltos: TD-P9-02, TD-P9-03, TD-P9-04, TD-P9-08
+Phase 9: COMPLETA y verificada — TD-P9-01..08 cerrados. Lista para merge a master.
 Watch: AUDIT-CLEAN-02, AUDIT-PERF-10, TD-P9-07
 ```
