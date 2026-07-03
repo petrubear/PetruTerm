@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-07-03
-**Open Items:** 5
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 1 | **P3:** 4 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 3
+**Open Items:** 4
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 1 | **P3:** 3 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 3
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -59,11 +59,10 @@ Wave 7 — Deuda estructural remanente
 
 Phase 9 — UI Restyle (abierto; branch ui-restyle)
   TD-P9-01 (verificación visual V-3/V-4; R-8 ya OK) ─┐
-  TD-P9-02 (tab-bar hit-test vs render)              │
-  TD-P9-03 (status bar sub-cell pin en resize)       ├─► verificar/mergear a master
+  TD-P9-02 (tab-bar hit-test vs render)              ├─► verificar/mergear a master
   TD-P9-05 (inset con titlebar no-Custom)            │
   TD-P9-06 (tuning visual V-4 bajo blur)             ┘
-  TD-P9-04 (borde panel chat) ── VERIFICADO 2026-07-03
+  RESUELTOS: TD-P9-03 (padding status bar), TD-P9-04 (borde panel), TD-P9-08 (deadlock cierre)
 
 Watch
   AUDIT-CLEAN-02 (sin cambio; reevaluar si ContextAction crece)
@@ -200,12 +199,28 @@ derecha que donde el hit-test las espera → clic mapea a la tab equivocada.
 Preexistente (discrepancia 132 vs 158 px), pero el inset de R-8 suma ~8px más.
 Fix: derivar el hit-test del mismo `effective_tabs_start` que el render.
 
-**TD-P9-03 — P3 — Sub-cell rounding del pin de la status bar (R-8).**
-`status_row = round((win_h - pad.bottom - sb_h - sb_pad_y)/cell_h)` en
-`frame.rs`. El inset (8px) no es múltiplo de `cell_h`, así que la status bar solo
-puede caer en una fila entera; se asumió que el error ≤½ celda lo absorben
-`SB_EXTRA_PX` + `pad.bottom`, pero no se confirmó que no deje una costura fina ni
-que no salte una celda a ciertas alturas de ventana. Verificar en resize.
+**TD-P9-03 — RESUELTO (2026-07-03).** Era un `round()` en `status_row`
+(`frame.rs`) que podía bajar la status bar hasta ½ celda **más allá** de
+`win_h - pad.bottom`, comiéndose el padding inferior (regresión visible reportada
+por el usuario; se veía o no según la altura de ventana por el redondeo).
+Cambiado a `floor()`: la barra nunca baja de `win_h - pad.bottom`, así el padding
+se conserva siempre — reproduce el placement pre-R-8. El gap inferior varía entre
+`pad.bottom` y `pad.bottom + cell_h` (inherente al snap a fila de grid, igual que
+antes de R-8), pero nunca es menor.
+
+**TD-P9-08 — RESUELTO (2026-07-03).** Deadlock al cerrar la ventana (colgaba tras
+tener 2+ tabs y que `run_app` retornara, ejecutando `App::drop`). **Bug
+preexistente** en el orden de `Pty::shutdown` (`src/term/pty.rs`), no de R-8.
+Se cerraba el master fd (`close(master_fd)`) **antes** de mandar SIGHUP al shell.
+En macOS/BSD `close()` bloquea hasta que el `read(master_fd)` en curso del hilo
+lector termine, pero ese `read()` no termina hasta que el slave cierre — lo que
+requería el SIGHUP posterior → deadlock. Encontrado por instrumentación del path
+de cierre (el log paraba justo en `close_master`). Fix: reordenar a **SIGHUP →
+join(reader) → join(child) → close(master)**. Verificado con reproducción real:
+el log llega a `reader joined`/`child joined`/`App::drop end` y el proceso cierra
+limpio. Nota: en cierre normal de 1 tab, macOS winit suele salir con
+`process::exit` dentro de `run_app` (no corre `App::drop`), por eso el bug solo
+aparecía intermitentemente.
 
 **TD-P9-04 — VERIFICADO (2026-07-03).** El borde cerrado del panel de chat
 (`build_chat_panel_instances`, `chat.rs`) se confirmó en captura: el panel se lee
@@ -248,6 +263,6 @@ Wave 4: AUDIT-PERF-08, AUDIT-PERF-09, AUDIT-RESP-01
 Wave 5: AUDIT-ENERGY-05, AUDIT-MEM-04, AUDIT-MEM-05, AUDIT-REFAC-06
 Wave 6: AUDIT-REFAC-07, AUDIT-CLEAN-03
 Wave 7: AUDIT-REFAC-08
-Phase 9 (abierto): TD-P9-01 (V-3/V-4), TD-P9-02, TD-P9-03, TD-P9-05, TD-P9-06 | verificado: TD-P9-04
+Phase 9 (abierto): TD-P9-01 (V-3/V-4), TD-P9-02, TD-P9-05, TD-P9-06 | resueltos: TD-P9-03, TD-P9-04, TD-P9-08
 Watch: AUDIT-CLEAN-02, AUDIT-PERF-10, TD-P9-07
 ```

@@ -808,11 +808,14 @@ impl App {
                         0
                     };
                 let sb_win_w = rc.renderer.size().0 as f32;
-                // R-8: pin the status bar to the window bottom (full-bleed) by
+                // R-8: pin the status bar near the window bottom (full-bleed) by
                 // back-computing its grid row from the inset content origin.
+                // `floor` (not `round`) so the bar never drops past
+                // `win_h - pad.bottom`, preserving the bottom padding — matches the
+                // pre-R-8 placement. `round` could eat `pad.bottom` on some heights.
                 let sb_win_h = rc.renderer.size().1 as f32;
                 let status_row = ((sb_win_h - sb_bottom_pad - sb_h_px - sb_pad_y) / cell_h as f32)
-                    .round()
+                    .floor()
                     .max(0.0) as usize;
                 // Key: all inputs that affect segment text + layout (TD-PERF-10).
                 // Include current minute so the time widget invalidates the cache
