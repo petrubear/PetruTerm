@@ -11,6 +11,16 @@ impl App {
         self.needs_redraw = true;
     }
 
+    /// Open the PTY-echo grace window. Call right after writing input to a PTY so
+    /// `about_to_wait` re-polls on a reliable timer while the shell echoes back —
+    /// guarding against lost/delayed `EventLoopProxy` wakeups on macOS that would
+    /// otherwise leave pasted text (or atuin selections) unrendered until an
+    /// unrelated event. See the `pty_echo_grace_until` field docs.
+    pub(super) fn note_pty_input(&mut self) {
+        self.pty_echo_grace_until =
+            Some(std::time::Instant::now() + std::time::Duration::from_millis(250));
+    }
+
     pub(super) fn flush_redraw_request(&mut self) {
         if !self.needs_redraw {
             return;
@@ -132,6 +142,7 @@ impl App {
                 data.push(b'\n');
                 terminal.write_input(&data);
             }
+            self.note_pty_input();
         }
     }
 
@@ -149,6 +160,7 @@ impl App {
                     data.push(b'\n');
                     terminal.write_input(&data);
                 }
+                self.note_pty_input();
                 let panel = self.ui.panel_mut();
                 panel.messages.push(ChatMessage::assistant(note));
                 panel.dirty = true;
@@ -205,6 +217,7 @@ impl App {
                     terminal.write_input(text.as_bytes());
                 }
             }
+            self.note_pty_input();
         }
     }
 

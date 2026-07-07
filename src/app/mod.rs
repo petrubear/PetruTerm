@@ -53,6 +53,14 @@ pub struct App {
     /// (erase + redraw) are coalesced into a single frame, preventing flickering.
     pending_pty_redraw: bool,
     last_pty_activity: std::time::Instant,
+    /// After we write input to a PTY (paste, key echo, atuin selection, agent
+    /// command), the shell echoes back asynchronously. That echo wakes the loop
+    /// via `EventLoopProxy::send_event`, but on macOS that wakeup is occasionally
+    /// lost/delayed — leaving the parked loop showing stale content until an
+    /// unrelated event (scroll/keypress) or the next timer fires. While this
+    /// grace window is active, `about_to_wait` caps its wait to a few ms so it
+    /// re-polls the PTY on a reliable timer and renders the echo regardless.
+    pty_echo_grace_until: Option<std::time::Instant>,
     /// Number of PTY events in the last batch, used for adaptive coalescing.
     /// Small batches (≤2) are keyboard echo — skip coalescing for lower latency.
     last_pty_batch_size: usize,
@@ -151,6 +159,7 @@ impl App {
             wakeup_proxy,
             pending_pty_redraw: false,
             last_pty_activity: std::time::Instant::now(),
+            pty_echo_grace_until: None,
             last_pty_batch_size: 0,
             window_occluded: false,
             window_focused: true,
@@ -589,6 +598,9 @@ impl App {
             self.apply_tab_bar_padding();
             self.resize_terminals_for_panel();
         }
+        // A key may have written to the PTY (typing, or an atuin/ZLE widget that
+        // rewrites the line asynchronously). Guard against a lost echo wakeup.
+        self.note_pty_input();
         self.request_redraw();
     }
 
@@ -1872,6 +1884,7 @@ impl ApplicationHandler<()> for App {
                     self.ui.panel_mut().append_path(&path_str);
                 } else if let Some(terminal) = self.mux.active_terminal() {
                     terminal.write_input(path_str.as_bytes());
+                    self.note_pty_input();
                 }
                 self.request_redraw();
             }
@@ -2095,6 +2108,18 @@ impl ApplicationHandler<()> for App {
         if let Some(fd) = frame_deadline {
             wake = wake.min(fd);
         }
+        // PTY-echo grace: after writing input to a PTY we expect an async echo
+        // shortly. macOS occasionally loses/delays the reader thread's
+        // EventLoopProxy wakeup, so poll on a reliable short timer instead of
+        // trusting the wakeup alone. Cleared once the window expires.
+        match self.pty_echo_grace_until {
+            Some(t) if std::time::Instant::now() < t => {
+                wake = wake.min(std::time::Instant::now() + std::time::Duration::from_millis(8));
+            }
+            Some(_) => self.pty_echo_grace_until = None,
+            None => {}
+        }
+
         event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(wake));
     }
 }
