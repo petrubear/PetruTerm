@@ -1,39 +1,45 @@
 # Active Context
 
-**Current Focus:** Phase 9 — UI Restyle (Floating Surfaces & Vibrancy)
-**Last Active:** 2026-07-02
-**Branch:** `master`
-**Estado:** Diseño aprobado. Spec en [`.context/specs/ui_restyle.md`](../specs/ui_restyle.md). Implementación pendiente.
-**Próxima tarea:** Ejecutar Fase 1 (R-1 tokens → R-8 float layout). Fase 2 (blur macOS) después.
+**Current Focus:** ninguno — sin tareas de feature abiertas.
+**Last Active:** 2026-07-08
+**Branch:** `master` (version 0.3.0)
+**Estado:** Phase 9 (UI Restyle) COMPLETA y mergeada a master. Phase 8 (ACP) COMPLETA y mergeada a master. Sin deuda técnica abierta.
+**Próxima tarea:** decidir el siguiente foco. No hay trabajo pendiente en cola.
 
-## Phase 9 — Estado de tareas
+## Phase 9 — UI Restyle — COMPLETA y MERGEADA a master (v0.3.0)
+
+Merge `8809e6f`. Todas las tareas cerradas y verificadas visualmente (TD-P9-01..08).
 
 | ID | Tarea | Fase | Estado |
 |----|-------|------|--------|
 | R-1 | Tokens de estilo UI (espaciado + radios) | 1 | **COMPLETA** |
-| R-2 | Tonos de superficie con contraste (Dracula Pro) | 1 | **COMPLETA** (otros 4 temas .lua pendientes) |
-| R-3 | Sidebar izquierda — restyle | 1 | **COMPLETA** (tokenizado; float en R-8) |
-| R-4 | Command palette — restyle | 1 | **COMPLETA** (search-box inset = follow-up) |
-| R-5 | Chat panel — restyle | 1 | Casi (tono propio + pills hechos; float inset en R-8) |
-| R-6 | Tab bar — restyle | 1 | Ya coherente (radios btn_h/4≈r_pill, tabs planos por diseño) |
-| R-7 | Status bar — restyle | 1 | Ya coherente (tonos derivados del tema) |
-| R-8 | Float layout de la ventana (inset global) | 1 | Pendiente |
-| V-1 | Ventana transparente + `window.opacity` | 2 | Pendiente |
-| V-2 | Blur/vibrancy nativo (NSVisualEffectView) | 2 | Pendiente |
-| V-3 | Esquinas redondeadas de ventana | 2 | Pendiente |
-| V-4 | Tokens de superficie translúcidos con blur | 2 | Pendiente |
+| R-2 | Tonos de superficie con contraste (Dracula Pro) | 1 | **COMPLETA** |
+| R-3 | Sidebar izquierda — restyle | 1 | **COMPLETA** |
+| R-4 | Command palette — restyle | 1 | **COMPLETA** |
+| R-5 | Chat panel — floating surface | 1 | **COMPLETA** (commit `5deae45`) |
+| R-6 | Tab bar — restyle | 1 | **COMPLETA** |
+| R-7 | Status bar — restyle | 1 | **COMPLETA** |
+| R-8 | Float layout de la ventana (inset global) | 1 | **COMPLETA** (commit `9bf4dad`) |
+| V-1 | Ventana transparente + `window.opacity` | 2 | **COMPLETA** (commit `2beaa41`) |
+| V-2 | Blur/vibrancy nativo (NSVisualEffectView) | 2 | **COMPLETA** (commits `282f0e6`/`52b5e08`) |
+| V-3 | Esquinas redondeadas de ventana | 2 | **COMPLETA** |
+| V-4 | Tokens de superficie translúcidos con blur | 2 | **COMPLETA** |
+
+**Post-merge (en master):** fixes de PTY-echo wakeup en macOS (`445c11b`, `3f4673b`) +
+code review findings (`0a89973`).
 
 ---
 
-## Phase 8 — ACP Integration (COMPLETA, previa)
+## Phase 8 — ACP Integration — COMPLETA y MERGEADA a master
 
-**Branch:** `acp` — **Commits:** `beee958` (feat: backend ACP) + `bb63df0` (chore: docs/llm.lua/fmt)
-**Pendiente:** decidir push de `acp` a remoto y/o PR hacia `master` (requiere confirmación explícita)
+**Commits en master:** `beee958` (feat: backend ACP) + `bb63df0` (chore: docs/llm.lua/fmt) +
+`515c586` (chore: cierre de sesión). Probada end-to-end con Claude vía
+`@agentclientprotocol/claude-agent-acp`.
 
 ## Estado actual del proyecto
 
-**Phases 1–7 COMPLETAS. Deuda técnica cerrada. Branch `acp` creado (2026-06-11).**
-**Deuda técnica: 0 items abiertos. Watch: AUDIT-CLEAN-02.**
+**Phases 1–8 COMPLETAS + Phase 9 (UI Restyle) COMPLETA. Todo mergeado a master (v0.3.0).**
+**Deuda técnica: 0 items abiertos. Watch: AUDIT-CLEAN-02, AUDIT-PERF-10, TD-P9-07.**
 
 ## Phase 8: ACP — Estado de tareas
 

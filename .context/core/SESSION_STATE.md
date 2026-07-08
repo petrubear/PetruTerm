@@ -1,17 +1,17 @@
 # Session State
 
-**Last Updated:** 2026-07-01
-**Session Focus:** Phase 8 — ACP Integration (Agent Client Protocol)
+**Last Updated:** 2026-07-08
+**Session Focus:** ninguno — sin tareas de feature abiertas.
 
-## Branch: `acp`
+## Branch: `master` (version 0.3.0)
 
 ## Estado actual
 
-**Phases 1–7 COMPLETAS. Deuda técnica Wave 7 cerrada.**
-**Deuda técnica: 0 items abiertos. Watch: AUDIT-CLEAN-02, AUDIT-PERF-10. Diferidos: TD-PERF-03, TD-PERF-05, AUDIT-MEM-04.**
-**Phase 8 (ACP) COMPLETA — probada manualmente con Claude vía `@agentclientprotocol/claude-agent-acp`.**
-**ci-local.sh: PASA en master y en `acp` (clippy -D warnings + fmt --check + test --lib + audit, verificado 2026-07-01).**
-**Branch `acp` commiteada (`beee958`, `bb63df0`), working tree limpio. NO pusheada ni mergeada a master todavía.**
+**Phases 1–8 COMPLETAS + Phase 9 (UI Restyle) COMPLETA. Todo mergeado a master (v0.3.0).**
+**Deuda técnica: 0 items abiertos. Watch: AUDIT-CLEAN-02, AUDIT-PERF-10, TD-P9-07. Diferidos: TD-PERF-03, TD-PERF-05, AUDIT-MEM-04.**
+**Phase 8 (ACP) MERGEADA a master (`beee958`, `bb63df0`, `515c586`) — probada con Claude vía `@agentclientprotocol/claude-agent-acp`.**
+**Phase 9 (UI Restyle) MERGEADA a master (merge `8809e6f`, v0.3.0). Post-merge: fixes PTY-echo (`445c11b`, `3f4673b`) + code review (`0a89973`).**
+**ci-local.sh: PASA en master (clippy -D warnings + fmt --check + test --lib + audit).**
 
 ## Esta sesión (2026-07-01) — Phase 8: ACP-6, fixes de code review + prueba manual
 

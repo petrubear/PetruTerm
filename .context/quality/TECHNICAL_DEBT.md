@@ -1,6 +1,6 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-07-03
+**Last Updated:** 2026-07-08
 **Open Items:** 0
 **Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 3
 
@@ -57,8 +57,8 @@ Wave 6 — Limpieza estructural
 Wave 7 — Deuda estructural remanente
   AUDIT-REFAC-08 ──────────────────────────────────────┘
 
-Phase 9 — UI Restyle (COMPLETA; branch ui-restyle, verificada visualmente 2026-07-03)
-  R-1..R-8, V-1..V-4 + fixes (TD-P9-02/03/04/08) DONE. Lista para merge a master.
+Phase 9 — UI Restyle (COMPLETA y MERGEADA a master 2026-07-03, version 0.3.0)
+  R-1..R-8, V-1..V-4 + fixes (TD-P9-02/03/04/08) DONE. Merge 8809e6f.
 
 Watch
   AUDIT-CLEAN-02 (sin cambio; reevaluar si ContextAction crece)
@@ -259,6 +259,6 @@ Wave 4: AUDIT-PERF-08, AUDIT-PERF-09, AUDIT-RESP-01
 Wave 5: AUDIT-ENERGY-05, AUDIT-MEM-04, AUDIT-MEM-05, AUDIT-REFAC-06
 Wave 6: AUDIT-REFAC-07, AUDIT-CLEAN-03
 Wave 7: AUDIT-REFAC-08
-Phase 9: COMPLETA y verificada — TD-P9-01..08 cerrados. Lista para merge a master.
+Phase 9: COMPLETA, verificada y MERGEADA a master (2026-07-03, v0.3.0) — TD-P9-01..08 cerrados.
 Watch: AUDIT-CLEAN-02, AUDIT-PERF-10, TD-P9-07
 ```
