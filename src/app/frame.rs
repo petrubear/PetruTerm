@@ -141,8 +141,8 @@ impl App {
                 let mut data = cmd.into_bytes();
                 data.push(b'\n');
                 terminal.write_input(&data);
+                self.note_pty_input();
             }
-            self.note_pty_input();
         }
     }
 
@@ -159,8 +159,8 @@ impl App {
                     let mut data = cmd.into_bytes();
                     data.push(b'\n');
                     terminal.write_input(&data);
+                    self.note_pty_input();
                 }
-                self.note_pty_input();
                 let panel = self.ui.panel_mut();
                 panel.messages.push(ChatMessage::assistant(note));
                 panel.dirty = true;
@@ -216,8 +216,8 @@ impl App {
                 } else {
                     terminal.write_input(text.as_bytes());
                 }
+                self.note_pty_input();
             }
-            self.note_pty_input();
         }
     }
 
