@@ -24,4 +24,5 @@ return {
     ui_muted          = "#6d6d87",
     ui_success        = "#8aff80",
     ui_overlay        = "#2d2b3bf2",
+    ui_border         = "#3e3b52",
 }
