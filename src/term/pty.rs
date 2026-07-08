@@ -46,9 +46,11 @@ pub struct PtyEventProxy {
     pub tx: Sender<PtyEvent>,
     pub wakeup: EventLoopProxy<()>,
     /// Raw PTY master fd used for direct PtyWrite responses (cursor position, etc.).
-    /// Written from whatever thread calls send_event — safe on Unix for PTY fds.
     pub master_fd: RawFd,
     pub(crate) qos_set: Arc<OnceLock<()>>,
+    /// Serializes concurrent writes to `master_fd` from the reader thread (PtyWrite
+    /// responses) and the main thread (keyboard input via `Pty::write`).
+    pub(crate) write_mutex: Arc<parking_lot::Mutex<()>>,
 }
 
 impl EventListener for PtyEventProxy {
@@ -67,13 +69,8 @@ impl EventListener for PtyEventProxy {
         if let Event::PtyWrite(text) = event {
             let bytes = text.as_bytes();
             if self.master_fd >= 0 && !bytes.is_empty() {
-                unsafe {
-                    libc::write(
-                        self.master_fd,
-                        bytes.as_ptr() as *const libc::c_void,
-                        bytes.len(),
-                    );
-                }
+                let _guard = self.write_mutex.lock();
+                pty_write_all(self.master_fd, bytes);
             }
             return;
         }
@@ -114,6 +111,8 @@ pub struct Pty {
     reader_thread: Option<JoinHandle<()>>,
     /// Child monitor thread: waits for child exit, emits PtyEvent::Exit.
     child_thread: Option<JoinHandle<()>>,
+    /// Shared with PtyEventProxy to serialize concurrent writes to master_fd.
+    write_mutex: Arc<parking_lot::Mutex<()>>,
 }
 
 impl Pty {
@@ -151,11 +150,13 @@ impl Pty {
         let (tx, rx) = crossbeam_channel::bounded::<PtyEvent>(1024);
 
         // ── 4. Build PtyEventProxy ────────────────────────────────────────
+        let write_mutex: Arc<parking_lot::Mutex<()>> = Arc::new(parking_lot::Mutex::new(()));
         let proxy = PtyEventProxy {
             tx: tx.clone(),
             wakeup: wakeup.clone(),
             master_fd,
             qos_set: Arc::new(OnceLock::new()),
+            write_mutex: Arc::clone(&write_mutex),
         };
 
         // ── 5. Create alacritty Term ──────────────────────────────────────
@@ -215,6 +216,7 @@ impl Pty {
                 child_pid_libc,
                 reader_thread: Some(reader_thread),
                 child_thread: Some(child_thread),
+                write_mutex,
             },
             term,
         ))
@@ -223,13 +225,8 @@ impl Pty {
     /// Write raw bytes to the PTY (keyboard input → shell).
     pub fn write(&self, data: &[u8]) {
         if self.master_fd >= 0 && !data.is_empty() {
-            unsafe {
-                libc::write(
-                    self.master_fd,
-                    data.as_ptr() as *const libc::c_void,
-                    data.len(),
-                );
-            }
+            let _guard = self.write_mutex.lock();
+            pty_write_all(self.master_fd, data);
         }
     }
 
@@ -288,6 +285,32 @@ impl Drop for Pty {
 }
 
 // ── PTY creation ─────────────────────────────────────────────────────────────
+
+/// Write all bytes to the PTY master fd, looping on short writes and EINTR.
+/// Logs a warning on EAGAIN or other errors and stops without panicking.
+///
+/// SAFETY: caller must hold `write_mutex` and ensure `master_fd` is valid.
+fn pty_write_all(master_fd: RawFd, data: &[u8]) {
+    let mut written = 0;
+    while written < data.len() {
+        let n = unsafe {
+            libc::write(
+                master_fd,
+                data[written..].as_ptr() as *const libc::c_void,
+                data.len() - written,
+            )
+        };
+        if n < 0 {
+            let err = io::Error::last_os_error();
+            if err.kind() == io::ErrorKind::Interrupted {
+                continue;
+            }
+            log::warn!("PTY write error (wrote {written}/{} bytes): {err}", data.len());
+            break;
+        }
+        written += n as usize;
+    }
+}
 
 /// Open a PTY pair and set the initial window size.
 /// Returns (master_fd, slave_fd).

@@ -433,15 +433,15 @@ impl ChatPanel {
         if !self.is_idle() || self.prompt_history.is_empty() {
             return;
         }
-        match self.history_idx {
+        let idx = match self.history_idx {
             None => {
                 self.history_draft = self.input.clone();
-                self.history_idx = Some(self.prompt_history.len() - 1);
+                self.prompt_history.len() - 1
             }
             Some(0) => return,
-            Some(i) => self.history_idx = Some(i - 1),
-        }
-        let idx = self.history_idx.unwrap();
+            Some(i) => i - 1,
+        };
+        self.history_idx = Some(idx);
         self.input = self.prompt_history[idx].clone();
         self.input_cursor = self.input.chars().count();
         self.dirty = true;

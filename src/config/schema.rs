@@ -366,9 +366,9 @@ impl ColorScheme {
     pub fn dracula_pro() -> Self {
         fn hex(s: &str) -> [f32; 4] {
             let s = s.trim_start_matches('#');
-            let r = u8::from_str_radix(&s[0..2], 16).unwrap() as f32 / 255.0;
-            let g = u8::from_str_radix(&s[2..4], 16).unwrap() as f32 / 255.0;
-            let b = u8::from_str_radix(&s[4..6], 16).unwrap() as f32 / 255.0;
+            let r = u8::from_str_radix(&s[0..2], 16).unwrap_or(0) as f32 / 255.0;
+            let g = u8::from_str_radix(&s[2..4], 16).unwrap_or(0) as f32 / 255.0;
+            let b = u8::from_str_radix(&s[4..6], 16).unwrap_or(0) as f32 / 255.0;
             [r, g, b, 1.0]
         }
         fn hexa(s: &str, a: f32) -> [f32; 4] {

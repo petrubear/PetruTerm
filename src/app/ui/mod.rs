@@ -1103,7 +1103,13 @@ impl UiManager {
                                     },
                                 ));
                                 let _ = wakeup_proxy.send_event(());
-                                let r = execute_tool(call, &cwd);
+                                let call_owned = call.clone();
+                                let cwd_owned = cwd.clone();
+                                let r = tokio::task::spawn_blocking(move || {
+                                    execute_tool(&call_owned, &cwd_owned)
+                                })
+                                .await
+                                .unwrap_or_else(|e| format!("Error: tool task panicked: {e}"));
                                 let _ = tx.send((
                                     panel_id,
                                     AiEvent::ToolStatus {
@@ -1689,7 +1695,7 @@ mod tests {
             block_rx,
             llm_provider: None,
             llm_init_error: None,
-            tokio_rt: tokio::runtime::Runtime::new().unwrap(),
+            tokio_rt: tokio::runtime::Runtime::new().expect("Failed to build tokio runtime"),
             ai_tx,
             ai_rx,
             pending_confirm_tx: None,
@@ -1764,7 +1770,7 @@ mod tests {
             block_rx,
             llm_provider: None,
             llm_init_error: None,
-            tokio_rt: tokio::runtime::Runtime::new().unwrap(),
+            tokio_rt: tokio::runtime::Runtime::new().expect("Failed to build tokio runtime"),
             ai_tx,
             ai_rx,
             pending_confirm_tx: None,

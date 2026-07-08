@@ -8,6 +8,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tokio::sync::OnceCell;
 
 use super::tools::AgentStepResult;
 use super::{
@@ -51,7 +52,9 @@ struct CachedJwt {
 
 pub struct CopilotProvider {
     client: Client,
-    github_token: SecretString,
+    /// Resolved lazily: populated from config/keychain at construction time, or via
+    /// device flow (in a `spawn_blocking` thread) the first time `jwt()` is called.
+    github_token: Arc<OnceCell<SecretString>>,
     cached_jwt: Arc<Mutex<Option<CachedJwt>>>,
     model: String,
 }
@@ -196,25 +199,19 @@ fn run_device_flow() -> Result<SecretString> {
 
 // ── Token resolution ──────────────────────────────────────────────────────────
 
-fn resolve_github_token(config: &LlmConfig) -> Result<SecretString> {
-    // 1. Lua config api_key
+/// Resolve the GitHub token from config or Keychain. Returns `None` when neither
+/// source has a token — the caller should trigger the device flow asynchronously.
+fn resolve_github_token_non_blocking(config: &LlmConfig) -> Option<SecretString> {
     if let Some(key) = &config.api_key {
-        return Ok(key.clone());
+        return Some(key.clone());
     }
-    // 2. macOS Keychain (preferred — stored by device flow or manually)
-    if let Some(tok) = keychain_load() {
-        return Ok(tok);
-    }
-    // 3. Run device flow — prints instructions to stderr, blocks until done
-    run_device_flow()
+    keychain_load()
 }
 
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 impl CopilotProvider {
     pub fn from_config(config: &LlmConfig) -> Result<Self> {
-        let github_token = resolve_github_token(config)?;
-
         // Copilot models are plain names (gpt-4o, claude-3.5-sonnet, o3-mini, ...).
         // OpenRouter/Ollama models contain '/' or ':' — fall back to gpt-4o for those.
         let model = if config.model.contains('/') || config.model.contains(':') {
@@ -229,6 +226,17 @@ impl CopilotProvider {
             .build()
             .context("Failed to build HTTP client")?;
 
+        let github_token: Arc<OnceCell<SecretString>> = Arc::new(OnceCell::new());
+
+        // Pre-populate from config/Keychain without blocking. When no token is
+        // available, the cell stays empty and `jwt()` triggers the OAuth device
+        // flow via `spawn_blocking` the first time LLM features are used — keeping
+        // the winit event loop and app startup fully responsive.
+        if let Some(token) = resolve_github_token_non_blocking(config) {
+            // Safety: cell is newly created and we hold the only Arc reference here.
+            let _ = github_token.set(token);
+        }
+
         Ok(Self {
             client,
             github_token,
@@ -238,6 +246,17 @@ impl CopilotProvider {
     }
 
     async fn jwt(&self) -> Result<SecretString> {
+        // Resolve github_token lazily — runs device flow in a blocking thread on
+        // first call when no token was found at construction time.
+        let github_token = self
+            .github_token
+            .get_or_try_init(|| async {
+                tokio::task::spawn_blocking(run_device_flow)
+                    .await
+                    .context("device flow thread panicked")?
+            })
+            .await?;
+
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -257,7 +276,7 @@ impl CopilotProvider {
             .get(TOKEN_URL)
             .header(
                 "Authorization",
-                format!("token {}", self.github_token.expose_secret()),
+                format!("token {}", github_token.expose_secret()),
             )
             .header("Accept", "application/json")
             .header("User-Agent", "PetruTerm/0.1.0")

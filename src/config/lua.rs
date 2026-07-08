@@ -45,6 +45,17 @@ pub fn load_config(path: &Path) -> Result<(Config, Lua)> {
     evict_stale_lua_cache();
     let lua = Lua::new_with(config_stdlib(), LuaOptions::default())
         .map_err(|e| anyhow::anyhow!("Lua VM init error: {e}"))?;
+
+    // Remove os.execute and os.exit — config scripts don't need to spawn processes.
+    // os.getenv, os.time, os.clock, os.date remain available.
+    lua.globals()
+        .get::<mlua::Table>("os")
+        .and_then(|os| {
+            os.set("execute", mlua::Value::Nil)?;
+            os.set("exit", mlua::Value::Nil)
+        })
+        .map_err(|e| anyhow::anyhow!("Lua sandbox setup error: {e}"))?;
+
     inject_petruterm_global(&lua).map_err(|e| anyhow::anyhow!("Lua setup error: {e}"))?;
     inject_require_path(&lua, path).map_err(|e| anyhow::anyhow!("Lua path error: {e}"))?;
 
@@ -66,14 +77,29 @@ fn hash_path(path: &Path) -> u64 {
     h.finish()
 }
 
-/// Return the path to `~/.cache/petruterm/lua-bc/{version}/{hash}.luac`.
-/// The version subdirectory automatically invalidates cache entries from older binaries.
-fn bytecode_cache_path(src_path: &Path) -> Option<std::path::PathBuf> {
+/// Compute a stable u64 hash of arbitrary byte content.
+fn hash_content(content: &str) -> u64 {
+    let mut h = DefaultHasher::new();
+    content.hash(&mut h);
+    h.finish()
+}
+
+/// Return the path to `~/.cache/petruterm/lua-bc/{version}/{path_hash}-{content_hash}.luac`.
+///
+/// Both the path and the source content are hashed into the filename. This means
+/// the cache entry is invalidated whenever the source changes AND prevents an attacker
+/// with write access to `~/.cache` from injecting malicious bytecode — they cannot
+/// produce a filename that matches the current source content without knowing it.
+fn bytecode_cache_path(src_path: &Path, src_content: &str) -> Option<std::path::PathBuf> {
     let cache_dir = dirs::cache_dir()?
         .join("petruterm")
         .join("lua-bc")
         .join(env!("CARGO_PKG_VERSION"));
-    Some(cache_dir.join(format!("{:016x}.luac", hash_path(src_path))))
+    Some(cache_dir.join(format!(
+        "{:016x}-{:016x}.luac",
+        hash_path(src_path),
+        hash_content(src_content)
+    )))
 }
 
 /// Remove stale bytecode cache entries: old version directories and .luac files not
@@ -117,48 +143,37 @@ fn evict_stale_lua_cache() {
     }
 }
 
-/// Get the mtime of a file as a `SystemTime`, returns `None` on any error.
-fn mtime(path: &Path) -> Option<std::time::SystemTime> {
-    std::fs::metadata(path).ok()?.modified().ok()
-}
 
 /// Try to load bytecode from cache; compile from source and cache on miss.
 /// On any cache I/O error, silently falls back to fresh compilation.
 fn load_or_compile_config(lua: &Lua, src_path: &Path, src: &str) -> LuaResult<LuaTable> {
-    // Attempt to use bytecode cache.
-    if let Some(cache_path) = bytecode_cache_path(src_path) {
-        let src_mtime = mtime(src_path);
-        let cache_mtime = mtime(&cache_path);
-
-        // Cache hit: cache exists and is at least as new as the source.
-        let use_cache = match (src_mtime, cache_mtime) {
-            (Some(sm), Some(cm)) => cm >= sm,
-            _ => false,
-        };
-
-        if use_cache {
-            if let Ok(bytecode) = std::fs::read(&cache_path) {
-                match lua
-                    .load(&bytecode[..])
-                    .set_name("config.lua")
-                    .eval::<LuaTable>()
-                {
-                    Ok(t) => {
-                        log::debug!(
-                            "Loaded Lua config from bytecode cache: {}",
-                            cache_path.display()
-                        );
-                        return Ok(t);
-                    }
-                    Err(e) => {
-                        log::warn!("Bytecode cache invalid, recompiling: {e}");
-                        // Fall through to recompile.
-                    }
+    // The cache path embeds both the source file path hash and the source content
+    // hash, so the cache is a hit if and only if the file exists — no mtime
+    // comparison needed. This also prevents an attacker with write access to
+    // ~/.cache from injecting foreign bytecode, since they cannot predict the
+    // content-derived filename without already knowing the source.
+    if let Some(cache_path) = bytecode_cache_path(src_path, src) {
+        if let Ok(bytecode) = std::fs::read(&cache_path) {
+            match lua
+                .load(&bytecode[..])
+                .set_name("config.lua")
+                .eval::<LuaTable>()
+            {
+                Ok(t) => {
+                    log::debug!(
+                        "Loaded Lua config from bytecode cache: {}",
+                        cache_path.display()
+                    );
+                    return Ok(t);
+                }
+                Err(e) => {
+                    log::warn!("Bytecode cache invalid, recompiling: {e}");
+                    // Fall through to recompile.
                 }
             }
         }
 
-        // Cache miss or stale — compile from source and store bytecode.
+        // Cache miss — compile from source and store bytecode.
         let func: LuaFunction = lua.load(src).set_name("config.lua").into_function()?;
         // dump(strip=true) removes debug info (line numbers, local names) for smaller cache.
         let bytecode: Vec<u8> = func.dump(true);
@@ -166,7 +181,7 @@ fn load_or_compile_config(lua: &Lua, src_path: &Path, src: &str) -> LuaResult<Lu
         // Evaluate the function to get the config table.
         let config_table: LuaTable = func.call(())?;
 
-        // Write cache asynchronously-ish: ignore errors so a read-only FS never breaks loading.
+        // Write cache; ignore errors so a read-only FS never breaks loading.
         if let Some(parent) = cache_path.parent() {
             if std::fs::create_dir_all(parent).is_ok() {
                 if let Err(e) = std::fs::write(&cache_path, &bytecode) {
