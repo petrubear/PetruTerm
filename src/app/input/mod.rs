@@ -54,6 +54,11 @@ pub struct InputHandler {
     pub pane_ratio_adjusted: bool,
     /// Set when <leader>+e+e fires so `app/mod.rs` can toggle the sidebar.
     pub toggle_sidebar_requested: bool,
+    /// Set true whenever `handle_key_input` synchronously writes bytes to a PTY
+    /// (typing, snippet expansion, Ctrl-L clear, KKP disambiguation, etc.). Reset
+    /// at the top of every key press. `app/mod.rs` reads it to arm the PTY-echo
+    /// grace window only when a write actually happened, instead of on every key.
+    pub pty_written: bool,
     /// Pane resize mode: activated by <leader>+Option+Arrow. While active, any
     /// arrow key (with or without Option) continues resizing. Any other key exits.
     pub resize_mode: bool,
@@ -98,6 +103,7 @@ impl InputHandler {
             cursor_last_blink: Instant::now(),
             pane_ratio_adjusted: false,
             toggle_sidebar_requested: false,
+            pty_written: false,
             resize_mode: false,
             input_echo: String::new(),
             last_key_instant: None,
@@ -184,6 +190,7 @@ impl InputHandler {
         if event.state != ElementState::Pressed {
             return;
         }
+        self.pty_written = false;
         self.cursor_blink_on = true;
         self.cursor_last_blink = Instant::now();
 
@@ -736,6 +743,7 @@ impl InputHandler {
                         if let Some(terminal) = mux.active_terminal_mut() {
                             terminal.write_input(b"\x1b[H\x1b[2J\x1b[3J");
                             terminal.block_manager.clear();
+                            self.pty_written = true;
                         }
                         return;
                     }
@@ -813,6 +821,7 @@ impl InputHandler {
                 terminal.scroll_to_bottom();
                 terminal.write_input(&backspaces);
                 terminal.write_input(snippet.body.as_bytes());
+                self.pty_written = true;
                 // Clear the word from the echo buffer.
                 let trim_len = self.input_echo.trim_end().len();
                 let new_len = trim_len.saturating_sub(word.len());
@@ -862,6 +871,9 @@ impl InputHandler {
                 terminal.scroll_to_bottom();
                 terminal.input_shadow.on_key(event, &self.modifiers);
                 self.last_key_instant = Some(std::time::Instant::now());
+                // Every path below writes bytes to the PTY (ghost accept or the
+                // main translate_key data), so arm the echo-grace window here.
+                self.pty_written = true;
 
                 // I-3: Tab or ArrowRight at end of buf → accept ghost text completion.
                 // Only fires when input_ghost_text is enabled to avoid interfering with

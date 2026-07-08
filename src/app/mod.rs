@@ -539,6 +539,7 @@ impl App {
                         self.input.leader_active = false;
                         self.input.leader_deadline = None;
                         self.rerun_hover_block_command();
+                        self.note_pty_input();
                         self.request_redraw();
                         return;
                     }
@@ -598,9 +599,13 @@ impl App {
             self.apply_tab_bar_padding();
             self.resize_terminals_for_panel();
         }
-        // A key may have written to the PTY (typing, or an atuin/ZLE widget that
-        // rewrites the line asynchronously). Guard against a lost echo wakeup.
-        self.note_pty_input();
+        // Only arm the PTY-echo grace window when the key actually wrote to the
+        // PTY (typing, snippet expansion, clear, etc.). Arming on every key —
+        // including pure-UI keys and key releases — would force a 250ms burst of
+        // 8ms wakeups per keystroke, undoing the idle/battery-saver gating.
+        if self.input.pty_written {
+            self.note_pty_input();
+        }
         self.request_redraw();
     }
 
@@ -2112,9 +2117,10 @@ impl ApplicationHandler<()> for App {
         // shortly. macOS occasionally loses/delays the reader thread's
         // EventLoopProxy wakeup, so poll on a reliable short timer instead of
         // trusting the wakeup alone. Cleared once the window expires.
+        let now = std::time::Instant::now();
         match self.pty_echo_grace_until {
-            Some(t) if std::time::Instant::now() < t => {
-                wake = wake.min(std::time::Instant::now() + std::time::Duration::from_millis(8));
+            Some(t) if now < t => {
+                wake = wake.min(now + std::time::Duration::from_millis(8));
             }
             Some(_) => self.pty_echo_grace_until = None,
             None => {}
