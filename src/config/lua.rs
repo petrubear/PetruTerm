@@ -143,7 +143,6 @@ fn evict_stale_lua_cache() {
     }
 }
 
-
 /// Try to load bytecode from cache; compile from source and cache on miss.
 /// On any cache I/O error, silently falls back to fresh compilation.
 fn load_or_compile_config(lua: &Lua, src_path: &Path, src: &str) -> LuaResult<LuaTable> {

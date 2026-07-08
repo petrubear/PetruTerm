@@ -305,7 +305,10 @@ fn pty_write_all(master_fd: RawFd, data: &[u8]) {
             if err.kind() == io::ErrorKind::Interrupted {
                 continue;
             }
-            log::warn!("PTY write error (wrote {written}/{} bytes): {err}", data.len());
+            log::warn!(
+                "PTY write error (wrote {written}/{} bytes): {err}",
+                data.len()
+            );
             break;
         }
         written += n as usize;
