@@ -777,6 +777,10 @@ impl RenderContext {
 
             // Name on the left — with optional colored swatch prefix.
             if let Some(swatch) = item.swatch_color {
+                // Paint the left margin cell so the menu background reaches its
+                // left edge; the swatch/name calls below start at menu.col + 1,
+                // which otherwise leaves menu.col showing the terminal behind it.
+                self.push_shaped_row(" ", fg, current_bg, row, menu.col, 1, font);
                 self.push_shaped_row("● ", swatch, current_bg, row, menu.col + 1, 2, font);
                 let name_text = format!(" {}", item.label);
                 self.push_shaped_row(
