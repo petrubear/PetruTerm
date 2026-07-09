@@ -1692,6 +1692,7 @@ impl ApplicationHandler<()> for App {
                 self.update_terminal_shell_ctx(*id);
             }
             self.refresh_status_cache();
+            self.extend_pty_echo_grace();
             // Adaptive coalescing: keyboard echo has small batches — skip the wait.
             if data_ids.len() <= 2 {
                 self.pending_pty_redraw = false;
@@ -1958,6 +1959,7 @@ impl ApplicationHandler<()> for App {
                 self.update_terminal_shell_ctx(*id);
             }
             self.refresh_status_cache();
+            self.extend_pty_echo_grace();
             // Adaptive coalescing: small batches (≤2) are keyboard echo — skip the wait.
             if data_ids.len() <= 2 {
                 self.pending_pty_redraw = false;

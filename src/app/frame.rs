@@ -21,6 +21,20 @@ impl App {
             Some(std::time::Instant::now() + std::time::Duration::from_millis(250));
     }
 
+    /// Slide the PTY-echo grace window forward when echo actually arrives, but
+    /// only while a window is already open. The shell can echo in several bursts
+    /// (e.g. atuin emits its alt-screen-exit sequence right after Enter, then the
+    /// prompt redraw with the selected command lands later); anchoring the window
+    /// to the keystroke alone tears it down after 250ms and strands the tail if
+    /// its `EventLoopProxy` wakeup is one macOS drops. Extending on observed data
+    /// keeps the reliable timer alive until 250ms of true silence. Gating on an
+    /// already-open window avoids arming the 8ms poll for pure background output.
+    pub(super) fn extend_pty_echo_grace(&mut self) {
+        if self.pty_echo_grace_until.is_some() {
+            self.note_pty_input();
+        }
+    }
+
     pub(super) fn flush_redraw_request(&mut self) {
         if !self.needs_redraw {
             return;
