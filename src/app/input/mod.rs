@@ -741,8 +741,11 @@ impl InputHandler {
                     }
                     "k" => {
                         if let Some(terminal) = mux.active_terminal_mut() {
-                            terminal.write_input(b"\x1b[H\x1b[2J\x1b[3J");
+                            terminal.clear_screen_and_scrollback();
                             terminal.block_manager.clear();
+                            // Nudge the shell (Ctrl+L) to redraw its prompt on
+                            // the freshly cleared screen.
+                            terminal.write_input(b"\x0c");
                             self.pty_written = true;
                         }
                         return;

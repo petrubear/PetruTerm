@@ -150,6 +150,19 @@ impl Terminal {
         self.pty.write(data);
     }
 
+    /// Clear the visible screen and scrollback, moving the cursor home.
+    ///
+    /// The erase sequence is fed through the VTE parser (the grid output path,
+    /// same as `clear`'s output) so the clear is deterministic. Writing it to
+    /// the PTY stdin instead would depend on the tty echo mode and not reliably
+    /// clear the grid.
+    pub fn clear_screen_and_scrollback(&self) {
+        use alacritty_terminal::vte::ansi::{Processor as VteProcessor, StdSyncHandler};
+        let mut processor: VteProcessor<StdSyncHandler> = VteProcessor::new();
+        let mut term = self.term.lock();
+        processor.advance(&mut *term, b"\x1b[H\x1b[2J\x1b[3J");
+    }
+
     /// Start a new text selection at the given viewport cell coordinate.
     /// Adjusts for display_offset so the selection is anchored in buffer space.
     pub fn start_selection(&self, col: usize, row: usize, ty: SelectionType) {
