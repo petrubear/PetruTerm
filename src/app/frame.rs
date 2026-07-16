@@ -7,6 +7,27 @@ use super::App;
 use crate::ui::PaneInfo;
 
 impl App {
+    /// Fast-poll grace window (ms). After PTY input, `about_to_wait` polls at
+    /// `PTY_ECHO_GRACE_POLL_MS` for this long so the common immediate echo
+    /// renders with sub-frame latency. Short by design — snappy but dense.
+    const PTY_ECHO_GRACE_MS: u64 = 250;
+    /// Fast-poll interval (ms) while the grace window is open.
+    pub(super) const PTY_ECHO_GRACE_POLL_MS: u64 = 8;
+
+    /// Slow-poll safety window (ms). Runs alongside the fast window but lasts
+    /// much longer and polls sparsely (`PTY_SAFETY_POLL_INTERVAL_MS`). This is
+    /// the deterministic backstop for the macOS bug where the reader thread's
+    /// `EventLoopProxy` wakeup is dropped: a delayed shell response (atuin
+    /// accept exiting its alt-screen TUI + prompt redraw, a large scrollback
+    /// restore) can land after the fast window has closed, and without this its
+    /// dropped wakeup would leave the loop parked until cursor blink (disabled
+    /// under battery-saver/idle) or the next-minute timer — rendering the output
+    /// seconds late. At 10Hz the worst-case render latency is ~100ms instead,
+    /// and the poll only arms after we write PTY input.
+    const PTY_SAFETY_POLL_MS: u64 = 3000;
+    /// Slow-poll interval (ms) while the safety window is open.
+    pub(super) const PTY_SAFETY_POLL_INTERVAL_MS: u64 = 100;
+
     pub(super) fn request_redraw(&mut self) {
         self.needs_redraw = true;
     }
@@ -17,20 +38,23 @@ impl App {
     /// otherwise leave pasted text (or atuin selections) unrendered until an
     /// unrelated event. See the `pty_echo_grace_until` field docs.
     pub(super) fn note_pty_input(&mut self) {
+        let now = std::time::Instant::now();
         self.pty_echo_grace_until =
-            Some(std::time::Instant::now() + std::time::Duration::from_millis(250));
+            Some(now + std::time::Duration::from_millis(Self::PTY_ECHO_GRACE_MS));
+        self.pty_safety_poll_until =
+            Some(now + std::time::Duration::from_millis(Self::PTY_SAFETY_POLL_MS));
     }
 
-    /// Slide the PTY-echo grace window forward when echo actually arrives, but
-    /// only while a window is already open. The shell can echo in several bursts
+    /// Slide both PTY-echo windows forward when echo actually arrives, but only
+    /// while a window is already open. The shell can echo in several bursts
     /// (e.g. atuin emits its alt-screen-exit sequence right after Enter, then the
     /// prompt redraw with the selected command lands later); anchoring the window
-    /// to the keystroke alone tears it down after 250ms and strands the tail if
-    /// its `EventLoopProxy` wakeup is one macOS drops. Extending on observed data
-    /// keeps the reliable timer alive until 250ms of true silence. Gating on an
-    /// already-open window avoids arming the 8ms poll for pure background output.
+    /// to the keystroke alone strands the tail if its `EventLoopProxy` wakeup is
+    /// one macOS drops. Extending on observed data keeps the reliable poll alive
+    /// until true silence. Gating on an already-open window avoids arming the
+    /// poll for pure background output with no recent input.
     pub(super) fn extend_pty_echo_grace(&mut self) {
-        if self.pty_echo_grace_until.is_some() {
+        if self.pty_echo_grace_until.is_some() || self.pty_safety_poll_until.is_some() {
             self.note_pty_input();
         }
     }

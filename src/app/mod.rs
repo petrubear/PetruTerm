@@ -61,6 +61,11 @@ pub struct App {
     /// grace window is active, `about_to_wait` caps its wait to a few ms so it
     /// re-polls the PTY on a reliable timer and renders the echo regardless.
     pty_echo_grace_until: Option<std::time::Instant>,
+    /// Longer, sparser companion to `pty_echo_grace_until`. Armed by the same
+    /// PTY writes but held open for seconds and polled at ~10Hz, it is the
+    /// deterministic backstop for delayed shell responses whose wakeup macOS
+    /// drops after the fast window closes (see `App::PTY_SAFETY_POLL_MS`).
+    pty_safety_poll_until: Option<std::time::Instant>,
     /// Number of PTY events in the last batch, used for adaptive coalescing.
     /// Small batches (≤2) are keyboard echo — skip coalescing for lower latency.
     last_pty_batch_size: usize,
@@ -160,6 +165,7 @@ impl App {
             pending_pty_redraw: false,
             last_pty_activity: std::time::Instant::now(),
             pty_echo_grace_until: None,
+            pty_safety_poll_until: None,
             last_pty_batch_size: 0,
             window_occluded: false,
             window_focused: true,
@@ -2122,9 +2128,20 @@ impl ApplicationHandler<()> for App {
         let now = std::time::Instant::now();
         match self.pty_echo_grace_until {
             Some(t) if now < t => {
-                wake = wake.min(now + std::time::Duration::from_millis(8));
+                wake = wake.min(now + std::time::Duration::from_millis(Self::PTY_ECHO_GRACE_POLL_MS));
             }
             Some(_) => self.pty_echo_grace_until = None,
+            None => {}
+        }
+        // Sparse safety poll: outlasts the fast window to catch a delayed shell
+        // response whose reader-thread wakeup macOS dropped. Bounds worst-case
+        // render latency to one poll interval instead of the next blink/minute.
+        match self.pty_safety_poll_until {
+            Some(t) if now < t => {
+                wake =
+                    wake.min(now + std::time::Duration::from_millis(Self::PTY_SAFETY_POLL_INTERVAL_MS));
+            }
+            Some(_) => self.pty_safety_poll_until = None,
             None => {}
         }
 
