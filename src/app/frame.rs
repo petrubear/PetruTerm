@@ -46,16 +46,41 @@ impl App {
     }
 
     /// Slide both PTY-echo windows forward when echo actually arrives, but only
-    /// while a window is already open. The shell can echo in several bursts
-    /// (e.g. atuin emits its alt-screen-exit sequence right after Enter, then the
-    /// prompt redraw with the selected command lands later); anchoring the window
-    /// to the keystroke alone strands the tail if its `EventLoopProxy` wakeup is
-    /// one macOS drops. Extending on observed data keeps the reliable poll alive
-    /// until true silence. Gating on an already-open window avoids arming the
-    /// poll for pure background output with no recent input.
+    /// while the fast window is already open. The shell can echo in several
+    /// bursts (e.g. atuin emits its alt-screen-exit sequence right after Enter,
+    /// then the prompt redraw with the selected command lands later); anchoring
+    /// the window to the keystroke alone tears it down after 250ms and strands
+    /// the tail if its `EventLoopProxy` wakeup is one macOS drops. Extending on
+    /// observed data keeps the reliable poll alive until true silence.
+    ///
+    /// Gating on the fast window specifically (not the safety window) bounds
+    /// each extension chain to ~250ms gaps between events, matching the fast
+    /// window's own lifetime. The safety window is a fixed backstop from the
+    /// last real write — it must decay on its own schedule, or a chatty
+    /// background pane (`tail -f`, a build with periodic output) would keep
+    /// resurrecting both windows indefinitely and never let the loop reach true
+    /// silence.
     pub(super) fn extend_pty_echo_grace(&mut self) {
-        if self.pty_echo_grace_until.is_some() || self.pty_safety_poll_until.is_some() {
+        if self.pty_echo_grace_until.is_some() {
             self.note_pty_input();
+        }
+    }
+
+    /// Consume a PTY poll window: while open, return the next poll deadline at
+    /// `interval_ms`; once expired, clear it and return `None`. Shared by both
+    /// `pty_echo_grace_until` and `pty_safety_poll_until` in `about_to_wait`.
+    pub(super) fn poll_window_deadline(
+        window: &mut Option<std::time::Instant>,
+        now: std::time::Instant,
+        interval_ms: u64,
+    ) -> Option<std::time::Instant> {
+        match *window {
+            Some(t) if now < t => Some(now + std::time::Duration::from_millis(interval_ms)),
+            Some(_) => {
+                *window = None;
+                None
+            }
+            None => None,
         }
     }
 

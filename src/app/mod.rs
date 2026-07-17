@@ -2126,23 +2126,22 @@ impl ApplicationHandler<()> for App {
         // EventLoopProxy wakeup, so poll on a reliable short timer instead of
         // trusting the wakeup alone. Cleared once the window expires.
         let now = std::time::Instant::now();
-        match self.pty_echo_grace_until {
-            Some(t) if now < t => {
-                wake = wake.min(now + std::time::Duration::from_millis(Self::PTY_ECHO_GRACE_POLL_MS));
-            }
-            Some(_) => self.pty_echo_grace_until = None,
-            None => {}
+        if let Some(d) = Self::poll_window_deadline(
+            &mut self.pty_echo_grace_until,
+            now,
+            Self::PTY_ECHO_GRACE_POLL_MS,
+        ) {
+            wake = wake.min(d);
         }
         // Sparse safety poll: outlasts the fast window to catch a delayed shell
         // response whose reader-thread wakeup macOS dropped. Bounds worst-case
         // render latency to one poll interval instead of the next blink/minute.
-        match self.pty_safety_poll_until {
-            Some(t) if now < t => {
-                wake =
-                    wake.min(now + std::time::Duration::from_millis(Self::PTY_SAFETY_POLL_INTERVAL_MS));
-            }
-            Some(_) => self.pty_safety_poll_until = None,
-            None => {}
+        if let Some(d) = Self::poll_window_deadline(
+            &mut self.pty_safety_poll_until,
+            now,
+            Self::PTY_SAFETY_POLL_INTERVAL_MS,
+        ) {
+            wake = wake.min(d);
         }
 
         event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(wake));
