@@ -602,8 +602,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "benches_shaping",
-      "community": 60,
-      "community_name": "Benches Shaping.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "shaping.rs"
     },
     {
@@ -613,8 +613,8 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "benches_shaping_make_shaper",
-      "community": 60,
-      "community_name": "Benches Shaping.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "make_shaper()"
     },
     {
@@ -624,8 +624,8 @@
       "source_location": "L69",
       "_origin": "ast",
       "id": "benches_shaping_make_colors",
-      "community": 60,
-      "community_name": "Benches Shaping.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "make_colors()"
     },
     {
@@ -635,8 +635,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "benches_shaping_rs_vec",
-      "community": 60,
-      "community_name": "Benches Shaping.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "vec"
     },
     {
@@ -646,8 +646,8 @@
       "source_location": "L75",
       "_origin": "ast",
       "id": "benches_shaping_bench_shape_line_ascii",
-      "community": 60,
-      "community_name": "Benches Shaping.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "bench_shape_line_ascii()"
     },
     {
@@ -657,8 +657,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "benches_shaping_rs_criterion",
-      "community": 60,
-      "community_name": "Benches Shaping.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "criterion"
     },
     {
@@ -668,8 +668,8 @@
       "source_location": "L87",
       "_origin": "ast",
       "id": "benches_shaping_bench_shape_line_ligatures",
-      "community": 60,
-      "community_name": "Benches Shaping.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "bench_shape_line_ligatures()"
     },
     {
@@ -679,8 +679,8 @@
       "source_location": "L99",
       "_origin": "ast",
       "id": "benches_shaping_bench_shape_line_unicode",
-      "community": 60,
-      "community_name": "Benches Shaping.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "bench_shape_line_unicode()"
     },
     {
@@ -690,8 +690,8 @@
       "source_location": "L112",
       "_origin": "ast",
       "id": "benches_shaping_bench_shape_line_ascii_cached",
-      "community": 60,
-      "community_name": "Benches Shaping.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "bench_shape_line_ascii_cached()"
     },
     {
@@ -701,8 +701,8 @@
       "source_location": "L129",
       "_origin": "ast",
       "id": "benches_shaping_bench_shape_line_ligatures_cached",
-      "community": 60,
-      "community_name": "Benches Shaping.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "bench_shape_line_ligatures_cached()"
     },
     {
@@ -2055,8 +2055,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_app_layout",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 93,
+      "community_name": "shaper.rs",
       "norm_label": "layout.rs"
     },
     {
@@ -2187,8 +2187,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_layout_rs_result",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 93,
+      "community_name": "shaper.rs",
       "norm_label": "result"
     },
     {
@@ -2484,8 +2484,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mod_rs_option",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 66,
+      "community_name": ".handle_mouse_button",
       "norm_label": "option"
     },
     {
@@ -2506,8 +2506,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mod_rs_window",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 104,
+      "community_name": ".resumed",
       "norm_label": "window"
     },
     {
@@ -2550,8 +2550,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mod_rs_eventloopproxy",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 66,
+      "community_name": ".handle_mouse_button",
       "norm_label": "eventloopproxy"
     },
     {
@@ -2605,8 +2605,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "systemtime",
-      "community": 28,
-      "community_name": "Src Ui",
+      "community": 18,
+      "community_name": "Src App",
       "norm_label": "systemtime"
     },
     {
@@ -2616,8 +2616,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mod_rs_lua",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 66,
+      "community_name": ".handle_mouse_button",
       "norm_label": "lua"
     },
     {
@@ -2638,8 +2638,8 @@
       "source_location": "L143",
       "_origin": "ast",
       "id": "src_app_mod_app_new",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 66,
+      "community_name": ".handle_mouse_button",
       "norm_label": ".new()"
     },
     {
@@ -2649,8 +2649,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mod_rs_self",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 66,
+      "community_name": ".handle_mouse_button",
       "norm_label": "self"
     },
     {
@@ -2660,8 +2660,8 @@
       "source_location": "L198",
       "_origin": "ast",
       "id": "src_app_mod_app_separator_at_pixel",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 66,
+      "community_name": ".handle_mouse_button",
       "norm_label": ".separator_at_pixel()"
     },
     {
@@ -2671,8 +2671,8 @@
       "source_location": "L226",
       "_origin": "ast",
       "id": "src_app_mod_app_clamp_sidebar_cursor",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 105,
+      "community_name": ".handle_sidebar_key",
       "norm_label": ".clamp_sidebar_cursor()"
     },
     {
@@ -2682,8 +2682,8 @@
       "source_location": "L231",
       "_origin": "ast",
       "id": "src_app_mod_app_sidebar_selected_workspace_id",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 66,
+      "community_name": ".handle_mouse_button",
       "norm_label": ".sidebar_selected_workspace_id()"
     },
     {
@@ -2693,8 +2693,8 @@
       "source_location": "L238",
       "_origin": "ast",
       "id": "src_app_mod_app_close_sidebar",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 66,
+      "community_name": ".handle_mouse_button",
       "norm_label": ".close_sidebar()"
     },
     {
@@ -2704,8 +2704,8 @@
       "source_location": "L247",
       "_origin": "ast",
       "id": "src_app_mod_app_open_sidebar_info_overlay",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 105,
+      "community_name": ".handle_sidebar_key",
       "norm_label": ".open_sidebar_info_overlay()"
     },
     {
@@ -2715,8 +2715,8 @@
       "source_location": "L298",
       "_origin": "ast",
       "id": "src_app_mod_app_handle_sidebar_key",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 105,
+      "community_name": ".handle_sidebar_key",
       "norm_label": ".handle_sidebar_key()"
     },
     {
@@ -2726,8 +2726,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mod_rs_keyevent",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 105,
+      "community_name": ".handle_sidebar_key",
       "norm_label": "keyevent"
     },
     {
@@ -2737,8 +2737,8 @@
       "source_location": "L528",
       "_origin": "ast",
       "id": "src_app_mod_app_handle_keyboard",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 105,
+      "community_name": ".handle_sidebar_key",
       "norm_label": ".handle_keyboard()"
     },
     {
@@ -2748,8 +2748,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mod_rs_activeeventloop",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 92,
+      "community_name": "LcdGlyphAtlas",
       "norm_label": "activeeventloop"
     },
     {
@@ -2759,8 +2759,8 @@
       "source_location": "L618",
       "_origin": "ast",
       "id": "src_app_mod_app_handle_mouse_motion",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 92,
+      "community_name": "LcdGlyphAtlas",
       "norm_label": ".handle_mouse_motion()"
     },
     {
@@ -2770,8 +2770,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "physicalposition",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 92,
+      "community_name": "LcdGlyphAtlas",
       "norm_label": "physicalposition"
     },
     {
@@ -2781,8 +2781,8 @@
       "source_location": "L755",
       "_origin": "ast",
       "id": "src_app_mod_app_handle_mouse_button",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 66,
+      "community_name": ".handle_mouse_button",
       "norm_label": ".handle_mouse_button()"
     },
     {
@@ -2792,8 +2792,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "elementstate",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 66,
+      "community_name": ".handle_mouse_button",
       "norm_label": "elementstate"
     },
     {
@@ -2803,8 +2803,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "mousebutton",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 66,
+      "community_name": ".handle_mouse_button",
       "norm_label": "mousebutton"
     },
     {
@@ -2814,8 +2814,8 @@
       "source_location": "L1376",
       "_origin": "ast",
       "id": "src_app_mod_app_handle_scroll",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 92,
+      "community_name": "LcdGlyphAtlas",
       "norm_label": ".handle_scroll()"
     },
     {
@@ -2825,8 +2825,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "mousescrolldelta",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 92,
+      "community_name": "LcdGlyphAtlas",
       "norm_label": "mousescrolldelta"
     },
     {
@@ -2836,8 +2836,8 @@
       "source_location": "L1425",
       "_origin": "ast",
       "id": "src_app_mod_app_apply_macos_custom_titlebar",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 104,
+      "community_name": ".resumed",
       "norm_label": ".apply_macos_custom_titlebar()"
     },
     {
@@ -2847,8 +2847,8 @@
       "source_location": "L1449",
       "_origin": "ast",
       "id": "src_app_mod_app_set_metal_layer_opaque",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 104,
+      "community_name": ".resumed",
       "norm_label": ".set_metal_layer_opaque()"
     },
     {
@@ -2858,8 +2858,8 @@
       "source_location": "L1491",
       "_origin": "ast",
       "id": "src_app_mod_app_apply_macos_rounded_corners",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 104,
+      "community_name": ".resumed",
       "norm_label": ".apply_macos_rounded_corners()"
     },
     {
@@ -2869,8 +2869,8 @@
       "source_location": "L1533",
       "_origin": "ast",
       "id": "src_app_mod_app_apply_macos_blur",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 104,
+      "community_name": ".resumed",
       "norm_label": ".apply_macos_blur()"
     },
     {
@@ -2880,8 +2880,8 @@
       "source_location": "L1600",
       "_origin": "ast",
       "id": "src_app_mod_app_poll_low_freq_tasks",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 92,
+      "community_name": "LcdGlyphAtlas",
       "norm_label": ".poll_low_freq_tasks()"
     },
     {
@@ -2902,8 +2902,8 @@
       "source_location": "L1677",
       "_origin": "ast",
       "id": "src_app_mod_app_user_event",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 92,
+      "community_name": "LcdGlyphAtlas",
       "norm_label": ".user_event()"
     },
     {
@@ -2913,8 +2913,8 @@
       "source_location": "L1719",
       "_origin": "ast",
       "id": "src_app_mod_app_resumed",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 104,
+      "community_name": ".resumed",
       "norm_label": ".resumed()"
     },
     {
@@ -2924,8 +2924,8 @@
       "source_location": "L1815",
       "_origin": "ast",
       "id": "src_app_mod_app_window_event",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 92,
+      "community_name": "LcdGlyphAtlas",
       "norm_label": ".window_event()"
     },
     {
@@ -2935,8 +2935,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "windowid",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 92,
+      "community_name": "LcdGlyphAtlas",
       "norm_label": "windowid"
     },
     {
@@ -2946,8 +2946,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "windowevent",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 92,
+      "community_name": "LcdGlyphAtlas",
       "norm_label": "windowevent"
     },
     {
@@ -2957,8 +2957,8 @@
       "source_location": "L1907",
       "_origin": "ast",
       "id": "src_app_mod_app_about_to_wait",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 92,
+      "community_name": "LcdGlyphAtlas",
       "norm_label": ".about_to_wait()"
     },
     {
@@ -3001,7 +3001,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "src_app_mux_mod_workspace",
-      "community": 38,
+      "community": 41,
       "community_name": "Src App",
       "norm_label": "workspace"
     },
@@ -3122,7 +3122,7 @@
       "source_location": "L103",
       "_origin": "ast",
       "id": "src_app_mux_mod_shell_quote",
-      "community": 38,
+      "community": 62,
       "community_name": "Src App",
       "norm_label": "shell_quote()"
     },
@@ -3155,7 +3155,7 @@
       "source_location": "L151",
       "_origin": "ast",
       "id": "src_app_mux_mod_mux_new",
-      "community": 62,
+      "community": 47,
       "community_name": "Src App",
       "norm_label": ".new()"
     },
@@ -3166,7 +3166,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mux_mod_rs_self",
-      "community": 62,
+      "community": 47,
       "community_name": "Src App",
       "norm_label": "self"
     },
@@ -3309,7 +3309,7 @@
       "source_location": "L268",
       "_origin": "ast",
       "id": "src_app_mux_mod_mux_poll_pty_events",
-      "community": 62,
+      "community": 41,
       "community_name": "Src App",
       "norm_label": ".poll_pty_events()"
     },
@@ -3320,7 +3320,7 @@
       "source_location": "L340",
       "_origin": "ast",
       "id": "src_app_mux_mod_mux_apply_osc133_events",
-      "community": 62,
+      "community": 41,
       "community_name": "Src App",
       "norm_label": ".apply_osc133_events()"
     },
@@ -3397,7 +3397,7 @@
       "source_location": "L551",
       "_origin": "ast",
       "id": "src_app_mux_mod_mux_terminal_exit_code",
-      "community": 41,
+      "community": 62,
       "community_name": "Src App",
       "norm_label": ".terminal_exit_code()"
     },
@@ -3540,8 +3540,8 @@
       "source_location": "L794",
       "_origin": "ast",
       "id": "src_app_mux_mod_mux_fill_active_pane_infos",
-      "community": 41,
-      "community_name": "Src App",
+      "community": 7,
+      "community_name": "Src Ui",
       "norm_label": ".fill_active_pane_infos()"
     },
     {
@@ -3551,8 +3551,8 @@
       "source_location": "L809",
       "_origin": "ast",
       "id": "src_app_mux_mod_mux_active_pane_separators",
-      "community": 41,
-      "community_name": "Src App",
+      "community": 7,
+      "community_name": "Src Ui",
       "norm_label": ".active_pane_separators()"
     },
     {
@@ -3606,7 +3606,7 @@
       "source_location": "L1108",
       "_origin": "ast",
       "id": "src_app_mux_mod_push_search_match_truncates_only_after_limit_is_exceeded",
-      "community": 62,
+      "community": 38,
       "community_name": "Src App",
       "norm_label": "push_search_match_truncates_only_after_limit_is_exceeded()"
     },
@@ -3892,7 +3892,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "src_app_mux_workspace_mux_workspaces",
-      "community": 38,
+      "community": 41,
       "community_name": "Src App",
       "norm_label": ".workspaces()"
     },
@@ -4937,8 +4937,8 @@
       "source_location": "L236",
       "_origin": "ast",
       "id": "src_app_renderer_terminal_rendercontext_build_cursor_instance",
-      "community": 17,
-      "community_name": "Src Term",
+      "community": 21,
+      "community_name": "Src App",
       "norm_label": ".build_cursor_instance()"
     },
     {
@@ -5916,8 +5916,8 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "src_app_ui_providers_uimanager",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 97,
+      "community_name": ".rasterize_lcd_to_atlas",
       "norm_label": "uimanager"
     },
     {
@@ -5927,8 +5927,8 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "src_app_ui_providers_uimanager_reload_mcp",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 97,
+      "community_name": ".rasterize_lcd_to_atlas",
       "norm_label": ".reload_mcp()"
     },
     {
@@ -5938,8 +5938,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_ui_providers_rs_path",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 97,
+      "community_name": ".rasterize_lcd_to_atlas",
       "norm_label": "path"
     },
     {
@@ -5949,8 +5949,8 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "src_app_ui_providers_uimanager_rewire_backend",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 97,
+      "community_name": ".rasterize_lcd_to_atlas",
       "norm_label": ".rewire_backend()"
     },
     {
@@ -5960,8 +5960,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_ui_providers_rs_eventloopproxy",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 97,
+      "community_name": ".rasterize_lcd_to_atlas",
       "norm_label": "eventloopproxy"
     },
     {
@@ -5971,8 +5971,8 @@
       "source_location": "L90",
       "_origin": "ast",
       "id": "src_app_ui_providers_uimanager_rewire_llm_provider",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 97,
+      "community_name": ".rasterize_lcd_to_atlas",
       "norm_label": ".rewire_llm_provider()"
     },
     {
@@ -5982,8 +5982,8 @@
       "source_location": "L114",
       "_origin": "ast",
       "id": "src_app_ui_providers_uimanager_handle_slash_command",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 97,
+      "community_name": ".rasterize_lcd_to_atlas",
       "norm_label": ".handle_slash_command()"
     },
     {
@@ -5993,8 +5993,8 @@
       "source_location": "L294",
       "_origin": "ast",
       "id": "src_app_ui_providers_uimanager_mcp_overlay_content",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 97,
+      "community_name": ".rasterize_lcd_to_atlas",
       "norm_label": ".mcp_overlay_content()"
     },
     {
@@ -6004,8 +6004,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_ui_providers_rs_string",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 97,
+      "community_name": ".rasterize_lcd_to_atlas",
       "norm_label": "string"
     },
     {
@@ -6015,8 +6015,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_config_keybind_view",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 103,
+      "community_name": "keybind_view.rs",
       "norm_label": "keybind_view.rs"
     },
     {
@@ -6026,8 +6026,8 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "src_config_keybind_view_leaderbindingsview",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 103,
+      "community_name": "keybind_view.rs",
       "norm_label": "leaderbindingsview"
     },
     {
@@ -6037,8 +6037,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_config_keybind_view_rs_string",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 103,
+      "community_name": "keybind_view.rs",
       "norm_label": "string"
     },
     {
@@ -6048,8 +6048,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_config_keybind_view_rs_vec",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 103,
+      "community_name": "keybind_view.rs",
       "norm_label": "vec"
     },
     {
@@ -6059,8 +6059,8 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "src_config_keybind_view_leader_bindings_view",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 103,
+      "community_name": "keybind_view.rs",
       "norm_label": "leader_bindings_view()"
     },
     {
@@ -6070,8 +6070,8 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "src_config_keybind_view_kb",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 103,
+      "community_name": "keybind_view.rs",
       "norm_label": "kb()"
     },
     {
@@ -6081,8 +6081,8 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "src_config_keybind_view_leader_bindings_view_filters_to_leader_mods_only_case_insensitive",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 103,
+      "community_name": "keybind_view.rs",
       "norm_label": "leader_bindings_view_filters_to_leader_mods_only_case_insensitive()"
     },
     {
@@ -6092,8 +6092,8 @@
       "source_location": "L56",
       "_origin": "ast",
       "id": "src_config_keybind_view_leader_bindings_view_carries_leader_key",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 103,
+      "community_name": "keybind_view.rs",
       "norm_label": "leader_bindings_view_carries_leader_key()"
     },
     {
@@ -6103,8 +6103,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_config_llm_view",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 65,
+      "community_name": "AcpAgentConfig",
       "norm_label": "llm_view.rs"
     },
     {
@@ -6114,8 +6114,8 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "src_config_llm_view_llmruntimeview",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 65,
+      "community_name": "AcpAgentConfig",
       "norm_label": "llmruntimeview"
     },
     {
@@ -6125,8 +6125,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_config_llm_view_rs_option",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 65,
+      "community_name": "AcpAgentConfig",
       "norm_label": "option"
     },
     {
@@ -6136,8 +6136,8 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "src_config_llm_view_llm_runtime_view",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 65,
+      "community_name": "AcpAgentConfig",
       "norm_label": "llm_runtime_view()"
     },
     {
@@ -6147,8 +6147,8 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "src_config_llm_view_agent_display_name",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 65,
+      "community_name": "AcpAgentConfig",
       "norm_label": "agent_display_name()"
     },
     {
@@ -6158,8 +6158,8 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "src_config_llm_view_llm_runtime_view_preserves_backend_agent_and_ui_width",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 65,
+      "community_name": "AcpAgentConfig",
       "norm_label": "llm_runtime_view_preserves_backend_agent_and_ui_width()"
     },
     {
@@ -6169,8 +6169,8 @@
       "source_location": "L57",
       "_origin": "ast",
       "id": "src_config_llm_view_llm_runtime_view_preserves_provider_defaults",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 65,
+      "community_name": "AcpAgentConfig",
       "norm_label": "llm_runtime_view_preserves_provider_defaults()"
     },
     {
@@ -6180,8 +6180,8 @@
       "source_location": "L71",
       "_origin": "ast",
       "id": "src_config_llm_view_llm_runtime_view_agent_path_requires_agent_config",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 65,
+      "community_name": "AcpAgentConfig",
       "norm_label": "llm_runtime_view_agent_path_requires_agent_config()"
     },
     {
@@ -6191,8 +6191,8 @@
       "source_location": "L84",
       "_origin": "ast",
       "id": "src_config_llm_view_agent_display_name_prefers_display_name_over_command_basename",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 65,
+      "community_name": "AcpAgentConfig",
       "norm_label": "agent_display_name_prefers_display_name_over_command_basename()"
     },
     {
@@ -6202,8 +6202,8 @@
       "source_location": "L95",
       "_origin": "ast",
       "id": "src_config_llm_view_agent_display_name_falls_back_to_command_basename",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 65,
+      "community_name": "AcpAgentConfig",
       "norm_label": "agent_display_name_falls_back_to_command_basename()"
     },
     {
@@ -6213,8 +6213,8 @@
       "source_location": "L106",
       "_origin": "ast",
       "id": "src_config_llm_view_agent_display_name_none_when_no_agent",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 65,
+      "community_name": "AcpAgentConfig",
       "norm_label": "agent_display_name_none_when_no_agent()"
     },
     {
@@ -6785,8 +6785,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_config_schema_rs_vec",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 65,
+      "community_name": "AcpAgentConfig",
       "norm_label": "vec"
     },
     {
@@ -6851,8 +6851,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_config_schema_rs_self",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 98,
+      "community_name": "FreeTypeCmapLookup",
       "norm_label": "self"
     },
     {
@@ -6884,8 +6884,8 @@
       "source_location": "L87",
       "_origin": "ast",
       "id": "src_config_schema_config_default",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 98,
+      "community_name": "FreeTypeCmapLookup",
       "norm_label": ".default()"
     },
     {
@@ -6961,8 +6961,8 @@
       "source_location": "L169",
       "_origin": "ast",
       "id": "src_config_schema_workspacesconfig_default",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 98,
+      "community_name": "FreeTypeCmapLookup",
       "norm_label": ".default()"
     },
     {
@@ -6983,8 +6983,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_config_schema_rs_option",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 93,
+      "community_name": "shaper.rs",
       "norm_label": "option"
     },
     {
@@ -7005,8 +7005,8 @@
       "source_location": "L196",
       "_origin": "ast",
       "id": "src_config_schema_fontconfig_default",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 98,
+      "community_name": "FreeTypeCmapLookup",
       "norm_label": ".default()"
     },
     {
@@ -7016,8 +7016,8 @@
       "source_location": "L210",
       "_origin": "ast",
       "id": "src_config_schema_windowconfig",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 93,
+      "community_name": "shaper.rs",
       "norm_label": "windowconfig"
     },
     {
@@ -7027,8 +7027,8 @@
       "source_location": "L227",
       "_origin": "ast",
       "id": "src_config_schema_windowblur",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 93,
+      "community_name": "shaper.rs",
       "norm_label": "windowblur"
     },
     {
@@ -7038,8 +7038,8 @@
       "source_location": "L235",
       "_origin": "ast",
       "id": "src_config_schema_windowconfig_default",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 93,
+      "community_name": "shaper.rs",
       "norm_label": ".default()"
     },
     {
@@ -7049,8 +7049,8 @@
       "source_location": "L256",
       "_origin": "ast",
       "id": "src_config_schema_titlebarstyle",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 93,
+      "community_name": "shaper.rs",
       "norm_label": "titlebarstyle"
     },
     {
@@ -7060,8 +7060,8 @@
       "source_location": "L264",
       "_origin": "ast",
       "id": "src_config_schema_padding",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 93,
+      "community_name": "shaper.rs",
       "norm_label": "padding"
     },
     {
@@ -7093,8 +7093,8 @@
       "source_location": "L366",
       "_origin": "ast",
       "id": "src_config_schema_colorscheme_dracula_pro",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 98,
+      "community_name": "FreeTypeCmapLookup",
       "norm_label": ".dracula_pro()"
     },
     {
@@ -7137,8 +7137,8 @@
       "source_location": "L451",
       "_origin": "ast",
       "id": "src_config_schema_colorscheme_apply_blur_translucency",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 93,
+      "community_name": "shaper.rs",
       "norm_label": ".apply_blur_translucency()"
     },
     {
@@ -7192,8 +7192,8 @@
       "source_location": "L530",
       "_origin": "ast",
       "id": "src_config_schema_leaderconfig_default",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 98,
+      "community_name": "FreeTypeCmapLookup",
       "norm_label": ".default()"
     },
     {
@@ -7236,8 +7236,8 @@
       "source_location": "L573",
       "_origin": "ast",
       "id": "src_config_schema_acpagentconfig",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 65,
+      "community_name": "AcpAgentConfig",
       "norm_label": "acpagentconfig"
     },
     {
@@ -7269,8 +7269,8 @@
       "source_location": "L604",
       "_origin": "ast",
       "id": "src_config_schema_llmconfig_default",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 98,
+      "community_name": "FreeTypeCmapLookup",
       "norm_label": ".default()"
     },
     {
@@ -7313,8 +7313,8 @@
       "source_location": "L640",
       "_origin": "ast",
       "id": "src_config_schema_llmfeatures_default",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 98,
+      "community_name": "FreeTypeCmapLookup",
       "norm_label": ".default()"
     },
     {
@@ -7324,8 +7324,8 @@
       "source_location": "L655",
       "_origin": "ast",
       "id": "src_config_schema_blur_translucency_only_when_translucent",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 98,
+      "community_name": "FreeTypeCmapLookup",
       "norm_label": "blur_translucency_only_when_translucent()"
     },
     {
@@ -7335,8 +7335,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_config_watcher",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 61,
+      "community_name": "ConfigWatcher",
       "norm_label": "watcher.rs"
     },
     {
@@ -7346,8 +7346,8 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "src_config_watcher_configwatcher",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 61,
+      "community_name": "ConfigWatcher",
       "norm_label": "configwatcher"
     },
     {
@@ -7357,8 +7357,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "recommendedwatcher",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 61,
+      "community_name": "ConfigWatcher",
       "norm_label": "recommendedwatcher"
     },
     {
@@ -7368,8 +7368,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_config_watcher_rs_receiver",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 61,
+      "community_name": "ConfigWatcher",
       "norm_label": "receiver"
     },
     {
@@ -7379,8 +7379,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_config_watcher_rs_pathbuf",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 61,
+      "community_name": "ConfigWatcher",
       "norm_label": "pathbuf"
     },
     {
@@ -7390,8 +7390,8 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "src_config_watcher_configwatcher_new",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 61,
+      "community_name": "ConfigWatcher",
       "norm_label": ".new()"
     },
     {
@@ -7401,8 +7401,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_config_watcher_rs_path",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 61,
+      "community_name": "ConfigWatcher",
       "norm_label": "path"
     },
     {
@@ -7412,8 +7412,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_config_watcher_rs_result",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 61,
+      "community_name": "ConfigWatcher",
       "norm_label": "result"
     },
     {
@@ -7423,8 +7423,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_config_watcher_rs_self",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 61,
+      "community_name": "ConfigWatcher",
       "norm_label": "self"
     },
     {
@@ -7434,8 +7434,8 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "src_config_watcher_configwatcher_poll",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 61,
+      "community_name": "ConfigWatcher",
       "norm_label": ".poll()"
     },
     {
@@ -7445,8 +7445,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_config_watcher_rs_option",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 61,
+      "community_name": "ConfigWatcher",
       "norm_label": "option"
     },
     {
@@ -7456,8 +7456,8 @@
       "source_location": "L53",
       "_origin": "ast",
       "id": "src_config_watcher_configwatcher_wait_timeout",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 61,
+      "community_name": "ConfigWatcher",
       "norm_label": ".wait_timeout()"
     },
     {
@@ -7467,8 +7467,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_config_watcher_rs_duration",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 61,
+      "community_name": "ConfigWatcher",
       "norm_label": "duration"
     },
     {
@@ -7489,8 +7489,8 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "src_font_freetype_lcd_lcdatlasentry",
-      "community": 92,
-      "community_name": "LcdGlyphAtlas",
+      "community": 6,
+      "community_name": "Src Font",
       "norm_label": "lcdatlasentry"
     },
     {
@@ -8028,8 +8028,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_font_shaper",
-      "community": 93,
-      "community_name": "shaper.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "shaper.rs"
     },
     {
@@ -8039,8 +8039,8 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "src_font_shaper_is_pua",
-      "community": 93,
-      "community_name": "shaper.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "is_pua()"
     },
     {
@@ -8050,8 +8050,8 @@
       "source_location": "L46",
       "_origin": "ast",
       "id": "src_font_shaper_should_use_lcd",
-      "community": 97,
-      "community_name": ".rasterize_lcd_to_atlas",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "should_use_lcd()"
     },
     {
@@ -8061,8 +8061,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_font_shaper_rs_cachekey",
-      "community": 97,
-      "community_name": ".rasterize_lcd_to_atlas",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "cachekey"
     },
     {
@@ -8072,8 +8072,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_font_shaper_rs_id",
-      "community": 97,
-      "community_name": ".rasterize_lcd_to_atlas",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "id"
     },
     {
@@ -8083,8 +8083,8 @@
       "source_location": "L55",
       "_origin": "ast",
       "id": "src_font_shaper_has_ligature_chars",
-      "community": 93,
-      "community_name": "shaper.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "has_ligature_chars()"
     },
     {
@@ -8094,8 +8094,8 @@
       "source_location": "L67",
       "_origin": "ast",
       "id": "src_font_shaper_build_attr_list",
-      "community": 93,
-      "community_name": "shaper.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "build_attr_list()"
     },
     {
@@ -8105,8 +8105,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "attrs",
-      "community": 93,
-      "community_name": "shaper.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "attrs"
     },
     {
@@ -8116,8 +8116,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "attrslist",
-      "community": 93,
-      "community_name": "shaper.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "attrslist"
     },
     {
@@ -8127,8 +8127,8 @@
       "source_location": "L97",
       "_origin": "ast",
       "id": "src_font_shaper_freetypecmaplookup",
-      "community": 98,
-      "community_name": "FreeTypeCmapLookup",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "freetypecmaplookup"
     },
     {
@@ -8138,8 +8138,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_font_shaper_rs_ft_library",
-      "community": 98,
-      "community_name": "FreeTypeCmapLookup",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "ft_library"
     },
     {
@@ -8149,8 +8149,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_font_shaper_rs_ft_face",
-      "community": 98,
-      "community_name": "FreeTypeCmapLookup",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "ft_face"
     },
     {
@@ -8215,8 +8215,8 @@
       "source_location": "L170",
       "_origin": "ast",
       "id": "src_font_shaper_freetypecmaplookup_cell_metrics",
-      "community": 98,
-      "community_name": "FreeTypeCmapLookup",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": ".cell_metrics()"
     },
     {
@@ -8226,8 +8226,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_font_shaper_rs_drop",
-      "community": 98,
-      "community_name": "FreeTypeCmapLookup",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "drop"
     },
     {
@@ -8237,8 +8237,8 @@
       "source_location": "L209",
       "_origin": "ast",
       "id": "src_font_shaper_freetypecmaplookup_drop",
-      "community": 98,
-      "community_name": "FreeTypeCmapLookup",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": ".drop()"
     },
     {
@@ -8270,8 +8270,8 @@
       "source_location": "L234",
       "_origin": "ast",
       "id": "src_font_shaper_shapedglyph",
-      "community": 97,
-      "community_name": ".rasterize_lcd_to_atlas",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "shapedglyph"
     },
     {
@@ -8336,8 +8336,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_font_shaper_rs_rc",
-      "community": 93,
-      "community_name": "shaper.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "rc"
     },
     {
@@ -8347,8 +8347,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_font_shaper_rs_refcell",
-      "community": 93,
-      "community_name": "shaper.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "refcell"
     },
     {
@@ -8358,8 +8358,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_font_shaper_rs_string",
-      "community": 93,
-      "community_name": "shaper.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "string"
     },
     {
@@ -8369,8 +8369,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_font_shaper_rs_hashset",
-      "community": 93,
-      "community_name": "shaper.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "hashset"
     },
     {
@@ -8380,8 +8380,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "lrucache",
-      "community": 93,
-      "community_name": "shaper.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "lrucache"
     },
     {
@@ -8391,8 +8391,8 @@
       "source_location": "L290",
       "_origin": "ast",
       "id": "src_font_shaper_textshaperconfig",
-      "community": 93,
-      "community_name": "shaper.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "textshaperconfig"
     },
     {
@@ -8402,8 +8402,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_font_shaper_rs_pathbuf",
-      "community": 93,
-      "community_name": "shaper.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "pathbuf"
     },
     {
@@ -8435,8 +8435,8 @@
       "source_location": "L402",
       "_origin": "ast",
       "id": "src_font_shaper_textshaper_measure_cell",
-      "community": 98,
-      "community_name": "FreeTypeCmapLookup",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": ".measure_cell()"
     },
     {
@@ -8589,8 +8589,8 @@
       "source_location": "L934",
       "_origin": "ast",
       "id": "src_font_shaper_textshaper_rasterize_lcd_to_atlas",
-      "community": 97,
-      "community_name": ".rasterize_lcd_to_atlas",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": ".rasterize_lcd_to_atlas()"
     },
     {
@@ -8600,8 +8600,8 @@
       "source_location": "L948",
       "_origin": "ast",
       "id": "src_font_shaper_textshaper_make_attrs",
-      "community": 93,
-      "community_name": "shaper.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": ".make_attrs()"
     },
     {
@@ -8611,8 +8611,8 @@
       "source_location": "L953",
       "_origin": "ast",
       "id": "src_font_shaper_glyph_to_cache_key",
-      "community": 97,
-      "community_name": ".rasterize_lcd_to_atlas",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "glyph_to_cache_key()"
     },
     {
@@ -8622,8 +8622,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "layoutglyph",
-      "community": 97,
-      "community_name": ".rasterize_lcd_to_atlas",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "layoutglyph"
     },
     {
@@ -8633,8 +8633,8 @@
       "source_location": "L971",
       "_origin": "ast",
       "id": "src_font_shaper_test_is_pua",
-      "community": 93,
-      "community_name": "shaper.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "test_is_pua()"
     },
     {
@@ -8644,8 +8644,8 @@
       "source_location": "L1023",
       "_origin": "ast",
       "id": "src_font_shaper_test_build_attr_list",
-      "community": 93,
-      "community_name": "shaper.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "test_build_attr_list()"
     },
     {
@@ -8655,8 +8655,8 @@
       "source_location": "L1038",
       "_origin": "ast",
       "id": "src_font_shaper_test_should_use_lcd_only_for_ascii_in_primary_font",
-      "community": 93,
-      "community_name": "shaper.rs",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "test_should_use_lcd_only_for_ascii_in_primary_font()"
     },
     {
@@ -8721,8 +8721,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_llm_acp_fs",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 53,
+      "community_name": "Src Config",
       "norm_label": "fs.rs"
     },
     {
@@ -8732,8 +8732,8 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "src_llm_acp_fs_validate_path",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 53,
+      "community_name": "Src Config",
       "norm_label": "validate_path()"
     },
     {
@@ -8743,8 +8743,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_llm_acp_fs_rs_path",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 53,
+      "community_name": "Src Config",
       "norm_label": "path"
     },
     {
@@ -8754,8 +8754,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_llm_acp_fs_rs_result",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 53,
+      "community_name": "Src Config",
       "norm_label": "result"
     },
     {
@@ -8765,8 +8765,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_llm_acp_fs_rs_pathbuf",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 53,
+      "community_name": "Src Config",
       "norm_label": "pathbuf"
     },
     {
@@ -9645,7 +9645,7 @@
       "source_location": "L109",
       "_origin": "ast",
       "id": "src_llm_chat_panel_mod_headeraction",
-      "community": 29,
+      "community": 39,
       "community_name": "Src Llm",
       "norm_label": "headeraction"
     },
@@ -9656,7 +9656,7 @@
       "source_location": "L115",
       "_origin": "ast",
       "id": "src_llm_chat_panel_mod_header_action_label",
-      "community": 29,
+      "community": 39,
       "community_name": "Src Llm",
       "norm_label": "header_action_label()"
     },
@@ -9667,7 +9667,7 @@
       "source_location": "L126",
       "_origin": "ast",
       "id": "src_llm_chat_panel_mod_header_actions_start_col",
-      "community": 29,
+      "community": 39,
       "community_name": "Src Llm",
       "norm_label": "header_actions_start_col()"
     },
@@ -9689,7 +9689,7 @@
       "source_location": "L133",
       "_origin": "ast",
       "id": "src_llm_chat_panel_mod_header_action_for_col",
-      "community": 29,
+      "community": 39,
       "community_name": "Src Llm",
       "norm_label": "header_action_for_col()"
     },
@@ -11537,8 +11537,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_llm_mcp_config",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 53,
+      "community_name": "Src Config",
       "norm_label": "config.rs"
     },
     {
@@ -11548,8 +11548,8 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "src_llm_mcp_config_mcpserverconfig",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 53,
+      "community_name": "Src Config",
       "norm_label": "mcpserverconfig"
     },
     {
@@ -11559,8 +11559,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_llm_mcp_config_rs_string",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 53,
+      "community_name": "Src Config",
       "norm_label": "string"
     },
     {
@@ -11570,8 +11570,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_llm_mcp_config_rs_vec",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 53,
+      "community_name": "Src Config",
       "norm_label": "vec"
     },
     {
@@ -11581,8 +11581,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_llm_mcp_config_rs_hashmap",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 53,
+      "community_name": "Src Config",
       "norm_label": "hashmap"
     },
     {
@@ -11592,8 +11592,8 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "src_llm_mcp_config_mcpfile",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 53,
+      "community_name": "Src Config",
       "norm_label": "mcpfile"
     },
     {
@@ -11603,8 +11603,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_llm_mcp_config_rs_mcpconfig",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 53,
+      "community_name": "Src Config",
       "norm_label": "mcpconfig"
     },
     {
@@ -11614,8 +11614,8 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "src_llm_mcp_config_load_global",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 53,
+      "community_name": "Src Config",
       "norm_label": "load_global()"
     },
     {
@@ -11625,8 +11625,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_llm_mcp_config_rs_result",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 53,
+      "community_name": "Src Config",
       "norm_label": "result"
     },
     {
@@ -11636,8 +11636,8 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "src_llm_mcp_config_load_local",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 53,
+      "community_name": "Src Config",
       "norm_label": "load_local()"
     },
     {
@@ -11647,8 +11647,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_llm_mcp_config_rs_path",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 53,
+      "community_name": "Src Config",
       "norm_label": "path"
     },
     {
@@ -11658,8 +11658,8 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "src_llm_mcp_config_load_from_paths",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 53,
+      "community_name": "Src Config",
       "norm_label": "load_from_paths()"
     },
     {
@@ -11669,8 +11669,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_llm_mcp_config_rs_option",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 53,
+      "community_name": "Src Config",
       "norm_label": "option"
     },
     {
@@ -11680,8 +11680,8 @@
       "source_location": "L100",
       "_origin": "ast",
       "id": "src_llm_mcp_config_parse_file",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 53,
+      "community_name": "Src Config",
       "norm_label": "parse_file()"
     },
     {
@@ -11691,8 +11691,8 @@
       "source_location": "L114",
       "_origin": "ast",
       "id": "src_llm_mcp_config_write",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 53,
+      "community_name": "Src Config",
       "norm_label": "write()"
     },
     {
@@ -11702,8 +11702,8 @@
       "source_location": "L123",
       "_origin": "ast",
       "id": "src_llm_mcp_config_parse_valid_json",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 53,
+      "community_name": "Src Config",
       "norm_label": "parse_valid_json()"
     },
     {
@@ -11713,8 +11713,8 @@
       "source_location": "L137",
       "_origin": "ast",
       "id": "src_llm_mcp_config_missing_file_returns_empty",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 53,
+      "community_name": "Src Config",
       "norm_label": "missing_file_returns_empty()"
     },
     {
@@ -11724,8 +11724,8 @@
       "source_location": "L147",
       "_origin": "ast",
       "id": "src_llm_mcp_config_local_overrides_global",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 53,
+      "community_name": "Src Config",
       "norm_label": "local_overrides_global()"
     },
     {
@@ -11735,8 +11735,8 @@
       "source_location": "L171",
       "_origin": "ast",
       "id": "src_llm_mcp_config_malformed_json_returns_err",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 53,
+      "community_name": "Src Config",
       "norm_label": "malformed_json_returns_err()"
     },
     {
@@ -11746,8 +11746,8 @@
       "source_location": "L178",
       "_origin": "ast",
       "id": "src_llm_mcp_config_env_vars_parsed",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 53,
+      "community_name": "Src Config",
       "norm_label": "env_vars_parsed()"
     },
     {
@@ -13770,8 +13770,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_platform_battery",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 102,
+      "community_name": "cfdict_str",
       "norm_label": "battery.rs"
     },
     {
@@ -13781,8 +13781,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_platform_battery_batterystatus",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 102,
+      "community_name": "cfdict_str",
       "norm_label": "batterystatus"
     },
     {
@@ -13792,8 +13792,8 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "src_platform_battery_query",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 102,
+      "community_name": "cfdict_str",
       "norm_label": "query()"
     },
     {
@@ -13803,8 +13803,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_platform_battery_rs_option",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 102,
+      "community_name": "cfdict_str",
       "norm_label": "option"
     },
     {
@@ -13814,8 +13814,8 @@
       "source_location": "L44",
       "_origin": "ast",
       "id": "src_platform_battery_cfdict_str",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 102,
+      "community_name": "cfdict_str",
       "norm_label": "cfdict_str()"
     },
     {
@@ -13825,8 +13825,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "c_void",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 102,
+      "community_name": "cfdict_str",
       "norm_label": "c_void"
     },
     {
@@ -13836,8 +13836,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_platform_battery_rs_string",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 102,
+      "community_name": "cfdict_str",
       "norm_label": "string"
     },
     {
@@ -13847,8 +13847,8 @@
       "source_location": "L63",
       "_origin": "ast",
       "id": "src_platform_battery_cfdict_i32",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 102,
+      "community_name": "cfdict_str",
       "norm_label": "cfdict_i32()"
     },
     {
@@ -13891,8 +13891,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_renderer_atlas",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 60,
+      "community_name": "Benches Shaping.rs",
       "norm_label": "atlas.rs"
     },
     {
@@ -13902,8 +13902,8 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "src_renderer_atlas_pad_r8_rows",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 60,
+      "community_name": "Benches Shaping.rs",
       "norm_label": "pad_r8_rows()"
     },
     {
@@ -13913,8 +13913,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_renderer_atlas_rs_vec",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 60,
+      "community_name": "Benches Shaping.rs",
       "norm_label": "vec"
     },
     {
@@ -13924,8 +13924,8 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "src_renderer_atlas_atlaserror",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 60,
+      "community_name": "Benches Shaping.rs",
       "norm_label": "atlaserror"
     },
     {
@@ -13935,8 +13935,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_renderer_atlas_rs_string",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 60,
+      "community_name": "Benches Shaping.rs",
       "norm_label": "string"
     },
     {
@@ -13946,8 +13946,8 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "src_renderer_atlas_atlasentry",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 60,
+      "community_name": "Benches Shaping.rs",
       "norm_label": "atlasentry"
     },
     {
@@ -13968,8 +13968,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_renderer_atlas_rs_texture",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 101,
+      "community_name": ".new",
       "norm_label": "texture"
     },
     {
@@ -14012,8 +14012,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_renderer_atlas_rs_cachekey",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 60,
+      "community_name": "Benches Shaping.rs",
       "norm_label": "cachekey"
     },
     {
@@ -14023,8 +14023,8 @@
       "source_location": "L84",
       "_origin": "ast",
       "id": "src_renderer_atlas_glyphatlas_new",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 101,
+      "community_name": ".new",
       "norm_label": ".new()"
     },
     {
@@ -14034,8 +14034,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_renderer_atlas_rs_device",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 101,
+      "community_name": ".new",
       "norm_label": "device"
     },
     {
@@ -14045,8 +14045,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_renderer_atlas_rs_self",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 101,
+      "community_name": ".new",
       "norm_label": "self"
     },
     {
@@ -14056,8 +14056,8 @@
       "source_location": "L111",
       "_origin": "ast",
       "id": "src_renderer_atlas_glyphatlas_create_texture",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 101,
+      "community_name": ".new",
       "norm_label": ".create_texture()"
     },
     {
@@ -14078,8 +14078,8 @@
       "source_location": "L135",
       "_origin": "ast",
       "id": "src_renderer_atlas_glyphatlas_get_and_touch",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 60,
+      "community_name": "Benches Shaping.rs",
       "norm_label": ".get_and_touch()"
     },
     {
@@ -14089,8 +14089,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_renderer_atlas_rs_option",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 60,
+      "community_name": "Benches Shaping.rs",
       "norm_label": "option"
     },
     {
@@ -14122,8 +14122,8 @@
       "source_location": "L181",
       "_origin": "ast",
       "id": "src_renderer_atlas_glyphatlas_upload",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 60,
+      "community_name": "Benches Shaping.rs",
       "norm_label": ".upload()"
     },
     {
@@ -14133,8 +14133,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_renderer_atlas_rs_queue",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 60,
+      "community_name": "Benches Shaping.rs",
       "norm_label": "queue"
     },
     {
@@ -14144,8 +14144,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_renderer_atlas_rs_result",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 60,
+      "community_name": "Benches Shaping.rs",
       "norm_label": "result"
     },
     {
@@ -14199,8 +14199,8 @@
       "source_location": "L284",
       "_origin": "ast",
       "id": "src_renderer_atlas_glyphatlas_clear",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 101,
+      "community_name": ".new",
       "norm_label": ".clear()"
     },
     {
@@ -14221,8 +14221,8 @@
       "source_location": "L320",
       "_origin": "ast",
       "id": "src_renderer_atlas_coloratlas_new",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 101,
+      "community_name": ".new",
       "norm_label": ".new()"
     },
     {
@@ -14232,8 +14232,8 @@
       "source_location": "L346",
       "_origin": "ast",
       "id": "src_renderer_atlas_coloratlas_create_texture",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 101,
+      "community_name": ".new",
       "norm_label": ".create_texture()"
     },
     {
@@ -14254,8 +14254,8 @@
       "source_location": "L367",
       "_origin": "ast",
       "id": "src_renderer_atlas_coloratlas_get_and_touch",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 60,
+      "community_name": "Benches Shaping.rs",
       "norm_label": ".get_and_touch()"
     },
     {
@@ -14287,8 +14287,8 @@
       "source_location": "L393",
       "_origin": "ast",
       "id": "src_renderer_atlas_coloratlas_upload",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 60,
+      "community_name": "Benches Shaping.rs",
       "norm_label": ".upload()"
     },
     {
@@ -14331,8 +14331,8 @@
       "source_location": "L475",
       "_origin": "ast",
       "id": "src_renderer_atlas_coloratlas_clear",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 101,
+      "community_name": ".new",
       "norm_label": ".clear()"
     },
     {
@@ -14342,8 +14342,8 @@
       "source_location": "L494",
       "_origin": "ast",
       "id": "src_renderer_atlas_dummy_entry",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 60,
+      "community_name": "Benches Shaping.rs",
       "norm_label": "dummy_entry()"
     },
     {
@@ -14353,8 +14353,8 @@
       "source_location": "L506",
       "_origin": "ast",
       "id": "src_renderer_atlas_dummy_key",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 60,
+      "community_name": "Benches Shaping.rs",
       "norm_label": "dummy_key()"
     },
     {
@@ -14364,8 +14364,8 @@
       "source_location": "L521",
       "_origin": "ast",
       "id": "src_renderer_atlas_epoch_starts_at_zero",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 60,
+      "community_name": "Benches Shaping.rs",
       "norm_label": "epoch_starts_at_zero()"
     },
     {
@@ -14375,8 +14375,8 @@
       "source_location": "L536",
       "_origin": "ast",
       "id": "src_renderer_atlas_evict_cold_removes_old_entries",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 60,
+      "community_name": "Benches Shaping.rs",
       "norm_label": "evict_cold_removes_old_entries()"
     },
     {
@@ -14386,8 +14386,8 @@
       "source_location": "L571",
       "_origin": "ast",
       "id": "src_renderer_atlas_evict_cold_keeps_all_when_all_warm",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 60,
+      "community_name": "Benches Shaping.rs",
       "norm_label": "evict_cold_keeps_all_when_all_warm()"
     },
     {
@@ -14397,8 +14397,8 @@
       "source_location": "L582",
       "_origin": "ast",
       "id": "src_renderer_atlas_evict_cold_removes_all_when_all_stale",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 60,
+      "community_name": "Benches Shaping.rs",
       "norm_label": "evict_cold_removes_all_when_all_stale()"
     },
     {
@@ -14408,8 +14408,8 @@
       "source_location": "L595",
       "_origin": "ast",
       "id": "src_renderer_atlas_fill_ratio_below_threshold_is_not_near_full",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 60,
+      "community_name": "Benches Shaping.rs",
       "norm_label": "fill_ratio_below_threshold_is_not_near_full()"
     },
     {
@@ -14419,8 +14419,8 @@
       "source_location": "L604",
       "_origin": "ast",
       "id": "src_renderer_atlas_fill_ratio_at_threshold_is_near_full",
-      "community": 31,
-      "community_name": "Src Renderer",
+      "community": 60,
+      "community_name": "Benches Shaping.rs",
       "norm_label": "fill_ratio_at_threshold_is_near_full()"
     },
     {
@@ -14430,8 +14430,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_renderer_cell",
-      "community": 53,
-      "community_name": "Src Config",
+      "community": 22,
+      "community_name": "Benches Build Instances.rs",
       "norm_label": "cell.rs"
     },
     {
@@ -14441,8 +14441,8 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "src_renderer_cell_cellvertex",
-      "community": 53,
-      "community_name": "Src Config",
+      "community": 22,
+      "community_name": "Benches Build Instances.rs",
       "norm_label": "cellvertex"
     },
     {
@@ -14452,8 +14452,8 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "src_renderer_cell_cellvertex_vertex_buffer_layout",
-      "community": 53,
-      "community_name": "Src Config",
+      "community": 22,
+      "community_name": "Benches Build Instances.rs",
       "norm_label": ".vertex_buffer_layout()"
     },
     {
@@ -14463,8 +14463,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "vertexbufferlayout",
-      "community": 53,
-      "community_name": "Src Config",
+      "community": 22,
+      "community_name": "Benches Build Instances.rs",
       "norm_label": "vertexbufferlayout"
     },
     {
@@ -14474,8 +14474,8 @@
       "source_location": "L90",
       "_origin": "ast",
       "id": "src_renderer_cell_celluniforms",
-      "community": 53,
-      "community_name": "Src Config",
+      "community": 22,
+      "community_name": "Benches Build Instances.rs",
       "norm_label": "celluniforms"
     },
     {
@@ -14738,8 +14738,8 @@
       "source_location": "L372",
       "_origin": "ast",
       "id": "src_renderer_gpu_gpurenderer_upload_instances",
-      "community": 53,
-      "community_name": "Src Config",
+      "community": 22,
+      "community_name": "Benches Build Instances.rs",
       "norm_label": ".upload_instances()"
     },
     {
@@ -14826,8 +14826,8 @@
       "source_location": "L556",
       "_origin": "ast",
       "id": "src_renderer_gpu_gpurenderer_upload_lcd_instances",
-      "community": 53,
-      "community_name": "Src Config",
+      "community": 22,
+      "community_name": "Benches Build Instances.rs",
       "norm_label": ".upload_lcd_instances()"
     },
     {
@@ -14914,8 +14914,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_renderer_lcd_atlas",
-      "community": 92,
-      "community_name": "LcdGlyphAtlas",
+      "community": 6,
+      "community_name": "Src Font",
       "norm_label": "lcd_atlas.rs"
     },
     {
@@ -14925,8 +14925,8 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "src_renderer_lcd_atlas_lcdcacheentry",
-      "community": 92,
-      "community_name": "LcdGlyphAtlas",
+      "community": 6,
+      "community_name": "Src Font",
       "norm_label": "lcdcacheentry"
     },
     {
@@ -14936,8 +14936,8 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "src_renderer_lcd_atlas_lcdglyphatlas",
-      "community": 92,
-      "community_name": "LcdGlyphAtlas",
+      "community": 6,
+      "community_name": "Src Font",
       "norm_label": "lcdglyphatlas"
     },
     {
@@ -14947,8 +14947,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_renderer_lcd_atlas_rs_texture",
-      "community": 92,
-      "community_name": "LcdGlyphAtlas",
+      "community": 6,
+      "community_name": "Src Font",
       "norm_label": "texture"
     },
     {
@@ -14958,8 +14958,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_renderer_lcd_atlas_rs_textureview",
-      "community": 92,
-      "community_name": "LcdGlyphAtlas",
+      "community": 6,
+      "community_name": "Src Font",
       "norm_label": "textureview"
     },
     {
@@ -14969,8 +14969,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_renderer_lcd_atlas_rs_sampler",
-      "community": 92,
-      "community_name": "LcdGlyphAtlas",
+      "community": 6,
+      "community_name": "Src Font",
       "norm_label": "sampler"
     },
     {
@@ -14980,8 +14980,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_renderer_lcd_atlas_rs_hashmap",
-      "community": 92,
-      "community_name": "LcdGlyphAtlas",
+      "community": 6,
+      "community_name": "Src Font",
       "norm_label": "hashmap"
     },
     {
@@ -14991,8 +14991,8 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "src_renderer_lcd_atlas_lcdglyphatlas_new",
-      "community": 92,
-      "community_name": "LcdGlyphAtlas",
+      "community": 6,
+      "community_name": "Src Font",
       "norm_label": ".new()"
     },
     {
@@ -15002,8 +15002,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_renderer_lcd_atlas_rs_device",
-      "community": 92,
-      "community_name": "LcdGlyphAtlas",
+      "community": 6,
+      "community_name": "Src Font",
       "norm_label": "device"
     },
     {
@@ -15013,8 +15013,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_renderer_lcd_atlas_rs_self",
-      "community": 92,
-      "community_name": "LcdGlyphAtlas",
+      "community": 6,
+      "community_name": "Src Font",
       "norm_label": "self"
     },
     {
@@ -15024,8 +15024,8 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "src_renderer_lcd_atlas_lcdglyphatlas_next_epoch",
-      "community": 92,
-      "community_name": "LcdGlyphAtlas",
+      "community": 6,
+      "community_name": "Src Font",
       "norm_label": ".next_epoch()"
     },
     {
@@ -15035,8 +15035,8 @@
       "source_location": "L86",
       "_origin": "ast",
       "id": "src_renderer_lcd_atlas_lcdglyphatlas_get_and_touch",
-      "community": 92,
-      "community_name": "LcdGlyphAtlas",
+      "community": 6,
+      "community_name": "Src Font",
       "norm_label": ".get_and_touch()"
     },
     {
@@ -15046,8 +15046,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_renderer_lcd_atlas_rs_option",
-      "community": 92,
-      "community_name": "LcdGlyphAtlas",
+      "community": 6,
+      "community_name": "Src Font",
       "norm_label": "option"
     },
     {
@@ -15057,8 +15057,8 @@
       "source_location": "L97",
       "_origin": "ast",
       "id": "src_renderer_lcd_atlas_lcdglyphatlas_is_near_full",
-      "community": 92,
-      "community_name": "LcdGlyphAtlas",
+      "community": 6,
+      "community_name": "Src Font",
       "norm_label": ".is_near_full()"
     },
     {
@@ -15068,8 +15068,8 @@
       "source_location": "L106",
       "_origin": "ast",
       "id": "src_renderer_lcd_atlas_lcdglyphatlas_evict_cold",
-      "community": 92,
-      "community_name": "LcdGlyphAtlas",
+      "community": 6,
+      "community_name": "Src Font",
       "norm_label": ".evict_cold()"
     },
     {
@@ -15079,8 +15079,8 @@
       "source_location": "L115",
       "_origin": "ast",
       "id": "src_renderer_lcd_atlas_lcdglyphatlas_upload",
-      "community": 92,
-      "community_name": "LcdGlyphAtlas",
+      "community": 6,
+      "community_name": "Src Font",
       "norm_label": ".upload()"
     },
     {
@@ -15090,8 +15090,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_renderer_lcd_atlas_rs_queue",
-      "community": 92,
-      "community_name": "LcdGlyphAtlas",
+      "community": 6,
+      "community_name": "Src Font",
       "norm_label": "queue"
     },
     {
@@ -15101,8 +15101,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_renderer_lcd_atlas_rs_result",
-      "community": 92,
-      "community_name": "LcdGlyphAtlas",
+      "community": 6,
+      "community_name": "Src Font",
       "norm_label": "result"
     },
     {
@@ -15112,8 +15112,8 @@
       "source_location": "L189",
       "_origin": "ast",
       "id": "src_renderer_lcd_atlas_lcdglyphatlas_texture_view",
-      "community": 92,
-      "community_name": "LcdGlyphAtlas",
+      "community": 6,
+      "community_name": "Src Font",
       "norm_label": ".texture_view()"
     },
     {
@@ -15123,8 +15123,8 @@
       "source_location": "L193",
       "_origin": "ast",
       "id": "src_renderer_lcd_atlas_lcdglyphatlas_sampler",
-      "community": 92,
-      "community_name": "LcdGlyphAtlas",
+      "community": 6,
+      "community_name": "Src Font",
       "norm_label": ".sampler()"
     },
     {
@@ -15134,8 +15134,8 @@
       "source_location": "L197",
       "_origin": "ast",
       "id": "src_renderer_lcd_atlas_lcdglyphatlas_clear",
-      "community": 92,
-      "community_name": "LcdGlyphAtlas",
+      "community": 6,
+      "community_name": "Src Font",
       "norm_label": ".clear()"
     },
     {
@@ -19113,7 +19113,7 @@
       "label": "SegmentKind",
       "file_type": "code",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L7",
+      "source_location": "L6",
       "_origin": "ast",
       "id": "src_ui_status_bar_segmentkind",
       "community": 28,
@@ -19124,7 +19124,7 @@
       "label": "StatusBarSegment",
       "file_type": "code",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L18",
+      "source_location": "L17",
       "_origin": "ast",
       "id": "src_ui_status_bar_statusbarsegment",
       "community": 28,
@@ -19146,7 +19146,7 @@
       "label": "StatusBar",
       "file_type": "code",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L27",
+      "source_location": "L26",
       "_origin": "ast",
       "id": "src_ui_status_bar_statusbar",
       "community": 28,
@@ -19179,7 +19179,7 @@
       "label": ".default()",
       "file_type": "code",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L37",
+      "source_location": "L36",
       "_origin": "ast",
       "id": "src_ui_status_bar_statusbar_default",
       "community": 28,
@@ -19201,7 +19201,7 @@
       "label": ".build()",
       "file_type": "code",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L58",
+      "source_location": "L57",
       "_origin": "ast",
       "id": "src_ui_status_bar_statusbar_build",
       "community": 28,
@@ -19234,7 +19234,7 @@
       "label": ".bar_bg()",
       "file_type": "code",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L169",
+      "source_location": "L168",
       "_origin": "ast",
       "id": "src_ui_status_bar_statusbar_bar_bg",
       "community": 28,
@@ -19245,7 +19245,7 @@
       "label": ".pl_left_arrow()",
       "file_type": "code",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L174",
+      "source_location": "L173",
       "_origin": "ast",
       "id": "src_ui_status_bar_statusbar_pl_left_arrow",
       "community": 28,
@@ -19256,7 +19256,7 @@
       "label": ".pl_right_arrow()",
       "file_type": "code",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L179",
+      "source_location": "L178",
       "_origin": "ast",
       "id": "src_ui_status_bar_statusbar_pl_right_arrow",
       "community": 28,
@@ -19267,7 +19267,7 @@
       "label": ".left_sep_width()",
       "file_type": "code",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L184",
+      "source_location": "L183",
       "_origin": "ast",
       "id": "src_ui_status_bar_statusbar_left_sep_width",
       "community": 28,
@@ -19278,7 +19278,7 @@
       "label": ".right_sep_width()",
       "file_type": "code",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L192",
+      "source_location": "L191",
       "_origin": "ast",
       "id": "src_ui_status_bar_statusbar_right_sep_width",
       "community": 28,
@@ -19289,7 +19289,7 @@
       "label": ".click_kind()",
       "file_type": "code",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L201",
+      "source_location": "L200",
       "_origin": "ast",
       "id": "src_ui_status_bar_statusbar_click_kind",
       "community": 28,
@@ -19300,7 +19300,7 @@
       "label": "truncate_path()",
       "file_type": "code",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L249",
+      "source_location": "L248",
       "_origin": "ast",
       "id": "src_ui_status_bar_truncate_path",
       "community": 28,
@@ -19311,34 +19311,12 @@
       "label": "format_time()",
       "file_type": "code",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L276",
+      "source_location": "L275",
       "_origin": "ast",
       "id": "src_ui_status_bar_format_time",
       "community": 28,
       "community_name": "Src Ui",
       "norm_label": "format_time()"
-    },
-    {
-      "label": "days_to_ymd()",
-      "file_type": "code",
-      "source_file": "src/ui/status_bar.rs",
-      "source_location": "L295",
-      "_origin": "ast",
-      "id": "src_ui_status_bar_days_to_ymd",
-      "community": 28,
-      "community_name": "Src Ui",
-      "norm_label": "days_to_ymd()"
-    },
-    {
-      "label": "is_leap()",
-      "file_type": "code",
-      "source_file": "src/ui/status_bar.rs",
-      "source_location": "L333",
-      "_origin": "ast",
-      "id": "src_ui_status_bar_is_leap",
-      "community": 28,
-      "community_name": "Src Ui",
-      "norm_label": "is_leap()"
     },
     {
       "label": "tabs.rs",
@@ -26428,18 +26406,6 @@
       "_origin": "ast",
       "source": "src_app_mod_app_new",
       "target": "src_app_mod_rs_eventloopproxy",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports_from",
-      "confidence": "EXTRACTED",
-      "source_file": "src/ui/status_bar.rs",
-      "source_location": "L3",
-      "weight": 1.0,
-      "context": "import",
-      "_origin": "ast",
-      "source": "src_ui_status_bar",
-      "target": "systemtime",
       "confidence_score": 1.0
     },
     {
@@ -38620,7 +38586,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L33",
+      "source_location": "L32",
       "weight": 1.0,
       "context": "field",
       "_origin": "ast",
@@ -38632,7 +38598,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L58",
+      "source_location": "L57",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -39233,7 +39199,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L169",
+      "source_location": "L168",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -39245,7 +39211,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L58",
+      "source_location": "L57",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -63620,18 +63586,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L295",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "src_ui_status_bar",
-      "target": "src_ui_status_bar_days_to_ymd",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "src/ui/status_bar.rs",
-      "source_location": "L276",
+      "source_location": "L275",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_ui_status_bar",
@@ -63642,18 +63597,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L333",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "src_ui_status_bar",
-      "target": "src_ui_status_bar_is_leap",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "src/ui/status_bar.rs",
-      "source_location": "L7",
+      "source_location": "L6",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_ui_status_bar",
@@ -63664,7 +63608,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L27",
+      "source_location": "L26",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_ui_status_bar",
@@ -63675,7 +63619,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L18",
+      "source_location": "L17",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_ui_status_bar",
@@ -63686,7 +63630,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L249",
+      "source_location": "L248",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_ui_status_bar",
@@ -63697,7 +63641,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L201",
+      "source_location": "L200",
       "weight": 1.0,
       "context": "generic_arg",
       "_origin": "ast",
@@ -63709,7 +63653,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L22",
+      "source_location": "L21",
       "weight": 1.0,
       "context": "field",
       "_origin": "ast",
@@ -63721,7 +63665,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L31",
+      "source_location": "L30",
       "weight": 1.0,
       "context": "generic_arg",
       "_origin": "ast",
@@ -63733,7 +63677,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L19",
+      "source_location": "L18",
       "weight": 1.0,
       "context": "field",
       "_origin": "ast",
@@ -63745,7 +63689,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L276",
+      "source_location": "L275",
       "weight": 1.0,
       "context": "return_type",
       "_origin": "ast",
@@ -63757,7 +63701,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L249",
+      "source_location": "L248",
       "weight": 1.0,
       "context": "return_type",
       "_origin": "ast",
@@ -63769,7 +63713,7 @@
       "relation": "implements",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L36",
+      "source_location": "L35",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_ui_status_bar_statusbar",
@@ -63780,7 +63724,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L31",
+      "source_location": "L30",
       "weight": 1.0,
       "context": "field",
       "_origin": "ast",
@@ -63792,7 +63736,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L169",
+      "source_location": "L168",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_ui_status_bar_statusbar",
@@ -63803,7 +63747,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L58",
+      "source_location": "L57",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_ui_status_bar_statusbar",
@@ -63814,7 +63758,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L201",
+      "source_location": "L200",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_ui_status_bar_statusbar",
@@ -63825,7 +63769,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L37",
+      "source_location": "L36",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_ui_status_bar_statusbar",
@@ -63836,7 +63780,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L184",
+      "source_location": "L183",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_ui_status_bar_statusbar",
@@ -63847,7 +63791,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L174",
+      "source_location": "L173",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_ui_status_bar_statusbar",
@@ -63858,7 +63802,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L179",
+      "source_location": "L178",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_ui_status_bar_statusbar",
@@ -63869,7 +63813,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L192",
+      "source_location": "L191",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_ui_status_bar_statusbar",
@@ -63881,7 +63825,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L72",
+      "source_location": "L71",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_ui_status_bar_statusbar_build",
@@ -63892,7 +63836,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L37",
+      "source_location": "L36",
       "weight": 1.0,
       "context": "return_type",
       "_origin": "ast",
@@ -63904,7 +63848,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L58",
+      "source_location": "L57",
       "weight": 1.0,
       "context": "return_type",
       "_origin": "ast",
@@ -63917,7 +63861,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L157",
+      "source_location": "L156",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_ui_status_bar_statusbar_build",
@@ -63928,7 +63872,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L58",
+      "source_location": "L57",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -63940,7 +63884,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L58",
+      "source_location": "L57",
       "weight": 1.0,
       "context": "generic_arg",
       "_origin": "ast",
@@ -63953,7 +63897,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L106",
+      "source_location": "L105",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_ui_status_bar_statusbar_build",
@@ -63964,7 +63908,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L201",
+      "source_location": "L200",
       "weight": 1.0,
       "context": "return_type",
       "_origin": "ast",
@@ -63976,7 +63920,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L249",
+      "source_location": "L248",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -63989,7 +63933,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L202",
+      "source_location": "L201",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_ui_status_bar_statusbar_click_kind",
@@ -64001,35 +63945,11 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/ui/status_bar.rs",
-      "source_location": "L216",
+      "source_location": "L215",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_ui_status_bar_statusbar_click_kind",
       "target": "src_ui_status_bar_statusbar_right_sep_width",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "src/ui/status_bar.rs",
-      "source_location": "L291",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "src_ui_status_bar_format_time",
-      "target": "src_ui_status_bar_days_to_ymd",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "src/ui/status_bar.rs",
-      "source_location": "L299",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "src_ui_status_bar_days_to_ymd",
-      "target": "src_ui_status_bar_is_leap",
       "confidence_score": 1.0
     },
     {
@@ -65335,5 +65255,5 @@
       "source_file": ".github/workflows/release.yml"
     }
   ],
-  "built_at_commit": "fbbc3b26cab92a01cd7b22258a7af182ca2d3ec8"
+  "built_at_commit": "9f53613037cdd1947d0b3c27a6296140f585ec50"
 }

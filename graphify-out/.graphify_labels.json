@@ -60,9 +60,12 @@
   "58": "Src Font",
   "59": "Src Renderer",
   "60": "Benches Shaping.rs",
+  "61": "ConfigWatcher",
   "62": "Src App",
   "63": "Src Llm",
   "64": "Scripts Gen Icon.swift",
+  "65": "AcpAgentConfig",
+  "66": ".handle_mouse_button",
   "67": "Src Llm",
   "68": "Src Term",
   "69": "Config Default",
@@ -96,5 +99,10 @@
   "97": ".rasterize_lcd_to_atlas",
   "98": "FreeTypeCmapLookup",
   "99": "GRAPH-ARCH-01 Chat Header LLM View Slice Implementation Plan",
-  "100": "Active Context Archive"
+  "100": "Active Context Archive",
+  "101": ".new",
+  "102": "cfdict_str",
+  "103": "keybind_view.rs",
+  "104": ".resumed",
+  "105": ".handle_sidebar_key"
 }

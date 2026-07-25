@@ -505,9 +505,9 @@
     "semantic_hash": "f811957a074b6f1661ace32e1f529bdc"
   },
   "src/ui/status_bar.rs": {
-    "mtime": 1778521864.7632215,
-    "ast_hash": "12c71f199e65b9bcc2ef472ac8af488e",
-    "semantic_hash": "12c71f199e65b9bcc2ef472ac8af488e"
+    "mtime": 1785008376.7239711,
+    "ast_hash": "a08f5749533aefcf839605c88ac79691",
+    "semantic_hash": ""
   },
   "src/ui/tabs.rs": {
     "mtime": 1783118963.74908,
@@ -520,9 +520,9 @@
     "semantic_hash": "95b59feb1eb18a4b56ba6a3f990845d2"
   },
   ".context/core/ACTIVE_CONTEXT.md": {
-    "mtime": 1784997460.8960755,
-    "ast_hash": "49c66651b6f19d39ec035195811bfdd7",
-    "semantic_hash": "49c66651b6f19d39ec035195811bfdd7"
+    "mtime": 1785008056.2666721,
+    "ast_hash": "2e034a137a62fd09da161b81ae704fde",
+    "semantic_hash": ""
   },
   ".context/core/SESSION_STATE.md": {
     "mtime": 1784998525.9072807,
@@ -535,8 +535,8 @@
     "semantic_hash": "7986faae6d019d823dfc6c6fe474c11c"
   },
   ".context/quality/TECHNICAL_DEBT.md": {
-    "mtime": 1784997489.4696023,
-    "ast_hash": "1640d8d2fea5f3c8f95b7e98052906ec",
+    "mtime": 1785008042.9529762,
+    "ast_hash": "810cf06b391c4113d76509fc2831ddcf",
     "semantic_hash": ""
   },
   ".context/quality/TECHNICAL_DEBT_archive.md": {
