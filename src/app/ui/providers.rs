@@ -209,7 +209,8 @@ impl UiManager {
                 true
             }
             "model" => {
-                let msg = match &config.llm.backend {
+                let view = crate::config::llm_view::llm_runtime_view(config);
+                let msg = match view.backend {
                     LlmBackend::Agent => {
                         if args.is_empty() {
                             "Agent mode: use /agent to switch agents.".to_string()
@@ -220,7 +221,10 @@ impl UiManager {
                     }
                     LlmBackend::Provider => {
                         if args.is_empty() {
-                            format!("Active: {}:{}", config.llm.provider, config.llm.model)
+                            format!(
+                                "Active: {}:{}",
+                                view.provider_cfg.provider, view.provider_cfg.model
+                            )
                         } else {
                             config.llm.model = args.to_string();
                             self.rewire_backend(config, wakeup_proxy.clone());
@@ -235,25 +239,15 @@ impl UiManager {
                 true
             }
             "agent" => {
-                let msg = match &config.llm.backend {
+                let view = crate::config::llm_view::llm_runtime_view(config);
+                let msg = match view.backend {
                     LlmBackend::Provider => {
                         "Provider mode active. Use /model to change models.".to_string()
                     }
                     LlmBackend::Agent => {
                         if args.is_empty() {
-                            let name = config
-                                .llm
-                                .agent
-                                .as_ref()
-                                .and_then(|a| a.display_name.as_deref())
-                                .or_else(|| {
-                                    config.llm.agent.as_ref().map(|a| {
-                                        std::path::Path::new(&a.command)
-                                            .file_name()
-                                            .and_then(|s| s.to_str())
-                                            .unwrap_or(&a.command)
-                                    })
-                                });
+                            let name =
+                                crate::config::llm_view::agent_display_name(view.agent.as_ref());
                             match name {
                                 Some(n) => format!("Active agent: {n}"),
                                 None => "No agent configured. Set llm.agent.command in config."
