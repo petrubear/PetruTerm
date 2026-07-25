@@ -554,3 +554,22 @@ Buffer GPU fijo de 2.5 MB por diseño, no heap leak. Overflow manejado con bound
 
 ### TD-030: Secret Leakage to LLM Provider
 - `sanitize_command` in `ShellContext` redacts `export VAR=secret` and `Authorization:` headers via regex before injecting into system prompt.
+
+---
+
+## Archive Run — 2026-07-25
+
+### Historical resolved debt archived from active registry cleanup
+
+Items moved out of active `TECHNICAL_DEBT.md` during context cleanup:
+
+- `AUDIT-SEC-01`, `AUDIT-SEC-02`, `AUDIT-SEC-03`
+- `AUDIT-PERF-01`, `AUDIT-PERF-02`, `AUDIT-PERF-03`, `AUDIT-PERF-04`, `AUDIT-PERF-05`, `AUDIT-PERF-06`, `AUDIT-PERF-07`, `AUDIT-PERF-08`, `AUDIT-PERF-09`
+- `AUDIT-ENERGY-01`, `AUDIT-ENERGY-02`, `AUDIT-ENERGY-03`, `AUDIT-ENERGY-04`, `AUDIT-ENERGY-05`
+- `AUDIT-THEME-01`, `AUDIT-THEME-02`
+- `AUDIT-REFAC-01`, `AUDIT-REFAC-02`, `AUDIT-REFAC-03`, `AUDIT-REFAC-04`, `AUDIT-REFAC-05`, `AUDIT-REFAC-06`, `AUDIT-REFAC-07`, `AUDIT-REFAC-08`
+- `AUDIT-CLEAN-01`, `AUDIT-CLEAN-03`
+- `AUDIT-MEM-01`, `AUDIT-MEM-02`, `AUDIT-MEM-03`, `AUDIT-MEM-05`
+- `TD-P9-01`, `TD-P9-02`, `TD-P9-03`, `TD-P9-04`, `TD-P9-05`, `TD-P9-06`, `TD-P9-08`
+
+Result: active debt registry now keeps only open, watch, and deferred work items.
