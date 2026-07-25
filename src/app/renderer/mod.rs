@@ -187,9 +187,7 @@ impl RenderContext {
         let renderer = GpuRenderer::new(window.clone(), config).await?;
         let scale_factor = window.scale_factor() as f32;
 
-        let mut scaled_font = config.font.clone();
-        scaled_font.size *= scale_factor;
-        crate::font::loader::locate_font_for_lcd(&mut scaled_font);
+        let scaled_font = Self::locate_scaled_font(config, scale_factor);
 
         let (font_system, actual_family, face_id, font_path, face_index) =
             build_font_system(&scaled_font)?;
@@ -274,6 +272,16 @@ impl RenderContext {
         })
     }
 
+    /// Font config scaled to physical pixels with LCD-safe font substitution applied.
+    /// Used at startup and on DPI/font-reload — kept as one function so the two
+    /// stay in lockstep instead of drifting independently.
+    fn locate_scaled_font(config: &Config, scale_factor: f32) -> crate::config::schema::FontConfig {
+        let mut cfg = config.font.clone();
+        cfg.size *= scale_factor;
+        crate::font::loader::locate_font_for_lcd(&mut cfg);
+        cfg
+    }
+
     /// Returns the font config with size scaled to physical pixels.
     pub fn scaled_font_config(&self, config: &Config) -> crate::config::schema::FontConfig {
         let mut cfg = config.font.clone();
@@ -285,9 +293,7 @@ impl RenderContext {
     pub fn refresh_text_metrics(&mut self, config: &Config, scale_factor: f32) -> Result<()> {
         self.scale_factor = scale_factor;
 
-        let mut scaled_font = config.font.clone();
-        scaled_font.size *= scale_factor;
-        crate::font::loader::locate_font_for_lcd(&mut scaled_font);
+        let scaled_font = Self::locate_scaled_font(config, scale_factor);
 
         let (font_system, actual_family, face_id, font_path, face_index) =
             build_font_system(&scaled_font)?;
