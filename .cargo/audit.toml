@@ -8,6 +8,16 @@
 # compiled on Linux. wayland-scanner 0.31.9 pins `quick-xml = "^0.39"`, so the
 # 0.41 fix cannot be selected without a winit upstream bump. Not reachable on
 # the macOS target. Remove when winit updates its Wayland dependency chain.
+#
+# ttf-parser 0.25.1 (RUSTSEC-2026-0192, unmaintained, no patched version
+# exists) — unlike the entries above, this one IS reachable on macOS: it
+# comes from fontdb 0.23.0 (`fontdb → cosmic-text → petruterm`), used for
+# font metadata/family parsing, not glyph shaping — cosmic-text's shaper
+# (harfrust) already depends on `skrifa`, the actively-maintained fontations
+# crate the advisory itself recommends. fontdb hasn't migrated its own
+# parsing off ttf-parser yet, and 0.23.0 is still its latest release, so
+# there is nothing to upgrade or patch on our side. Revisit when fontdb
+# adopts skrifa upstream.
 [advisories]
 ignore = [
     "RUSTSEC-2024-0412", # gdk
@@ -21,4 +31,5 @@ ignore = [
     "RUSTSEC-2024-0429", # glib unsound Iterator (transitive via muda → gtk)
     "RUSTSEC-2026-0194", # quick-xml quadratic dup-attr check (Wayland, Linux)
     "RUSTSEC-2026-0195", # quick-xml unbounded ns alloc DoS (Wayland, Linux)
+    "RUSTSEC-2026-0192", # ttf-parser unmaintained, via fontdb (metadata parsing, not shaping)
 ]
