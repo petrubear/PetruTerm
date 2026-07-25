@@ -75,3 +75,7 @@ dist/
 .github/hooks/rtk-rewrite.json
 .github/copilot-instructions.md
 .antigravitycli
+
+# graphify runtime/local state
+graphify-out/cost.json
+graphify-out/cache/
