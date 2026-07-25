@@ -1,6 +1,5 @@
 use crate::config::schema::{StatusBarColors, StatusBarStyle};
 use rust_i18n::t;
-use std::time::SystemTime;
 
 /// Which logical widget a status bar segment represents.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -272,64 +271,22 @@ fn truncate_path(path: &std::path::Path, max_chars: usize) -> String {
     format!("…{}", chars[start..].iter().collect::<String>())
 }
 
-/// Format current local time as "YYYY-MM-DD HH:MM".
+/// Format the current time in the system's local timezone as "YYYY-MM-DD HH:MM".
 fn format_time() -> String {
-    use std::time::UNIX_EPOCH;
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-
-    // Simple UTC calculation (no chrono dependency).
-    let secs_per_day = 86_400u64;
-    let days = secs / secs_per_day;
-    let day_secs = secs % secs_per_day;
-    let hh = day_secs / 3600;
-    let mm = (day_secs % 3600) / 60;
-
-    // Gregorian calendar from day count (days since 1970-01-01).
-    let (year, month, day) = days_to_ymd(days);
-    format!("{year:04}-{month:02}-{day:02} {hh:02}:{mm:02}")
-}
-
-fn days_to_ymd(mut days: u64) -> (u64, u64, u64) {
-    // Algorithm: Euclidean, handles leap years.
-    let mut year = 1970u64;
-    loop {
-        let leap = is_leap(year);
-        let days_in_year = if leap { 366 } else { 365 };
-        if days < days_in_year {
-            break;
-        }
-        days -= days_in_year;
-        year += 1;
-    }
-    let leap = is_leap(year);
-    let month_days = [
-        31u64,
-        if leap { 29 } else { 28 },
-        31,
-        30,
-        31,
-        30,
-        31,
-        31,
-        30,
-        31,
-        30,
-        31,
-    ];
-    let mut month = 1u64;
-    for &md in &month_days {
-        if days < md {
-            break;
-        }
-        days -= md;
-        month += 1;
-    }
-    (year, month, days + 1)
-}
-
-fn is_leap(year: u64) -> bool {
-    (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400)
+    // SAFETY: `t` is a valid non-null `time_t` output pointer target and `tm` is
+    // fully written by `localtime_r` before it's read below.
+    let tm = unsafe {
+        let t = libc::time(std::ptr::null_mut());
+        let mut tm: libc::tm = std::mem::zeroed();
+        libc::localtime_r(&t, &mut tm);
+        tm
+    };
+    format!(
+        "{:04}-{:02}-{:02} {:02}:{:02}",
+        tm.tm_year + 1900,
+        tm.tm_mon + 1,
+        tm.tm_mday,
+        tm.tm_hour,
+        tm.tm_min,
+    )
 }
