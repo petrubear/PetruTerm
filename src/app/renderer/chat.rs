@@ -448,9 +448,10 @@ impl RenderContext {
         use crate::config::schema::LlmBackend;
         use std::fmt::Write as _;
 
-        let (left_label, center_full) = match &config.llm.backend {
+        let view = crate::config::llm_view::llm_runtime_view(config);
+        let (left_label, center_full) = match &view.backend {
             LlmBackend::Agent => {
-                let agent = config.llm.agent.as_ref();
+                let agent = view.agent.as_ref();
                 let cmd = agent.map(|a| a.command.as_str()).unwrap_or("agent");
                 let name = agent
                     .and_then(|a| a.display_name.as_deref())
@@ -463,8 +464,8 @@ impl RenderContext {
                 (format!(" \u{25c8} {name}"), format!("agent:{name}"))
             }
             LlmBackend::Provider => {
-                let provider = &config.llm.provider;
-                let model = &config.llm.model;
+                let provider = &view.provider_cfg.provider;
+                let model = &view.provider_cfg.model;
                 let short_model = short_chat_header_model_name(model);
                 (
                     format!(" \u{2726} {short_model}"),
