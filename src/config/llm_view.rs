@@ -19,6 +19,16 @@ pub fn llm_runtime_view(config: &Config) -> LlmRuntimeView {
     }
 }
 
+pub fn agent_display_name(agent: Option<&AcpAgentConfig>) -> Option<&str> {
+    let agent = agent?;
+    Some(agent.display_name.as_deref().unwrap_or_else(|| {
+        std::path::Path::new(&agent.command)
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or(&agent.command)
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -68,5 +78,32 @@ mod tests {
 
         assert!(matches!(view.backend, LlmBackend::Agent));
         assert!(view.agent.is_none());
+    }
+
+    #[test]
+    fn agent_display_name_prefers_display_name_over_command_basename() {
+        let agent = AcpAgentConfig {
+            command: "/usr/local/bin/claude-agent-acp".into(),
+            args: vec![],
+            env: vec![],
+            display_name: Some("Claude".into()),
+        };
+        assert_eq!(agent_display_name(Some(&agent)), Some("Claude"));
+    }
+
+    #[test]
+    fn agent_display_name_falls_back_to_command_basename() {
+        let agent = AcpAgentConfig {
+            command: "/usr/local/bin/claude-agent-acp".into(),
+            args: vec![],
+            env: vec![],
+            display_name: None,
+        };
+        assert_eq!(agent_display_name(Some(&agent)), Some("claude-agent-acp"));
+    }
+
+    #[test]
+    fn agent_display_name_none_when_no_agent() {
+        assert_eq!(agent_display_name(None), None);
     }
 }
