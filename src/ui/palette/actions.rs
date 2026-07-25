@@ -116,13 +116,12 @@ impl std::str::FromStr for Action {
 /// Build the built-in action list with keybinds resolved from `config`.
 pub fn built_in_actions(config: &Config) -> Vec<PaletteAction> {
     // Build a lookup: Action string → formatted keybind label.
-    let leader_label = format!("^{}", config.leader.key.to_uppercase());
+    let leader_view = crate::config::keybind_view::leader_bindings_view(config);
+    let leader_label = format!("^{}", leader_view.leader_key.to_uppercase());
     let mut keybind_map: std::collections::HashMap<String, String> =
         std::collections::HashMap::new();
-    for kb in &config.keys {
-        if kb.mods.eq_ignore_ascii_case("LEADER") {
-            keybind_map.insert(kb.action.clone(), format!("{} {}", leader_label, kb.key));
-        }
+    for kb in &leader_view.bindings {
+        keybind_map.insert(kb.action.clone(), format!("{} {}", leader_label, kb.key));
     }
 
     let kb = |action: &str| -> Option<String> { keybind_map.get(action).cloned() };

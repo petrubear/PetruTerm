@@ -74,10 +74,10 @@ pub struct InputHandler {
 
 impl InputHandler {
     pub fn new(config: &Config) -> Self {
-        let leader_map = config
-            .keys
+        let leader_view = crate::config::keybind_view::leader_bindings_view(config);
+        let leader_map = leader_view
+            .bindings
             .iter()
-            .filter(|kb| kb.mods.eq_ignore_ascii_case("LEADER"))
             .filter_map(|kb| {
                 let action = kb.action.parse::<Action>().ok()?;
                 Some((kb.key.clone(), action))
