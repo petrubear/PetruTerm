@@ -42,4 +42,18 @@ mod tests {
         assert_eq!(view.panel_width_cols, 72);
         assert_eq!(view.agent.as_ref().unwrap().command, "npx");
     }
+
+    #[test]
+    fn llm_runtime_view_preserves_provider_defaults() {
+        let config = Config::default();
+        let view = llm_runtime_view(&config);
+
+        assert_eq!(view.backend, LlmBackend::Provider);
+        assert_eq!(view.provider_cfg.provider, "openrouter");
+        assert_eq!(
+            view.provider_cfg.model,
+            "meta-llama/llama-3.1-8b-instruct:free"
+        );
+        assert_eq!(view.panel_width_cols, config.llm.ui.width_cols);
+    }
 }
