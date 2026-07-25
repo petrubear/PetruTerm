@@ -270,11 +270,12 @@ pub struct AiPollResult {
 
 impl UiManager {
     pub fn new(config: &Config, wakeup_proxy: EventLoopProxy<()>) -> Self {
+        let view = crate::config::llm_view::llm_runtime_view(config);
         let (ai_tx, ai_rx) = crossbeam_channel::bounded(256);
         let (block_tx, block_rx) = crossbeam_channel::bounded(64);
         // Use a 2-thread runtime when LLM is enabled; single-threaded otherwise.
         // Saves 2 OS threads + scheduler overhead when AI is disabled (AUDIT-ENERGY-03).
-        let tokio_rt = if config.llm.enabled {
+        let tokio_rt = if view.enabled {
             tokio::runtime::Builder::new_multi_thread()
                 .worker_threads(2)
                 .enable_all()
@@ -290,16 +291,16 @@ impl UiManager {
         let (acp_terminal_tx, acp_terminal_rx) =
             crossbeam_channel::bounded::<AcpTerminalRequest>(32);
 
-        let (llm_provider, llm_init_error, acp_pending_connect) = if config.llm.enabled {
-            match config.llm.backend {
+        let (llm_provider, llm_init_error, acp_pending_connect) = if view.enabled {
+            match view.backend {
                 crate::config::schema::LlmBackend::Provider => {
-                    match crate::llm::build_provider(&config.llm) {
+                    match crate::llm::build_provider(&view.provider_cfg) {
                         Ok(p) => (Some(p), None, None),
                         Err(e) => (None, Some(format!("{e:#}")), None),
                     }
                 }
                 crate::config::schema::LlmBackend::Agent => {
-                    let pending = config.llm.agent.as_ref().map(|agent_cfg| {
+                    let pending = view.agent.as_ref().map(|agent_cfg| {
                         let cwd = std::env::current_dir().unwrap_or_default();
                         spawn_acp_connect(&tokio_rt, agent_cfg.clone(), cwd, wakeup_proxy.clone())
                     });
@@ -312,7 +313,7 @@ impl UiManager {
 
         let (git_tx_init, git_rx_init) = crossbeam_channel::bounded::<String>(1);
 
-        let panel_width_cols = config.llm.ui.width_cols;
+        let panel_width_cols = view.panel_width_cols;
         let mut initial_panel = ChatPanel::new();
         initial_panel.width_cols = panel_width_cols;
 
@@ -341,7 +342,7 @@ impl UiManager {
         let skill_count = skill_manager.skills().len();
 
         // Skip MCP entirely when LLM is disabled — no AI panel, no tool calls (AUDIT-ENERGY-03).
-        let mcp_manager = if config.llm.enabled {
+        let mcp_manager = if view.enabled {
             let mut mgr = McpManager::new();
             // Always load global MCP servers (installed by the user deliberately).
             if let Ok(mut cfg) = mcp_config::load_global() {
