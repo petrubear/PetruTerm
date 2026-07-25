@@ -1,4 +1,5 @@
 pub mod lua;
+pub mod llm_view;
 pub mod schema;
 pub mod watcher;
 
