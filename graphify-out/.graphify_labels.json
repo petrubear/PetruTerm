@@ -60,12 +60,9 @@
   "58": "Src Font",
   "59": "Src Renderer",
   "60": "Benches Shaping.rs",
-  "61": "Src App",
   "62": "Src App",
   "63": "Src Llm",
   "64": "Scripts Gen Icon.swift",
-  "65": "Src Renderer",
-  "66": "Src Platform",
   "67": "Src Llm",
   "68": "Src Term",
   "69": "Config Default",
@@ -99,6 +96,5 @@
   "97": ".rasterize_lcd_to_atlas",
   "98": "FreeTypeCmapLookup",
   "99": "GRAPH-ARCH-01 Chat Header LLM View Slice Implementation Plan",
-  "100": "Active Context Archive",
-  "101": ".clear_color"
+  "100": "Active Context Archive"
 }
