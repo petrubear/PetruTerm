@@ -2079,8 +2079,7 @@ impl ApplicationHandler<()> for App {
         // If flush_redraw_request deferred a frame due to max_fps, compute when
         // the next frame slot opens so we can wake at exactly that time.
         let frame_deadline: Option<std::time::Instant> = if self.needs_redraw {
-            let fps = self.config.max_fps.max(1) as u64;
-            let interval = std::time::Duration::from_nanos(1_000_000_000 / fps);
+            let interval = self.frame_interval();
             Some(self.last_frame_at + interval)
         } else {
             None

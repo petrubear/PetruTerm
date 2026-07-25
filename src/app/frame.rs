@@ -84,14 +84,20 @@ impl App {
         }
     }
 
+    /// Minimum duration between frames, derived from `config.max_fps` (never zero,
+    /// even if `max_fps` is misconfigured to 0).
+    pub(super) fn frame_interval(&self) -> std::time::Duration {
+        let fps = self.config.max_fps.max(1) as u64;
+        std::time::Duration::from_nanos(1_000_000_000 / fps)
+    }
+
     pub(super) fn flush_redraw_request(&mut self) {
         if !self.needs_redraw {
             return;
         }
         // Enforce max_fps cap. If too soon since last frame, leave needs_redraw=true
         // so about_to_wait schedules a WaitUntil at the next frame deadline.
-        let fps = self.config.max_fps.max(1) as u64;
-        let interval = std::time::Duration::from_nanos(1_000_000_000 / fps);
+        let interval = self.frame_interval();
         if self.last_frame_at.elapsed() < interval {
             return;
         }
