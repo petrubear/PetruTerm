@@ -1,10 +1,10 @@
 # Active Context
 
 **Current Focus:** ninguno — sin tareas de feature abiertas.
-**Last Active:** 2026-07-08
+**Last Active:** 2026-07-25
 **Branch:** `master` (version 0.3.0)
-**Estado:** Phase 9 (UI Restyle) COMPLETA y mergeada a master. Phase 8 (ACP) COMPLETA y mergeada a master. Sin deuda técnica abierta.
-**Próxima tarea:** decidir el siguiente foco. No hay trabajo pendiente en cola.
+**Estado:** Phase 9 (UI Restyle) COMPLETA y mergeada a master. Phase 8 (ACP) COMPLETA y mergeada a master. GRAPH-ARCH-01 (decoupling de Config) COMPLETA y mergeada a master (2026-07-25). Deuda técnica: 3 items P3 abiertos (GRAPH-ARCH-01-A/B/C, ver TECHNICAL_DEBT.md) + 4 watch.
+**Próxima tarea:** decidir el siguiente foco. No hay trabajo de feature pendiente en cola; backlog P3 disponible si se quiere continuar con los loose ends de GRAPH-ARCH-01.
 
 ## Phase 9 — UI Restyle — COMPLETA y MERGEADA a master (v0.3.0)
 
