@@ -451,16 +451,8 @@ impl RenderContext {
         let view = crate::config::llm_view::llm_runtime_view(config);
         let (left_label, center_full) = match &view.backend {
             LlmBackend::Agent => {
-                let agent = view.agent.as_ref();
-                let cmd = agent.map(|a| a.command.as_str()).unwrap_or("agent");
-                let name = agent
-                    .and_then(|a| a.display_name.as_deref())
-                    .unwrap_or_else(|| {
-                        std::path::Path::new(cmd)
-                            .file_name()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or(cmd)
-                    });
+                let name = crate::config::llm_view::agent_display_name(view.agent.as_ref())
+                    .unwrap_or("agent");
                 (format!(" \u{25c8} {name}"), format!("agent:{name}"))
             }
             LlmBackend::Provider => {
