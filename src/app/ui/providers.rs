@@ -51,8 +51,9 @@ impl UiManager {
         config: &Config,
         wakeup_proxy: winit::event_loop::EventLoopProxy<()>,
     ) {
+        let view = crate::config::llm_view::llm_runtime_view(config);
         self.acp_pending_connect = None;
-        match config.llm.backend {
+        match view.backend {
             LlmBackend::Provider => {
                 self.acp_session = None;
                 self.rewire_llm_provider(config);
@@ -61,18 +62,18 @@ impl UiManager {
                 self.llm_provider = None;
                 self.llm_init_error = None;
                 self.acp_session = None;
-                self.panel_width_cols = config.llm.ui.width_cols;
+                self.panel_width_cols = view.panel_width_cols;
                 self.system_prompt = crate::config::load_system_prompt();
                 if let Ok(cwd) = std::env::current_dir() {
                     let trusted = crate::llm::mcp::trust::is_trusted(&cwd);
                     self.skill_manager.load(&cwd, trusted);
                     self.steering_manager.load(&cwd, trusted);
                 }
-                if let Some(agent_cfg) = &config.llm.agent {
+                if let Some(agent_cfg) = view.agent {
                     let cwd = std::env::current_dir().unwrap_or_default();
                     self.acp_pending_connect = Some(super::spawn_acp_connect(
                         &self.tokio_rt,
-                        agent_cfg.clone(),
+                        agent_cfg,
                         cwd,
                         wakeup_proxy,
                     ));
@@ -87,15 +88,16 @@ impl UiManager {
     /// TD-020: Re-wire the LLM provider and panel width from a fresh config.
     /// Call this on every config reload (both hot-reload and palette-triggered).
     pub fn rewire_llm_provider(&mut self, config: &Config) {
-        (self.llm_provider, self.llm_init_error) = if config.llm.enabled {
-            match crate::llm::build_provider(&config.llm) {
+        let view = crate::config::llm_view::llm_runtime_view(config);
+        (self.llm_provider, self.llm_init_error) = if view.enabled {
+            match crate::llm::build_provider(&view.provider_cfg) {
                 Ok(p) => (Some(p), None),
                 Err(e) => (None, Some(format!("{e:#}"))),
             }
         } else {
             (None, None)
         };
-        self.panel_width_cols = config.llm.ui.width_cols;
+        self.panel_width_cols = view.panel_width_cols;
         self.system_prompt = crate::config::load_system_prompt();
         if let Ok(cwd) = std::env::current_dir() {
             let trusted = crate::llm::mcp::trust::is_trusted(&cwd);

@@ -56,4 +56,17 @@ mod tests {
         );
         assert_eq!(view.panel_width_cols, config.llm.ui.width_cols);
     }
+
+    #[test]
+    fn llm_runtime_view_agent_path_requires_agent_config() {
+        let mut config = Config::default();
+        config.llm.enabled = true;
+        config.llm.backend = LlmBackend::Agent;
+        config.llm.agent = None;
+
+        let view = llm_runtime_view(&config);
+
+        assert!(matches!(view.backend, LlmBackend::Agent));
+        assert!(view.agent.is_none());
+    }
 }
