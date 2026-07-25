@@ -32,12 +32,14 @@ mod tests {
 
     #[test]
     fn leader_bindings_view_filters_to_leader_mods_only_case_insensitive() {
-        let mut config = Config::default();
-        config.keys = vec![
-            kb("LEADER", "c", "NewTab"),
-            kb("CMD", "k", "ClearScreen"),
-            kb("leader", "x", "ClosePane"),
-        ];
+        let config = Config {
+            keys: vec![
+                kb("LEADER", "c", "NewTab"),
+                kb("CMD", "k", "ClearScreen"),
+                kb("leader", "x", "ClosePane"),
+            ],
+            ..Config::default()
+        };
         let view = leader_bindings_view(&config);
         assert_eq!(view.bindings.len(), 2);
         assert!(view

@@ -84,8 +84,9 @@ impl App {
         }
     }
 
-    /// Minimum duration between frames, derived from `config.max_fps` (never zero,
-    /// even if `max_fps` is misconfigured to 0).
+    /// Minimum duration between frames, derived from `config.max_fps`. The `.max(1)`
+    /// guards only against `max_fps == 0`; integer division still yields
+    /// `Duration::ZERO` if `max_fps` exceeds 1_000_000_000.
     pub(super) fn frame_interval(&self) -> std::time::Duration {
         let fps = self.config.max_fps.max(1) as u64;
         std::time::Duration::from_nanos(1_000_000_000 / fps)
