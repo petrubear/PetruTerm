@@ -90,15 +90,5 @@
   "88": "Src Font",
   "89": "Src Lib.rs",
   "90": "Src Llm",
-  "91": "Src Platform",
-  "92": "LcdGlyphAtlas",
-  "93": "shaper.rs",
-  "94": "GRAPH-ARCH-01 First Slice Design",
-  "95": "Global Constraints",
-  "96": "Global Constraints",
-  "97": ".rasterize_lcd_to_atlas",
-  "98": "FreeTypeCmapLookup",
-  "99": "GRAPH-ARCH-01 Chat Header LLM View Slice Implementation Plan",
-  "100": "Active Context Archive",
-  "101": ".clear_color"
+  "91": "Src Platform"
 }
