@@ -104,8 +104,5 @@
   "102": "cfdict_str",
   "103": "keybind_view.rs",
   "104": ".resumed",
-  "105": ".handle_sidebar_key",
-  "106": ".rasterize_lcd_to_atlas",
-  "107": "FreeTypeCmapLookup",
-  "108": ".new"
+  "105": ".handle_sidebar_key"
 }

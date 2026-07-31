@@ -25,7 +25,13 @@ use alacritty_terminal::selection::SelectionRange;
 use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::vte::ansi::{Color as AnsiColor, Rgb};
 use anyhow::Result;
+use std::collections::VecDeque;
 use winit::event_loop::EventLoopProxy;
+
+/// Maximum number of closed terminals for which we retain exit codes and final
+/// output. Prevents unbounded growth of per-terminal state as terminal_id only
+/// ever increments.
+const MAX_CLOSED_TERMINALS: usize = 100;
 
 /// Per-column fg override for the active input row (I-2 syntax highlight).
 pub struct SyntaxOverlay {
@@ -139,12 +145,17 @@ pub struct Mux {
     pub osc133_events: Vec<(usize, Osc133Marker)>,
     /// Exit codes for terminals that have exited, keyed by terminal_id.
     /// Retained after close so ACP `terminal/wait_for_exit` handlers can read them.
+    /// Evicted after `MAX_CLOSED_TERMINALS` to avoid unbounded growth.
     pub terminal_exit_codes: std::collections::HashMap<usize, i32>,
     /// Final output text captured at close time, keyed by terminal_id.
     /// The pane (and its grid) is torn down as soon as the shell exits, so
     /// ACP `terminal/output` requests arriving after that point would
-    /// otherwise always see an empty terminal. Retained after close.
+    /// otherwise always see an empty terminal. Retained after close, but
+    /// evicted after `MAX_CLOSED_TERMINALS`.
     pub terminal_final_output: std::collections::HashMap<usize, String>,
+    /// Insertion order of closed terminal IDs so we can evict the oldest stale
+    /// entries from `terminal_exit_codes` / `terminal_final_output`.
+    closed_terminal_order: VecDeque<usize>,
 }
 
 impl Mux {
@@ -167,6 +178,21 @@ impl Mux {
             osc133_events: Vec::new(),
             terminal_exit_codes: std::collections::HashMap::new(),
             terminal_final_output: std::collections::HashMap::new(),
+            closed_terminal_order: VecDeque::new(),
+        }
+    }
+
+    /// Register a closed terminal id for bounded retention of exit code/output.
+    /// Removes the oldest entries once we exceed `MAX_CLOSED_TERMINALS`.
+    fn retain_closed_terminal(&mut self, terminal_id: usize) {
+        if !self.closed_terminal_order.contains(&terminal_id) {
+            self.closed_terminal_order.push_back(terminal_id);
+        }
+        while self.closed_terminal_order.len() > MAX_CLOSED_TERMINALS {
+            if let Some(oldest) = self.closed_terminal_order.pop_front() {
+                self.terminal_exit_codes.remove(&oldest);
+                self.terminal_final_output.remove(&oldest);
+            }
         }
     }
 
@@ -268,6 +294,7 @@ impl Mux {
     pub fn poll_pty_events(&mut self) -> (Vec<usize>, Vec<usize>) {
         let mut data_ids: Vec<usize> = Vec::new();
         let mut exited: Vec<usize> = Vec::new();
+        let mut exit_codes: Vec<(usize, i32)> = Vec::new();
         self.osc133_events.clear();
         let mut osc133_pending: Vec<(usize, Osc133Marker)> = Vec::new();
         for (id, terminal_slot) in self.terminals.iter_mut().enumerate() {
@@ -288,7 +315,7 @@ impl Mux {
                         }
                         PtyEvent::Exit(code) => {
                             log::info!("PTY shell exited (terminal {id}, code {code}).");
-                            self.terminal_exit_codes.insert(id, code);
+                            exit_codes.push((id, code));
                             if !exited.contains(&id) {
                                 exited.push(id);
                             }
@@ -330,6 +357,10 @@ impl Mux {
                     Err(TryRecvError::Empty) => break,
                 }
             }
+        }
+        for (id, code) in exit_codes {
+            self.terminal_exit_codes.insert(id, code);
+            self.retain_closed_terminal(id);
         }
         self.osc133_events.extend(osc133_pending);
         (data_ids, exited)
@@ -391,6 +422,7 @@ impl Mux {
             // discarded, so ACP `terminal/output` can still return it after exit.
             self.terminal_final_output
                 .insert(terminal_id, self.terminal_output_text(terminal_id));
+            self.retain_closed_terminal(terminal_id);
             if let Some(slot) = self.terminals.get_mut(terminal_id) {
                 *slot = None;
             }

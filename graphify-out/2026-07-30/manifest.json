@@ -145,9 +145,9 @@
     "semantic_hash": ""
   },
   "src/app/mux/mod.rs": {
-    "mtime": 1785458608.7447002,
-    "ast_hash": "41cdc29db82c4734c140e240a6c524ca",
-    "semantic_hash": ""
+    "mtime": 1783109827.7591577,
+    "ast_hash": "7f632729c0b44ca352fd370835029819",
+    "semantic_hash": "7f632729c0b44ca352fd370835029819"
   },
   "src/app/mux/snapshot.rs": {
     "mtime": 1778630347.005841,
@@ -425,9 +425,9 @@
     "semantic_hash": "3133da1b9fa25676ee26018960c29e8b"
   },
   "src/term/blocks.rs": {
-    "mtime": 1785458426.851898,
-    "ast_hash": "1a402449bc723524c526d30392ea92f8",
-    "semantic_hash": ""
+    "mtime": 1778182940.3779337,
+    "ast_hash": "53f8917f836152fab9a852bf1cad252f",
+    "semantic_hash": "53f8917f836152fab9a852bf1cad252f"
   },
   "src/term/color.rs": {
     "mtime": 1776564953.909578,

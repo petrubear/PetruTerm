@@ -1,5 +1,10 @@
 use crate::term::Osc133Marker;
 
+/// Maximum number of completed blocks retained per pane. Older blocks are
+/// dropped once the limit is exceeded to prevent unbounded growth and O(n)
+/// scans during rendering/hit-testing after long-lived sessions.
+const MAX_BLOCKS: usize = 1_000;
+
 /// A completed or in-progress command block detected via OSC 133.
 ///
 /// Rows are stored as "absolute from top of buffer":
@@ -82,6 +87,7 @@ impl BlockManager {
                 }
             }
         }
+        self.evict_oldest();
     }
 
     /// Returns completed blocks whose row range overlaps the current viewport.
@@ -110,15 +116,14 @@ impl BlockManager {
             .collect()
     }
 
-    /// Remove blocks that have scrolled entirely out of the scrollback buffer.
-    /// Call periodically to avoid unbounded growth.
-    #[allow(dead_code)]
-    pub fn evict_old(&mut self, history_size: usize) {
-        let h = history_size as i64;
-        self.blocks.retain(|b| {
-            b.output_end
-                .is_none_or(|end| end - h > -(history_size as i64))
-        });
+    /// Drop the oldest completed blocks once we exceed `MAX_BLOCKS`.
+    /// Called automatically from `on_marker` so the block list never grows
+    /// without bound in long-lived panes.
+    fn evict_oldest(&mut self) {
+        if self.blocks.len() > MAX_BLOCKS {
+            let drop = self.blocks.len() - MAX_BLOCKS;
+            self.blocks.drain(..drop);
+        }
     }
 
     /// Return the completed block whose row range contains `absolute_row`, if any.
@@ -210,5 +215,19 @@ mod tests {
         m.on_marker(Osc133Marker::PromptStart, 100, String::new());
         m.on_marker(Osc133Marker::CommandEnd(127), 110, String::new());
         assert_eq!(m.blocks[0].exit_code, Some(127));
+    }
+
+    #[test]
+    fn block_count_is_capped() {
+        let mut m = mgr();
+        for i in 0..MAX_BLOCKS + 50 {
+            let row = 100 + i as i64 * 10;
+            m.on_marker(Osc133Marker::PromptStart, row, String::new());
+            m.on_marker(Osc133Marker::CommandEnd(0), row + 5, String::new());
+        }
+        assert_eq!(m.blocks.len(), MAX_BLOCKS);
+        // The oldest blocks should have been dropped, leaving the most recent.
+        assert_eq!(m.blocks.first().unwrap().id, 50);
+        assert_eq!(m.blocks.last().unwrap().id, MAX_BLOCKS + 49);
     }
 }
