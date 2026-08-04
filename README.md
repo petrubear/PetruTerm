@@ -119,14 +119,14 @@ return config
 
 #### Font
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `config.font` | string | `"JetBrainsMono Nerd Font Mono, Monolisa Nerd Font, Fira Code, Menlo"` | Font family name. Use `petruterm.font("A, B, C")` to resolve the first installed family from a comma-separated list. |
-| `config.font_size` | number | `16` | Font size in points. |
-| `config.font_line_height` | number | `1.2` | Line-height multiplier. |
-| `config.font_features` | string[] | `{"calt=1","liga=1","dlig=1"}` | HarfBuzz OpenType feature tags. |
-| `config.font_fallbacks` | string[] | `{"Apple Color Emoji","Noto Color Emoji"}` | Fallback fonts for missing glyphs and emoji. |
-| `config.lcd_antialiasing` | bool | `false` | Enable LCD subpixel antialiasing where supported. |
+| Key                       | Type     | Default                                                                | Description                                                                                                          |
+| ------------------------- | -------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `config.font`             | string   | `"JetBrainsMono Nerd Font Mono, Monolisa Nerd Font, Fira Code, Menlo"` | Font family name. Use `petruterm.font("A, B, C")` to resolve the first installed family from a comma-separated list. |
+| `config.font_size`        | number   | `16`                                                                   | Font size in points.                                                                                                 |
+| `config.font_line_height` | number   | `1.2`                                                                  | Line-height multiplier.                                                                                              |
+| `config.font_features`    | string[] | `{"calt=1","liga=1","dlig=1"}`                                         | HarfBuzz OpenType feature tags.                                                                                      |
+| `config.font_fallbacks`   | string[] | `{"Apple Color Emoji","Noto Color Emoji"}`                             | Fallback fonts for missing glyphs and emoji.                                                                         |
+| `config.lcd_antialiasing` | bool     | `false`                                                                | Enable LCD subpixel antialiasing where supported.                                                                    |
 
 ```lua
 config.font         = petruterm.font("Monolisa Nerd Font, JetBrainsMono Nerd Font Mono")
@@ -138,24 +138,24 @@ config.font_features = { "calt=1", "liga=1", "dlig=0" }
 
 `config.colors` accepts a table with the following hex string keys:
 
-| Key | Default | Description |
-|-----|---------|-------------|
-| `foreground` | `"#e0e0e8"` | Default text color |
-| `background` | `"#0e0e10"` | Terminal background |
-| `cursor_bg` | `"#9580ff"` | Cursor fill color |
-| `cursor_fg` | `"#e0e0e8"` | Text under cursor |
-| `cursor_border` | `"#9580ff"` | Cursor outline |
-| `selection_bg` | `"#2a2a3a"` | Selection background |
-| `selection_fg` | `"#e0e0e8"` | Selected text color |
-| `ansi` | Dracula Pro | Array of 8 normal ANSI colors (indices 0–7) |
-| `brights` | Dracula Pro | Array of 8 bright ANSI colors (indices 8–15) |
-| `ui_accent` | derived | Optional semantic accent color for UI highlights |
-| `ui_surface` | derived | Optional semantic panel / sidebar background |
-| `ui_surface_active` | derived | Optional semantic selected-item background |
-| `ui_surface_hover` | derived | Optional semantic hover background |
-| `ui_muted` | derived | Optional semantic muted text / separator color |
-| `ui_success` | derived | Optional semantic success color |
-| `ui_overlay` | derived | Optional semantic overlay background |
+| Key                 | Default     | Description                                      |
+| ------------------- | ----------- | ------------------------------------------------ |
+| `foreground`        | `"#e0e0e8"` | Default text color                               |
+| `background`        | `"#0e0e10"` | Terminal background                              |
+| `cursor_bg`         | `"#9580ff"` | Cursor fill color                                |
+| `cursor_fg`         | `"#e0e0e8"` | Text under cursor                                |
+| `cursor_border`     | `"#9580ff"` | Cursor outline                                   |
+| `selection_bg`      | `"#2a2a3a"` | Selection background                             |
+| `selection_fg`      | `"#e0e0e8"` | Selected text color                              |
+| `ansi`              | Dracula Pro | Array of 8 normal ANSI colors (indices 0–7)      |
+| `brights`           | Dracula Pro | Array of 8 bright ANSI colors (indices 8–15)     |
+| `ui_accent`         | derived     | Optional semantic accent color for UI highlights |
+| `ui_surface`        | derived     | Optional semantic panel / sidebar background     |
+| `ui_surface_active` | derived     | Optional semantic selected-item background       |
+| `ui_surface_hover`  | derived     | Optional semantic hover background               |
+| `ui_muted`          | derived     | Optional semantic muted text / separator color   |
+| `ui_success`        | derived     | Optional semantic success color                  |
+| `ui_overlay`        | derived     | Optional semantic overlay background             |
 
 ```lua
 config.colors = {
@@ -177,15 +177,15 @@ config.colors = {
 
 `config.window` accepts:
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `title_bar_style` | string | `"custom"` | `"custom"` — transparent title bar, draggable content area (macOS). `"native"` — standard OS title bar. `"none"` — fully borderless. |
-| `padding` | table | `{left=20, right=20, top=60, bottom=10}` | Inner padding in physical pixels. `top` should be ≥ 60 with `"custom"` to clear traffic lights. |
-| `start_maximized` | bool | `true` | Launch maximized. |
-| `initial_width` | number\|nil | `nil` | Initial window width in pixels (overrides `start_maximized`). |
-| `initial_height` | number\|nil | `nil` | Initial window height in pixels. |
-| `opacity` | number | `1.0` | Window opacity (0.0–1.0). |
-| `borderless` | bool | `false` | Remove all window chrome. |
+| Key               | Type        | Default                                  | Description                                                                                                                          |
+| ----------------- | ----------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `title_bar_style` | string      | `"custom"`                               | `"custom"` — transparent title bar, draggable content area (macOS). `"native"` — standard OS title bar. `"none"` — fully borderless. |
+| `padding`         | table       | `{left=20, right=20, top=60, bottom=10}` | Inner padding in physical pixels. `top` should be ≥ 60 with `"custom"` to clear traffic lights.                                      |
+| `start_maximized` | bool        | `true`                                   | Launch maximized.                                                                                                                    |
+| `initial_width`   | number\|nil | `nil`                                    | Initial window width in pixels (overrides `start_maximized`).                                                                        |
+| `initial_height`  | number\|nil | `nil`                                    | Initial window height in pixels.                                                                                                     |
+| `opacity`         | number      | `1.0`                                    | Window opacity (0.0–1.0).                                                                                                            |
+| `borderless`      | bool        | `false`                                  | Remove all window chrome.                                                                                                            |
 
 ```lua
 config.window = {
@@ -200,18 +200,18 @@ config.window = {
 
 #### Tab bar
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `config.enable_tab_bar` | bool | `true` | Show tab bar when more than one tab is open. |
-| `config.hide_tab_bar_if_one` | bool | `true` | Hide tab bar when only one tab exists. |
+| Key                          | Type | Default | Description                                  |
+| ---------------------------- | ---- | ------- | -------------------------------------------- |
+| `config.enable_tab_bar`      | bool | `true`  | Show tab bar when more than one tab is open. |
+| `config.hide_tab_bar_if_one` | bool | `true`  | Hide tab bar when only one tab exists.       |
 
 #### Status bar
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `config.status_bar.enabled` | bool | `true` | Show the status bar. Also togglable via command palette. |
-| `config.status_bar.position` | string | `"bottom"` | `"bottom"` or `"top"`. |
-| `config.status_bar.style` | string | `"plain"` | `"plain"` text separators or `"powerline"` Nerd Font arrows. |
+| Key                          | Type   | Default    | Description                                                  |
+| ---------------------------- | ------ | ---------- | ------------------------------------------------------------ |
+| `config.status_bar.enabled`  | bool   | `true`     | Show the status bar. Also togglable via command palette.     |
+| `config.status_bar.position` | string | `"bottom"` | `"bottom"` or `"top"`.                                       |
+| `config.status_bar.style`    | string | `"plain"`  | `"plain"` text separators or `"powerline"` Nerd Font arrows. |
 
 The status bar shows (left to right): **leader mode indicator** (turns purple when active), **current directory**, **git branch** (with `*` if dirty), and on the right: **last exit code** (only when non-zero, in red) and **date/time**.
 
@@ -226,15 +226,15 @@ config.status_bar = {
 
 ### `perf.lua` — Performance
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `config.scrollback_lines` | number | `5000` | Maximum scrollback buffer depth per pane. |
-| `config.enable_scroll_bar` | bool | `true` | Show the 6 px scroll bar on the right edge when scrollback is active. |
-| `config.max_fps` | number | `60` | Target render frame rate. |
-| `config.gpu_preference` | string | `"low_power"` | GPU selection preference: `"high_performance"`, `"low_power"`, or `"none"`. |
-| `config.status_bar.git_dirty_check` | bool | `false` | Poll `git status --porcelain` for a dirty marker in the status bar. |
-| `config.battery_saver` | string | `"auto"` | Battery saver policy: `"auto"`, `"always"`, or `"never"`. |
-| `config.shell_integration` | bool | `true` | Enable shell integration hooks (writes CWD/exit-code context for the AI panel). See [Shell Integration](#shell-integration). |
+| Key                                 | Type   | Default       | Description                                                                                                                  |
+| ----------------------------------- | ------ | ------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `config.scrollback_lines`           | number | `5000`        | Maximum scrollback buffer depth per pane.                                                                                    |
+| `config.enable_scroll_bar`          | bool   | `true`        | Show the 6 px scroll bar on the right edge when scrollback is active.                                                        |
+| `config.max_fps`                    | number | `60`          | Target render frame rate.                                                                                                    |
+| `config.gpu_preference`             | string | `"low_power"` | GPU selection preference: `"high_performance"`, `"low_power"`, or `"none"`.                                                  |
+| `config.status_bar.git_dirty_check` | bool   | `false`       | Poll `git status --porcelain` for a dirty marker in the status bar.                                                          |
+| `config.battery_saver`              | string | `"auto"`      | Battery saver policy: `"auto"`, `"always"`, or `"never"`.                                                                    |
+| `config.shell_integration`          | bool   | `true`        | Enable shell integration hooks (writes CWD/exit-code context for the AI panel). See [Shell Integration](#shell-integration). |
 
 ```lua
 config.scrollback_lines  = 50000
@@ -259,45 +259,45 @@ Press `Ctrl+F`, release, then press the bound key within `timeout_ms` millisecon
 
 #### Hardcoded system bindings (not configurable)
 
-| Key | Action |
-|-----|--------|
-| `Cmd+C` | Copy selection to clipboard |
-| `Cmd+V` | Paste from clipboard |
-| `Cmd+Q` | Quit |
-| `Cmd+K` | Clear screen and scrollback |
-| `Cmd+F` | Toggle text search |
-| `Cmd+1–9` | Switch to tab N |
-| `Ctrl+Space` | Toggle inline AI block |
-| `F12` | Toggle debug HUD |
+| Key          | Action                      |
+| ------------ | --------------------------- |
+| `Cmd+C`      | Copy selection to clipboard |
+| `Cmd+V`      | Paste from clipboard        |
+| `Cmd+Q`      | Quit                        |
+| `Cmd+K`      | Clear screen and scrollback |
+| `Cmd+F`      | Toggle text search          |
+| `Cmd+1–9`    | Switch to tab N             |
+| `Ctrl+Space` | Toggle inline AI block      |
+| `F12`        | Toggle debug HUD            |
 
 #### Default leader bindings
 
-| Binding | Action |
-|---------|--------|
-| `Leader+o` | Open command palette |
-| `Leader+a+a` | Open / close AI panel |
-| `Leader+A` | Move focus between terminal and AI panel (without closing) |
-| `Leader+a+e` | Explain last terminal output |
-| `Leader+a+f` | Fix last error |
-| `Leader+a+z` | Undo last AI file write |
-| `Leader+e+e` | Toggle workspace sidebar |
-| `Leader+w` | New workspace |
-| `Leader+W+n` | New workspace |
-| `Leader+W+&` | Close workspace |
-| `Leader+W+,` | Rename workspace |
-| `Leader+W+j` | Next workspace |
-| `Leader+W+k` | Previous workspace |
-| `Leader+W+s` | Save current workspace layout |
-| `Leader+W+L` | Open saved workspaces palette |
-| `Leader+c` | New tab |
-| `Leader+&` | Close tab |
-| `Leader+n` | Next tab |
-| `Leader+b` | Previous tab |
-| `Leader+%` | Split pane horizontally (left \| right) |
-| `Leader+"` | Split pane vertically (top / bottom) |
-| `Leader+x` | Close active pane |
-| `Leader+h/j/k/l` | Focus pane left / down / up / right (vim-style) |
-| `Leader+Option+Arrow` | Resize active pane |
+| Binding               | Action                                                     |
+| --------------------- | ---------------------------------------------------------- |
+| `Leader+o`            | Open command palette                                       |
+| `Leader+a+a`          | Open / close AI panel                                      |
+| `Leader+A`            | Move focus between terminal and AI panel (without closing) |
+| `Leader+a+e`          | Explain last terminal output                               |
+| `Leader+a+f`          | Fix last error                                             |
+| `Leader+a+z`          | Undo last AI file write                                    |
+| `Leader+e+e`          | Toggle workspace sidebar                                   |
+| `Leader+w`            | New workspace                                              |
+| `Leader+W+n`          | New workspace                                              |
+| `Leader+W+&`          | Close workspace                                            |
+| `Leader+W+,`          | Rename workspace                                           |
+| `Leader+W+j`          | Next workspace                                             |
+| `Leader+W+k`          | Previous workspace                                         |
+| `Leader+W+s`          | Save current workspace layout                              |
+| `Leader+W+L`          | Open saved workspaces palette                              |
+| `Leader+c`            | New tab                                                    |
+| `Leader+&`            | Close tab                                                  |
+| `Leader+n`            | Next tab                                                   |
+| `Leader+b`            | Previous tab                                               |
+| `Leader+%`            | Split pane horizontally (left \| right)                    |
+| `Leader+"`            | Split pane vertically (top / bottom)                       |
+| `Leader+x`            | Close active pane                                          |
+| `Leader+h/j/k/l`      | Focus pane left / down / up / right (vim-style)            |
+| `Leader+Option+Arrow` | Resize active pane                                         |
 
 #### Custom bindings
 
@@ -317,30 +317,30 @@ config.keys = {
 
 #### Available actions
 
-| Action | Description |
-|--------|-------------|
-| `petruterm.action.CommandPalette` | Open command palette |
-| `petruterm.action.ToggleAiPanel` | Open / close AI agent panel |
-| `petruterm.action.FocusAiPanel` | Move focus between terminal and AI panel |
+| Action                               | Description                                     |
+| ------------------------------------ | ----------------------------------------------- |
+| `petruterm.action.CommandPalette`    | Open command palette                            |
+| `petruterm.action.ToggleAiPanel`     | Open / close AI agent panel                     |
+| `petruterm.action.FocusAiPanel`      | Move focus between terminal and AI panel        |
 | `petruterm.action.ExplainLastOutput` | Send last terminal output to AI for explanation |
-| `petruterm.action.FixLastError` | Send last failed command to AI for a fix |
-| `petruterm.action.UndoLastWrite` | Undo last AI-proposed file write |
-| `petruterm.action.ToggleStatusBar` | Show / hide the status bar |
-| `petruterm.action.NewTab` | Open a new tab |
-| `petruterm.action.CloseTab` | Close the current tab |
-| `petruterm.action.NextTab` | Switch to the next tab |
-| `petruterm.action.PrevTab` | Switch to the previous tab |
-| `petruterm.action.SplitHorizontal` | Split active pane horizontally |
-| `petruterm.action.SplitVertical` | Split active pane vertically |
-| `petruterm.action.ClosePane` | Close the active pane |
-| `petruterm.action.FocusPaneLeft` | Focus pane to the left |
-| `petruterm.action.FocusPaneRight` | Focus pane to the right |
-| `petruterm.action.FocusPaneUp` | Focus pane above |
-| `petruterm.action.FocusPaneDown` | Focus pane below |
-| `petruterm.action.ToggleFullscreen` | Toggle fullscreen mode |
-| `petruterm.action.ReloadConfig` | Hot-reload configuration |
-| `petruterm.action.OpenConfigFile` | Open config file in default editor |
-| `petruterm.action.Quit` | Quit PetruTerm |
+| `petruterm.action.FixLastError`      | Send last failed command to AI for a fix        |
+| `petruterm.action.UndoLastWrite`     | Undo last AI-proposed file write                |
+| `petruterm.action.ToggleStatusBar`   | Show / hide the status bar                      |
+| `petruterm.action.NewTab`            | Open a new tab                                  |
+| `petruterm.action.CloseTab`          | Close the current tab                           |
+| `petruterm.action.NextTab`           | Switch to the next tab                          |
+| `petruterm.action.PrevTab`           | Switch to the previous tab                      |
+| `petruterm.action.SplitHorizontal`   | Split active pane horizontally                  |
+| `petruterm.action.SplitVertical`     | Split active pane vertically                    |
+| `petruterm.action.ClosePane`         | Close the active pane                           |
+| `petruterm.action.FocusPaneLeft`     | Focus pane to the left                          |
+| `petruterm.action.FocusPaneRight`    | Focus pane to the right                         |
+| `petruterm.action.FocusPaneUp`       | Focus pane above                                |
+| `petruterm.action.FocusPaneDown`     | Focus pane below                                |
+| `petruterm.action.ToggleFullscreen`  | Toggle fullscreen mode                          |
+| `petruterm.action.ReloadConfig`      | Hot-reload configuration                        |
+| `petruterm.action.OpenConfigFile`    | Open config file in default editor              |
+| `petruterm.action.Quit`              | Quit PetruTerm                                  |
 
 ---
 
@@ -368,32 +368,32 @@ config.llm = {
 
 #### Top-level options
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `enabled` | bool | `false` | Master switch. Set to `true` to enable all AI features. |
-| `provider` | string | `"openrouter"` | LLM provider: `"openrouter"`, `"ollama"`, `"lmstudio"`, or `"copilot"`. |
-| `model` | string | `"meta-llama/llama-3.1-8b-instruct:free"` | Model identifier. Format depends on the provider. |
-| `api_key` | string\|nil | `nil` | API key. Use `os.getenv("VAR")` to avoid hardcoding secrets. See provider defaults below. |
-| `base_url` | string\|nil | `nil` | Override the provider's base URL. `nil` uses the default. |
-| `context_lines` | number | `50` | Lines of terminal output included as context in AI requests. |
+| Key             | Type        | Default                                   | Description                                                                               |
+| --------------- | ----------- | ----------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `enabled`       | bool        | `false`                                   | Master switch. Set to `true` to enable all AI features.                                   |
+| `provider`      | string      | `"openrouter"`                            | LLM provider: `"openrouter"`, `"ollama"`, `"lmstudio"`, or `"copilot"`.                   |
+| `model`         | string      | `"meta-llama/llama-3.1-8b-instruct:free"` | Model identifier. Format depends on the provider.                                         |
+| `api_key`       | string\|nil | `nil`                                     | API key. Use `os.getenv("VAR")` to avoid hardcoding secrets. See provider defaults below. |
+| `base_url`      | string\|nil | `nil`                                     | Override the provider's base URL. `nil` uses the default.                                 |
+| `context_lines` | number      | `50`                                      | Lines of terminal output included as context in AI requests.                              |
 
 #### Provider defaults
 
-| Provider | Default `base_url` | Auth |
-|----------|-------------------|------|
-| `openrouter` | `https://openrouter.ai/api/v1` | API key required |
-| `ollama` | `http://localhost:11434/v1` | None |
-| `lmstudio` | `http://localhost:1234/v1` | None |
-| `copilot` | `https://api.githubcopilot.com` | GitHub token (see below) |
+| Provider     | Default `base_url`              | Auth                     |
+| ------------ | ------------------------------- | ------------------------ |
+| `openrouter` | `https://openrouter.ai/api/v1`  | API key required         |
+| `ollama`     | `http://localhost:11434/v1`     | None                     |
+| `lmstudio`   | `http://localhost:1234/v1`      | None                     |
+| `copilot`    | `https://api.githubcopilot.com` | GitHub token (see below) |
 
 #### `features` table
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `nl_to_command` | bool | `true` | Natural language → shell command via inline AI block (`Ctrl+Space`). |
-| `explain_output` | bool | `true` | Explain last terminal output (`Leader+a+e`). |
-| `fix_last_error` | bool | `true` | Suggest a fix for the last failed command (`Leader+a+f`). |
-| `context_chat` | bool | `true` | Multi-turn chat panel with CWD, exit code, and last command context. |
+| Key              | Type | Default | Description                                                          |
+| ---------------- | ---- | ------- | -------------------------------------------------------------------- |
+| `nl_to_command`  | bool | `true`  | Natural language → shell command via inline AI block (`Ctrl+Space`). |
+| `explain_output` | bool | `true`  | Explain last terminal output (`Leader+a+e`).                         |
+| `fix_last_error` | bool | `true`  | Suggest a fix for the last failed command (`Leader+a+f`).            |
+| `context_chat`   | bool | `true`  | Multi-turn chat panel with CWD, exit code, and last command context. |
 
 #### Local provider examples
 
@@ -466,24 +466,24 @@ Open with `Leader+a+a`. Press again to close. Use `Leader+A` to move focus betwe
 
 When the panel opens it automatically attaches `AGENTS.md` from the current terminal's working directory as project context. Press `Tab` to open the file picker and attach additional files:
 
-| Key | Action |
-|-----|--------|
-| `Tab` | Open / close file picker |
-| `↑` / `↓` | Navigate file list |
-| `Enter` | Attach / detach selected file |
-| `Esc` | Close file picker |
+| Key       | Action                        |
+| --------- | ----------------------------- |
+| `Tab`     | Open / close file picker      |
+| `↑` / `↓` | Navigate file list            |
+| `Enter`   | Attach / detach selected file |
+| `Esc`     | Close file picker             |
 
 Attached files are injected into the LLM system message before every query. The footer shows an estimated token count.
 
 ### Chat input
 
-| Key | Action |
-|-----|--------|
-| `Enter` | Submit query |
-| `Shift+Enter` | Insert newline in input |
-| `Ctrl+S` | Submit query (alternative) |
-| `Esc` | Close panel / dismiss error |
-| `/q` or `/quit` | Close panel |
+| Key             | Action                      |
+| --------------- | --------------------------- |
+| `Enter`         | Submit query                |
+| `Shift+Enter`   | Insert newline in input     |
+| `Ctrl+S`        | Submit query (alternative)  |
+| `Esc`           | Close panel / dismiss error |
+| `/q` or `/quit` | Close panel                 |
 
 ### Ask AI from context menu
 
@@ -493,12 +493,12 @@ Right-click any selected text and choose **Ask AI** to send it directly to the c
 
 When the LLM needs additional context it can autonomously call built-in tools (up to 10 rounds per query). Filesystem tools are sandboxed to the terminal's current working directory.
 
-| Tool | Confirmation | Description |
-|------|-------------|-------------|
-| `ReadFile` | No | Read the contents of a file |
-| `ListDir` | No | List files in a directory |
-| `WriteFile` | **Yes** | Overwrite a file with a diff preview before writing |
-| `RunCommand` | **Yes** | Execute a shell command in the active PTY |
+| Tool         | Confirmation | Description                                         |
+| ------------ | ------------ | --------------------------------------------------- |
+| `ReadFile`   | No           | Read the contents of a file                         |
+| `ListDir`    | No           | List files in a directory                           |
+| `WriteFile`  | **Yes**      | Overwrite a file with a diff preview before writing |
+| `RunCommand` | **Yes**      | Execute a shell command in the active PTY           |
 
 Write and run tools show a `[y] Apply  [n] Reject` prompt. Use `Leader+a+z` to undo the last file write.
 
@@ -508,11 +508,11 @@ While a tool is running the panel shows `⟳ tool(path)`; after completion it sh
 
 A 4-row overlay at the bottom of the terminal for quick NL→command generation:
 
-| Key | Action |
-|-----|--------|
-| `Enter` (typing) | Submit query |
+| Key                    | Action                           |
+| ---------------------- | -------------------------------- |
+| `Enter` (typing)       | Submit query                     |
 | `Enter` (result ready) | Execute suggested command in PTY |
-| `Esc` | Close |
+| `Esc`                  | Close                            |
 
 ---
 
@@ -543,12 +543,21 @@ Servers are declared in `~/.config/petruterm/mcp/mcp.json`:
   "mcpServers": {
     "postgres": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://user:pass@localhost/mydb"],
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://user:pass@localhost/mydb"
+      ],
       "env": {}
     },
     "filesystem": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/private/tmp", "/Users/you"],
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/private/tmp",
+        "/Users/you"
+      ],
       "env": {}
     }
   }
@@ -565,10 +574,10 @@ Each key under `mcpServers` is the display name shown in the panel. PetruTerm la
 
 ### Built-in servers
 
-| Server | Package | Description |
-|--------|---------|-------------|
+| Server       | Package                                   | Description                       |
+| ------------ | ----------------------------------------- | --------------------------------- |
 | `filesystem` | `@modelcontextprotocol/server-filesystem` | Read/write files in allowed paths |
-| `postgres` | `@modelcontextprotocol/server-postgres` | Query a PostgreSQL database |
+| `postgres`   | `@modelcontextprotocol/server-postgres`   | Query a PostgreSQL database       |
 
 > **Requirement:** `npx` must be available in your `PATH` (comes with Node.js).
 
@@ -582,16 +591,16 @@ Place an `AGENTS.md` file in your project root to give the AI panel automatic co
 
 ## Tech Stack
 
-| Component | Crate |
-|-----------|-------|
-| GPU rendering | `wgpu` 29 (Metal on macOS) |
-| Windowing | `winit` 0.30 |
-| Terminal emulation | `alacritty_terminal` 0.25 |
-| Font shaping | `cosmic-text` 0.18 + HarfBuzz + FreeType LCD |
-| Config DSL | `mlua` 0.11 (Lua 5.4) |
-| Async / LLM | `tokio` + `reqwest` |
-| Fuzzy search | `skim` + `fuzzy-matcher` |
-| Hashing | `rustc-hash` (FxHasher) |
+| Component          | Crate                                        |
+| ------------------ | -------------------------------------------- |
+| GPU rendering      | `wgpu` 29 (Metal on macOS)                   |
+| Windowing          | `winit` 0.30                                 |
+| Terminal emulation | `alacritty_terminal` 0.25                    |
+| Font shaping       | `cosmic-text` 0.18 + HarfBuzz + FreeType LCD |
+| Config DSL         | `mlua` 0.11 (Lua 5.4)                        |
+| Async / LLM        | `tokio` + `reqwest`                          |
+| Fuzzy search       | `skim` + `fuzzy-matcher`                     |
+| Hashing            | `rustc-hash` (FxHasher)                      |
 
 ---
 
