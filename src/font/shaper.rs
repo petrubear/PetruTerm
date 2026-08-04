@@ -8,7 +8,7 @@ use lru::LruCache;
 
 use cosmic_text::{
     fontdb, Attrs, AttrsList, Buffer, BufferLine, CacheKey, CacheKeyFlags, Family, FontSystem,
-    LayoutGlyph, Metrics, Shaping, SwashCache,
+    LayoutGlyph, Metrics, Shaping, Style, SwashCache, Weight,
 };
 
 use crate::config::schema::FontConfig;
@@ -61,20 +61,106 @@ fn has_ligature_chars(text: &str) -> bool {
     })
 }
 
-/// Build an AttrsList where PUA codepoints get an explicit span forcing the
-/// user's own font. Without this, cosmic-text may route PUA to a fallback that
-/// doesn't exist (no system fonts loaded) and return glyph_id=0.
-fn build_attr_list<'a>(text: &str, default_attrs: &'a Attrs<'a>, family: &'a str) -> AttrsList {
-    let mut attr_list = AttrsList::new(default_attrs);
-    let pua_attrs = default_attrs.clone().family(Family::Name(family));
-    let mut byte_idx = 0;
-    for ch in text.chars() {
-        let ch_len = ch.len_utf8();
-        if is_pua(ch) {
-            attr_list.add_span(byte_idx..byte_idx + ch_len, &pua_attrs);
-        }
-        byte_idx += ch_len;
+/// Per-cell bold/italic state, derived from terminal SGR attributes (or markdown
+/// emphasis in the chat panel). One entry per column, aligned with `colors`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct CellStyle {
+    pub bold: bool,
+    pub italic: bool,
+}
+
+impl CellStyle {
+    pub const NORMAL: CellStyle = CellStyle {
+        bold: false,
+        italic: false,
+    };
+
+    #[inline]
+    fn is_normal(self) -> bool {
+        !self.bold && !self.italic
     }
+}
+
+/// Build an AttrsList where PUA codepoints get an explicit span forcing the
+/// user's own font (so Nerd Font icons don't fall back to a system font), and
+/// bold/italic cells get a span requesting `Weight::BOLD` / `Style::Italic` so
+/// cosmic-text picks the matching face already loaded into fontdb by
+/// `load_system_fonts()`.
+///
+/// Spans are built as one contiguous run per (pua, style) combination rather
+/// than per-char, since adding overlapping spans for the same byte range for
+/// PUA-family and weight/style independently would let the later `add_span`
+/// call silently clobber the earlier one.
+fn build_attr_list<'a>(
+    text: &str,
+    default_attrs: &'a Attrs<'a>,
+    family: &'a str,
+    styles: &[CellStyle],
+) -> AttrsList {
+    let mut attr_list = AttrsList::new(default_attrs);
+
+    let mut run_start = 0usize;
+    let mut run_pua = false;
+    let mut run_style = CellStyle::NORMAL;
+    let mut run_active = false;
+
+    fn flush(
+        attr_list: &mut AttrsList,
+        default_attrs: &Attrs<'_>,
+        family: &str,
+        start: usize,
+        end: usize,
+        pua: bool,
+        style: CellStyle,
+    ) {
+        if start == end || (!pua && style.is_normal()) {
+            return;
+        }
+        let mut attrs = default_attrs.clone();
+        if pua {
+            attrs = attrs.family(Family::Name(family));
+        }
+        if style.bold {
+            attrs = attrs.weight(Weight::BOLD);
+        }
+        if style.italic {
+            attrs = attrs.style(Style::Italic);
+        }
+        attr_list.add_span(start..end, &attrs);
+    }
+
+    for (col, (byte_idx, ch)) in text.char_indices().enumerate() {
+        let pua = is_pua(ch);
+        let style = styles.get(col).copied().unwrap_or(CellStyle::NORMAL);
+
+        if run_active && (pua != run_pua || style != run_style) {
+            flush(
+                &mut attr_list,
+                default_attrs,
+                family,
+                run_start,
+                byte_idx,
+                run_pua,
+                run_style,
+            );
+            run_start = byte_idx;
+        }
+        run_pua = pua;
+        run_style = style;
+        run_active = true;
+    }
+    if run_active {
+        flush(
+            &mut attr_list,
+            default_attrs,
+            family,
+            run_start,
+            text.len(),
+            run_pua,
+            run_style,
+        );
+    }
+
     attr_list
 }
 
@@ -587,34 +673,44 @@ impl TextShaper {
         &mut self,
         text: &str,
         colors: &[([f32; 4], [f32; 4])],
+        styles: &[CellStyle],
         font_config: &FontConfig,
     ) -> ShapedRun {
         #[cfg(feature = "profiling")]
         let _span = tracing::info_span!("shape_line", len = text.len()).entered();
 
-        // ── ASCII fast path ───────────────────────────────────────────────────
-        // For pure-ASCII text with no ligature-trigger characters, skip HarfBuzz
-        // entirely: look up glyph IDs directly from the FreeType cmap. Benchmarks
-        // show ~3–4× speedup for typical terminal output (the common case).
-        if let Some(run) = self.try_ascii_fast_path(text, colors, font_config) {
-            return run;
-        }
+        // Bold/italic cells need per-span Weight/Style attrs, which only the full
+        // HarfBuzz path (via `build_attr_list`) applies. The ASCII fast path looks up
+        // glyph IDs directly from the regular face's FreeType cmap, and the word cache
+        // stores geometry shaped from that same regular face — neither is aware of
+        // per-cell style, so any styled line skips straight to HarfBuzz.
+        let all_normal = styles.iter().all(|s| s.is_normal());
 
-        // ── Per-word shape cache (slow path only) ─────────────────────────────
-        // For lines that DO go through HarfBuzz, we check a word-level cache so
-        // that repeated words (`fn`, `let`, `pub`, …) pay only one HarfBuzz call
-        // across many rows. The cache stores geometry (glyph IDs + positions)
-        // without colors; colors are re-applied on each hit.
-        //
-        // This is only attempted when the text is pure ASCII (but has ligature
-        // chars) — non-ASCII lines are too diverse for high hit rates.
-        if text.is_ascii() {
-            if let Some(run) = self.try_word_cached_shape(text, colors, font_config) {
+        if all_normal {
+            // ── ASCII fast path ───────────────────────────────────────────────
+            // For pure-ASCII text with no ligature-trigger characters, skip HarfBuzz
+            // entirely: look up glyph IDs directly from the FreeType cmap. Benchmarks
+            // show ~3–4× speedup for typical terminal output (the common case).
+            if let Some(run) = self.try_ascii_fast_path(text, colors, font_config) {
                 return run;
+            }
+
+            // ── Per-word shape cache (slow path only) ─────────────────────────
+            // For lines that DO go through HarfBuzz, we check a word-level cache so
+            // that repeated words (`fn`, `let`, `pub`, …) pay only one HarfBuzz call
+            // across many rows. The cache stores geometry (glyph IDs + positions)
+            // without colors; colors are re-applied on each hit.
+            //
+            // This is only attempted when the text is pure ASCII (but has ligature
+            // chars) — non-ASCII lines are too diverse for high hit rates.
+            if text.is_ascii() {
+                if let Some(run) = self.try_word_cached_shape(text, colors, font_config) {
+                    return run;
+                }
             }
         }
 
-        self.shape_line_harfbuzz(text, colors, font_config)
+        self.shape_line_harfbuzz(text, colors, styles, font_config)
     }
 
     /// Word-level shape cache for ASCII-but-with-ligature-chars lines.
@@ -728,7 +824,7 @@ impl TextShaper {
         colors: &[([f32; 4], [f32; 4])],
         font_config: &FontConfig,
     ) -> ShapedRun {
-        self.shape_line_harfbuzz(word, colors, font_config)
+        self.shape_line_harfbuzz(word, colors, &[], font_config)
     }
 
     /// Full HarfBuzz shaping path for a single text run.
@@ -736,10 +832,11 @@ impl TextShaper {
         &mut self,
         text: &str,
         colors: &[([f32; 4], [f32; 4])],
+        styles: &[CellStyle],
         font_config: &FontConfig,
     ) -> ShapedRun {
         let attrs = Self::make_attrs(&self.family, font_config);
-        let attr_list = build_attr_list(text, &attrs, &self.family);
+        let attr_list = build_attr_list(text, &attrs, &self.family, styles);
 
         self.shape_buf
             .set_size(&mut self.font_system, None, Some(self.cell_height));
@@ -1024,7 +1121,7 @@ mod tests {
         let family = "TestFont";
         let default_attrs = Attrs::new();
         let text = "A \u{e0a0} B";
-        let _list = build_attr_list(text, &default_attrs, family);
+        let _list = build_attr_list(text, &default_attrs, family, &[]);
 
         // "A " is 2 bytes, "\u{e0a0}" is 3 bytes, " B" is 2 bytes
         // Total bytes: 7
@@ -1032,6 +1129,41 @@ mod tests {
         // We can't easily inspect the spans in AttrsList without shaping,
         // but we can at least verify it doesn't panic and the logic runs.
         assert_eq!(text.len(), 7);
+    }
+
+    #[test]
+    fn test_build_attr_list_bold_italic_spans() {
+        let family = "TestFont";
+        let default_attrs = Attrs::new();
+        let text = "abcd";
+        let styles = [
+            CellStyle::NORMAL,
+            CellStyle {
+                bold: true,
+                italic: false,
+            },
+            CellStyle {
+                bold: false,
+                italic: true,
+            },
+            CellStyle {
+                bold: true,
+                italic: true,
+            },
+        ];
+        let list = build_attr_list(text, &default_attrs, family, &styles);
+
+        assert_eq!(list.get_span(0).weight, Weight::NORMAL);
+        assert_eq!(list.get_span(0).style, Style::Normal);
+
+        assert_eq!(list.get_span(1).weight, Weight::BOLD);
+        assert_eq!(list.get_span(1).style, Style::Normal);
+
+        assert_eq!(list.get_span(2).weight, Weight::NORMAL);
+        assert_eq!(list.get_span(2).style, Style::Italic);
+
+        assert_eq!(list.get_span(3).weight, Weight::BOLD);
+        assert_eq!(list.get_span(3).style, Style::Italic);
     }
 
     #[test]

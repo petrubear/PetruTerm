@@ -87,7 +87,7 @@ fn rasterize_one(
 fn bench_rasterize_glyph_ascii(c: &mut Criterion) {
     let (mut shaper, font_config) = make_shaper();
     let colors = make_colors(1);
-    let run = shaper.shape_line("A", &colors, &font_config);
+    let run = shaper.shape_line("A", &colors, &[], &font_config);
     let key = match run.glyphs.first() {
         Some(g) => g.cache_key,
         None => return,
@@ -103,7 +103,7 @@ fn bench_rasterize_line_ascii(c: &mut Criterion) {
     let (mut shaper, font_config) = make_shaper();
     let text = "fn hello_world() -> &str {";
     let colors = make_colors(text.chars().count());
-    let run = shaper.shape_line(text, &colors, &font_config);
+    let run = shaper.shape_line(text, &colors, &[], &font_config);
     let keys: Vec<_> = run.glyphs.iter().map(|g| g.cache_key).collect();
 
     c.bench_function("rasterize_line_ascii", |b| {
@@ -120,7 +120,7 @@ fn bench_rasterize_line_ligatures(c: &mut Criterion) {
     let (mut shaper, font_config) = make_shaper();
     let text = "let result = if x >= 0 { x } else { -x };";
     let colors = make_colors(text.chars().count());
-    let run = shaper.shape_line(text, &colors, &font_config);
+    let run = shaper.shape_line(text, &colors, &[], &font_config);
     let keys: Vec<_> = run.glyphs.iter().map(|g| g.cache_key).collect();
 
     c.bench_function("rasterize_line_ligatures", |b| {
@@ -137,7 +137,7 @@ fn bench_rasterize_line_unicode(c: &mut Criterion) {
     let (mut shaper, font_config) = make_shaper();
     let text = "// café résumé naïve fiancée";
     let colors = make_colors(text.chars().count());
-    let run = shaper.shape_line(text, &colors, &font_config);
+    let run = shaper.shape_line(text, &colors, &[], &font_config);
     let keys: Vec<_> = run.glyphs.iter().map(|g| g.cache_key).collect();
 
     c.bench_function("rasterize_line_unicode", |b| {

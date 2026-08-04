@@ -79,7 +79,7 @@ fn bench_shape_line_ascii(c: &mut Criterion) {
 
     c.bench_function("shape_line_ascii", |b| {
         b.iter(|| {
-            let _ = shaper.shape_line(text, &colors, &font_config);
+            let _ = shaper.shape_line(text, &colors, &[], &font_config);
         });
     });
 }
@@ -91,7 +91,7 @@ fn bench_shape_line_ligatures(c: &mut Criterion) {
 
     c.bench_function("shape_line_ligatures", |b| {
         b.iter(|| {
-            let _ = shaper.shape_line(text, &colors, &font_config);
+            let _ = shaper.shape_line(text, &colors, &[], &font_config);
         });
     });
 }
@@ -103,7 +103,7 @@ fn bench_shape_line_unicode(c: &mut Criterion) {
 
     c.bench_function("shape_line_unicode", |b| {
         b.iter(|| {
-            let _ = shaper.shape_line(text, &colors, &font_config);
+            let _ = shaper.shape_line(text, &colors, &[], &font_config);
         });
     });
 }
@@ -115,11 +115,11 @@ fn bench_shape_line_ascii_cached(c: &mut Criterion) {
     let colors = make_colors(text.chars().count());
 
     // Prime the word cache (this call goes through HarfBuzz or ASCII fast path).
-    let _ = shaper.shape_line(text, &colors, &font_config);
+    let _ = shaper.shape_line(text, &colors, &[], &font_config);
 
     c.bench_function("shape_line_ascii_cached", |b| {
         b.iter(|| {
-            let _ = shaper.shape_line(text, &colors, &font_config);
+            let _ = shaper.shape_line(text, &colors, &[], &font_config);
         });
     });
 }
@@ -132,11 +132,11 @@ fn bench_shape_line_ligatures_cached(c: &mut Criterion) {
     let colors = make_colors(text.chars().count());
 
     // Prime the word cache.
-    let _ = shaper.shape_line(text, &colors, &font_config);
+    let _ = shaper.shape_line(text, &colors, &[], &font_config);
 
     c.bench_function("shape_line_ligatures_cached", |b| {
         b.iter(|| {
-            let _ = shaper.shape_line(text, &colors, &font_config);
+            let _ = shaper.shape_line(text, &colors, &[], &font_config);
         });
     });
 }

@@ -14,9 +14,10 @@ impl RenderContext {
     /// slower than serial at 200 rows due to fork-join overhead (~130 µs) exceeding the work
     /// (~10 µs). Rayon is reserved for higher-granularity tasks (search, batch rasterization).
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::type_complexity)]
     pub fn build_instances(
         &mut self,
-        cell_data: &[(String, Vec<(AnsiColor, AnsiColor)>)],
+        cell_data: &[(String, Vec<(AnsiColor, AnsiColor, CellStyle)>)],
         config: &Config,
         font: &crate::config::schema::FontConfig,
         terminal_id: usize,
@@ -46,7 +47,7 @@ impl RenderContext {
         for (row_idx, (text, raw_colors)) in cell_data.iter().enumerate() {
             self.colors_scratch.clear();
             self.colors_scratch
-                .extend(raw_colors.iter().map(|(fg, bg)| {
+                .extend(raw_colors.iter().map(|(fg, bg, _)| {
                     (
                         resolve_color(*fg, &config.colors),
                         resolve_color(*bg, &config.colors),
@@ -54,7 +55,12 @@ impl RenderContext {
                 }));
             let colors: &[([f32; 4], [f32; 4])] = &self.colors_scratch;
 
-            let row_hash = calculate_row_hash(text, colors);
+            self.styles_scratch.clear();
+            self.styles_scratch
+                .extend(raw_colors.iter().map(|(_, _, style)| *style));
+            let styles: &[CellStyle] = &self.styles_scratch;
+
+            let row_hash = calculate_row_hash(text, colors, styles);
 
             // Cache hit: increment counter and skip shaping for this row.
             let is_hit = self
@@ -75,7 +81,7 @@ impl RenderContext {
             let mut row_instances: Vec<CellVertex> = Vec::new();
             let mut row_lcd_instances: Vec<CellVertex> = Vec::new();
 
-            let shaped = self.shaper.shape_line(text, colors, font);
+            let shaped = self.shaper.shape_line(text, colors, styles, font);
 
             let default_bg = config.colors.background;
 

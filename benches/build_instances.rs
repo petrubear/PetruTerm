@@ -142,7 +142,7 @@ fn build_row_vertices(
     queue: &wgpu::Queue,
 ) -> (u64, Vec<CellVertex>) {
     let hash = row_hash(text, colors);
-    let shaped = shaper.shape_line(text, colors, font);
+    let shaped = shaper.shape_line(text, colors, &[], font);
     let cell_height = shaper.cell_height;
     let mut verts: Vec<CellVertex> = Vec::new();
 

@@ -5,7 +5,7 @@ use winit::window::Window;
 
 use crate::app::mux::Workspace;
 use crate::config::Config;
-use crate::font::{build_font_system, TextShaper};
+use crate::font::{build_font_system, CellStyle, TextShaper};
 use crate::llm::ai_block::{AiBlock, AiState, AI_BLOCK_ROWS};
 use crate::llm::chat_panel::{
     header_action_label, header_actions_start_col, ChatPanel, HeaderAction,
@@ -59,11 +59,13 @@ pub struct RenderContext {
     /// Capture of `term_cols` when panel cache was built. If it changes, mark panel dirty.
     pub panel_cache_term_cols: usize,
     /// Scratch buffer for `collect_grid_cells_for` — reused across frames (TD-PERF-12).
+    #[allow(clippy::type_complexity)]
     pub cell_data_scratch: Vec<(
         String,
         Vec<(
             alacritty_terminal::vte::ansi::Color,
             alacritty_terminal::vte::ansi::Color,
+            CellStyle,
         )>,
     )>,
     /// Which terminal's data is currently in `cell_data_scratch`.
@@ -76,6 +78,8 @@ pub struct RenderContext {
     pub scratch_colors: Vec<([f32; 4], [f32; 4])>,
     /// Per-pane color resolve scratch — avoids Vec alloc per pane per frame (TD-PERF-32).
     pub colors_scratch: Vec<([f32; 4], [f32; 4])>,
+    /// Per-pane bold/italic scratch, parallel to `colors_scratch` (TD-PERF-32).
+    pub styles_scratch: Vec<CellStyle>,
     /// Incremental streaming wrap cache — avoids re-wrapping the full buf each token (TD-PERF-37).
     pub(super) streaming_stable_lines: Vec<AnnotatedLine>,
     /// ParseState carried across stable-line boundaries for streaming markdown.
@@ -236,6 +240,7 @@ impl RenderContext {
             scratch_str: String::new(),
             scratch_colors: Vec::new(),
             colors_scratch: Vec::new(),
+            styles_scratch: Vec::new(),
             streaming_stable_lines: Vec::new(),
             streaming_fence_state: ParseState::default(),
             streaming_stable_end: 0,
@@ -439,7 +444,9 @@ impl RenderContext {
         scratch_colors.clear();
         scratch_colors.extend((0..width).map(|_| (fg, bg)));
 
-        let shaped = self.shaper.shape_line(&scratch_str, &scratch_colors, font);
+        let shaped = self
+            .shaper
+            .shape_line(&scratch_str, &scratch_colors, &[], font);
 
         // Restore scratch buffers.
         self.scratch_chars = scratch_chars;
@@ -637,7 +644,11 @@ pub(super) fn colors_approx_eq(a: [f32; 4], b: [f32; 4]) -> bool {
     pack_color(a) == pack_color(b)
 }
 
-pub(super) fn calculate_row_hash(text: &str, colors: &[([f32; 4], [f32; 4])]) -> u64 {
+pub(super) fn calculate_row_hash(
+    text: &str,
+    colors: &[([f32; 4], [f32; 4])],
+    styles: &[CellStyle],
+) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut hasher = rustc_hash::FxHasher::default();
     text.hash(&mut hasher);
@@ -645,6 +656,10 @@ pub(super) fn calculate_row_hash(text: &str, colors: &[([f32; 4], [f32; 4])]) ->
         // Hash all 4 channels of each color packed into a u32 (not just red).
         pack_color(*fg).hash(&mut hasher);
         pack_color(*bg).hash(&mut hasher);
+    }
+    for style in styles {
+        style.bold.hash(&mut hasher);
+        style.italic.hash(&mut hasher);
     }
     hasher.finish()
 }

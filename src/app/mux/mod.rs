@@ -28,6 +28,8 @@ use anyhow::Result;
 use std::collections::VecDeque;
 use winit::event_loop::EventLoopProxy;
 
+use crate::font::CellStyle;
+
 /// Maximum number of closed terminals for which we retain exit codes and final
 /// output. Prevents unbounded growth of per-terminal state as terminal_id only
 /// ever increments.
@@ -858,10 +860,11 @@ impl Mux {
     ///
     /// When `search` is `Some`, cells that match the query are recolored in-place.
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::type_complexity)]
     pub fn collect_grid_cells_for(
         &self,
         terminal_id: usize,
-        buf: &mut Vec<(String, Vec<(AnsiColor, AnsiColor)>)>,
+        buf: &mut Vec<(String, Vec<(AnsiColor, AnsiColor, CellStyle)>)>,
         search: Option<(&[SearchMatch], usize)>,
         force_full: bool,
         syntax: Option<&SyntaxOverlay>,
@@ -977,7 +980,11 @@ impl Mux {
                 let fg = overlay_fg
                     .or_else(|| syntax_highlight_at(row, col, syntax))
                     .unwrap_or(fg);
-                colors.push((fg, bg));
+                let style = CellStyle {
+                    bold: cell.flags.contains(Flags::BOLD),
+                    italic: cell.flags.contains(Flags::ITALIC),
+                };
+                colors.push((fg, bg, style));
             }
         }
     }
