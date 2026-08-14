@@ -23,10 +23,12 @@ use alacritty_terminal::vte::ansi::Color as AnsiColor;
 
 mod chat;
 mod damage;
+mod layout;
 mod overlay;
 mod terminal;
 
 pub(crate) use damage::{DirtyRows, RowRevisionMap};
+pub(crate) use layout::TerminalInstanceLayout;
 
 /// Cache for a single shaped row to avoid re-shaping every frame.
 #[derive(Clone)]
@@ -69,8 +71,19 @@ pub struct RenderContext {
     pub row_revisions: HashMap<usize, RowRevisionMap>,
     /// Visual state used to invalidate rows when transient overlays disappear.
     pub grid_visual_states: HashMap<usize, GridVisualState>,
+    /// Persistent terminal cell instances, arranged in stable row slots.
+    pub(crate) terminal_instances: Vec<CellVertex>,
+    /// Persistent terminal LCD instances, arranged in the same row slots.
+    pub(crate) terminal_lcd_instances: Vec<CellVertex>,
+    /// Temporary LCD upload data used when a block cursor changes the cell background.
+    pub(crate) lcd_upload_instances: Vec<CellVertex>,
+    /// LCD cursor background patch for the current focused cursor.
+    pub(crate) lcd_cursor_patch: Option<([f32; 2], [f32; 4])>,
+    /// Layout metadata for each visible terminal pane.
+    pub(crate) terminal_layouts: HashMap<usize, TerminalInstanceLayout>,
+    /// Terminals whose layout was rebuilt during the current frame.
+    pub(crate) layout_dirty_terminals: std::collections::HashSet<usize>,
     pub instances: Vec<CellVertex>,
-    pub lcd_instances: Vec<CellVertex>,
     /// Cached GPU instances for the AI chat panel — rebuilt only when `ChatPanel::dirty`.
     pub panel_instances_cache: Vec<CellVertex>,
     /// Capture of `term_cols` when panel cache was built. If it changes, mark panel dirty.
@@ -146,6 +159,8 @@ pub struct RenderContext {
     pub shape_cache_misses: u64,
     pub(crate) frame_metrics: crate::app::perf::FrameMetrics,
     pub last_instance_count: usize,
+    /// Whether the most recent complete frame upload succeeded.
+    pub last_full_upload_succeeded: bool,
     /// overlay_start from the last full frame — used by the blink fast path so it
     /// can keep overlay rendering correct without a full rebuild.
     pub last_overlay_start: usize,
@@ -249,8 +264,13 @@ impl RenderContext {
             row_caches: HashMap::new(),
             row_revisions: HashMap::new(),
             grid_visual_states: HashMap::new(),
+            terminal_instances: Vec::new(),
+            terminal_lcd_instances: Vec::new(),
+            lcd_upload_instances: Vec::new(),
+            lcd_cursor_patch: None,
+            terminal_layouts: HashMap::new(),
+            layout_dirty_terminals: std::collections::HashSet::new(),
             instances: Vec::new(),
-            lcd_instances: Vec::new(),
             panel_cache_term_cols: 0,
             panel_instances_cache: Vec::new(),
             panel_rect_cache: Vec::new(),
@@ -277,6 +297,7 @@ impl RenderContext {
             shape_cache_misses: 0,
             frame_metrics: crate::app::perf::FrameMetrics::default(),
             last_instance_count: 0,
+            last_full_upload_succeeded: false,
             last_overlay_start: 0,
             last_gpu_upload_bytes: 0,
             scroll_bar_state: None,
@@ -370,6 +391,7 @@ impl RenderContext {
         self.cursor_vertex_template = None;
         self.content_end = 0;
         self.last_instance_count = 0;
+        self.last_full_upload_succeeded = false;
         self.last_overlay_start = 0;
 
         Ok(())
@@ -393,7 +415,9 @@ impl RenderContext {
                 }
             }
             shrink_vec(&mut self.instances);
-            shrink_vec(&mut self.lcd_instances);
+            shrink_vec(&mut self.terminal_instances);
+            shrink_vec(&mut self.terminal_lcd_instances);
+            shrink_vec(&mut self.lcd_upload_instances);
             shrink_vec(&mut self.panel_instances_cache);
             shrink_vec(&mut self.rect_instances);
             shrink_vec(&mut self.scratch_chars);
@@ -403,8 +427,13 @@ impl RenderContext {
             shrink_str(&mut self.fmt_buf);
         }
         self.instances.clear();
-        self.lcd_instances.clear();
         self.rect_instances.clear();
+        self.layout_dirty_terminals.clear();
+        self.lcd_cursor_patch = None;
+        if self.terminal_layouts.is_empty() {
+            self.terminal_instances.clear();
+            self.terminal_lcd_instances.clear();
+        }
     }
 
     /// Drop all per-terminal row caches (used after atlas eviction).
@@ -412,6 +441,196 @@ impl RenderContext {
         self.row_caches.clear();
         self.row_revisions.clear();
         self.grid_visual_states.clear();
+        self.terminal_layouts.clear();
+        self.terminal_instances.clear();
+        self.terminal_lcd_instances.clear();
+        self.lcd_upload_instances.clear();
+        self.lcd_cursor_patch = None;
+        self.layout_dirty_terminals.clear();
+    }
+
+    pub(crate) fn prepare_terminal_layouts(&mut self, pane_infos: &[crate::ui::PaneInfo]) {
+        let row_stride = |columns: usize| columns.saturating_mul(2).max(1);
+        let geometry_changed = pane_infos.len() != self.terminal_layouts.len()
+            || pane_infos.iter().any(|info| {
+                let stride = row_stride(info.cols);
+                self.terminal_layouts
+                    .get(&info.terminal_id)
+                    .map(|layout| {
+                        if layout.columns != info.cols
+                            || layout.rows != info.rows
+                            || layout.col_offset != info.col_offset
+                            || layout.row_offset != info.row_offset
+                        {
+                            return true;
+                        }
+                        let cached_stride = self
+                            .row_caches
+                            .get(&info.terminal_id)
+                            .map(|cache| {
+                                cache
+                                    .rows
+                                    .iter()
+                                    .take(info.rows)
+                                    .flatten()
+                                    .map(|entry| {
+                                        entry.instances.len().max(entry.lcd_instances.len())
+                                    })
+                                    .max()
+                                    .unwrap_or(0)
+                            })
+                            .unwrap_or(0);
+                        layout.row_stride != stride.max(cached_stride).max(1)
+                    })
+                    .unwrap_or(true)
+            });
+        if !geometry_changed {
+            return;
+        }
+
+        self.terminal_layouts.clear();
+        self.terminal_instances.clear();
+        self.terminal_lcd_instances.clear();
+        self.layout_dirty_terminals.clear();
+
+        let mut base = 0usize;
+        for info in pane_infos {
+            let stride = row_stride(info.cols);
+            let mut layout = TerminalInstanceLayout::rebuild(
+                info.terminal_id,
+                info.cols,
+                info.rows,
+                info.col_offset,
+                info.row_offset,
+                stride,
+            );
+            layout.set_base(base);
+            base = base.saturating_add(layout.storage_len());
+            self.layout_dirty_terminals.insert(info.terminal_id);
+            self.terminal_layouts.insert(info.terminal_id, layout);
+        }
+        let zero = bytemuck::Zeroable::zeroed();
+        self.terminal_instances.resize(base, zero);
+        self.terminal_lcd_instances.resize(base, zero);
+    }
+
+    pub(crate) fn take_layout_dirty(&mut self, terminal_id: usize) -> bool {
+        self.layout_dirty_terminals.remove(&terminal_id)
+    }
+
+    pub(crate) fn terminal_instance_count(&self) -> usize {
+        self.terminal_instances.len()
+    }
+
+    pub(crate) fn prepare_lcd_upload(&mut self, cursor_blink_on: bool) -> bool {
+        let Some((cursor_pos, cursor_bg)) = self.lcd_cursor_patch else {
+            self.lcd_upload_instances.clear();
+            return false;
+        };
+        if !cursor_blink_on {
+            self.lcd_upload_instances.clear();
+            return false;
+        }
+
+        self.lcd_upload_instances.clear();
+        self.lcd_upload_instances
+            .extend_from_slice(&self.terminal_lcd_instances);
+        for vertex in &mut self.lcd_upload_instances {
+            if vertex.grid_pos == cursor_pos {
+                vertex.bg = cursor_bg;
+            }
+        }
+        true
+    }
+
+    pub(crate) fn grow_terminal_row_capacity(
+        &mut self,
+        terminal_id: usize,
+        required: usize,
+    ) -> Result<(), crate::renderer::atlas::AtlasError> {
+        let Some(target) = self.terminal_layouts.get(&terminal_id) else {
+            return Err(crate::renderer::atlas::AtlasError::Other(
+                "terminal instance layout is missing".to_string(),
+            ));
+        };
+        let target_stride = target.row_stride.saturating_mul(2).max(required).max(1);
+        let geometries: Vec<_> = self
+            .terminal_layouts
+            .values()
+            .map(|layout| {
+                (
+                    layout.terminal_id,
+                    layout.columns,
+                    layout.rows,
+                    layout.col_offset,
+                    layout.row_offset,
+                    if layout.terminal_id == terminal_id {
+                        target_stride
+                    } else {
+                        layout.row_stride
+                    },
+                )
+            })
+            .collect();
+
+        let cached_rows: Vec<_> = geometries
+            .iter()
+            .flat_map(|(tid, _, rows, _, _, row_stride)| {
+                self.row_caches.get(tid).into_iter().flat_map(move |cache| {
+                    cache
+                        .rows
+                        .iter()
+                        .take(*rows)
+                        .enumerate()
+                        .filter_map(move |(row, entry)| {
+                            entry.as_ref().map(|entry| {
+                                let fits = entry.instances.len().max(entry.lcd_instances.len())
+                                    <= *row_stride;
+                                fits.then(|| {
+                                    (
+                                        *tid,
+                                        row,
+                                        entry.instances.clone(),
+                                        entry.lcd_instances.clone(),
+                                    )
+                                })
+                            })
+                        })
+                })
+            })
+            .flatten()
+            .collect();
+
+        self.terminal_layouts.clear();
+        let mut base = 0usize;
+        for (tid, columns, rows, col_offset, row_offset, row_stride) in geometries {
+            let mut layout = TerminalInstanceLayout::rebuild(
+                tid, columns, rows, col_offset, row_offset, row_stride,
+            );
+            layout.set_base(base);
+            base = base.saturating_add(layout.storage_len());
+            self.terminal_layouts.insert(tid, layout);
+        }
+
+        let zero = bytemuck::Zeroable::zeroed();
+        self.terminal_instances.clear();
+        self.terminal_lcd_instances.clear();
+        self.lcd_upload_instances.clear();
+        self.terminal_instances.resize(base, zero);
+        self.terminal_lcd_instances.resize(base, zero);
+
+        for (tid, row, instances, lcd_instances) in cached_rows {
+            let Some(layout) = self.terminal_layouts.get_mut(&tid) else {
+                continue;
+            };
+            layout
+                .write_row(row, &instances, &mut self.terminal_instances)
+                .map_err(|error| crate::renderer::atlas::AtlasError::Other(error.to_string()))?;
+            layout
+                .write_lcd_row(row, &lcd_instances, &mut self.terminal_lcd_instances)
+                .map_err(|error| crate::renderer::atlas::AtlasError::Other(error.to_string()))?;
+        }
+        Ok(())
     }
 
     pub(crate) fn update_grid_visual_state(

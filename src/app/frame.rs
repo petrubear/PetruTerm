@@ -351,6 +351,11 @@ impl App {
         if blink_only {
             self.cursor_blink_dirty = false;
             if let Some(rc) = &mut self.render_ctx {
+                if !rc.last_full_upload_succeeded {
+                    rc.renderer.set_cell_count(0);
+                    let _ = rc.renderer.render();
+                    return;
+                }
                 let blink_on = self.input.cursor_blink_on;
                 // Upload cursor (or a transparent placeholder) at content_end so the
                 // status bar / tab bar / scroll bar at content_end+1.. remain in the
@@ -366,8 +371,40 @@ impl App {
                             ..v
                         }
                     };
-                    rc.renderer
+                    let cursor_uploaded = rc
+                        .renderer
                         .upload_instances(std::slice::from_ref(&upload_v), rc.content_end);
+                    let lcd_uploaded = if rc.renderer.lcd_enabled() {
+                        let use_lcd_upload = rc.prepare_lcd_upload(blink_on);
+                        if use_lcd_upload {
+                            rc.renderer.upload_lcd_instances(&rc.lcd_upload_instances)
+                        } else {
+                            rc.renderer.upload_lcd_instances(&rc.terminal_lcd_instances)
+                        }
+                    } else {
+                        true
+                    };
+                    if !cursor_uploaded || !lcd_uploaded {
+                        rc.renderer.set_cell_count(0);
+                        let _ = rc.renderer.render();
+                        return;
+                    }
+                } else {
+                    let lcd_uploaded = if rc.renderer.lcd_enabled() {
+                        let use_lcd_upload = rc.prepare_lcd_upload(blink_on);
+                        if use_lcd_upload {
+                            rc.renderer.upload_lcd_instances(&rc.lcd_upload_instances)
+                        } else {
+                            rc.renderer.upload_lcd_instances(&rc.terminal_lcd_instances)
+                        }
+                    } else {
+                        true
+                    };
+                    if !lcd_uploaded {
+                        rc.renderer.set_cell_count(0);
+                        let _ = rc.renderer.render();
+                        return;
+                    }
                 }
                 rc.renderer.set_cell_count(rc.last_instance_count);
                 rc.renderer.set_overlay_start(rc.last_overlay_start);
@@ -1039,7 +1076,7 @@ impl App {
 
             // ── Overlays (search bar, palette, context menu) ─────────────────────
             // Record the split point so the GPU renders these in a separate pass.
-            let overlay_start = rc.instances.len();
+            let overlay_start = rc.terminal_instances.len() + rc.instances.len();
             if self.ui.search_bar.visible {
                 rc.build_search_bar_instances(
                     &self.ui.search_bar,
@@ -1114,13 +1151,16 @@ impl App {
             }
 
             // ── GPU upload ──────────────────────────────────────────────────────
-            rc.last_instance_count = rc.instances.len();
+            let terminal_count = rc.terminal_instance_count();
+            let overlay_count = rc.instances.len();
+            rc.last_instance_count = terminal_count + overlay_count;
             rc.last_overlay_start = overlay_start;
             {
                 use crate::renderer::cell::CellVertex;
                 use crate::renderer::rounded_rect::RoundedRectInstance;
-                let instance_bytes = rc.instances.len() * std::mem::size_of::<CellVertex>();
-                let lcd_bytes = rc.lcd_instances.len() * std::mem::size_of::<CellVertex>();
+                let instance_bytes =
+                    (terminal_count + overlay_count) * std::mem::size_of::<CellVertex>();
+                let lcd_bytes = rc.terminal_lcd_instances.len() * std::mem::size_of::<CellVertex>();
                 let rect_bytes =
                     rc.rect_instances.len() * std::mem::size_of::<RoundedRectInstance>();
                 rc.last_gpu_upload_bytes = instance_bytes + lcd_bytes + rect_bytes;
@@ -1132,9 +1172,25 @@ impl App {
             }
             rc.renderer.upload_rect_instances(&rc.rect_instances);
             rc.renderer.set_overlay_start(overlay_start);
-            rc.renderer.upload_instances(&rc.instances, 0);
-            rc.renderer.set_cell_count(rc.instances.len());
-            rc.renderer.upload_lcd_instances(&rc.lcd_instances);
+            let terminal_uploaded = rc.renderer.upload_instances(&rc.terminal_instances, 0);
+            let overlays_uploaded = rc.renderer.upload_instances(&rc.instances, terminal_count);
+            let lcd_uploaded = if rc.renderer.lcd_enabled() {
+                let use_lcd_upload = rc.prepare_lcd_upload(self.input.cursor_blink_on);
+                if use_lcd_upload {
+                    rc.renderer.upload_lcd_instances(&rc.lcd_upload_instances)
+                } else {
+                    rc.renderer.upload_lcd_instances(&rc.terminal_lcd_instances)
+                }
+            } else {
+                true
+            };
+            if terminal_uploaded && overlays_uploaded && lcd_uploaded {
+                rc.renderer.set_cell_count(terminal_count + overlay_count);
+                rc.last_full_upload_succeeded = true;
+            } else {
+                rc.renderer.set_cell_count(0);
+                rc.last_full_upload_succeeded = false;
+            }
             let _ = rc.renderer.render();
 
             // ── Input-to-pixel latency probe (RUST_LOG=petruterm=debug) ─────────
@@ -1177,6 +1233,7 @@ fn build_all_pane_instances(
     active_terminal_id: usize,
 ) -> Result<(), crate::renderer::atlas::AtlasError> {
     rc.begin_frame();
+    rc.prepare_terminal_layouts(pane_infos);
     // Take the scratch buffer out of rc so we can mutably borrow rc (build_instances)
     // while the buffer is filled by mux. Returned at the end of the function.
     let mut cell_data_scratch = std::mem::take(&mut rc.cell_data_scratch);
@@ -1188,6 +1245,7 @@ fn build_all_pane_instances(
         // Without this, undamaged-row skipping retains stale data from the previous
         // terminal, causing TUI app content to bleed into unrelated tabs.
         let terminal_changed = last_scratch_tid != Some(info.terminal_id);
+        let layout_changed = rc.take_layout_dirty(info.terminal_id);
         if terminal_changed {
             cell_data_scratch.clear();
         }
@@ -1336,7 +1394,7 @@ fn build_all_pane_instances(
                     .map(|overlay| overlay.viewport_row),
             },
         );
-        let force_full = terminal_changed || visual_state_changed;
+        let force_full = terminal_changed || layout_changed || visual_state_changed;
         mux.collect_grid_cells_for(
             info.terminal_id,
             &mut cell_data_scratch,
@@ -1348,22 +1406,14 @@ fn build_all_pane_instances(
             flag_hint_overlay.as_ref(),
         );
         let cell_data = &cell_data_scratch[..];
-        rc.build_instances(
-            cell_data,
-            config,
-            font,
-            info.terminal_id,
-            &dirty_rows,
-            info.col_offset,
-            info.row_offset,
-        )?;
+        rc.build_instances(cell_data, config, font, info.terminal_id, &dirty_rows)?;
         last_scratch_tid = Some(info.terminal_id);
     }
     rc.cell_data_scratch = cell_data_scratch;
     rc.scratch_terminal_id = last_scratch_tid;
 
     // Record content boundary before cursor — used by the fast blink path.
-    rc.content_end = rc.instances.len();
+    rc.content_end = rc.terminal_instances.len();
 
     // Emit cursor for the focused pane (always after content_end).
     if let Some(info) = pane_infos.iter().find(|i| i.focused) {

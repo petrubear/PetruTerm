@@ -3,16 +3,11 @@ use super::*;
 impl RenderContext {
     /// Build and append cell instances for one pane's terminal.
     ///
-    /// Instances are APPENDED to `self.instances` (not cleared); call `begin_frame()` first.
-    /// `col_offset` and `row_offset` position this pane within the global grid coordinate space.
+    /// Store terminal instances in persistent row slots.
     ///
-    /// Two sequential phases:
-    ///   Phase 1 (serial): resolve colors, hash, shape+rasterize cache misses, populate row_caches.
-    ///   Phase 2 (serial): apply pane offsets from cache into output buffers.
+    /// Dirty rows are shaped serially and written into their stable slots. Clean
+    /// rows remain in persistent storage and do not touch the shaping path.
     ///
-    /// NOTE: rayon was evaluated for Phase 2 (vertex offset application) but found to be 14x
-    /// slower than serial at 200 rows due to fork-join overhead (~130 µs) exceeding the work
-    /// (~10 µs). Rayon is reserved for higher-granularity tasks (search, batch rasterization).
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::type_complexity)]
     pub fn build_instances(
@@ -22,8 +17,6 @@ impl RenderContext {
         font: &crate::config::schema::FontConfig,
         terminal_id: usize,
         dirty_rows: &DirtyRows,
-        col_offset: usize,
-        row_offset: usize,
     ) -> Result<(), crate::renderer::atlas::AtlasError> {
         #[cfg(feature = "profiling")]
         let _span = tracing::info_span!("build_instances", rows = cell_data.len()).entered();
@@ -53,10 +46,7 @@ impl RenderContext {
             }
         }
 
-        // ── Phase 1: serial — shape + rasterize cache misses, populate row_caches ──────
-        //
-        // No vertex emission here. All emission happens in phase 2 so that
-        // the cache is fully populated before the parallel read pass begins.
+        // ── Phase 1: serial — shape + rasterize dirty rows ─────────────────────────────
         for (row_idx, (text, raw_colors)) in cell_data.iter().enumerate() {
             let revision = self
                 .row_revisions
@@ -106,6 +96,23 @@ impl RenderContext {
                 {
                     entry.revision = revision;
                 }
+                let (cached_instances, cached_lcd_instances) = self
+                    .row_caches
+                    .get(&terminal_id)
+                    .and_then(|cache| cache.rows.get(row_idx))
+                    .and_then(|entry| entry.as_ref())
+                    .map(|entry| (entry.instances.clone(), entry.lcd_instances.clone()))
+                    .ok_or_else(|| {
+                        crate::renderer::atlas::AtlasError::Other(
+                            "row cache entry disappeared during update".to_string(),
+                        )
+                    })?;
+                self.write_row_to_layout(
+                    terminal_id,
+                    row_idx,
+                    &cached_instances,
+                    &cached_lcd_instances,
+                )?;
                 continue;
             }
             self.shape_cache_misses = self.shape_cache_misses.saturating_add(1);
@@ -230,7 +237,9 @@ impl RenderContext {
                 }
             }
 
-            // Store local coordinates in cache. Emission happens in phase 2.
+            self.write_row_to_layout(terminal_id, row_idx, &row_instances, &row_lcd_instances)?;
+
+            // Store local coordinates in cache.
             if let Some(cache) = self.row_caches.get_mut(&terminal_id) {
                 if row_idx < cache.rows.len() {
                     cache.rows[row_idx] = Some(RowCacheEntry {
@@ -243,30 +252,37 @@ impl RenderContext {
             }
         }
 
-        // ── Phase 2: emit all rows with pane offset applied ──────────────────────────
-        if let Some(cache) = self.row_caches.get(&terminal_id) {
-            let rows = &cache.rows[..n.min(cache.rows.len())];
-            let co = col_offset as f32;
-            for (row_idx, entry_opt) in rows.iter().enumerate() {
-                let Some(entry) = entry_opt.as_ref() else {
-                    continue;
-                };
-                let ro = (row_offset + row_idx) as f32;
-                for inst in &entry.instances {
-                    self.instances.push(CellVertex {
-                        grid_pos: [inst.grid_pos[0] + co, ro],
-                        ..*inst
-                    });
-                }
-                for inst in &entry.lcd_instances {
-                    self.lcd_instances.push(CellVertex {
-                        grid_pos: [inst.grid_pos[0] + co, ro],
-                        ..*inst
-                    });
-                }
-            }
+        Ok(())
+    }
+
+    fn write_row_to_layout(
+        &mut self,
+        terminal_id: usize,
+        row: usize,
+        instances: &[CellVertex],
+        lcd_instances: &[CellVertex],
+    ) -> Result<(), crate::renderer::atlas::AtlasError> {
+        let required = instances.len().max(lcd_instances.len());
+        let needs_growth = self
+            .terminal_layouts
+            .get(&terminal_id)
+            .and_then(|layout| layout.row_slot(row).map(|slot| required > slot.capacity))
+            .unwrap_or(false);
+        if needs_growth {
+            self.grow_terminal_row_capacity(terminal_id, required)?;
         }
 
+        let Some(layout) = self.terminal_layouts.get_mut(&terminal_id) else {
+            return Err(crate::renderer::atlas::AtlasError::Other(
+                "terminal instance layout is missing".to_string(),
+            ));
+        };
+        layout
+            .write_row(row, instances, &mut self.terminal_instances)
+            .map_err(|error| crate::renderer::atlas::AtlasError::Other(error.to_string()))?;
+        layout
+            .write_lcd_row(row, lcd_instances, &mut self.terminal_lcd_instances)
+            .map_err(|error| crate::renderer::atlas::AtlasError::Other(error.to_string()))?;
         Ok(())
     }
 
@@ -312,25 +328,17 @@ impl RenderContext {
             _pad: 0,
         };
         self.cursor_vertex_template = Some(v);
-        if blink_on {
-            self.instances.push(v);
-        }
-
-        // fs_lcd blends in.bg explicitly (unlike fs_main which uses premultiplied
-        // alpha over the framebuffer). LCD glyph vertices store the cell's original
-        // bg, which is correct for normal rendering but wrong when a BLOCK cursor BG
-        // pass paints cursor_bg over the full cell. Only patch for block shapes — beam
-        // and underline cursors cover a small fraction of the cell, so the glyph bg
-        // should remain the cell's original bg (most of the glyph sits on default_bg).
-        if matches!(info.shape, CursorShape::Block | CursorShape::HollowBlock) {
-            let cursor_bg = config.colors.cursor_bg;
-            let cursor_gp = v.grid_pos;
-            for lcd_v in &mut self.lcd_instances {
-                if lcd_v.grid_pos == cursor_gp {
-                    lcd_v.bg = cursor_bg;
-                }
+        self.instances.push(if blink_on {
+            v
+        } else {
+            CellVertex {
+                bg: [0.0, 0.0, 0.0, 0.0],
+                ..v
             }
-        }
+        });
+
+        self.lcd_cursor_patch = matches!(info.shape, CursorShape::Block | CursorShape::HollowBlock)
+            .then_some((v.grid_pos, config.colors.cursor_bg));
     }
 
     /// Draw 1-pixel separator lines between panes.

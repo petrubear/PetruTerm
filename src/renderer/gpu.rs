@@ -14,7 +14,7 @@ use crate::renderer::pipeline::{CellPipeline, CellPipelineBgAware, CellPipelineL
 use crate::renderer::rounded_rect::{RoundedRectInstance, RoundedRectPipeline};
 
 /// Maximum number of cell instances per frame (cols × rows + overdraw headroom).
-const MAX_INSTANCES: usize = 32_768;
+const INITIAL_INSTANCE_CAPACITY: usize = 32_768;
 
 /// Maximum number of rounded rect instances per frame (tab bar pills + overdraw).
 const MAX_RECT_INSTANCES: usize = 1024;
@@ -43,6 +43,7 @@ pub struct GpuRenderer {
     bg_aware_uniform_bind_group: wgpu::BindGroup,
     bg_aware_atlas_bind_group: wgpu::BindGroup,
     instance_buffer: wgpu::Buffer,
+    instance_capacity: usize,
     cell_count: usize,
     /// Index into the instance buffer where overlay instances start (palette, context menu).
     /// Instances before this index are rendered first (bg+glyph); overlays rendered after.
@@ -53,6 +54,7 @@ pub struct GpuRenderer {
     lcd_atlas: Option<Rc<RefCell<LcdGlyphAtlas>>>,
     lcd_atlas_bind_group: wgpu::BindGroup,
     lcd_instance_buffer: wgpu::Buffer,
+    lcd_instance_capacity: usize,
     lcd_instance_count: usize,
     lcd_ready: bool,
 
@@ -233,8 +235,10 @@ impl GpuRenderer {
         // Instance buffer (GPU-side, write each frame)
         let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("cell instances"),
-            size: (MAX_INSTANCES * std::mem::size_of::<CellVertex>()) as u64,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            size: (INITIAL_INSTANCE_CAPACITY * std::mem::size_of::<CellVertex>()) as u64,
+            usage: wgpu::BufferUsages::VERTEX
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
 
@@ -270,8 +274,10 @@ impl GpuRenderer {
         // LCD instance buffer
         let lcd_instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("LCD cell instances"),
-            size: (MAX_INSTANCES * std::mem::size_of::<CellVertex>()) as u64,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            size: (INITIAL_INSTANCE_CAPACITY * std::mem::size_of::<CellVertex>()) as u64,
+            usage: wgpu::BufferUsages::VERTEX
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
 
@@ -305,12 +311,14 @@ impl GpuRenderer {
             bg_aware_uniform_bind_group,
             bg_aware_atlas_bind_group,
             instance_buffer,
+            instance_capacity: INITIAL_INSTANCE_CAPACITY,
             cell_count: 0,
             overlay_start: 0,
             lcd_pipeline,
             lcd_atlas,
             lcd_atlas_bind_group,
             lcd_instance_buffer,
+            lcd_instance_capacity: INITIAL_INSTANCE_CAPACITY,
             lcd_instance_count: 0,
             lcd_ready: false,
             rect_pipeline,
@@ -369,18 +377,22 @@ impl GpuRenderer {
     }
 
     /// Upload cell instances for this frame. Supports partial updates via offset.
-    pub fn upload_instances(&mut self, instances: &[CellVertex], offset: usize) {
+    pub fn upload_instances(&mut self, instances: &[CellVertex], offset: usize) -> bool {
         #[cfg(feature = "profiling")]
         let _span = tracing::info_span!("upload_instance_ranges", count = instances.len(), offset)
             .entered();
 
         let count = instances.len();
-        if offset + count > MAX_INSTANCES {
-            log::warn!(
-                "upload_instances overflow: offset={offset} count={count} max={MAX_INSTANCES}"
-            );
+        let Some(required) = offset.checked_add(count) else {
+            log::error!("upload_instances size overflow: offset={offset} count={count}");
+            self.cell_count = 0;
+            return false;
+        };
+        if !self.ensure_instance_capacity(required) {
+            self.cell_count = 0;
+            return false;
         }
-        if count > 0 && offset + count <= MAX_INSTANCES {
+        if count > 0 {
             self.queue.write_buffer(
                 &self.instance_buffer,
                 (offset * std::mem::size_of::<CellVertex>()) as u64,
@@ -388,17 +400,18 @@ impl GpuRenderer {
             );
         }
         // cell_count is the total count to draw, set by the caller.
+        true
     }
 
     pub fn set_cell_count(&mut self, count: usize) {
-        self.cell_count = count.min(MAX_INSTANCES);
+        self.cell_count = count;
     }
 
     /// Set the index at which overlay instances (palette, context menu) begin.
     /// These are rendered in a separate bg+glyph pass AFTER the main pass so
     /// overlay backgrounds cover terminal glyphs underneath.
     pub fn set_overlay_start(&mut self, start: usize) {
-        self.overlay_start = start.min(MAX_INSTANCES);
+        self.overlay_start = start;
     }
 
     /// Render a single frame: combined pass for bg and glyphs.
@@ -557,22 +570,135 @@ impl GpuRenderer {
     }
 
     /// Upload LCD cell instances for this frame. Must be called before `render()`.
-    pub fn upload_lcd_instances(&mut self, instances: &[CellVertex]) {
-        let count = instances.len().min(MAX_INSTANCES);
-        if instances.len() > MAX_INSTANCES {
-            log::warn!(
-                "upload_lcd_instances overflow: count={} max={MAX_INSTANCES}",
-                instances.len()
-            );
+    pub fn upload_lcd_instances(&mut self, instances: &[CellVertex]) -> bool {
+        if self.lcd_pipeline.is_none() {
+            self.lcd_instance_count = 0;
+            return true;
+        }
+        let count = instances.len();
+        if !self.ensure_lcd_instance_capacity(count) {
+            self.lcd_instance_count = 0;
+            return false;
         }
         if count > 0 {
             self.queue.write_buffer(
                 &self.lcd_instance_buffer,
                 0,
-                bytemuck::cast_slice(&instances[..count]),
+                bytemuck::cast_slice(instances),
             );
         }
         self.lcd_instance_count = count;
+        true
+    }
+
+    pub fn lcd_enabled(&self) -> bool {
+        self.lcd_pipeline.is_some()
+    }
+
+    fn ensure_instance_capacity(&mut self, required: usize) -> bool {
+        if required <= self.instance_capacity {
+            return true;
+        }
+        let vertex_size = std::mem::size_of::<CellVertex>();
+        let max_capacity = (self.device.limits().max_buffer_size as usize) / vertex_size;
+        if required > max_capacity {
+            log::error!(
+                "cell instance upload exceeds device buffer limit: required={required} max={max_capacity}"
+            );
+            return false;
+        }
+        let mut capacity = self.instance_capacity.max(1);
+        while capacity < required {
+            capacity = capacity
+                .checked_mul(2)
+                .unwrap_or(required)
+                .min(max_capacity);
+        }
+        let size = match capacity.checked_mul(vertex_size) {
+            Some(size) => size,
+            None => {
+                log::error!("cell instance buffer size overflow: capacity={capacity}");
+                return false;
+            }
+        };
+        let new_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("cell instances"),
+            size: size as u64,
+            usage: wgpu::BufferUsages::VERTEX
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        let old_buffer = std::mem::replace(&mut self.instance_buffer, new_buffer);
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("grow cell instance buffer"),
+            });
+        encoder.copy_buffer_to_buffer(
+            &old_buffer,
+            0,
+            &self.instance_buffer,
+            0,
+            (self.instance_capacity * vertex_size) as u64,
+        );
+        self.queue.submit(std::iter::once(encoder.finish()));
+        self.instance_capacity = capacity;
+        log::debug!("Grew cell instance buffer to {capacity} vertices");
+        true
+    }
+
+    fn ensure_lcd_instance_capacity(&mut self, required: usize) -> bool {
+        if required <= self.lcd_instance_capacity {
+            return true;
+        }
+        let vertex_size = std::mem::size_of::<CellVertex>();
+        let max_capacity = (self.device.limits().max_buffer_size as usize) / vertex_size;
+        if required > max_capacity {
+            log::error!(
+                "LCD instance upload exceeds device buffer limit: required={required} max={max_capacity}"
+            );
+            return false;
+        }
+        let mut capacity = self.lcd_instance_capacity.max(1);
+        while capacity < required {
+            capacity = capacity
+                .checked_mul(2)
+                .unwrap_or(required)
+                .min(max_capacity);
+        }
+        let size = match capacity.checked_mul(vertex_size) {
+            Some(size) => size,
+            None => {
+                log::error!("LCD instance buffer size overflow: capacity={capacity}");
+                return false;
+            }
+        };
+        let new_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("LCD cell instances"),
+            size: size as u64,
+            usage: wgpu::BufferUsages::VERTEX
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        let old_buffer = std::mem::replace(&mut self.lcd_instance_buffer, new_buffer);
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("grow LCD instance buffer"),
+            });
+        encoder.copy_buffer_to_buffer(
+            &old_buffer,
+            0,
+            &self.lcd_instance_buffer,
+            0,
+            (self.lcd_instance_capacity * vertex_size) as u64,
+        );
+        self.queue.submit(std::iter::once(encoder.finish()));
+        self.lcd_instance_capacity = capacity;
+        log::debug!("Grew LCD instance buffer to {capacity} vertices");
+        true
     }
 
     /// Returns a clone of the LCD atlas Rc for sharing with TextShaper.

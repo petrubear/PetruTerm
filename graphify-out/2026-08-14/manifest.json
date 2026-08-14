@@ -165,8 +165,8 @@
     "semantic_hash": ""
   },
   "src/app/renderer/mod.rs": {
-    "mtime": 1786721270.8748124,
-    "ast_hash": "b6e73f4385c8d49122b3cdc7d7382f31",
+    "mtime": 1786720961.1539454,
+    "ast_hash": "180ddcb2a31ff9af7518212409d50599",
     "semantic_hash": ""
   },
   "src/app/renderer/overlay.rs": {
