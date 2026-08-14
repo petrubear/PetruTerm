@@ -1443,10 +1443,21 @@ impl RenderContext {
             ),
             (
                 format!(
-                    " {:10} inc:{} full:{}",
+                    " {:10} inc:{} full:{} redraws:{} wakeups:{}",
                     "writes",
                     self.frame_metrics.incremental_upload_ranges,
-                    self.frame_metrics.full_upload_ranges
+                    self.frame_metrics.full_upload_ranges,
+                    self.frame_metrics.redraws,
+                    self.frame_metrics.wakeups
+                ),
+                value_fg,
+            ),
+            (
+                format!(
+                    " {:10} data:{} pending:{}",
+                    "pty_events",
+                    self.frame_metrics.pty_events,
+                    self.frame_metrics.pty_pending_events
                 ),
                 value_fg,
             ),

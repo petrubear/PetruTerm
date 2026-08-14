@@ -22,10 +22,36 @@ impl FrameScenario {
     }
 }
 
+pub(crate) fn classify_frame_scenario(
+    requested: FrameScenario,
+    active_panes: usize,
+    has_data: bool,
+    data_events: usize,
+    pending_events: usize,
+) -> FrameScenario {
+    if matches!(requested, FrameScenario::Resize | FrameScenario::Scroll) {
+        return requested;
+    }
+    if active_panes > 1 {
+        return FrameScenario::MultiPane;
+    }
+    if has_data {
+        if data_events > 2 || pending_events > 0 {
+            FrameScenario::PtyOutput
+        } else {
+            FrameScenario::Interactive
+        }
+    } else {
+        requested
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct FrameMetrics {
     pub scenario: FrameScenario,
     pub pty_terminals: usize,
+    pub pty_events: usize,
+    pub pty_pending_events: usize,
     pub dirty_rows: usize,
     pub rebuilt_rows: usize,
     pub upload_ranges: usize,
@@ -68,7 +94,7 @@ impl FrameMetrics {
 
 #[cfg(test)]
 mod tests {
-    use super::FrameMetrics;
+    use super::{classify_frame_scenario, FrameMetrics, FrameScenario};
 
     #[test]
     fn upload_metrics_accumulate_and_reset() {
@@ -90,8 +116,44 @@ mod tests {
 
     #[test]
     fn scenario_labels_are_stable_debug_labels() {
-        assert_eq!(FrameScenario::Idle.label(), "idle");
-        assert_eq!(FrameScenario::PtyOutput.label(), "pty_output");
-        assert_eq!(FrameScenario::MultiPane.label(), "multi_pane");
+        let labels = [
+            (FrameScenario::Idle, "idle"),
+            (FrameScenario::Interactive, "interactive"),
+            (FrameScenario::PtyOutput, "pty_output"),
+            (FrameScenario::Scroll, "scroll"),
+            (FrameScenario::Resize, "resize"),
+            (FrameScenario::MultiPane, "multi_pane"),
+        ];
+        for (scenario, label) in labels {
+            assert_eq!(scenario.label(), label);
+        }
+    }
+
+    #[test]
+    fn scenario_classification_uses_event_volume_and_preserves_workload_labels() {
+        assert_eq!(
+            classify_frame_scenario(FrameScenario::Idle, 1, true, 1, 0),
+            FrameScenario::Interactive
+        );
+        assert_eq!(
+            classify_frame_scenario(FrameScenario::Interactive, 1, true, 3, 0),
+            FrameScenario::PtyOutput
+        );
+        assert_eq!(
+            classify_frame_scenario(FrameScenario::Idle, 1, true, 1, 1),
+            FrameScenario::PtyOutput
+        );
+        assert_eq!(
+            classify_frame_scenario(FrameScenario::Interactive, 2, true, 1, 0),
+            FrameScenario::MultiPane
+        );
+        assert_eq!(
+            classify_frame_scenario(FrameScenario::Resize, 2, true, 10, 10),
+            FrameScenario::Resize
+        );
+        assert_eq!(
+            classify_frame_scenario(FrameScenario::Scroll, 2, true, 10, 10),
+            FrameScenario::Scroll
+        );
     }
 }

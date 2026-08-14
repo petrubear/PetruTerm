@@ -19,6 +19,8 @@ pub(crate) struct PtyEventBatch {
     pub(crate) data_ids: Vec<usize>,
     pub(crate) exited: Vec<usize>,
     pub(crate) has_pending: bool,
+    pub(crate) data_events: usize,
+    pub(crate) pending_events: usize,
 }
 
 pub(crate) const PTY_EVENT_WORK_BUDGET: usize = 256;
@@ -55,6 +57,8 @@ impl PtyEventBatch {
             }
         }
         self.has_pending |= other.has_pending;
+        self.data_events = self.data_events.saturating_add(other.data_events);
+        self.pending_events = self.pending_events.saturating_add(other.pending_events);
     }
 }
 
@@ -354,6 +358,8 @@ impl Mux {
         let mut exit_codes: Vec<(usize, i32)> = Vec::new();
         let mut work = 0usize;
         let mut has_pending = false;
+        let mut data_events = 0usize;
+        let mut pending_events = 0usize;
         self.osc133_events.clear();
         let mut osc133_pending: Vec<(usize, Osc133Marker)> = Vec::new();
         'terminals: for (id, terminal_slot) in self.terminals.iter_mut().enumerate() {
@@ -364,6 +370,7 @@ impl Mux {
             let terminal_has_pending =
                 drain_pty_events(&rx, &mut work, PTY_EVENT_WORK_BUDGET, |event| match event {
                     PtyEvent::DataReady => {
+                        data_events = data_events.saturating_add(1);
                         if !data_ids.contains(&id) {
                             data_ids.push(id);
                         }
@@ -409,6 +416,7 @@ impl Mux {
                 });
             if terminal_has_pending {
                 has_pending = true;
+                pending_events = pending_events.saturating_add(rx.len());
                 break 'terminals;
             }
         }
@@ -421,6 +429,8 @@ impl Mux {
             data_ids,
             exited,
             has_pending,
+            data_events,
+            pending_events,
             ..PtyEventBatch::default()
         }
     }

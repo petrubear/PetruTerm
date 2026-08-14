@@ -12,6 +12,7 @@ use crate::renderer::cell::{CellUniforms, CellVertex};
 use crate::renderer::lcd_atlas::LcdGlyphAtlas;
 use crate::renderer::pipeline::{CellPipeline, CellPipelineBgAware, CellPipelineLcd};
 use crate::renderer::rounded_rect::{RoundedRectInstance, RoundedRectPipeline};
+use crate::renderer::upload::upload_ranges_bytes;
 use crate::renderer::upload::UploadRange;
 
 /// Maximum number of cell instances per frame (cols × rows + overdraw headroom).
@@ -426,7 +427,6 @@ impl GpuRenderer {
             ));
         }
 
-        let mut bytes_written = 0usize;
         for range in ranges {
             let bytes = bytemuck::cast_slice(&instances[range.start..range.end]);
             let byte_offset = range
@@ -435,11 +435,11 @@ impl GpuRenderer {
                 .ok_or_else(|| anyhow::anyhow!("terminal upload byte offset overflow"))?;
             self.queue
                 .write_buffer(&self.instance_buffer, byte_offset as u64, bytes);
-            bytes_written = bytes_written
-                .checked_add(bytes.len())
-                .ok_or_else(|| anyhow::anyhow!("terminal upload byte count overflow"))?;
         }
-        Ok(bytes_written)
+        Ok(upload_ranges_bytes(
+            ranges,
+            std::mem::size_of::<CellVertex>(),
+        ))
     }
 
     /// Upload only the changed ranges of persistent LCD instances.
@@ -461,7 +461,6 @@ impl GpuRenderer {
             ));
         }
 
-        let mut bytes_written = 0usize;
         for range in ranges {
             let bytes = bytemuck::cast_slice(&instances[range.start..range.end]);
             let byte_offset = range
@@ -470,12 +469,12 @@ impl GpuRenderer {
                 .ok_or_else(|| anyhow::anyhow!("LCD upload byte offset overflow"))?;
             self.queue
                 .write_buffer(&self.lcd_instance_buffer, byte_offset as u64, bytes);
-            bytes_written = bytes_written
-                .checked_add(bytes.len())
-                .ok_or_else(|| anyhow::anyhow!("LCD upload byte count overflow"))?;
         }
         self.lcd_instance_count = instances.len();
-        Ok(bytes_written)
+        Ok(upload_ranges_bytes(
+            ranges,
+            std::mem::size_of::<CellVertex>(),
+        ))
     }
 
     /// Upload the dynamic cursor and UI overlay buffer.

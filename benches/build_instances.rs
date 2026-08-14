@@ -4,6 +4,7 @@ use petruterm::config::schema::FontConfig;
 use petruterm::font::{TextShaper, TextShaperConfig};
 use petruterm::renderer::atlas::{ColorAtlas, GlyphAtlas};
 use petruterm::renderer::cell::{CellVertex, FLAG_COLOR_GLYPH};
+use petruterm::renderer::upload::{merge_upload_ranges, upload_ranges_bytes, UploadRange};
 use rayon::prelude::*;
 use rustc_hash::FxHasher;
 use std::hash::{Hash, Hasher};
@@ -596,28 +597,38 @@ fn bench_incremental_multi_pane_layout_change(c: &mut Criterion) {
     });
 }
 
-/// Comparable CPU-side accounting for legacy full terminal/LCD uploads and
-/// incremental row-range uploads. Both paths intentionally exclude overlays.
+/// Exercise production UploadRange merging and byte accounting for legacy full
+/// terminal/LCD uploads versus incremental row-range uploads.
 fn bench_upload_bytes_comparison(c: &mut Criterion) {
     let full_instances = COLS * ROWS;
     let vertex_bytes = std::mem::size_of::<CellVertex>();
-    let full_bytes = full_instances * vertex_bytes * 2;
+    let full_ranges = [UploadRange {
+        start: 0,
+        end: full_instances,
+    }];
     let mut group = c.benchmark_group("upload_bytes_comparison");
 
     for rows in [1usize, 8, ROWS] {
         group.bench_with_input(BenchmarkId::new("baseline_full", rows), &rows, |b, _| {
-            b.iter(|| std::hint::black_box(full_bytes));
+            b.iter(|| {
+                let bytes = upload_ranges_bytes(&full_ranges, vertex_bytes) * 2;
+                std::hint::black_box(bytes)
+            });
         });
         group.bench_with_input(
             BenchmarkId::new("incremental_rows", rows),
             &rows,
             |b, &rows| {
                 b.iter(|| {
-                    std::hint::black_box(
-                        rows.saturating_mul(COLS)
-                            .saturating_mul(vertex_bytes)
-                            .saturating_mul(2),
-                    )
+                    let mut ranges: Vec<_> = (0..rows)
+                        .map(|row| UploadRange {
+                            start: row * COLS,
+                            end: (row + 1) * COLS,
+                        })
+                        .collect();
+                    let merged = merge_upload_ranges(&mut ranges);
+                    let bytes = upload_ranges_bytes(&merged, vertex_bytes) * 2;
+                    std::hint::black_box(bytes)
                 });
             },
         );

@@ -152,15 +152,15 @@ PTY coalescing window, 8 ms echo poll, and batch limits were not retuned
 because this environment did not provide an equivalent interactive runtime
 trace.
 
-| Machine / profile | Scenario | Baseline p50/p95 | Incremental p50/p95 | Baseline upload bytes | Incremental upload bytes | Throughput | Regressions / limitations |
+| Machine / profile | Scenario | Baseline p50/p95 latency | Incremental p50/p95 latency | Baseline upload bytes | Incremental upload bytes | Throughput | Regressions / limitations |
 |---|---|---:|---:|---:|---:|---:|---|
 | Apple M4 Max, 14 CPU cores, 32-core GPU, 36 GB; macOS 26.5.2; release/optimized | idle, focused | N/A | N/A | N/A | N/A | N/A | GUI timing, wakeups/sec, and unchanged-frame writes were not safely observable from this non-interactive CLI session. |
 | Same | interactive typing/paste | N/A | N/A | N/A | N/A | N/A | No keyboard/paste sample could be driven equivalently; the debug path retains the existing 4 ms/8 ms latency safeguards. |
 | Same | 10,000-line PTY output | N/A | N/A | N/A | N/A | N/A | No controlled PTY producer/window trace was run; no throughput or CPU speedup is claimed. |
 | Same | scroll / resize / multi-pane | N/A | N/A | N/A | N/A | N/A | GUI scroll, resize, font-scale, and pane movement measurements were unavailable. |
-| Same; Criterion release bench | 80×24, one dirty row | 300 KiB / 1 range-pair (equivalent full terminal+LCD write) | 12.5 KiB / 1 range-pair | 307,200 | 12,800 | N/A | Deterministic byte accounting only; it is not a GPU-device throughput measurement. |
-| Same; Criterion release bench | 80×24, eight dirty rows | 300 KiB / 1 range-pair | 100.0 KiB / 8 range-pairs before merge | 307,200 | 102,400 | N/A | Range count is pre-merge row accounting; adjacent ranges are coalesced by production upload planning. |
-| Same; Criterion release bench | 80×24, full damage | 300 KiB / 1 range-pair | 300 KiB / 1 range-pair after merge | 307,200 | 307,200 | N/A | Full-damage equivalence is intentional; no incremental advantage is claimed. |
+| Same; Criterion release bench | 80×24, one dirty row | N/A | N/A | 307,200 B / 1 range-pair | 12,800 B / 1 range-pair | N/A | Deterministic byte accounting only; it is not a GPU-device throughput measurement. |
+| Same; Criterion release bench | 80×24, eight dirty rows | N/A | N/A | 307,200 B / 1 range-pair | 102,400 B / 1 merged range | N/A | Adjacent row ranges are coalesced by production upload planning. |
+| Same; Criterion release bench | 80×24, full damage | N/A | N/A | 307,200 B / 1 range-pair | 307,200 B / 1 range-pair | N/A | Full-damage equivalence is intentional; no incremental advantage is claimed. |
 
 The current Criterion observations were: `build_frame_miss` 34.561–34.740
 µs, `build_frame_hit` 787.63–789.12 ns, one dirty row 882.11–887.17 ns,

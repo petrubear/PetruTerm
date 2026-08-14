@@ -4,6 +4,17 @@ pub struct UploadRange {
     pub end: usize,
 }
 
+pub fn upload_ranges_bytes(ranges: &[UploadRange], element_size: usize) -> usize {
+    ranges.iter().fold(0usize, |total, range| {
+        total.saturating_add(
+            range
+                .end
+                .saturating_sub(range.start)
+                .saturating_mul(element_size),
+        )
+    })
+}
+
 pub fn merge_upload_ranges(ranges: &mut [UploadRange]) -> Vec<UploadRange> {
     ranges.sort_unstable_by_key(|range| (range.start, range.end));
     let mut merged: Vec<UploadRange> = Vec::with_capacity(ranges.len());
@@ -25,7 +36,7 @@ pub fn merge_upload_ranges(ranges: &mut [UploadRange]) -> Vec<UploadRange> {
 
 #[cfg(test)]
 mod tests {
-    use super::{merge_upload_ranges, UploadRange};
+    use super::{merge_upload_ranges, upload_ranges_bytes, UploadRange};
 
     #[test]
     fn merge_upload_ranges_coalesces_adjacent_and_overlapping_ranges() {
@@ -68,5 +79,15 @@ mod tests {
                 UploadRange { start: 12, end: 16 },
             ]
         );
+    }
+
+    #[test]
+    fn upload_ranges_bytes_accounts_for_merged_ranges() {
+        let ranges = [
+            UploadRange { start: 0, end: 4 },
+            UploadRange { start: 8, end: 10 },
+        ];
+
+        assert_eq!(upload_ranges_bytes(&ranges, 80), 480);
     }
 }

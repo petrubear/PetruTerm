@@ -70,9 +70,6 @@ pub struct App {
     /// deterministic backstop for delayed shell responses whose wakeup macOS
     /// drops after the fast window closes (see `App::PTY_SAFETY_POLL_MS`).
     pty_safety_poll_until: Option<std::time::Instant>,
-    /// Number of PTY events in the last batch, used for adaptive coalescing.
-    /// Small batches (≤2) are keyboard echo — skip coalescing for lower latency.
-    last_pty_batch_size: usize,
     /// True when the window is occluded/minimized — skip render to save CPU/GPU.
     window_occluded: bool,
     /// True when the window has OS focus. When false, cursor blink and git polling
@@ -89,6 +86,8 @@ pub struct App {
     frame_scenario: FrameScenario,
     /// Native event-loop wakeups observed since the previous rendered frame.
     wakeups_since_frame: usize,
+    /// OS redraw requests emitted since the previous rendered frame.
+    redraws_since_frame: usize,
 
     /// Cached pane separator geometry from the last render frame (TD-PERF-24).
     /// Avoids recomputing separator layout on every CursorMoved event.
@@ -176,7 +175,6 @@ impl App {
             last_pty_activity: std::time::Instant::now(),
             pty_echo_grace_until: None,
             pty_safety_poll_until: None,
-            last_pty_batch_size: 0,
             window_occluded: false,
             window_focused: true,
             cursor_blink_dirty: false,
@@ -184,6 +182,7 @@ impl App {
             pending_pty_batch: mux::PtyEventBatch::default(),
             frame_scenario: FrameScenario::Idle,
             wakeups_since_frame: 0,
+            redraws_since_frame: 0,
             cached_cwd: None,
             sidebar: SidebarState::default(),
             last_frame_at: std::time::Instant::now(),
@@ -1958,7 +1957,6 @@ impl ApplicationHandler<()> for App {
             self.request_redraw();
         }
         if had_pty_data {
-            self.last_pty_batch_size = data_count;
             self.pending_pty_redraw = true;
             self.last_pty_activity = std::time::Instant::now();
             // Refresh CWD for the active pane (TD-PERF-02).
