@@ -110,9 +110,9 @@ impl RenderContext {
         let cache_complete = self.row_caches.get(&terminal_id).is_some_and(|cache| {
             cache.rows.len() >= n && cache.rows.iter().take(n).all(Option::is_some)
         });
-        let build_damage = self
-            .build_state
-            .resolve_terminal_build(dirty_rows, n, cache_complete);
+        let build_damage =
+            self.build_state
+                .resolve_terminal_build(terminal_id, dirty_rows, n, cache_complete);
         let effective_dirty = build_damage.rows;
         self.frame_metrics.dirty_rows = self
             .frame_metrics

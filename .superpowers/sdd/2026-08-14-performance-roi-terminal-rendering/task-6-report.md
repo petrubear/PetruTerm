@@ -162,6 +162,40 @@ Completed. No dependencies were added.
 - `rtk git diff --check` — passed.
 - `rtk graphify update .` — completed; generated graph artifacts were reverted and are not part of this task's diff.
 
+## Fix round 5 — terminal-scoped capacity overflow consumption
+
+### Status
+
+Completed. No dependencies were added and no unrelated files were changed.
+
+### Correction
+
+- Added terminal-scoped deferred rebuild requests to `RenderBuildState`.
+- `RenderContext::grow_terminal_row_capacity` now records
+  `RowSlotCapacityOverflow` for the originating terminal instead of one global
+  pending request.
+- `RenderContext::build_instances` passes its terminal ID when resolving build
+  damage; terminal-scoped requests are consumed only by that terminal, before
+  row writes.
+- Added coverage proving pane B cannot consume pane A's overflow request, pane A
+  receives a full rebuild, every visible row is dirty, and the request is
+  consumed exactly once.
+
+### Exact validation evidence
+
+- `rtk cargo test capacity -- --nocapture` — passed, 2 tests, 146 filtered.
+- `rtk cargo fmt --all -- --check` — passed.
+- `rtk cargo test` — passed, 148 tests across 3 suites.
+- `rtk cargo test --lib` — passed, 22 tests.
+- `rtk cargo check --features profiling` — passed.
+- `rtk cargo bench --bench build_instances -- --noplot --warm-up-time 1 --measurement-time 2 --sample-size 10` — completed successfully; all requested benchmark IDs ran. Gnuplot was unavailable, so Criterion used plotters. Criterion reported environment-sensitive regressions for `build_frame_miss` (+2.1572%), `build_frame_hit` (+2.3973%), `incremental_eight_contiguous_rows` (+1.7430%), `incremental_scattered_rows` (+2.1090%), and `incremental_full_damage` (+1.4440%); other requested cases were within noise or unchanged.
+- `rtk git diff --check` — passed.
+- `rtk graphify update .` — completed; generated graph artifacts were reverted and are not part of this task's diff.
+
+### Concerns
+
+- Benchmark deltas are environment-sensitive and do not indicate a correctness failure; all benchmark cases completed successfully.
+
 ### Final fresh verification
 
 - Combined command `rtk cargo fmt --all -- --check && rtk cargo test --lib && rtk cargo test && rtk cargo check --features profiling && rtk cargo bench --bench build_instances -- --noplot --warm-up-time 1 --measurement-time 2 --sample-size 10 && rtk git diff --check` — exited 0.

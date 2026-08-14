@@ -1581,7 +1581,7 @@ mod tests {
         let trigger = upload_failure_rebuild_trigger(true, false, true).unwrap();
         let mut state = RenderBuildState::default();
         state.request_full_rebuild(trigger);
-        let damage = state.resolve_terminal_build(&DirtyRows::default(), 5, true);
+        let damage = state.resolve_terminal_build(0, &DirtyRows::default(), 5, true);
 
         assert!(damage.full_rebuild);
         assert!((0..5).all(|row| damage.rows.is_dirty(row)));

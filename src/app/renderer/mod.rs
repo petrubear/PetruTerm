@@ -558,8 +558,10 @@ impl RenderContext {
                 "terminal instance layout is missing".to_string(),
             ));
         };
-        self.build_state
-            .request_full_rebuild(FullRebuildTrigger::RowSlotCapacityOverflow);
+        self.build_state.request_terminal_full_rebuild(
+            terminal_id,
+            FullRebuildTrigger::RowSlotCapacityOverflow,
+        );
         let target_stride = target.row_stride.saturating_mul(2).max(required).max(1);
         let geometries: Vec<_> = self
             .terminal_layouts
