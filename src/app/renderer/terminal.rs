@@ -6,11 +6,13 @@ pub(crate) struct OverlayUploadPlan {
     pub(crate) overlay_count: usize,
     pub(crate) cursor_index: Option<usize>,
     pub(crate) cursor_first: bool,
+    pub(crate) terminal_upload_ranges_empty: bool,
 }
 
 pub(crate) fn plan_overlay_upload(
     terminal_count: usize,
     overlays: &[CellVertex],
+    terminal_upload_ranges: &[UploadRange],
 ) -> OverlayUploadPlan {
     OverlayUploadPlan {
         terminal_count,
@@ -25,21 +27,7 @@ pub(crate) fn plan_overlay_upload(
                     == crate::renderer::cell::FLAG_CURSOR
             })
             .is_none_or(|index| index == 0),
-    }
-}
-
-fn effective_dirty_rows(
-    invalidation: Option<FullRebuildTrigger>,
-    dirty_rows: &DirtyRows,
-    row_count: usize,
-    cache_complete: bool,
-) -> DirtyRows {
-    if let Some(trigger) = invalidation {
-        rows_for_full_rebuild(trigger, row_count)
-    } else if cache_complete {
-        dirty_rows.clone()
-    } else {
-        rows_for_full_rebuild(FullRebuildTrigger::MissingRowCache, row_count)
+        terminal_upload_ranges_empty: terminal_upload_ranges.is_empty(),
     }
 }
 
@@ -72,8 +60,14 @@ impl RenderContext {
             .capacity_overflow_terminals
             .remove(&terminal_id)
             .then_some(FullRebuildTrigger::RowSlotCapacityOverflow);
-        let invalidation = capacity_overflow.or_else(|| self.pending_full_rebuild.take());
-        let effective_dirty = effective_dirty_rows(invalidation, dirty_rows, n, cache_complete);
+        let build_damage = take_build_damage(
+            &mut self.pending_full_rebuild,
+            capacity_overflow,
+            dirty_rows,
+            n,
+            cache_complete,
+        );
+        let effective_dirty = build_damage.rows;
         self.frame_metrics.dirty_rows = self
             .frame_metrics
             .dirty_rows
@@ -614,21 +608,13 @@ impl RenderContext {
 
 #[cfg(test)]
 mod tests {
-    use super::{effective_dirty_rows, plan_overlay_upload};
-    use crate::app::renderer::{DirtyRows, FullRebuildTrigger};
+    use super::plan_overlay_upload;
+    use crate::app::renderer::{
+        request_full_rebuild, take_build_damage, DirtyRows, FullRebuildTrigger,
+    };
     use crate::renderer::cell::{CellVertex, FLAG_CURSOR};
+    use crate::renderer::UploadRange;
     use bytemuck::Zeroable;
-
-    #[test]
-    fn missing_row_cache_forces_full_rebuild() {
-        let mut dirty = DirtyRows::default();
-        dirty.mark(1);
-
-        let rebuilt = effective_dirty_rows(None, &dirty, 4, false);
-
-        assert!(rebuilt.is_full());
-        assert!((0..4).all(|row| rebuilt.is_dirty(row)));
-    }
 
     #[test]
     fn production_build_path_applies_every_full_rebuild_trigger() {
@@ -645,15 +631,18 @@ mod tests {
         let dirty = DirtyRows::default();
 
         for trigger in triggers {
-            let rebuilt = effective_dirty_rows(Some(trigger), &dirty, 4, true);
-            assert!(rebuilt.is_full());
-            assert_eq!(rebuilt.len(), 4);
-            assert!((0..4).all(|row| rebuilt.is_dirty(row)));
+            let mut pending = None;
+            request_full_rebuild(&mut pending, trigger);
+            let damage = take_build_damage(&mut pending, None, &dirty, 4, true);
+            assert!(damage.full_rebuild);
+            assert!(pending.is_none());
+            assert_eq!(damage.rows.len(), 4);
+            assert!((0..4).all(|row| damage.rows.is_dirty(row)));
         }
     }
 
     #[test]
-    fn production_overlay_upload_plan_keeps_terminal_count_independent() {
+    fn production_overlay_upload_plan_keeps_cursor_first_and_terminal_ranges_separate() {
         let overlays = vec![
             CellVertex {
                 flags: FLAG_CURSOR,
@@ -663,11 +652,16 @@ mod tests {
             CellVertex::zeroed(),
         ];
 
-        let plan = plan_overlay_upload(42, &overlays);
+        let plan = plan_overlay_upload(42, &overlays, &[]);
 
         assert_eq!(plan.cursor_index, Some(0));
         assert!(plan.cursor_first);
         assert_eq!(plan.overlay_count, 3);
         assert_eq!(plan.terminal_count, 42);
+        assert!(plan.terminal_upload_ranges_empty);
+        assert_ne!(
+            plan_overlay_upload(42, &overlays, &[UploadRange { start: 4, end: 8 }]).terminal_count,
+            plan.overlay_count
+        );
     }
 }

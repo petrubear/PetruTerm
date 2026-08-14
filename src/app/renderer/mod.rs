@@ -27,7 +27,10 @@ mod layout;
 mod overlay;
 mod terminal;
 
-pub(crate) use damage::{rows_for_full_rebuild, DirtyRows, FullRebuildTrigger, RowRevisionMap};
+pub(crate) use damage::{
+    request_full_rebuild, rows_for_full_rebuild, take_build_damage, DirtyRows, FullRebuildTrigger,
+    RowRevisionMap,
+};
 pub(crate) use layout::TerminalInstanceLayout;
 pub(crate) use terminal::plan_overlay_upload;
 
@@ -449,7 +452,7 @@ impl RenderContext {
     }
 
     pub(crate) fn clear_all_row_caches_for(&mut self, trigger: FullRebuildTrigger) {
-        self.pending_full_rebuild = Some(trigger);
+        request_full_rebuild(&mut self.pending_full_rebuild, trigger);
         self.row_caches.clear();
         self.row_revisions.clear();
         self.grid_visual_states.clear();

@@ -91,3 +91,42 @@ Completed. No dependencies were added and no unrelated files were changed.
   for `build_frame_miss`, `incremental_one_dirty_row`, and the layout-change benchmark;
   the command completed and the full-damage benchmark remained in the same order of
   magnitude. Device-specific GPU profiling remains outside this headless benchmark.
+
+## Fix round 2 — production-connected invalidation and overlay coverage
+
+### Status
+
+Completed. No dependencies were added and behavior remains unchanged.
+
+### Corrections
+
+- Added the production build-damage contract used by `RenderContext::build_instances`,
+  including pending invalidation consumption, missing-cache fallback, and row-slot
+  capacity overflow handling.
+- Routed cache invalidation through the same production request seam used by
+  `clear_all_row_caches_for`; tests cover resize, pane geometry, font metrics,
+  theme/color, atlas generation, missing cache, capacity overflow, and invalid GPU
+  upload triggers, asserting full rebuild and every visible row dirty.
+- Added the production upload-failure trigger used by `handle_redraw`, with a test
+  proving an upload failure schedules the invalid-GPU full rebuild contract.
+- Connected overlay planning to both full upload and fast blink paths. Tests cover
+  cursor-first ordering, independent terminal/overlay counts, cursor blink changing
+  only the overlay vertex, and empty terminal upload ranges during blink.
+
+### Validation
+
+- `rtk cargo fmt --all -- --check` — passed.
+- `rtk cargo test` — passed, 148 tests.
+- `rtk cargo test --lib` — passed, 22 tests.
+- `rtk cargo check --features profiling` — passed.
+- `rtk cargo bench --bench build_instances -- --noplot --warm-up-time 1 --measurement-time 2 --sample-size 10` — completed successfully; all requested benchmark IDs ran. Gnuplot was unavailable, so Criterion used plotters.
+- `rtk git diff --check` — passed.
+- `rtk graphify update .` — completed; generated graph artifacts were reverted and are not part of this task diff.
+
+### Residual concerns
+
+- Criterion remained environment-sensitive: `build_frame_hit_large_par`,
+  `incremental_multi_pane_layout_change`, and `build_row_hit` reported small
+  regressions; all requested benchmarks completed and full damage remained in the
+  prior order of magnitude. Device-specific GPU profiling remains outside this
+  headless benchmark.

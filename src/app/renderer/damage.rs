@@ -5,7 +5,7 @@ pub(crate) struct RowRange {
     pub(crate) end: usize,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) struct DirtyRows {
     rows: Vec<usize>,
     full: bool,
@@ -118,6 +118,40 @@ pub(crate) fn rows_for_full_rebuild(_trigger: FullRebuildTrigger, row_count: usi
     DirtyRows::full_rebuild(row_count)
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct BuildDamage {
+    pub(crate) full_rebuild: bool,
+    pub(crate) rows: DirtyRows,
+}
+
+pub(crate) fn request_full_rebuild(
+    pending: &mut Option<FullRebuildTrigger>,
+    trigger: FullRebuildTrigger,
+) {
+    *pending = Some(trigger);
+}
+
+pub(crate) fn take_build_damage(
+    pending: &mut Option<FullRebuildTrigger>,
+    capacity_overflow: Option<FullRebuildTrigger>,
+    dirty_rows: &DirtyRows,
+    row_count: usize,
+    cache_complete: bool,
+) -> BuildDamage {
+    let invalidation = capacity_overflow.or_else(|| pending.take());
+    let rows = if let Some(trigger) = invalidation {
+        rows_for_full_rebuild(trigger, row_count)
+    } else if cache_complete {
+        dirty_rows.clone()
+    } else {
+        rows_for_full_rebuild(FullRebuildTrigger::MissingRowCache, row_count)
+    };
+    BuildDamage {
+        full_rebuild: rows.is_full(),
+        rows,
+    }
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct RowRevisionMap {
     revisions: Vec<u64>,
@@ -153,7 +187,10 @@ impl RowRevisionMap {
 
 #[cfg(test)]
 mod tests {
-    use super::{rows_for_full_rebuild, DirtyRows, FullRebuildTrigger, RowRange, RowRevisionMap};
+    use super::{
+        request_full_rebuild, take_build_damage, DirtyRows, FullRebuildTrigger, RowRange,
+        RowRevisionMap,
+    };
 
     #[test]
     fn dirty_rows_merge_and_sort_ranges() {
@@ -187,7 +224,7 @@ mod tests {
     }
 
     #[test]
-    fn every_full_rebuild_trigger_marks_all_visible_rows() {
+    fn production_build_contract_consumes_every_full_rebuild_trigger() {
         let triggers = [
             FullRebuildTrigger::TerminalResize,
             FullRebuildTrigger::PaneGeometryChange,
@@ -200,10 +237,31 @@ mod tests {
         ];
 
         for trigger in triggers {
-            let rows = rows_for_full_rebuild(trigger, 6);
-            assert!(rows.is_full());
-            assert_eq!(rows.len(), 6);
-            assert!((0..6).all(|row| rows.is_dirty(row)));
+            let mut pending = None;
+            request_full_rebuild(&mut pending, trigger);
+            let damage = take_build_damage(&mut pending, None, &DirtyRows::default(), 6, true);
+            assert!(damage.full_rebuild);
+            assert!(pending.is_none());
+            assert_eq!(damage.rows.len(), 6);
+            assert!((0..6).all(|row| damage.rows.is_dirty(row)));
         }
+    }
+
+    #[test]
+    fn production_build_contract_falls_back_for_missing_cache_and_capacity_overflow() {
+        let dirty = DirtyRows::default();
+        let missing = take_build_damage(&mut None, None, &dirty, 5, false);
+        assert!(missing.full_rebuild);
+        assert!((0..5).all(|row| missing.rows.is_dirty(row)));
+
+        let overflow = take_build_damage(
+            &mut None,
+            Some(FullRebuildTrigger::RowSlotCapacityOverflow),
+            &dirty,
+            5,
+            true,
+        );
+        assert!(overflow.full_rebuild);
+        assert!((0..5).all(|row| overflow.rows.is_dirty(row)));
     }
 }
