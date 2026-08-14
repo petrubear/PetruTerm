@@ -19,6 +19,7 @@ mod input;
 mod layout;
 mod menu;
 mod mux;
+pub(crate) mod perf;
 mod renderer;
 mod ui;
 

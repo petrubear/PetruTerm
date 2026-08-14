@@ -28,6 +28,7 @@ impl RenderContext {
         let _span = tracing::info_span!("build_instances", rows = cell_data.len()).entered();
 
         let n = cell_data.len();
+        self.frame_metrics.dirty_rows = self.frame_metrics.dirty_rows.saturating_add(n);
 
         // Ensure the per-terminal row cache exists and has enough slots.
         {
@@ -75,6 +76,7 @@ impl RenderContext {
                 continue;
             }
             self.shape_cache_misses = self.shape_cache_misses.saturating_add(1);
+            self.frame_metrics.rebuilt_rows = self.frame_metrics.rebuilt_rows.saturating_add(1);
 
             // Cache miss: shape and rasterize (must remain serial — shaper and atlas
             // are not thread-safe; wgpu::Queue writes cannot be parallelized here).

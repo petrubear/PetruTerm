@@ -294,6 +294,10 @@ impl Mux {
     /// `terminals_with_data` lists every terminal ID that received a `DataReady` event
     /// so callers can update per-terminal state (e.g. shell context) for the right pane.
     pub fn poll_pty_events(&mut self) -> (Vec<usize>, Vec<usize>) {
+        #[cfg(feature = "profiling")]
+        let _span =
+            tracing::info_span!("poll_pty_events", terminal_count = self.terminals.len()).entered();
+
         let mut data_ids: Vec<usize> = Vec::new();
         let mut exited: Vec<usize> = Vec::new();
         let mut exit_codes: Vec<(usize, i32)> = Vec::new();
@@ -871,6 +875,9 @@ impl Mux {
         ghost: Option<&GhostOverlay>,
         flag_hint: Option<&FlagHintOverlay>,
     ) {
+        #[cfg(feature = "profiling")]
+        let _span = tracing::info_span!("collect_grid_cells").entered();
+
         let Some(Some(terminal)) = self.terminals.get(terminal_id) else {
             buf.clear();
             return;

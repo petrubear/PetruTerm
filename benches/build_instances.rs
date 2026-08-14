@@ -1,5 +1,5 @@
 use cosmic_text::{fontdb, FontSystem};
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use petruterm::config::schema::FontConfig;
 use petruterm::font::{TextShaper, TextShaperConfig};
 use petruterm::renderer::atlas::{ColorAtlas, GlyphAtlas};
@@ -485,6 +485,48 @@ fn bench_build_frame_hit_large_par(c: &mut Criterion) {
     });
 }
 
+/// Partial frame updates that rebuild only selected rows.
+/// This is the baseline for the incremental damage path.
+fn bench_build_frame_dirty_rows(c: &mut Criterion) {
+    let (device, queue) = create_headless_wgpu();
+    let mut atlas = GlyphAtlas::new(&device);
+    let mut color_atlas = ColorAtlas::new(&device);
+    let (mut shaper, font_config) = make_shaper();
+    let rows: Vec<&str> = (0..ROWS)
+        .map(|i| SAMPLE_ROWS[i % SAMPLE_ROWS.len()])
+        .collect();
+    let colors = make_colors(COLS);
+    let mut output = Vec::with_capacity(COLS * ROWS);
+    let mut group = c.benchmark_group("build_frame_dirty_rows");
+
+    for (label, dirty_rows) in [
+        ("one", vec![0]),
+        ("eight_contiguous", (4..12).collect()),
+        ("scattered", vec![0, 3, 7, 11, 15, 19, 22]),
+        ("all", (0..ROWS).collect()),
+    ] {
+        group.bench_function(BenchmarkId::from_parameter(label), |b| {
+            b.iter(|| {
+                output.clear();
+                for &row_idx in &dirty_rows {
+                    let (_, vertices) = build_row_vertices(
+                        rows[row_idx],
+                        &colors,
+                        &font_config,
+                        &mut shaper,
+                        &mut atlas,
+                        &mut color_atlas,
+                        &queue,
+                    );
+                    apply_row_offset(&vertices, 0.0, row_idx as f32, &mut output);
+                }
+                output.len()
+            });
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_build_row_miss,
@@ -493,5 +535,6 @@ criterion_group!(
     bench_build_frame_hit,
     bench_build_frame_hit_large_serial,
     bench_build_frame_hit_large_par,
+    bench_build_frame_dirty_rows,
 );
 criterion_main!(benches);

@@ -127,6 +127,7 @@ pub struct RenderContext {
     pub latency_samples: std::collections::VecDeque<f32>,
     pub shape_cache_hits: u64,
     pub shape_cache_misses: u64,
+    pub(crate) frame_metrics: crate::app::perf::FrameMetrics,
     pub last_instance_count: usize,
     /// overlay_start from the last full frame — used by the blink fast path so it
     /// can keep overlay rendering correct without a full rebuild.
@@ -255,6 +256,7 @@ impl RenderContext {
             latency_samples: std::collections::VecDeque::new(),
             shape_cache_hits: 0,
             shape_cache_misses: 0,
+            frame_metrics: crate::app::perf::FrameMetrics::default(),
             last_instance_count: 0,
             last_overlay_start: 0,
             last_gpu_upload_bytes: 0,
@@ -356,6 +358,7 @@ impl RenderContext {
 
     /// Clear per-frame instance buffers. Call once before rendering all panes.
     pub fn begin_frame(&mut self) {
+        self.frame_metrics.reset();
         // Periodic capacity shrink — every 300 frames, reclaim memory if a capacity spike
         // (e.g. large terminal or chat message) left buffers bloated (AUDIT-MEM-02, MEM-03).
         if self.frame_counter.is_multiple_of(300) {

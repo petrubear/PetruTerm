@@ -370,6 +370,10 @@ impl GpuRenderer {
 
     /// Upload cell instances for this frame. Supports partial updates via offset.
     pub fn upload_instances(&mut self, instances: &[CellVertex], offset: usize) {
+        #[cfg(feature = "profiling")]
+        let _span = tracing::info_span!("upload_instance_ranges", count = instances.len(), offset)
+            .entered();
+
         let count = instances.len();
         if offset + count > MAX_INSTANCES {
             log::warn!(

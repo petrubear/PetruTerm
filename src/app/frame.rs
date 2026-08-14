@@ -308,6 +308,12 @@ impl App {
 
         self.check_config_reload();
         let (data_ids, exited) = self.mux.poll_pty_events();
+        if let Some(rc) = &mut self.render_ctx {
+            rc.frame_metrics.pty_terminals = rc
+                .frame_metrics
+                .pty_terminals
+                .saturating_add(data_ids.len());
+        }
         self.mux.apply_osc133_events();
         if self.close_exited_terminals(exited) {
             event_loop.exit();
@@ -1117,6 +1123,11 @@ impl App {
                 let rect_bytes =
                     rc.rect_instances.len() * std::mem::size_of::<RoundedRectInstance>();
                 rc.last_gpu_upload_bytes = instance_bytes + lcd_bytes + rect_bytes;
+                let upload_ranges = usize::from(instance_bytes > 0)
+                    + usize::from(lcd_bytes > 0)
+                    + usize::from(rect_bytes > 0);
+                rc.frame_metrics
+                    .record_upload(rc.last_gpu_upload_bytes, upload_ranges);
             }
             rc.renderer.upload_rect_instances(&rc.rect_instances);
             rc.renderer.set_overlay_start(overlay_start);
