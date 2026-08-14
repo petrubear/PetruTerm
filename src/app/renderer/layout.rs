@@ -48,7 +48,7 @@ impl std::fmt::Display for RowWriteError {
 
 impl std::error::Error for RowWriteError {}
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct TerminalInstanceLayout {
     #[allow(dead_code)]
     pub(crate) terminal_id: usize,

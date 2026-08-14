@@ -451,6 +451,7 @@ impl RenderContext {
     }
 
     pub(crate) fn clear_all_row_caches_for(&mut self, trigger: FullRebuildTrigger) {
+        self.build_state.clear_all_rebuilds();
         self.build_state.request_full_rebuild(trigger);
         self.row_caches.clear();
         self.row_revisions.clear();
@@ -463,80 +464,141 @@ impl RenderContext {
         self.layout_dirty_terminals.clear();
     }
 
+    pub(crate) fn clear_terminal_state(&mut self, terminal_id: usize) {
+        self.build_state.clear_terminal_rebuild(terminal_id);
+        self.row_caches.remove(&terminal_id);
+        self.row_revisions.remove(&terminal_id);
+        self.grid_visual_states.remove(&terminal_id);
+        self.terminal_layouts.remove(&terminal_id);
+        self.layout_dirty_terminals.remove(&terminal_id);
+    }
+
     pub(crate) fn prepare_terminal_layouts(&mut self, pane_infos: &[crate::ui::PaneInfo]) {
         let row_stride = |columns: usize| columns.saturating_mul(2).max(1);
-        let geometry_changed = pane_infos.len() != self.terminal_layouts.len()
-            || pane_infos.iter().any(|info| {
-                let stride = row_stride(info.cols);
-                self.terminal_layouts
-                    .get(&info.terminal_id)
-                    .map(|layout| {
-                        if !layout.matches_geometry(
-                            info.cols,
-                            info.rows,
-                            info.col_offset,
-                            info.row_offset,
-                            stride,
-                        ) {
-                            return true;
-                        }
-                        let cached_stride = self
-                            .row_caches
-                            .get(&info.terminal_id)
-                            .map(|cache| {
-                                cache
-                                    .rows
-                                    .iter()
-                                    .take(info.rows)
-                                    .flatten()
-                                    .map(|entry| {
-                                        entry.instances.len().max(entry.lcd_instances.len())
-                                    })
-                                    .max()
-                                    .unwrap_or(0)
-                            })
-                            .unwrap_or(0);
-                        layout.row_stride != stride.max(cached_stride).max(1)
-                    })
-                    .unwrap_or(true)
+        let old_layouts = std::mem::take(&mut self.terminal_layouts);
+        let old_terminal_instances = std::mem::take(&mut self.terminal_instances);
+        let old_lcd_instances = std::mem::take(&mut self.terminal_lcd_instances);
+        let mut next_layouts = HashMap::with_capacity(pane_infos.len());
+        let mut changed_terminals = std::collections::HashSet::new();
+        let mut base = 0usize;
+
+        for info in pane_infos {
+            let requested_stride = row_stride(info.cols);
+            let cached_stride = self
+                .row_caches
+                .get(&info.terminal_id)
+                .map(|cache| {
+                    cache
+                        .rows
+                        .iter()
+                        .take(info.rows)
+                        .flatten()
+                        .map(|entry| entry.instances.len().max(entry.lcd_instances.len()))
+                        .max()
+                        .unwrap_or(0)
+                })
+                .unwrap_or(0);
+            let stride = requested_stride.max(cached_stride).max(1);
+            let old = old_layouts.get(&info.terminal_id);
+            let unchanged = old.is_some_and(|layout| {
+                layout.matches_geometry(
+                    info.cols,
+                    info.rows,
+                    info.col_offset,
+                    info.row_offset,
+                    stride,
+                )
             });
-        if !geometry_changed {
+            let mut layout = if unchanged {
+                old.cloned().expect("checked above")
+            } else {
+                changed_terminals.insert(info.terminal_id);
+                TerminalInstanceLayout::rebuild(
+                    info.terminal_id,
+                    info.cols,
+                    info.rows,
+                    info.col_offset,
+                    info.row_offset,
+                    stride,
+                )
+            };
+            let old_base = old
+                .and_then(|layout| layout.row_slot(0))
+                .map(|slot| slot.start);
+            layout.set_base(base);
+            if old_base != Some(base) {
+                self.instance_upload_ranges.push(UploadRange {
+                    start: base,
+                    end: base.saturating_add(layout.storage_len()),
+                });
+                self.lcd_upload_ranges.push(UploadRange {
+                    start: base,
+                    end: base.saturating_add(layout.storage_len()),
+                });
+            }
+            base = base.saturating_add(layout.storage_len());
+            next_layouts.insert(info.terminal_id, layout);
+        }
+
+        if old_layouts.len() == next_layouts.len()
+            && changed_terminals.is_empty()
+            && self.instance_upload_ranges.is_empty()
+            && self.lcd_upload_ranges.is_empty()
+        {
+            self.terminal_layouts = old_layouts;
+            self.terminal_instances = old_terminal_instances;
+            self.terminal_lcd_instances = old_lcd_instances;
             return;
         }
 
-        self.build_state
-            .request_full_rebuild(FullRebuildTrigger::PaneGeometryChange);
-        self.terminal_layouts.clear();
-        self.terminal_instances.clear();
-        self.terminal_lcd_instances.clear();
-        self.layout_dirty_terminals.clear();
-
-        let mut base = 0usize;
-        for info in pane_infos {
-            let stride = row_stride(info.cols);
-            let mut layout = TerminalInstanceLayout::rebuild(
-                info.terminal_id,
-                info.cols,
-                info.rows,
-                info.col_offset,
-                info.row_offset,
-                stride,
+        for terminal_id in &changed_terminals {
+            self.build_state.request_terminal_full_rebuild(
+                *terminal_id,
+                FullRebuildTrigger::PaneGeometryChange,
             );
-            layout.set_base(base);
-            base = base.saturating_add(layout.storage_len());
-            self.layout_dirty_terminals.insert(info.terminal_id);
-            self.terminal_layouts.insert(info.terminal_id, layout);
+            self.layout_dirty_terminals.insert(*terminal_id);
         }
+
         let zero = bytemuck::Zeroable::zeroed();
         self.terminal_instances.resize(base, zero);
         self.terminal_lcd_instances.resize(base, zero);
-        if base > 0 {
-            let full_range = UploadRange {
-                start: 0,
-                end: base,
+        self.terminal_layouts = next_layouts;
+
+        // Preserve unaffected rows even when a preceding pane changes its base.
+        // Their storage must still be uploaded at the new base, but their row
+        // revisions and shaping caches remain valid.
+        for (terminal_id, old_layout) in old_layouts {
+            let Some(new_layout) = self.terminal_layouts.get(&terminal_id) else {
+                self.row_caches.remove(&terminal_id);
+                self.row_revisions.remove(&terminal_id);
+                self.grid_visual_states.remove(&terminal_id);
+                continue;
             };
-            self.instance_upload_ranges.push(full_range);
-            self.lcd_upload_ranges.push(full_range);
+            if changed_terminals.contains(&terminal_id) {
+                continue;
+            }
+            for row in 0..old_layout.rows.min(new_layout.rows) {
+                let Some(old_slot) = old_layout.row_slot(row) else {
+                    continue;
+                };
+                let Some(new_slot) = new_layout.row_slot(row) else {
+                    continue;
+                };
+                let old_end = old_slot.start.saturating_add(old_slot.capacity);
+                let new_end = new_slot.start.saturating_add(new_slot.capacity);
+                if old_end <= old_terminal_instances.len()
+                    && new_end <= self.terminal_instances.len()
+                {
+                    self.terminal_instances[new_slot.start..new_end]
+                        .copy_from_slice(&old_terminal_instances[old_slot.start..old_end]);
+                }
+                if old_end <= old_lcd_instances.len()
+                    && new_end <= self.terminal_lcd_instances.len()
+                {
+                    self.terminal_lcd_instances[new_slot.start..new_end]
+                        .copy_from_slice(&old_lcd_instances[old_slot.start..old_end]);
+                }
+            }
         }
     }
 

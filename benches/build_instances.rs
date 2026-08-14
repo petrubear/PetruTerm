@@ -4,7 +4,7 @@ use petruterm::config::schema::FontConfig;
 use petruterm::font::{TextShaper, TextShaperConfig};
 use petruterm::renderer::atlas::{ColorAtlas, GlyphAtlas};
 use petruterm::renderer::cell::{CellVertex, FLAG_COLOR_GLYPH};
-use petruterm::renderer::upload::{merge_upload_ranges, upload_ranges_bytes, UploadRange};
+use petruterm::renderer::upload::{account_terminal_uploads, merge_upload_ranges, UploadRange};
 use rayon::prelude::*;
 use rustc_hash::FxHasher;
 use std::hash::{Hash, Hasher};
@@ -608,30 +608,55 @@ fn bench_upload_bytes_comparison(c: &mut Criterion) {
     }];
     let mut group = c.benchmark_group("upload_bytes_comparison");
 
-    for rows in [1usize, 8, ROWS] {
-        group.bench_with_input(BenchmarkId::new("baseline_full", rows), &rows, |b, _| {
-            b.iter(|| {
-                let bytes = upload_ranges_bytes(&full_ranges, vertex_bytes) * 2;
-                std::hint::black_box(bytes)
-            });
-        });
-        group.bench_with_input(
-            BenchmarkId::new("incremental_rows", rows),
-            &rows,
-            |b, &rows| {
-                b.iter(|| {
-                    let mut ranges: Vec<_> = (0..rows)
-                        .map(|row| UploadRange {
-                            start: row * COLS,
-                            end: (row + 1) * COLS,
-                        })
-                        .collect();
-                    let merged = merge_upload_ranges(&mut ranges);
-                    let bytes = upload_ranges_bytes(&merged, vertex_bytes) * 2;
-                    std::hint::black_box(bytes)
-                });
-            },
-        );
+    for lcd_enabled in [false, true] {
+        let label = if lcd_enabled {
+            "lcd_enabled"
+        } else {
+            "lcd_disabled"
+        };
+        for rows in [1usize, 8, ROWS] {
+            group.bench_with_input(
+                BenchmarkId::new(format!("{label}/baseline_full"), rows),
+                &rows,
+                |b, _| {
+                    b.iter(|| {
+                        let accounting = account_terminal_uploads(
+                            full_instances,
+                            full_instances,
+                            &full_ranges,
+                            &full_ranges,
+                            vertex_bytes,
+                            lcd_enabled,
+                        );
+                        std::hint::black_box(accounting.full_bytes)
+                    });
+                },
+            );
+            group.bench_with_input(
+                BenchmarkId::new(format!("{label}/incremental_rows"), rows),
+                &rows,
+                |b, &rows| {
+                    b.iter(|| {
+                        let mut ranges: Vec<_> = (0..rows)
+                            .map(|row| UploadRange {
+                                start: row * COLS,
+                                end: (row + 1) * COLS,
+                            })
+                            .collect();
+                        let merged = merge_upload_ranges(&mut ranges);
+                        let accounting = account_terminal_uploads(
+                            full_instances,
+                            full_instances,
+                            &merged,
+                            &merged,
+                            vertex_bytes,
+                            lcd_enabled,
+                        );
+                        std::hint::black_box(accounting.incremental_bytes)
+                    });
+                },
+            );
+        }
     }
     group.finish();
 }

@@ -7,7 +7,7 @@ use super::renderer::{
     DirtyRows, FullRebuildTrigger, GridVisualState, RenderContext, SidebarDrawParams,
 };
 use super::App;
-use crate::renderer::upload::merge_upload_ranges;
+use crate::renderer::upload::{account_terminal_uploads, merge_upload_ranges};
 use crate::ui::PaneInfo;
 
 pub(crate) fn blink_only_render(
@@ -344,6 +344,7 @@ impl App {
 
         let frame_start = std::time::Instant::now();
         let wakeups = std::mem::take(&mut self.wakeups_since_frame);
+        let wait_iterations = std::mem::take(&mut self.wait_iterations_since_frame);
         let redraws = std::mem::take(&mut self.redraws_since_frame);
 
         if let Some(rc) = &mut self.render_ctx {
@@ -359,6 +360,7 @@ impl App {
             self.mux.active_pane_count(),
             !data_ids.is_empty(),
             batch.data_events,
+            batch.data_bytes,
             batch.pending_events,
         );
         self.frame_scenario = FrameScenario::Idle;
@@ -369,8 +371,10 @@ impl App {
                 .saturating_add(data_ids.len());
             rc.frame_metrics.scenario = scenario;
             rc.frame_metrics.wakeups = wakeups;
+            rc.frame_metrics.event_loop_iterations = wait_iterations;
             rc.frame_metrics.redraws = redraws;
             rc.frame_metrics.pty_events = batch.data_events;
+            rc.frame_metrics.pty_bytes = batch.data_bytes;
             rc.frame_metrics.pty_pending_events = batch.pending_events;
         }
         self.mux.apply_osc133_events();
@@ -411,6 +415,7 @@ impl App {
                 rc.frame_metrics.reset();
                 rc.frame_metrics.scenario = scenario;
                 rc.frame_metrics.wakeups = wakeups;
+                rc.frame_metrics.event_loop_iterations = wait_iterations;
                 rc.frame_metrics.redraws = redraws;
                 if !rc.last_full_upload_succeeded {
                     self.needs_redraw = true;
@@ -452,11 +457,13 @@ impl App {
                 rc.frame_metrics
                     .record_upload(cursor_upload_bytes, usize::from(cursor_upload_bytes > 0));
                 log::debug!(
-                    "frame-metrics scenario={} redraws={} wakeups={} pty_events={} pty_pending_events={} dirty_rows={} rebuilt_rows={} upload_ranges={} upload_bytes={} full_upload_ranges={} full_upload_bytes={} incremental_upload_ranges={} incremental_upload_bytes={}",
+                    "frame-metrics scenario={} redraws={} user_events={} wait_iterations={} pty_events={} pty_bytes={} pty_pending_events={} dirty_rows={} rebuilt_rows={} upload_ranges={} upload_bytes={} full_upload_ranges={} full_upload_bytes={} incremental_upload_ranges={} incremental_upload_bytes={}",
                     rc.frame_metrics.scenario.label(),
                     rc.frame_metrics.redraws,
                     rc.frame_metrics.wakeups,
+                    rc.frame_metrics.event_loop_iterations,
                     rc.frame_metrics.pty_events,
+                    rc.frame_metrics.pty_bytes,
                     rc.frame_metrics.pty_pending_events,
                     rc.frame_metrics.dirty_rows,
                     rc.frame_metrics.rebuilt_rows,
@@ -469,7 +476,19 @@ impl App {
                 );
                 rc.renderer.set_terminal_cell_count(rc.last_terminal_count);
                 rc.renderer.set_overlay_count(rc.last_overlay_count);
-                let _ = rc.renderer.render();
+                match rc.renderer.render() {
+                    Ok(crate::renderer::gpu::RenderOutcome::Presented) => {}
+                    Ok(crate::renderer::gpu::RenderOutcome::RebuildNeeded) => {
+                        log::warn!("surface/device state requires a full terminal rebuild");
+                        rc.clear_all_row_caches_for(FullRebuildTrigger::SurfaceReconfiguration);
+                        rc.last_full_upload_succeeded = false;
+                        self.needs_redraw = true;
+                    }
+                    Err(error) => {
+                        log::error!("GPU render failed: {error:#}");
+                        self.needs_redraw = true;
+                    }
+                }
             }
             return;
         }
@@ -696,7 +715,7 @@ impl App {
             } else {
                 None
             };
-            let render_result = build_all_pane_instances(
+            let mut render_result = build_all_pane_instances(
                 rc,
                 &pane_infos,
                 &self.mux,
@@ -707,22 +726,29 @@ impl App {
                 active_tid,
             );
 
-            if let Err(crate::renderer::atlas::AtlasError::Full) = render_result {
-                // Atlas full — clear everything and retry.
-                rc.renderer.atlas.clear(&rc.renderer.device());
-                rc.renderer.color_atlas.clear(&rc.renderer.device());
-                if let Some(atlas) = rc.renderer.get_lcd_atlas() {
-                    atlas.borrow_mut().clear(&rc.renderer.device());
-                    // LCD atlas clear invalidates the rasterizer's local cache (TD-MEM-02).
-                    rc.shaper.clear_lcd_rasterizer_cache();
+            if let Err(error) = render_result {
+                if matches!(&error, crate::renderer::atlas::AtlasError::Full) {
+                    // Atlas full — clear everything and retry.
+                    rc.renderer.atlas.clear(&rc.renderer.device());
+                    rc.renderer.color_atlas.clear(&rc.renderer.device());
+                    if let Some(atlas) = rc.renderer.get_lcd_atlas() {
+                        atlas.borrow_mut().clear(&rc.renderer.device());
+                        // LCD atlas clear invalidates the rasterizer's local cache (TD-MEM-02).
+                        rc.shaper.clear_lcd_rasterizer_cache();
+                    }
+                    // Bind groups held stale wgpu TextureViews after clear() (TD-MEM-03).
+                    rc.renderer.rebuild_atlas_bind_groups();
+                    rc.clear_all_row_caches_for(
+                        crate::app::renderer::FullRebuildTrigger::AtlasGenerationChange,
+                    );
+                    rc.atlas_generation += 1;
+                } else {
+                    log::error!("incremental terminal build failed; forcing full rebuild: {error}");
+                    rc.clear_all_row_caches_for(
+                        crate::app::renderer::FullRebuildTrigger::RowSlotCapacityOverflow,
+                    );
                 }
-                // Bind groups held stale wgpu TextureViews after clear() (TD-MEM-03).
-                rc.renderer.rebuild_atlas_bind_groups();
-                rc.clear_all_row_caches_for(
-                    crate::app::renderer::FullRebuildTrigger::AtlasGenerationChange,
-                );
-                rc.atlas_generation += 1;
-                let _ = build_all_pane_instances(
+                render_result = build_all_pane_instances(
                     rc,
                     &pane_infos,
                     &self.mux,
@@ -733,13 +759,20 @@ impl App {
                     active_tid,
                 );
             }
+            if let Err(error) = render_result {
+                log::error!("full terminal rebuild failed: {error}");
+                self.needs_redraw = true;
+                return;
+            }
             // `build_all_pane_instances` resets per-frame metrics, so attach the
             // event-loop snapshot after the CPU build and before the HUD renders.
             rc.frame_metrics.scenario = scenario;
             rc.frame_metrics.wakeups = wakeups;
+            rc.frame_metrics.event_loop_iterations = wait_iterations;
             rc.frame_metrics.redraws = redraws;
             rc.frame_metrics.pty_terminals = data_ids.len();
             rc.frame_metrics.pty_events = batch.data_events;
+            rc.frame_metrics.pty_bytes = batch.data_bytes;
             rc.frame_metrics.pty_pending_events = batch.pending_events;
 
             // Account for the exact terminal/LCD ranges before building the HUD.
@@ -751,33 +784,19 @@ impl App {
             let lcd_upload_ranges = merge_upload_ranges(&mut rc.lcd_upload_ranges);
             let vertex_size = std::mem::size_of::<crate::renderer::cell::CellVertex>();
             let lcd_enabled = rc.renderer.lcd_queue().is_some();
-            let planned_terminal_bytes =
-                crate::renderer::upload::upload_ranges_bytes(instance_upload_ranges, vertex_size);
-            let planned_lcd_bytes = lcd_enabled
-                .then(|| {
-                    crate::renderer::upload::upload_ranges_bytes(&lcd_upload_ranges, vertex_size)
-                })
-                .unwrap_or(0);
-            let full_terminal_bytes = rc
-                .terminal_instances
-                .len()
-                .saturating_mul(vertex_size)
-                .saturating_add(
-                    lcd_enabled
-                        .then(|| rc.terminal_lcd_instances.len().saturating_mul(vertex_size))
-                        .unwrap_or(0),
-                );
-            let full_terminal_ranges = usize::from(!rc.terminal_instances.is_empty())
-                + usize::from(lcd_enabled && !rc.terminal_lcd_instances.is_empty());
+            let upload_accounting = account_terminal_uploads(
+                rc.terminal_instances.len(),
+                rc.terminal_lcd_instances.len(),
+                instance_upload_ranges,
+                &lcd_upload_ranges,
+                vertex_size,
+                lcd_enabled,
+            );
             rc.frame_metrics.record_terminal_uploads(
-                full_terminal_bytes,
-                full_terminal_ranges,
-                planned_terminal_bytes.saturating_add(planned_lcd_bytes),
-                incremental_upload_range_count(
-                    instance_upload_ranges.len(),
-                    lcd_upload_ranges.len(),
-                    lcd_enabled,
-                ),
+                upload_accounting.full_bytes,
+                upload_accounting.full_ranges,
+                upload_accounting.incremental_bytes,
+                upload_accounting.incremental_ranges,
             );
 
             // Pane separator lines (hidden when a pane is zoomed).
@@ -1282,25 +1301,49 @@ impl App {
             let lcd_upload = rc
                 .renderer
                 .upload_lcd_ranges(&rc.terminal_lcd_instances, &lcd_upload_ranges);
-            let overlay_upload = rc.renderer.upload_overlay_instances(&rc.instances);
-
-            let terminal_succeeded = terminal_upload.is_ok();
-            let lcd_succeeded = lcd_upload.is_ok();
-            let overlay_succeeded = overlay_upload.is_ok();
-            let terminal_bytes = match terminal_upload {
+            let mut terminal_succeeded = terminal_upload.is_ok();
+            let mut lcd_succeeded = lcd_upload.is_ok();
+            let mut terminal_bytes = match terminal_upload {
                 Ok(bytes) => bytes,
                 Err(error) => {
                     log::error!("terminal instance upload failed: {error:#}");
                     0
                 }
             };
-            let lcd_bytes = match lcd_upload {
+            let mut lcd_bytes = match lcd_upload {
                 Ok(bytes) => bytes,
                 Err(error) => {
                     log::error!("LCD instance upload failed: {error:#}");
                     0
                 }
             };
+            let mut used_full_fallback = false;
+            if !terminal_succeeded || !lcd_succeeded {
+                log::warn!(
+                    "incremental terminal upload failed; using independent full-frame upload fallback"
+                );
+                match rc.renderer.upload_instances_full(&rc.terminal_instances) {
+                    Ok(bytes) => {
+                        terminal_bytes = bytes;
+                        terminal_succeeded = true;
+                    }
+                    Err(error) => {
+                        log::error!("full terminal instance upload failed: {error:#}");
+                    }
+                }
+                match rc.renderer.upload_lcd_full(&rc.terminal_lcd_instances) {
+                    Ok(bytes) => {
+                        lcd_bytes = bytes;
+                        lcd_succeeded = true;
+                    }
+                    Err(error) => {
+                        log::error!("full LCD instance upload failed: {error:#}");
+                    }
+                }
+                used_full_fallback = terminal_succeeded && lcd_succeeded;
+            }
+            let overlay_upload = rc.renderer.upload_overlay_instances(&rc.instances);
+            let overlay_succeeded = overlay_upload.is_ok();
             let overlay_bytes = match overlay_upload {
                 Ok(bytes) => bytes,
                 Err(error) => {
@@ -1311,9 +1354,13 @@ impl App {
             rc.last_gpu_upload_bytes = terminal_bytes + lcd_bytes + overlay_bytes + rect_bytes;
             rc.frame_metrics.record_upload(
                 rc.last_gpu_upload_bytes,
-                instance_upload_ranges.len()
-                    + usize::from(lcd_enabled) * lcd_upload_ranges.len()
-                    + usize::from(overlay_bytes > 0)
+                if used_full_fallback {
+                    usize::from(!rc.terminal_instances.is_empty())
+                        + usize::from(lcd_enabled && !rc.terminal_lcd_instances.is_empty())
+                } else {
+                    instance_upload_ranges.len()
+                        + usize::from(lcd_enabled) * lcd_upload_ranges.len()
+                } + usize::from(overlay_bytes > 0)
                     + usize::from(rect_bytes > 0),
             );
             if let Some(trigger) =
@@ -1334,13 +1381,16 @@ impl App {
             rc.last_full_upload_succeeded = true;
             rc.frame_metrics.scenario = scenario;
             rc.frame_metrics.wakeups = wakeups;
+            rc.frame_metrics.event_loop_iterations = wait_iterations;
             rc.frame_metrics.redraws = redraws;
             log::debug!(
-                "frame-metrics scenario={} redraws={} wakeups={} pty_events={} pty_pending_events={} dirty_rows={} rebuilt_rows={} upload_ranges={} upload_bytes={} full_upload_ranges={} full_upload_bytes={} incremental_upload_ranges={} incremental_upload_bytes={}",
+                "frame-metrics scenario={} redraws={} user_events={} wait_iterations={} pty_events={} pty_bytes={} pty_pending_events={} dirty_rows={} rebuilt_rows={} upload_ranges={} upload_bytes={} full_upload_ranges={} full_upload_bytes={} incremental_upload_ranges={} incremental_upload_bytes={}",
                 rc.frame_metrics.scenario.label(),
                 rc.frame_metrics.redraws,
                 rc.frame_metrics.wakeups,
+                rc.frame_metrics.event_loop_iterations,
                 rc.frame_metrics.pty_events,
+                rc.frame_metrics.pty_bytes,
                 rc.frame_metrics.pty_pending_events,
                 rc.frame_metrics.dirty_rows,
                 rc.frame_metrics.rebuilt_rows,
@@ -1351,7 +1401,19 @@ impl App {
                 rc.frame_metrics.incremental_upload_ranges,
                 rc.frame_metrics.incremental_upload_bytes,
             );
-            let _ = rc.renderer.render();
+            match rc.renderer.render() {
+                Ok(crate::renderer::gpu::RenderOutcome::Presented) => {}
+                Ok(crate::renderer::gpu::RenderOutcome::RebuildNeeded) => {
+                    log::warn!("surface/device state requires a full terminal rebuild");
+                    rc.clear_all_row_caches_for(FullRebuildTrigger::SurfaceReconfiguration);
+                    rc.last_full_upload_succeeded = false;
+                    self.needs_redraw = true;
+                }
+                Err(error) => {
+                    log::error!("GPU render failed: {error:#}");
+                    self.needs_redraw = true;
+                }
+            }
 
             // ── Input-to-pixel latency probe (RUST_LOG=petruterm=debug) ─────────
             // Only logged when PTY data arrived this frame (echo of a keypress).
@@ -1612,19 +1674,11 @@ fn static_hash(parts: &[&[u8]]) -> u64 {
     h.finish()
 }
 
-fn incremental_upload_range_count(
-    instance_ranges: usize,
-    lcd_ranges: usize,
-    lcd_enabled: bool,
-) -> usize {
-    instance_ranges + usize::from(lcd_enabled) * lcd_ranges
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
-        blink_only_render, blink_overlay_slot, incremental_upload_range_count,
-        terminal_upload_ranges_for_blink, upload_failure_rebuild_trigger,
+        blink_only_render, blink_overlay_slot, terminal_upload_ranges_for_blink,
+        upload_failure_rebuild_trigger,
     };
     use crate::app::renderer::{DirtyRows, RenderBuildState, RenderOverlayState};
     use crate::renderer::cell::{CellVertex, FLAG_CURSOR};
@@ -1691,11 +1745,5 @@ mod tests {
 
         assert!(damage.full_rebuild);
         assert!((0..5).all(|row| damage.rows.is_dirty(row)));
-    }
-
-    #[test]
-    fn lcd_disabled_incremental_upload_ranges_exclude_lcd_ranges() {
-        assert_eq!(incremental_upload_range_count(2, 3, false), 2);
-        assert_eq!(incremental_upload_range_count(2, 3, true), 5);
     }
 }

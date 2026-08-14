@@ -1443,21 +1443,24 @@ impl RenderContext {
             ),
             (
                 format!(
-                    " {:10} inc:{} full:{} redraws:{} wakeups:{}",
+                    " {:10} dirty:{} rebuilt:{} inc:{} full:{}",
                     "writes",
+                    self.frame_metrics.dirty_rows,
+                    self.frame_metrics.rebuilt_rows,
                     self.frame_metrics.incremental_upload_ranges,
-                    self.frame_metrics.full_upload_ranges,
-                    self.frame_metrics.redraws,
-                    self.frame_metrics.wakeups
+                    self.frame_metrics.full_upload_ranges
                 ),
                 value_fg,
             ),
             (
                 format!(
-                    " {:10} data:{} pending:{}",
+                    " {:10} data:{} bytes:{} pending:{} events:{} waits:{}",
                     "pty_events",
                     self.frame_metrics.pty_events,
-                    self.frame_metrics.pty_pending_events
+                    self.frame_metrics.pty_bytes,
+                    self.frame_metrics.pty_pending_events,
+                    self.frame_metrics.wakeups,
+                    self.frame_metrics.event_loop_iterations
                 ),
                 value_fg,
             ),

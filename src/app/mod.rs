@@ -84,8 +84,10 @@ pub struct App {
     pending_pty_batch: mux::PtyEventBatch,
     /// Workload label attached to the next rendered frame for debug metrics.
     frame_scenario: FrameScenario,
-    /// Native event-loop wakeups observed since the previous rendered frame.
+    /// Custom user events observed since the previous rendered frame.
     wakeups_since_frame: usize,
+    /// Event-loop wait iterations observed since the previous rendered frame.
+    wait_iterations_since_frame: usize,
     /// OS redraw requests emitted since the previous rendered frame.
     redraws_since_frame: usize,
 
@@ -182,6 +184,7 @@ impl App {
             pending_pty_batch: mux::PtyEventBatch::default(),
             frame_scenario: FrameScenario::Idle,
             wakeups_since_frame: 0,
+            wait_iterations_since_frame: 0,
             redraws_since_frame: 0,
             cached_cwd: None,
             sidebar: SidebarState::default(),
@@ -585,9 +588,7 @@ impl App {
             self.terminal_shell_ctxs.remove(&tid);
             self.ui.remove_terminal_state(tid);
             if let Some(rc) = &mut self.render_ctx {
-                rc.row_caches.remove(&tid);
-                rc.row_revisions.remove(&tid);
-                rc.grid_visual_states.remove(&tid);
+                rc.clear_terminal_state(tid);
             }
         }
         self.dispatch_lua_events();
@@ -1652,7 +1653,11 @@ impl App {
                         } else {
                             wgpu::PresentMode::Fifo
                         };
-                        rc.renderer.set_present_mode(mode);
+                        if rc.renderer.set_present_mode(mode) {
+                            rc.clear_all_row_caches_for(
+                                crate::app::renderer::FullRebuildTrigger::SurfaceReconfiguration,
+                            );
+                        }
                     }
                     self.request_redraw();
                 }
@@ -1693,6 +1698,10 @@ impl ApplicationHandler<()> for App {
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: ()) {
         // PTY channels are drained from about_to_wait so one loop iteration has
         // a single normal drain point. This event only wakes the event loop.
+        self.wakeups_since_frame = self.wakeups_since_frame.saturating_add(1);
+        if let Some(rc) = &mut self.render_ctx {
+            rc.frame_metrics.wakeups = self.wakeups_since_frame;
+        }
         self.flush_pending_pty_run();
         self.flush_pending_agent_action();
         self.flush_pending_paste();
@@ -1839,6 +1848,9 @@ impl ApplicationHandler<()> for App {
                 self.frame_scenario = FrameScenario::Resize;
                 if let Some(rc) = &mut self.render_ctx {
                     rc.renderer.resize(size.width, size.height);
+                    rc.clear_all_row_caches_for(
+                        crate::app::renderer::FullRebuildTrigger::TerminalResize,
+                    );
                 }
                 self.resize_terminals_for_panel();
                 self.ui.ai_block.dirty = true;
@@ -1900,9 +1912,9 @@ impl ApplicationHandler<()> for App {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        self.wakeups_since_frame = self.wakeups_since_frame.saturating_add(1);
+        self.wait_iterations_since_frame = self.wait_iterations_since_frame.saturating_add(1);
         if let Some(rc) = &mut self.render_ctx {
-            rc.frame_metrics.wakeups = self.wakeups_since_frame;
+            rc.frame_metrics.event_loop_iterations = self.wait_iterations_since_frame;
         }
         // Drain native menu events. muda uses an internal static channel when no
         // custom set_event_handler is registered; about_to_wait runs after every

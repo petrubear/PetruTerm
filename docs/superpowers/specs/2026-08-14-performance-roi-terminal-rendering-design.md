@@ -170,9 +170,15 @@ parallel hits 100.06–113.73 µs. These are current measurements, not an
 equivalent before/after runtime baseline; repository Criterion change
 annotations therefore are not treated as a Task 7 speedup claim.
 
-The HUD and `RUST_LOG=petruterm=debug` path now expose scenario, redraw/wakeup
-counts, dirty/rebuilt rows, actual upload bytes/ranges, and comparable full
-versus incremental terminal/LCD counters. GUI/device values, input latency
+Upload accounting benchmarks call the same production `UploadRange` merge and
+accounting seam with explicit LCD-disabled and LCD-enabled inputs; they do not
+assume a second buffer when LCD is disabled. These remain byte-accounting
+benchmarks rather than GPU-device throughput measurements.
+
+The HUD and `RUST_LOG=petruterm=debug` path now expose scenario, redraw,
+user-event, and event-loop-wait counts, dirty/rebuilt rows, PTY byte volume,
+actual upload bytes/ranges, and comparable full versus incremental terminal/LCD
+counters. GUI/device values, input latency
 percentiles, output throughput, CPU utilization, and visible-tearing checks
 remain N/A until a controlled interactive run can collect them.
 

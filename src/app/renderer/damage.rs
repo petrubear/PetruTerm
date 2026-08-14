@@ -111,6 +111,7 @@ pub(crate) enum FullRebuildTrigger {
     MissingRowCache,
     RowSlotCapacityOverflow,
     InvalidGpuUploadRange,
+    SurfaceReconfiguration,
 }
 
 #[allow(dead_code)]
@@ -143,6 +144,15 @@ impl RenderBuildState {
         trigger: FullRebuildTrigger,
     ) {
         self.pending_terminal_rebuilds.insert(terminal_id, trigger);
+    }
+
+    pub(crate) fn clear_terminal_rebuild(&mut self, terminal_id: usize) {
+        self.pending_terminal_rebuilds.remove(&terminal_id);
+    }
+
+    pub(crate) fn clear_all_rebuilds(&mut self) {
+        self.pending_full_rebuild = None;
+        self.pending_terminal_rebuilds.clear();
     }
 
     /// Resolve the damage consumed directly by `RenderContext::build_instances`.
@@ -250,6 +260,7 @@ mod tests {
             FullRebuildTrigger::MissingRowCache,
             FullRebuildTrigger::RowSlotCapacityOverflow,
             FullRebuildTrigger::InvalidGpuUploadRange,
+            FullRebuildTrigger::SurfaceReconfiguration,
         ];
 
         for trigger in triggers {
@@ -294,5 +305,20 @@ mod tests {
 
         let next = state.resolve_terminal_build(7, &dirty, 4, true);
         assert!(!next.full_rebuild);
+    }
+
+    #[test]
+    fn deferred_terminal_rebuilds_are_removed_when_state_is_cleared() {
+        let mut state = RenderBuildState::default();
+        state.request_terminal_full_rebuild(7, FullRebuildTrigger::RowSlotCapacityOverflow);
+        state.clear_terminal_rebuild(7);
+        let damage = state.resolve_terminal_build(7, &DirtyRows::default(), 4, true);
+        assert!(!damage.full_rebuild);
+
+        state.request_full_rebuild(FullRebuildTrigger::SurfaceReconfiguration);
+        state.request_terminal_full_rebuild(7, FullRebuildTrigger::RowSlotCapacityOverflow);
+        state.clear_all_rebuilds();
+        let damage = state.resolve_terminal_build(7, &DirtyRows::default(), 4, true);
+        assert!(!damage.full_rebuild);
     }
 }

@@ -15,6 +15,41 @@ pub fn upload_ranges_bytes(ranges: &[UploadRange], element_size: usize) -> usize
     })
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct TerminalUploadAccounting {
+    pub full_bytes: usize,
+    pub full_ranges: usize,
+    pub incremental_bytes: usize,
+    pub incremental_ranges: usize,
+}
+
+pub fn account_terminal_uploads(
+    terminal_vertices: usize,
+    lcd_vertices: usize,
+    terminal_ranges: &[UploadRange],
+    lcd_ranges: &[UploadRange],
+    element_size: usize,
+    lcd_enabled: bool,
+) -> TerminalUploadAccounting {
+    let full_bytes = terminal_vertices
+        .saturating_add(lcd_enabled.then_some(lcd_vertices).unwrap_or(0))
+        .saturating_mul(element_size);
+    let full_ranges =
+        usize::from(terminal_vertices > 0) + usize::from(lcd_enabled && lcd_vertices > 0);
+    let incremental_bytes = upload_ranges_bytes(terminal_ranges, element_size).saturating_add(
+        lcd_enabled
+            .then(|| upload_ranges_bytes(lcd_ranges, element_size))
+            .unwrap_or(0),
+    );
+    let incremental_ranges = terminal_ranges.len() + usize::from(lcd_enabled) * lcd_ranges.len();
+    TerminalUploadAccounting {
+        full_bytes,
+        full_ranges,
+        incremental_bytes,
+        incremental_ranges,
+    }
+}
+
 pub fn merge_upload_ranges(ranges: &mut [UploadRange]) -> Vec<UploadRange> {
     ranges.sort_unstable_by_key(|range| (range.start, range.end));
     let mut merged: Vec<UploadRange> = Vec::with_capacity(ranges.len());
@@ -36,7 +71,7 @@ pub fn merge_upload_ranges(ranges: &mut [UploadRange]) -> Vec<UploadRange> {
 
 #[cfg(test)]
 mod tests {
-    use super::{merge_upload_ranges, upload_ranges_bytes, UploadRange};
+    use super::{account_terminal_uploads, merge_upload_ranges, upload_ranges_bytes, UploadRange};
 
     #[test]
     fn merge_upload_ranges_coalesces_adjacent_and_overlapping_ranges() {
@@ -89,5 +124,30 @@ mod tests {
         ];
 
         assert_eq!(upload_ranges_bytes(&ranges, 80), 480);
+    }
+
+    #[test]
+    fn terminal_upload_accounting_respects_lcd_configuration() {
+        let terminal = [UploadRange { start: 0, end: 4 }];
+        let lcd = [UploadRange { start: 8, end: 10 }];
+
+        assert_eq!(
+            account_terminal_uploads(10, 10, &terminal, &lcd, 8, false),
+            super::TerminalUploadAccounting {
+                full_bytes: 80,
+                full_ranges: 1,
+                incremental_bytes: 32,
+                incremental_ranges: 1,
+            }
+        );
+        assert_eq!(
+            account_terminal_uploads(10, 10, &terminal, &lcd, 8, true),
+            super::TerminalUploadAccounting {
+                full_bytes: 160,
+                full_ranges: 2,
+                incremental_bytes: 48,
+                incremental_ranges: 2,
+            }
+        );
     }
 }

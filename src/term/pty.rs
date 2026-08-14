@@ -18,7 +18,7 @@ use crate::term::osc133::{EraseScanner, Osc133Marker, Osc133Scanner};
 /// Events emitted by the PTY reader thread to the main thread.
 pub enum PtyEvent {
     /// New data arrived; terminal grid has been updated.
-    DataReady,
+    DataReady(usize),
     /// The shell process exited with the given code.
     Exit(i32),
     /// Terminal title changed (OSC 0/2).
@@ -78,7 +78,7 @@ impl EventListener for PtyEventProxy {
         }
 
         let pty_event = match event {
-            Event::Wakeup => PtyEvent::DataReady,
+            Event::Wakeup => PtyEvent::DataReady(0),
             Event::Exit => PtyEvent::Exit(0),
             Event::ChildExit(code) => PtyEvent::Exit(code),
             Event::Title(t) => PtyEvent::TitleChanged(t),
@@ -475,7 +475,7 @@ fn reader_loop(
         }
 
         // Notify main thread that new data is available.
-        let _ = tx.try_send(PtyEvent::DataReady);
+        let _ = tx.try_send(PtyEvent::DataReady(n));
         if wakeup_gate.signal() {
             let _ = wakeup.send_event(());
         }

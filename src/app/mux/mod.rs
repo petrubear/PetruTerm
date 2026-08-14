@@ -20,6 +20,7 @@ pub(crate) struct PtyEventBatch {
     pub(crate) exited: Vec<usize>,
     pub(crate) has_pending: bool,
     pub(crate) data_events: usize,
+    pub(crate) data_bytes: usize,
     pub(crate) pending_events: usize,
 }
 
@@ -58,6 +59,7 @@ impl PtyEventBatch {
         }
         self.has_pending |= other.has_pending;
         self.data_events = self.data_events.saturating_add(other.data_events);
+        self.data_bytes = self.data_bytes.saturating_add(other.data_bytes);
         self.pending_events = self.pending_events.saturating_add(other.pending_events);
     }
 }
@@ -359,6 +361,7 @@ impl Mux {
         let mut work = 0usize;
         let mut has_pending = false;
         let mut data_events = 0usize;
+        let mut data_bytes = 0usize;
         let mut pending_events = 0usize;
         self.osc133_events.clear();
         let mut osc133_pending: Vec<(usize, Osc133Marker)> = Vec::new();
@@ -369,8 +372,9 @@ impl Mux {
             let rx = terminal.pty.rx.clone();
             let terminal_has_pending =
                 drain_pty_events(&rx, &mut work, PTY_EVENT_WORK_BUDGET, |event| match event {
-                    PtyEvent::DataReady => {
+                    PtyEvent::DataReady(bytes) => {
                         data_events = data_events.saturating_add(1);
+                        data_bytes = data_bytes.saturating_add(bytes);
                         if !data_ids.contains(&id) {
                             data_ids.push(id);
                         }
@@ -430,6 +434,7 @@ impl Mux {
             exited,
             has_pending,
             data_events,
+            data_bytes,
             pending_events,
             ..PtyEventBatch::default()
         }
@@ -1269,7 +1274,7 @@ mod tests {
     fn production_pty_drain_preserves_payload_and_special_events_across_budget() {
         let (tx, rx) = unbounded();
         for _ in 0..PTY_EVENT_WORK_BUDGET {
-            tx.send(PtyEvent::DataReady).unwrap();
+            tx.send(PtyEvent::DataReady(1)).unwrap();
         }
         tx.send(PtyEvent::PtyWrite("payload".to_string())).unwrap();
         tx.send(PtyEvent::Exit(17)).unwrap();
@@ -1287,7 +1292,7 @@ mod tests {
         assert_eq!(first.len(), PTY_EVENT_WORK_BUDGET);
         assert!(first
             .iter()
-            .all(|event| matches!(event, PtyEvent::DataReady)));
+            .all(|event| matches!(event, PtyEvent::DataReady(_))));
 
         work = 0;
         let mut second = Vec::new();

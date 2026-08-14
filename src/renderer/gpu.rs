@@ -41,6 +41,17 @@ fn validate_upload_range(range: UploadRange, instance_len: usize) -> Result<()> 
     Ok(())
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RenderOutcome {
+    Presented,
+    RebuildNeeded,
+}
+
+#[allow(dead_code)]
+pub const fn render_outcome_requires_rebuild(outcome: RenderOutcome) -> bool {
+    matches!(outcome, RenderOutcome::RebuildNeeded)
+}
+
 /// Core wgpu renderer: owns the surface, device, queue, pipeline, and glyph atlas.
 pub struct GpuRenderer {
     /// Kept alive so the raw window handle the surface holds remains valid.
@@ -83,6 +94,19 @@ pub struct GpuRenderer {
     rect_pipeline: RoundedRectPipeline,
     rect_instance_buffer: wgpu::Buffer,
     rect_instance_count: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{render_outcome_requires_rebuild, RenderOutcome};
+
+    #[test]
+    fn surface_recovery_outcome_requires_full_rebuild() {
+        assert!(!render_outcome_requires_rebuild(RenderOutcome::Presented));
+        assert!(render_outcome_requires_rebuild(
+            RenderOutcome::RebuildNeeded
+        ));
+    }
 }
 
 impl GpuRenderer {
@@ -359,13 +383,14 @@ impl GpuRenderer {
     /// Use `wgpu::PresentMode::Fifo` (vsync) to reduce GPU wakeup frequency on battery,
     /// or `wgpu::PresentMode::Mailbox` for lowest latency when on power.
     /// Has immediate effect — no restart required.
-    pub fn set_present_mode(&mut self, mode: wgpu::PresentMode) {
+    pub fn set_present_mode(&mut self, mode: wgpu::PresentMode) -> bool {
         if self.surface_config.present_mode == mode {
-            return;
+            return false;
         }
         self.surface_config.present_mode = mode;
         self.surface.configure(&self.device, &self.surface_config);
         log::info!("Present mode switched to {:?}", mode);
+        true
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
@@ -442,6 +467,24 @@ impl GpuRenderer {
         ))
     }
 
+    /// Independently upload the complete persistent terminal storage.
+    ///
+    /// This deliberately does not delegate to the range API: it is the
+    /// correctness fallback when a range, slot, or persistent-buffer invariant
+    /// fails.
+    pub fn upload_instances_full(&mut self, instances: &[CellVertex]) -> Result<usize> {
+        if !self.ensure_instance_capacity(instances.len()) {
+            return Err(anyhow::anyhow!(
+                "terminal instance storage exceeds the device buffer limit"
+            ));
+        }
+        let bytes = bytemuck::cast_slice(instances);
+        if !bytes.is_empty() {
+            self.queue.write_buffer(&self.instance_buffer, 0, bytes);
+        }
+        Ok(bytes.len())
+    }
+
     /// Upload only the changed ranges of persistent LCD instances.
     pub fn upload_lcd_ranges(
         &mut self,
@@ -475,6 +518,25 @@ impl GpuRenderer {
             ranges,
             std::mem::size_of::<CellVertex>(),
         ))
+    }
+
+    /// Independently upload the complete persistent LCD storage.
+    pub fn upload_lcd_full(&mut self, instances: &[CellVertex]) -> Result<usize> {
+        if self.lcd_pipeline.is_none() {
+            self.lcd_instance_count = 0;
+            return Ok(0);
+        }
+        if !self.ensure_lcd_instance_capacity(instances.len()) {
+            return Err(anyhow::anyhow!(
+                "LCD instance storage exceeds the device buffer limit"
+            ));
+        }
+        let bytes = bytemuck::cast_slice(instances);
+        if !bytes.is_empty() {
+            self.queue.write_buffer(&self.lcd_instance_buffer, 0, bytes);
+        }
+        self.lcd_instance_count = instances.len();
+        Ok(bytes.len())
     }
 
     /// Upload the dynamic cursor and UI overlay buffer.
@@ -531,20 +593,25 @@ impl GpuRenderer {
     }
 
     /// Render a single frame: combined pass for bg and glyphs.
-    pub fn render(&mut self) -> Result<()> {
+    pub fn render(&mut self) -> Result<RenderOutcome> {
         use wgpu::CurrentSurfaceTexture;
+        let mut rebuild_needed = false;
         let output = match self.surface.get_current_texture() {
             CurrentSurfaceTexture::Success(t) => t,
             CurrentSurfaceTexture::Suboptimal(t) => {
                 self.surface.configure(&self.device, &self.surface_config);
+                log::warn!("surface acquire returned suboptimal; requesting full rebuild");
+                rebuild_needed = true;
                 t
             }
             CurrentSurfaceTexture::Outdated | CurrentSurfaceTexture::Lost => {
                 self.surface.configure(&self.device, &self.surface_config);
-                return Ok(());
+                log::warn!("surface acquire returned lost/outdated; requesting full rebuild");
+                return Ok(RenderOutcome::RebuildNeeded);
             }
             CurrentSurfaceTexture::Timeout | CurrentSurfaceTexture::Occluded => {
-                return Ok(());
+                log::debug!("surface acquire returned timeout/occluded");
+                return Ok(RenderOutcome::RebuildNeeded);
             }
             CurrentSurfaceTexture::Validation => {
                 return Err(anyhow::anyhow!(
@@ -632,7 +699,11 @@ impl GpuRenderer {
 
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
-        Ok(())
+        Ok(if rebuild_needed {
+            RenderOutcome::RebuildNeeded
+        } else {
+            RenderOutcome::Presented
+        })
     }
 
     pub fn update_bg_color(&mut self, color: wgpu::Color) {

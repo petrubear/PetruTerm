@@ -27,6 +27,7 @@ pub(crate) fn classify_frame_scenario(
     active_panes: usize,
     has_data: bool,
     data_events: usize,
+    data_bytes: usize,
     pending_events: usize,
 ) -> FrameScenario {
     if matches!(requested, FrameScenario::Resize | FrameScenario::Scroll) {
@@ -36,7 +37,7 @@ pub(crate) fn classify_frame_scenario(
         return FrameScenario::MultiPane;
     }
     if has_data {
-        if data_events > 2 || pending_events > 0 {
+        if data_events > 2 || data_bytes >= 4096 || pending_events > 0 {
             FrameScenario::PtyOutput
         } else {
             FrameScenario::Interactive
@@ -51,6 +52,7 @@ pub(crate) struct FrameMetrics {
     pub scenario: FrameScenario,
     pub pty_terminals: usize,
     pub pty_events: usize,
+    pub pty_bytes: usize,
     pub pty_pending_events: usize,
     pub dirty_rows: usize,
     pub rebuilt_rows: usize,
@@ -62,6 +64,7 @@ pub(crate) struct FrameMetrics {
     pub incremental_upload_bytes: usize,
     pub wakeups: usize,
     pub redraws: usize,
+    pub event_loop_iterations: usize,
 }
 
 impl FrameMetrics {
@@ -132,28 +135,36 @@ mod tests {
     #[test]
     fn scenario_classification_uses_event_volume_and_preserves_workload_labels() {
         assert_eq!(
-            classify_frame_scenario(FrameScenario::Idle, 1, true, 1, 0),
+            classify_frame_scenario(FrameScenario::Idle, 1, true, 1, 1, 0),
             FrameScenario::Interactive
         );
         assert_eq!(
-            classify_frame_scenario(FrameScenario::Interactive, 1, true, 3, 0),
+            classify_frame_scenario(FrameScenario::Interactive, 1, true, 3, 0, 0),
             FrameScenario::PtyOutput
         );
         assert_eq!(
-            classify_frame_scenario(FrameScenario::Idle, 1, true, 1, 1),
+            classify_frame_scenario(FrameScenario::Idle, 1, true, 1, 1, 1),
             FrameScenario::PtyOutput
         );
         assert_eq!(
-            classify_frame_scenario(FrameScenario::Interactive, 2, true, 1, 0),
+            classify_frame_scenario(FrameScenario::Interactive, 2, true, 1, 1, 0),
             FrameScenario::MultiPane
         );
         assert_eq!(
-            classify_frame_scenario(FrameScenario::Resize, 2, true, 10, 10),
+            classify_frame_scenario(FrameScenario::Resize, 2, true, 10, 10, 10),
             FrameScenario::Resize
         );
         assert_eq!(
-            classify_frame_scenario(FrameScenario::Scroll, 2, true, 10, 10),
+            classify_frame_scenario(FrameScenario::Scroll, 2, true, 10, 10, 10),
             FrameScenario::Scroll
+        );
+    }
+
+    #[test]
+    fn large_single_read_is_output_not_interactive_echo() {
+        assert_eq!(
+            classify_frame_scenario(FrameScenario::Interactive, 1, true, 1, 64 * 1024, 0),
+            FrameScenario::PtyOutput
         );
     }
 }
