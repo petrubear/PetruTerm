@@ -28,10 +28,10 @@ mod overlay;
 mod terminal;
 
 pub(crate) use damage::{
-    rows_for_full_rebuild, BuildInvalidationState, DirtyRows, FullRebuildTrigger, RowRevisionMap,
+    rows_for_full_rebuild, DirtyRows, FullRebuildTrigger, RenderBuildState, RowRevisionMap,
 };
 pub(crate) use layout::TerminalInstanceLayout;
-pub(crate) use terminal::OverlayUploadState;
+pub(crate) use terminal::RenderOverlayState;
 
 /// Cache for a single shaped row to avoid re-shaping every frame.
 #[derive(Clone)]
@@ -86,8 +86,8 @@ pub struct RenderContext {
     pub(crate) terminal_layouts: HashMap<usize, TerminalInstanceLayout>,
     /// Terminals whose layout was rebuilt during the current frame.
     pub(crate) layout_dirty_terminals: std::collections::HashSet<usize>,
-    pub(crate) capacity_overflow_terminals: std::collections::HashSet<usize>,
-    pub(crate) build_invalidation: BuildInvalidationState,
+    pub(crate) build_state: RenderBuildState,
+    pub(crate) overlay_state: RenderOverlayState,
     pub instances: Vec<CellVertex>,
     /// Cached GPU instances for the AI chat panel — rebuilt only when `ChatPanel::dirty`.
     pub panel_instances_cache: Vec<CellVertex>,
@@ -274,8 +274,8 @@ impl RenderContext {
             lcd_upload_ranges: Vec::new(),
             terminal_layouts: HashMap::new(),
             layout_dirty_terminals: std::collections::HashSet::new(),
-            capacity_overflow_terminals: std::collections::HashSet::new(),
-            build_invalidation: BuildInvalidationState::default(),
+            build_state: RenderBuildState::default(),
+            overlay_state: RenderOverlayState,
             instances: Vec::new(),
             panel_cache_term_cols: 0,
             panel_instances_cache: Vec::new(),
@@ -451,7 +451,7 @@ impl RenderContext {
     }
 
     pub(crate) fn clear_all_row_caches_for(&mut self, trigger: FullRebuildTrigger) {
-        self.build_invalidation.invalidate(trigger);
+        self.build_state.request_full_rebuild(trigger);
         self.row_caches.clear();
         self.row_revisions.clear();
         self.grid_visual_states.clear();
@@ -461,7 +461,6 @@ impl RenderContext {
         self.instance_upload_ranges.clear();
         self.lcd_upload_ranges.clear();
         self.layout_dirty_terminals.clear();
-        self.capacity_overflow_terminals.clear();
     }
 
     pub(crate) fn prepare_terminal_layouts(&mut self, pane_infos: &[crate::ui::PaneInfo]) {
@@ -505,8 +504,8 @@ impl RenderContext {
             return;
         }
 
-        self.build_invalidation
-            .invalidate(FullRebuildTrigger::PaneGeometryChange);
+        self.build_state
+            .request_full_rebuild(FullRebuildTrigger::PaneGeometryChange);
         self.terminal_layouts.clear();
         self.terminal_instances.clear();
         self.terminal_lcd_instances.clear();
@@ -559,6 +558,8 @@ impl RenderContext {
                 "terminal instance layout is missing".to_string(),
             ));
         };
+        self.build_state
+            .request_full_rebuild(FullRebuildTrigger::RowSlotCapacityOverflow);
         let target_stride = target.row_stride.saturating_mul(2).max(required).max(1);
         let geometries: Vec<_> = self
             .terminal_layouts

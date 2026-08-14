@@ -125,27 +125,24 @@ pub(crate) struct BuildDamage {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct BuildInvalidationState {
+pub(crate) struct RenderBuildState {
     pending_full_rebuild: Option<FullRebuildTrigger>,
 }
 
-impl BuildInvalidationState {
-    /// Record an invalidation for the next production terminal build.
-    pub(crate) fn invalidate(&mut self, trigger: FullRebuildTrigger) {
+impl RenderBuildState {
+    /// Record a full rebuild request for the next production terminal build.
+    pub(crate) fn request_full_rebuild(&mut self, trigger: FullRebuildTrigger) {
         self.pending_full_rebuild = Some(trigger);
     }
 
-    /// Resolve the damage consumed by `RenderContext::build_instances`.
-    pub(crate) fn begin_terminal_build(
+    /// Resolve the damage consumed directly by `RenderContext::build_instances`.
+    pub(crate) fn resolve_terminal_build(
         &mut self,
         dirty_rows: &DirtyRows,
         row_count: usize,
         cache_complete: bool,
-        capacity_overflow: bool,
     ) -> BuildDamage {
-        let invalidation = capacity_overflow
-            .then_some(FullRebuildTrigger::RowSlotCapacityOverflow)
-            .or_else(|| self.pending_full_rebuild.take());
+        let invalidation = self.pending_full_rebuild.take();
         let rows = if let Some(trigger) = invalidation {
             rows_for_full_rebuild(trigger, row_count)
         } else if cache_complete {
@@ -195,7 +192,7 @@ impl RowRevisionMap {
 
 #[cfg(test)]
 mod tests {
-    use super::{BuildInvalidationState, DirtyRows, FullRebuildTrigger, RowRange, RowRevisionMap};
+    use super::{DirtyRows, FullRebuildTrigger, RenderBuildState, RowRange, RowRevisionMap};
 
     #[test]
     fn dirty_rows_merge_and_sort_ranges() {
@@ -242,13 +239,13 @@ mod tests {
         ];
 
         for trigger in triggers {
-            let mut state = BuildInvalidationState::default();
-            state.invalidate(trigger);
-            let damage = state.begin_terminal_build(&DirtyRows::default(), 6, true, false);
+            let mut state = RenderBuildState::default();
+            state.request_full_rebuild(trigger);
+            let damage = state.resolve_terminal_build(&DirtyRows::default(), 6, true);
             assert!(damage.full_rebuild);
             assert_eq!(damage.rows.len(), 6);
             assert!((0..6).all(|row| damage.rows.is_dirty(row)));
-            let next = state.begin_terminal_build(&DirtyRows::default(), 6, true, false);
+            let next = state.resolve_terminal_build(&DirtyRows::default(), 6, true);
             assert!(!next.full_rebuild);
         }
     }
@@ -256,12 +253,13 @@ mod tests {
     #[test]
     fn production_build_contract_falls_back_for_missing_cache_and_capacity_overflow() {
         let dirty = DirtyRows::default();
-        let mut state = BuildInvalidationState::default();
-        let missing = state.begin_terminal_build(&dirty, 5, false, false);
+        let mut state = RenderBuildState::default();
+        let missing = state.resolve_terminal_build(&dirty, 5, false);
         assert!(missing.full_rebuild);
         assert!((0..5).all(|row| missing.rows.is_dirty(row)));
 
-        let overflow = state.begin_terminal_build(&dirty, 5, true, true);
+        state.request_full_rebuild(FullRebuildTrigger::RowSlotCapacityOverflow);
+        let overflow = state.resolve_terminal_build(&dirty, 5, true);
         assert!(overflow.full_rebuild);
         assert!((0..5).all(|row| overflow.rows.is_dirty(row)));
     }

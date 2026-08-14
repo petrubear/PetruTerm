@@ -1,36 +1,70 @@
 use super::*;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct OverlayUploadState {
-    plan: OverlayUploadPlan,
-}
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct RenderOverlayState;
 
-impl OverlayUploadState {
-    /// Shared upload state used by the full redraw and cursor-blink paths.
-    pub(crate) fn new(
+impl RenderOverlayState {
+    /// Plan the overlay upload used by both production redraw paths.
+    pub(crate) fn plan_production_upload(
+        &self,
         terminal_count: usize,
         overlays: &[CellVertex],
         terminal_upload_ranges: &[UploadRange],
-    ) -> Self {
+    ) -> OverlayUploadPlan {
         let cursor_index = overlays.iter().position(|vertex| {
             vertex.flags & crate::renderer::cell::FLAG_CURSOR == crate::renderer::cell::FLAG_CURSOR
         });
-        Self {
-            plan: OverlayUploadPlan {
-                terminal_count,
-                overlay_count: overlays.len(),
-                cursor_index,
-                cursor_first: cursor_index.is_none_or(|index| index == 0),
-                terminal_upload_ranges_empty: terminal_upload_ranges.is_empty(),
-            },
+        OverlayUploadPlan {
+            terminal_count,
+            overlay_count: overlays.len(),
+            cursor_index,
+            cursor_first: cursor_index.is_none_or(|index| index == 0),
+            terminal_upload_ranges_empty: terminal_upload_ranges.is_empty(),
         }
     }
 
-    pub(crate) fn plan(&self) -> OverlayUploadPlan {
-        self.plan
+    /// Build the cursor overlay consumed by `RenderContext::build_cursor_instance`.
+    pub(crate) fn build_cursor_overlay(
+        &self,
+        info: &CursorInfo,
+        cell_width: f32,
+        cell_height: f32,
+        col_offset: usize,
+        row_offset: usize,
+        colors: &crate::config::schema::ColorScheme,
+    ) -> Option<CellVertex> {
+        let (glyph_offset, glyph_size) = match info.shape {
+            CursorShape::Block | CursorShape::HollowBlock => {
+                ([0.0f32, 0.0], [cell_width, cell_height])
+            }
+            CursorShape::Underline => ([0.0, (cell_height - 2.0).max(0.0)], [cell_width, 2.0]),
+            CursorShape::Beam => ([0.0, 0.0], [2.0, cell_height]),
+            CursorShape::Hidden => return None,
+        };
+        if !info.visible {
+            return None;
+        }
+        Some(CellVertex {
+            grid_pos: [
+                (col_offset + info.col) as f32,
+                (row_offset + info.row) as f32,
+            ],
+            atlas_uv: [0.0; 4],
+            fg: colors.cursor_fg,
+            bg: colors.cursor_bg,
+            glyph_offset,
+            glyph_size,
+            flags: FLAG_CURSOR,
+            _pad: 0,
+        })
     }
 
-    pub(crate) fn blink_vertex(template: CellVertex, blink_on: bool) -> CellVertex {
+    /// Plan the cursor-only upload used by the production blink path.
+    pub(crate) fn plan_cursor_blink_overlay(
+        &self,
+        template: CellVertex,
+        blink_on: bool,
+    ) -> CellVertex {
         if blink_on {
             template
         } else {
@@ -40,39 +74,6 @@ impl OverlayUploadState {
             }
         }
     }
-}
-
-/// Build the cursor template consumed by `RenderContext::build_cursor_instance`.
-pub(crate) fn build_cursor_vertex(
-    info: &CursorInfo,
-    cell_width: f32,
-    cell_height: f32,
-    col_offset: usize,
-    row_offset: usize,
-    colors: &crate::config::schema::ColorScheme,
-) -> Option<CellVertex> {
-    let (glyph_offset, glyph_size) = match info.shape {
-        CursorShape::Block | CursorShape::HollowBlock => ([0.0f32, 0.0], [cell_width, cell_height]),
-        CursorShape::Underline => ([0.0, (cell_height - 2.0).max(0.0)], [cell_width, 2.0]),
-        CursorShape::Beam => ([0.0, 0.0], [2.0, cell_height]),
-        CursorShape::Hidden => return None,
-    };
-    if !info.visible {
-        return None;
-    }
-    Some(CellVertex {
-        grid_pos: [
-            (col_offset + info.col) as f32,
-            (row_offset + info.row) as f32,
-        ],
-        atlas_uv: [0.0; 4],
-        fg: colors.cursor_fg,
-        bg: colors.cursor_bg,
-        glyph_offset,
-        glyph_size,
-        flags: FLAG_CURSOR,
-        _pad: 0,
-    })
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -109,16 +110,9 @@ impl RenderContext {
         let cache_complete = self.row_caches.get(&terminal_id).is_some_and(|cache| {
             cache.rows.len() >= n && cache.rows.iter().take(n).all(Option::is_some)
         });
-        let capacity_overflow = self
-            .capacity_overflow_terminals
-            .remove(&terminal_id)
-            .then_some(FullRebuildTrigger::RowSlotCapacityOverflow);
-        let build_damage = self.build_invalidation.begin_terminal_build(
-            dirty_rows,
-            n,
-            cache_complete,
-            capacity_overflow.is_some(),
-        );
+        let build_damage = self
+            .build_state
+            .resolve_terminal_build(dirty_rows, n, cache_complete);
         let effective_dirty = build_damage.rows;
         self.frame_metrics.dirty_rows = self
             .frame_metrics
@@ -369,7 +363,6 @@ impl RenderContext {
             .unwrap_or(false);
         if needs_growth {
             self.grow_terminal_row_capacity(terminal_id, required)?;
-            self.capacity_overflow_terminals.insert(terminal_id);
             self.layout_dirty_terminals.insert(terminal_id);
         }
 
@@ -410,8 +403,14 @@ impl RenderContext {
     ) {
         let cw = self.shaper.cell_width;
         let ch = self.shaper.cell_height;
-        let Some(v) = build_cursor_vertex(info, cw, ch, col_offset, row_offset, &config.colors)
-        else {
+        let Some(v) = self.overlay_state.build_cursor_overlay(
+            info,
+            cw,
+            ch,
+            col_offset,
+            row_offset,
+            &config.colors,
+        ) else {
             self.cursor_vertex_template = None;
             return;
         };
@@ -419,7 +418,7 @@ impl RenderContext {
         self.instances.push(if blink_on {
             v
         } else {
-            OverlayUploadState::blink_vertex(v, false)
+            self.overlay_state.plan_cursor_blink_overlay(v, false)
         });
     }
 
@@ -636,7 +635,7 @@ impl RenderContext {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_cursor_vertex, OverlayUploadState};
+    use super::RenderOverlayState;
     use crate::config::Config;
     use crate::renderer::cell::{CellVertex, FLAG_CURSOR};
     use crate::renderer::UploadRange;
@@ -646,43 +645,45 @@ mod tests {
     #[test]
     fn production_cursor_builder_and_overlay_upload_state_are_connected() {
         let config = Config::default();
-        let cursor = build_cursor_vertex(
-            &CursorInfo {
-                col: 2,
-                row: 3,
-                shape: CursorShape::Block,
-                visible: true,
-            },
-            8.0,
-            16.0,
-            10,
-            20,
-            &config.colors,
-        )
-        .expect("visible block cursor");
+        let overlay_state = RenderOverlayState;
+        let cursor = overlay_state
+            .build_cursor_overlay(
+                &CursorInfo {
+                    col: 2,
+                    row: 3,
+                    shape: CursorShape::Block,
+                    visible: true,
+                },
+                8.0,
+                16.0,
+                10,
+                20,
+                &config.colors,
+            )
+            .expect("visible block cursor");
         assert_eq!(cursor.grid_pos, [12.0, 23.0]);
         assert_eq!(cursor.flags, FLAG_CURSOR);
 
         let overlays = vec![cursor, CellVertex::zeroed(), CellVertex::zeroed()];
 
-        let plan = OverlayUploadState::new(42, &overlays, &[]);
+        let plan = overlay_state.plan_production_upload(42, &overlays, &[]);
 
-        assert_eq!(plan.plan().cursor_index, Some(0));
-        assert!(plan.plan().cursor_first);
-        assert_eq!(plan.plan().overlay_count, 3);
-        assert_eq!(plan.plan().terminal_count, 42);
-        assert!(plan.plan().terminal_upload_ranges_empty);
-        let misplaced = OverlayUploadState::new(
+        assert_eq!(plan.cursor_index, Some(0));
+        assert!(plan.cursor_first);
+        assert_eq!(plan.overlay_count, 3);
+        assert_eq!(plan.terminal_count, 42);
+        assert!(plan.terminal_upload_ranges_empty);
+        let misplaced = overlay_state.plan_production_upload(
             42,
             &[CellVertex::zeroed(), cursor, CellVertex::zeroed()],
             &[],
         );
-        assert!(!misplaced.plan().cursor_first);
+        assert!(!misplaced.cursor_first);
         assert_ne!(
-            OverlayUploadState::new(42, &overlays, &[UploadRange { start: 4, end: 8 }])
-                .plan()
+            overlay_state
+                .plan_production_upload(42, &overlays, &[UploadRange { start: 4, end: 8 }])
                 .terminal_count,
-            plan.plan().overlay_count
+            plan.overlay_count
         );
     }
 }

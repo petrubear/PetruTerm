@@ -162,6 +162,13 @@ Completed. No dependencies were added.
 - `rtk git diff --check` — passed.
 - `rtk graphify update .` — completed; generated graph artifacts were reverted and are not part of this task's diff.
 
+### Final fresh verification
+
+- Combined command `rtk cargo fmt --all -- --check && rtk cargo test --lib && rtk cargo test && rtk cargo check --features profiling && rtk cargo bench --bench build_instances -- --noplot --warm-up-time 1 --measurement-time 2 --sample-size 10 && rtk git diff --check` — exited 0.
+- Fresh test evidence: `cargo test --lib` reported 22 passed; `cargo test` reported 147 passed across 3 suites; profiling check finished successfully.
+- Fresh benchmark evidence: one-dirty row improved 1.6954%, contiguous rows improved 1.7597%, scattered rows improved 2.7554%, full damage improved 1.4132%, and all requested benchmark IDs completed.
+- Criterion flagged environment-sensitive regressions for `build_frame_hit_large_par` (+11.543%) and `incremental_multi_pane_layout_change` (+1.4679%); the command still exited 0 and full damage remained in the prior order of magnitude.
+
 ### Concerns
 
 - GPU-device-specific upload behavior remains outside the headless seam tests; runtime
@@ -169,3 +176,39 @@ Completed. No dependencies were added.
 - The fresh benchmark sample was environment-sensitive: Criterion flagged small
   regressions for `build_row_miss` (+1.5%) and `incremental_one_dirty_row` (+2.3%);
   all other requested cases were unchanged or improved, and the command exited 0.
+
+## Fix round 4 — production-owned headless orchestration
+
+### Status
+
+Completed. No dependencies were added.
+
+### Corrections
+
+- Replaced `BuildInvalidationState` with the production-owned `RenderBuildState`
+  stored directly in `RenderContext`. `RenderContext::build_instances` now calls
+  `resolve_terminal_build`; `clear_all_row_caches_for`, `prepare_terminal_layouts`,
+  `grow_terminal_row_capacity`, and upload-failure fallback all call the shared
+  `request_full_rebuild` seam. Capacity growth no longer relies on a test-visible
+  terminal set or a boolean passed only to the resolver.
+- Replaced `OverlayUploadState` and the free `build_cursor_vertex` helper with the
+  production-owned `RenderOverlayState` stored in `RenderContext`. Real
+  `build_cursor_instance` calls `build_cursor_overlay`; real `handle_redraw` full
+  and blink paths call `plan_production_upload` and
+  `plan_cursor_blink_overlay`. Headless tests call these same production state
+  methods and do not construct duplicate wrappers or test-only upload helpers.
+- Preserved the complete trigger matrix and overlay assertions: every trigger
+  yields `full_rebuild` with all visible rows dirty; cursor remains first,
+  terminal count is independent of overlay count, blink updates slot zero only,
+  and blink has no terminal upload ranges.
+
+### Exact validation evidence
+
+- `rtk cargo fmt --all -- --check` — passed.
+- `rtk cargo test production_ -- --nocapture` — passed, 6 tests, 141 filtered.
+- `rtk cargo test --lib` — passed, 22 tests.
+- `rtk cargo test` — passed, 147 tests across 3 suites.
+- `rtk cargo check --features profiling` — passed.
+- `rtk cargo bench --bench build_instances -- --noplot --warm-up-time 1 --measurement-time 2 --sample-size 10` — completed successfully. All requested benchmark IDs ran; `build_row_miss` improved 1.50%, `incremental_one_dirty_row` improved 0.59%, full damage showed no change, and `incremental_multi_pane_layout_change` improved 0.87%.
+- `rtk git diff --check` — passed.
+- `rtk graphify update .` — completed; generated graph artifacts were reverted and are not part of this task's diff.
