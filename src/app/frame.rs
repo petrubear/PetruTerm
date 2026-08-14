@@ -773,7 +773,11 @@ impl App {
                 full_terminal_bytes,
                 full_terminal_ranges,
                 planned_terminal_bytes.saturating_add(planned_lcd_bytes),
-                instance_upload_ranges.len() + lcd_upload_ranges.len(),
+                incremental_upload_range_count(
+                    instance_upload_ranges.len(),
+                    lcd_upload_ranges.len(),
+                    lcd_enabled,
+                ),
             );
 
             // Pane separator lines (hidden when a pane is zoomed).
@@ -1608,11 +1612,19 @@ fn static_hash(parts: &[&[u8]]) -> u64 {
     h.finish()
 }
 
+fn incremental_upload_range_count(
+    instance_ranges: usize,
+    lcd_ranges: usize,
+    lcd_enabled: bool,
+) -> usize {
+    instance_ranges + usize::from(lcd_enabled) * lcd_ranges
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        blink_only_render, blink_overlay_slot, terminal_upload_ranges_for_blink,
-        upload_failure_rebuild_trigger,
+        blink_only_render, blink_overlay_slot, incremental_upload_range_count,
+        terminal_upload_ranges_for_blink, upload_failure_rebuild_trigger,
     };
     use crate::app::renderer::{DirtyRows, RenderBuildState, RenderOverlayState};
     use crate::renderer::cell::{CellVertex, FLAG_CURSOR};
@@ -1679,5 +1691,11 @@ mod tests {
 
         assert!(damage.full_rebuild);
         assert!((0..5).all(|row| damage.rows.is_dirty(row)));
+    }
+
+    #[test]
+    fn lcd_disabled_incremental_upload_ranges_exclude_lcd_ranges() {
+        assert_eq!(incremental_upload_range_count(2, 3, false), 2);
+        assert_eq!(incremental_upload_range_count(2, 3, true), 5);
     }
 }
