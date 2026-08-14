@@ -2,7 +2,9 @@ use anyhow::Result;
 use winit::event_loop::ActiveEventLoop;
 
 use super::mux::{FlagHintOverlay, GhostOverlay, Mux, SyntaxOverlay};
-use super::renderer::{DirtyRows, GridVisualState, RenderContext, SidebarDrawParams};
+use super::renderer::{
+    plan_overlay_upload, DirtyRows, GridVisualState, RenderContext, SidebarDrawParams,
+};
 use super::App;
 use crate::renderer::upload::merge_upload_ranges;
 use crate::ui::PaneInfo;
@@ -21,12 +23,16 @@ pub(crate) fn blink_only_render(
 pub(crate) fn terminal_upload_ranges_for_blink(
     blink_only: bool,
     ranges: &[crate::renderer::UploadRange],
-) -> Vec<crate::renderer::UploadRange> {
+) -> &[crate::renderer::UploadRange] {
     if blink_only {
-        Vec::new()
+        &[]
     } else {
-        ranges.to_vec()
+        ranges
     }
+}
+
+pub(crate) const fn blink_overlay_slot() -> usize {
+    0
 }
 
 impl App {
@@ -383,6 +389,9 @@ impl App {
                 let blink_on = self.input.cursor_blink_on;
                 // The cursor is the first dynamic overlay, so blink updates do not
                 // touch persistent terminal or LCD storage.
+                let terminal_ranges =
+                    terminal_upload_ranges_for_blink(true, &rc.instance_upload_ranges);
+                debug_assert!(terminal_ranges.is_empty());
                 let cursor_upload = if let Some(v) = rc.cursor_vertex_template {
                     let upload_v = if blink_on {
                         v
@@ -398,7 +407,8 @@ impl App {
                         return;
                     };
                     *cursor_slot = upload_v;
-                    rc.renderer.upload_overlay_instance(0, &upload_v)
+                    rc.renderer
+                        .upload_overlay_instance(blink_overlay_slot(), &upload_v)
                 } else {
                     Ok(0)
                 };
@@ -516,7 +526,9 @@ impl App {
                     }
                     rc.renderer.rebuild_atlas_bind_groups();
                     rc.atlas_generation += 1;
-                    rc.clear_all_row_caches();
+                    rc.clear_all_row_caches_for(
+                        crate::app::renderer::FullRebuildTrigger::AtlasGenerationChange,
+                    );
                     log::debug!("Atlas: preemptive clear (cursor_fill_ratio > 0.75)");
                 }
             }
@@ -530,7 +542,9 @@ impl App {
                 if rc.renderer.color_atlas.cursor_fill_ratio() > 0.75 {
                     rc.renderer.color_atlas.clear(&rc.renderer.device());
                     rc.renderer.rebuild_atlas_bind_groups();
-                    rc.clear_all_row_caches();
+                    rc.clear_all_row_caches_for(
+                        crate::app::renderer::FullRebuildTrigger::AtlasGenerationChange,
+                    );
                 }
             }
 
@@ -548,7 +562,9 @@ impl App {
                         lcd.borrow_mut().clear(&rc.renderer.device());
                         rc.shaper.clear_lcd_rasterizer_cache();
                         rc.renderer.rebuild_atlas_bind_groups();
-                        rc.clear_all_row_caches();
+                        rc.clear_all_row_caches_for(
+                            crate::app::renderer::FullRebuildTrigger::AtlasGenerationChange,
+                        );
                         log::debug!(
                             "LCD atlas: preemptive clear (cursor still near full after eviction)"
                         );
@@ -658,7 +674,9 @@ impl App {
                 }
                 // Bind groups held stale wgpu TextureViews after clear() (TD-MEM-03).
                 rc.renderer.rebuild_atlas_bind_groups();
-                rc.clear_all_row_caches();
+                rc.clear_all_row_caches_for(
+                    crate::app::renderer::FullRebuildTrigger::AtlasGenerationChange,
+                );
                 rc.atlas_generation += 1;
                 let _ = build_all_pane_instances(
                     rc,
@@ -1156,12 +1174,16 @@ impl App {
             }
 
             // ── GPU upload ──────────────────────────────────────────────────────
-            let terminal_count = rc.terminal_instance_count();
-            let overlay_count = rc.instances.len();
+            let overlay_plan = plan_overlay_upload(rc.terminal_instance_count(), &rc.instances);
+            debug_assert!(overlay_plan.cursor_first);
+            let terminal_count = overlay_plan.terminal_count;
+            let overlay_count = overlay_plan.overlay_count;
             rc.last_terminal_count = terminal_count;
             rc.last_overlay_count = overlay_count;
             rc.last_instance_count = terminal_count + overlay_count;
-            let instance_upload_ranges = merge_upload_ranges(&mut rc.instance_upload_ranges);
+            let merged_instance_upload_ranges = merge_upload_ranges(&mut rc.instance_upload_ranges);
+            let instance_upload_ranges =
+                terminal_upload_ranges_for_blink(false, &merged_instance_upload_ranges);
             let lcd_upload_ranges = merge_upload_ranges(&mut rc.lcd_upload_ranges);
             let rect_bytes = rc.renderer.upload_rect_instances(&rc.rect_instances);
             let terminal_upload = rc
@@ -1213,7 +1235,9 @@ impl App {
                 // The range APIs reject invalid storage bounds instead of clamping
                 // missing rows. Drop cached terminal geometry and rebuild on the next
                 // redraw so a transient storage mismatch cannot persist.
-                rc.clear_all_row_caches();
+                rc.clear_all_row_caches_for(
+                    crate::app::renderer::FullRebuildTrigger::InvalidGpuUploadRange,
+                );
                 rc.renderer.set_terminal_cell_count(0);
                 rc.renderer.set_overlay_count(0);
                 rc.last_full_upload_succeeded = false;
@@ -1483,7 +1507,7 @@ fn static_hash(parts: &[&[u8]]) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{blink_only_render, terminal_upload_ranges_for_blink};
+    use super::{blink_only_render, blink_overlay_slot, terminal_upload_ranges_for_blink};
     use crate::renderer::UploadRange;
 
     #[test]
@@ -1491,7 +1515,11 @@ mod tests {
         let ranges = [UploadRange { start: 4, end: 8 }];
 
         assert!(blink_only_render(true, true, false, false, false));
+        assert_eq!(blink_overlay_slot(), 0);
         assert!(terminal_upload_ranges_for_blink(true, &ranges).is_empty());
-        assert_eq!(terminal_upload_ranges_for_blink(false, &ranges), ranges);
+        assert_eq!(
+            terminal_upload_ranges_for_blink(false, &ranges),
+            ranges.as_slice()
+        );
     }
 }

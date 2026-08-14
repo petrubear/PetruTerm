@@ -277,11 +277,13 @@ mod tests {
     fn full_and_incremental_row_storage_are_equivalent() {
         let mut full_layout = TerminalInstanceLayout::rebuild(7, 4, 4, 2, 3, 4);
         let mut incremental_layout = TerminalInstanceLayout::rebuild(7, 4, 4, 2, 3, 4);
-        let mut full = vec![CellVertex::zeroed(); full_layout.storage_len()];
-        let mut incremental = vec![CellVertex::zeroed(); incremental_layout.storage_len()];
+        let mut full_terminal = vec![CellVertex::zeroed(); full_layout.storage_len()];
+        let mut full_lcd = vec![CellVertex::zeroed(); full_layout.storage_len()];
+        let mut incremental_terminal = vec![CellVertex::zeroed(); incremental_layout.storage_len()];
+        let mut incremental_lcd = vec![CellVertex::zeroed(); incremental_layout.storage_len()];
 
-        let rows = |row: usize, len: usize| {
-            (0..len)
+        let old_rows = |row: usize| {
+            (0..row % 3 + 1)
                 .map(|col| CellVertex {
                     grid_pos: [col as f32, row as f32],
                     glyph_size: [1.0 + row as f32, 1.0],
@@ -289,43 +291,72 @@ mod tests {
                 })
                 .collect::<Vec<_>>()
         };
+        let updated_rows = |row: usize| {
+            (0..3)
+                .map(|col| CellVertex {
+                    grid_pos: [col as f32, row as f32],
+                    glyph_size: [10.0 + row as f32, 2.0],
+                    ..CellVertex::zeroed()
+                })
+                .collect::<Vec<_>>()
+        };
 
+        // Establish the old incremental frame once. Clean rows must survive this
+        // frame while the full reference is rebuilt from the updated terminal.
         for row in 0..4 {
-            let vertices = rows(row, row % 3 + 1);
-            full_layout.write_row(row, &vertices, &mut full).unwrap();
+            let vertices = old_rows(row);
             incremental_layout
-                .write_row(row, &vertices, &mut incremental)
-                .unwrap();
-            full_layout
-                .write_lcd_row(row, &vertices, &mut full)
+                .write_row(row, &vertices, &mut incremental_terminal)
                 .unwrap();
             incremental_layout
-                .write_lcd_row(row, &vertices, &mut incremental)
+                .write_lcd_row(row, &vertices, &mut incremental_lcd)
+                .unwrap();
+            incremental_layout
+                .write_lcd_row(row, &vertices, &mut incremental_lcd)
                 .unwrap();
         }
 
-        for row in [1, 3] {
-            let vertices = rows(row, 3);
-            full_layout.write_row(row, &vertices, &mut full).unwrap();
-            incremental_layout
-                .write_row(row, &vertices, &mut incremental)
+        // The full path rebuilds every row, while the incremental path only
+        // rewrites the two damaged rows through the production slot writers.
+        for row in 0..4 {
+            let vertices = if row == 1 || row == 3 {
+                updated_rows(row)
+            } else {
+                old_rows(row)
+            };
+            full_layout
+                .write_row(row, &vertices, &mut full_terminal)
                 .unwrap();
             full_layout
-                .write_lcd_row(row, &vertices, &mut full)
+                .write_lcd_row(row, &vertices, &mut full_lcd)
+                .unwrap();
+        }
+        for row in [1, 3] {
+            incremental_layout
+                .write_row(row, &updated_rows(row), &mut incremental_terminal)
                 .unwrap();
             incremental_layout
-                .write_lcd_row(row, &vertices, &mut incremental)
+                .write_lcd_row(row, &updated_rows(row), &mut incremental_lcd)
                 .unwrap();
         }
 
         assert!(row_storage_equivalent(
-            &full,
-            &incremental,
+            &full_terminal,
+            &incremental_terminal,
+            &full_layout.slots
+        ));
+        assert!(row_storage_equivalent(
+            &full_lcd,
+            &incremental_lcd,
             &full_layout.slots
         ));
         assert_eq!(
             full_layout.slots.iter().map(|slot| slot.len).sum::<usize>(),
-            10
+            incremental_layout
+                .slots
+                .iter()
+                .map(|slot| slot.len)
+                .sum::<usize>()
         );
         assert_eq!(
             full_layout
@@ -333,14 +364,23 @@ mod tests {
                 .iter()
                 .map(|slot| slot.lcd_len)
                 .sum::<usize>(),
-            10
+            incremental_layout
+                .slots
+                .iter()
+                .map(|slot| slot.lcd_len)
+                .sum::<usize>()
         );
         for slot in &incremental_layout.slots {
-            let padding = &incremental[slot.start + slot.len..slot.start + slot.capacity];
-            assert!(padding
-                .iter()
-                .all(|vertex| bytemuck::bytes_of(vertex)
-                    == bytemuck::bytes_of(&CellVertex::zeroed())));
+            let terminal_padding =
+                &incremental_terminal[slot.start + slot.len..slot.start + slot.capacity];
+            let lcd_padding =
+                &incremental_lcd[slot.start + slot.lcd_len..slot.start + slot.capacity];
+            assert!(terminal_padding.iter().all(|vertex| {
+                bytemuck::bytes_of(vertex) == bytemuck::bytes_of(&CellVertex::zeroed())
+            }));
+            assert!(lcd_padding.iter().all(|vertex| {
+                bytemuck::bytes_of(vertex) == bytemuck::bytes_of(&CellVertex::zeroed())
+            }));
         }
     }
 }

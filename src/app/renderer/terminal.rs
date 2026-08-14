@@ -1,27 +1,45 @@
 use super::*;
 
-#[allow(dead_code)]
-pub(crate) fn ordered_overlay_indices(
-    cursor: usize,
-    palette: &[usize],
-    context_menu: &[usize],
-) -> Vec<usize> {
-    let mut ordered = Vec::with_capacity(1 + palette.len() + context_menu.len());
-    ordered.push(cursor);
-    ordered.extend_from_slice(palette);
-    ordered.extend_from_slice(context_menu);
-    ordered
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct OverlayUploadPlan {
+    pub(crate) terminal_count: usize,
+    pub(crate) overlay_count: usize,
+    pub(crate) cursor_index: Option<usize>,
+    pub(crate) cursor_first: bool,
+}
+
+pub(crate) fn plan_overlay_upload(
+    terminal_count: usize,
+    overlays: &[CellVertex],
+) -> OverlayUploadPlan {
+    OverlayUploadPlan {
+        terminal_count,
+        overlay_count: overlays.len(),
+        cursor_index: overlays.iter().position(|vertex| {
+            vertex.flags & crate::renderer::cell::FLAG_CURSOR == crate::renderer::cell::FLAG_CURSOR
+        }),
+        cursor_first: overlays
+            .iter()
+            .position(|vertex| {
+                vertex.flags & crate::renderer::cell::FLAG_CURSOR
+                    == crate::renderer::cell::FLAG_CURSOR
+            })
+            .is_none_or(|index| index == 0),
+    }
 }
 
 fn effective_dirty_rows(
+    invalidation: Option<FullRebuildTrigger>,
     dirty_rows: &DirtyRows,
     row_count: usize,
     cache_complete: bool,
 ) -> DirtyRows {
-    if cache_complete {
+    if let Some(trigger) = invalidation {
+        rows_for_full_rebuild(trigger, row_count)
+    } else if cache_complete {
         dirty_rows.clone()
     } else {
-        DirtyRows::full_rebuild(row_count)
+        rows_for_full_rebuild(FullRebuildTrigger::MissingRowCache, row_count)
     }
 }
 
@@ -50,7 +68,12 @@ impl RenderContext {
         let cache_complete = self.row_caches.get(&terminal_id).is_some_and(|cache| {
             cache.rows.len() >= n && cache.rows.iter().take(n).all(Option::is_some)
         });
-        let effective_dirty = effective_dirty_rows(dirty_rows, n, cache_complete);
+        let capacity_overflow = self
+            .capacity_overflow_terminals
+            .remove(&terminal_id)
+            .then_some(FullRebuildTrigger::RowSlotCapacityOverflow);
+        let invalidation = capacity_overflow.or_else(|| self.pending_full_rebuild.take());
+        let effective_dirty = effective_dirty_rows(invalidation, dirty_rows, n, cache_complete);
         self.frame_metrics.dirty_rows = self
             .frame_metrics
             .dirty_rows
@@ -300,6 +323,7 @@ impl RenderContext {
             .unwrap_or(false);
         if needs_growth {
             self.grow_terminal_row_capacity(terminal_id, required)?;
+            self.capacity_overflow_terminals.insert(terminal_id);
             self.layout_dirty_terminals.insert(terminal_id);
         }
 
@@ -590,24 +614,60 @@ impl RenderContext {
 
 #[cfg(test)]
 mod tests {
-    use super::{effective_dirty_rows, ordered_overlay_indices};
-    use crate::app::renderer::DirtyRows;
+    use super::{effective_dirty_rows, plan_overlay_upload};
+    use crate::app::renderer::{DirtyRows, FullRebuildTrigger};
+    use crate::renderer::cell::{CellVertex, FLAG_CURSOR};
+    use bytemuck::Zeroable;
 
     #[test]
     fn missing_row_cache_forces_full_rebuild() {
         let mut dirty = DirtyRows::default();
         dirty.mark(1);
 
-        let rebuilt = effective_dirty_rows(&dirty, 4, false);
+        let rebuilt = effective_dirty_rows(None, &dirty, 4, false);
 
         assert!(rebuilt.is_full());
         assert!((0..4).all(|row| rebuilt.is_dirty(row)));
     }
 
     #[test]
-    fn cursor_overlay_precedes_palette_and_context_menu() {
-        let ordered = ordered_overlay_indices(3, &[7, 8], &[11, 12]);
+    fn production_build_path_applies_every_full_rebuild_trigger() {
+        let triggers = [
+            FullRebuildTrigger::TerminalResize,
+            FullRebuildTrigger::PaneGeometryChange,
+            FullRebuildTrigger::FontMetricRefresh,
+            FullRebuildTrigger::ThemeColorChange,
+            FullRebuildTrigger::AtlasGenerationChange,
+            FullRebuildTrigger::MissingRowCache,
+            FullRebuildTrigger::RowSlotCapacityOverflow,
+            FullRebuildTrigger::InvalidGpuUploadRange,
+        ];
+        let dirty = DirtyRows::default();
 
-        assert_eq!(ordered, vec![3, 7, 8, 11, 12]);
+        for trigger in triggers {
+            let rebuilt = effective_dirty_rows(Some(trigger), &dirty, 4, true);
+            assert!(rebuilt.is_full());
+            assert_eq!(rebuilt.len(), 4);
+            assert!((0..4).all(|row| rebuilt.is_dirty(row)));
+        }
+    }
+
+    #[test]
+    fn production_overlay_upload_plan_keeps_terminal_count_independent() {
+        let overlays = vec![
+            CellVertex {
+                flags: FLAG_CURSOR,
+                ..CellVertex::zeroed()
+            },
+            CellVertex::zeroed(),
+            CellVertex::zeroed(),
+        ];
+
+        let plan = plan_overlay_upload(42, &overlays);
+
+        assert_eq!(plan.cursor_index, Some(0));
+        assert!(plan.cursor_first);
+        assert_eq!(plan.overlay_count, 3);
+        assert_eq!(plan.terminal_count, 42);
     }
 }

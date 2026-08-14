@@ -50,3 +50,44 @@ The implementation keeps existing persistent row-slot, dirty-row revision, merge
 ## Commit
 
 `[PERF-ROI-01] test: Prove incremental rendering equivalence` (final HEAD)
+
+## Fix round 1 — reviewer Important findings
+
+### Status
+
+Completed. No dependencies were added and no unrelated files were changed.
+
+### Corrections
+
+- Connected full-rebuild trigger handling to production grid damage, row-cache, layout,
+  atlas/font/theme, row-capacity, and upload-failure paths. Capacity growth now schedules
+  an explicit full rebuild on the next build instead of relying on copied slots silently.
+- Reworked the row equivalence test into a real full-reference versus incremental update:
+  clean rows remain in old terminal/LCD storage, only rows 1 and 3 use slot writes, and
+  all slot bytes, transparent padding, and terminal/LCD counts are compared.
+- Connected overlay planning and blink helpers to the production upload path. The plan
+  preserves terminal count independently, verifies cursor-first ordering, and blink
+  uploads slot zero without terminal ranges.
+- Replaced the unused synthetic PTY batch drain with a bounded helper called by
+  `Mux::poll_pty_events`; tests use actual `PtyEvent` payloads and preserve exit,
+  OSC-133, and screen-clear events after the first budgeted drain.
+- Changed `incremental_multi_pane_layout_change` to retain pane layout/cache state and
+  alternate a real persistent pane transition, rebuilding only the pane whose geometry
+  changed.
+
+### Validation
+
+- `rtk cargo fmt --all -- --check` — passed.
+- `rtk cargo test` — passed, 147 tests.
+- `rtk cargo test --lib` — passed, 22 tests.
+- `rtk cargo check --features profiling` — passed.
+- `rtk cargo bench --bench build_instances -- --noplot --warm-up-time 1 --measurement-time 2 --sample-size 10` — completed successfully; all requested benchmark IDs ran, including one-dirty, contiguous, scattered, full-damage, and multi-pane layout-change cases. Gnuplot was unavailable, so Criterion used its existing plotters backend.
+- `rtk git diff --check` — passed.
+- `rtk graphify update .` — completed; generated graph artifacts were reverted and are not part of the task diff.
+
+### Residual concerns
+
+- Criterion reported small environment-sensitive regressions against its saved baseline
+  for `build_frame_miss`, `incremental_one_dirty_row`, and the layout-change benchmark;
+  the command completed and the full-damage benchmark remained in the same order of
+  magnitude. Device-specific GPU profiling remains outside this headless benchmark.

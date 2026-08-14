@@ -1660,7 +1660,9 @@ impl UiManager {
                         config.colors = scheme;
                         // V-4: re-soften chrome surfaces for the new theme under blur.
                         config.colors.apply_blur_translucency(&config.window);
-                        render_ctx.clear_all_row_caches();
+                        render_ctx.clear_all_row_caches_for(
+                            crate::app::renderer::FullRebuildTrigger::ThemeColorChange,
+                        );
                     }
                     Err(e) => log::error!("Failed to load theme '{name}': {e}"),
                 }

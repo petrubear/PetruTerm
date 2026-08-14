@@ -27,8 +27,9 @@ mod layout;
 mod overlay;
 mod terminal;
 
-pub(crate) use damage::{DirtyRows, RowRevisionMap};
+pub(crate) use damage::{rows_for_full_rebuild, DirtyRows, FullRebuildTrigger, RowRevisionMap};
 pub(crate) use layout::TerminalInstanceLayout;
+pub(crate) use terminal::plan_overlay_upload;
 
 /// Cache for a single shaped row to avoid re-shaping every frame.
 #[derive(Clone)]
@@ -83,6 +84,8 @@ pub struct RenderContext {
     pub(crate) terminal_layouts: HashMap<usize, TerminalInstanceLayout>,
     /// Terminals whose layout was rebuilt during the current frame.
     pub(crate) layout_dirty_terminals: std::collections::HashSet<usize>,
+    pub(crate) capacity_overflow_terminals: std::collections::HashSet<usize>,
+    pub(crate) pending_full_rebuild: Option<FullRebuildTrigger>,
     pub instances: Vec<CellVertex>,
     /// Cached GPU instances for the AI chat panel — rebuilt only when `ChatPanel::dirty`.
     pub panel_instances_cache: Vec<CellVertex>,
@@ -269,6 +272,8 @@ impl RenderContext {
             lcd_upload_ranges: Vec::new(),
             terminal_layouts: HashMap::new(),
             layout_dirty_terminals: std::collections::HashSet::new(),
+            capacity_overflow_terminals: std::collections::HashSet::new(),
+            pending_full_rebuild: None,
             instances: Vec::new(),
             panel_cache_term_cols: 0,
             panel_instances_cache: Vec::new(),
@@ -371,7 +376,7 @@ impl RenderContext {
         }
 
         self.shaper = shaper;
-        self.clear_all_row_caches();
+        self.clear_all_row_caches_for(FullRebuildTrigger::FontMetricRefresh);
         self.panel_instances_cache.clear();
         self.panel_rect_cache.clear();
         self.panel_cache_term_cols = 0;
@@ -438,7 +443,13 @@ impl RenderContext {
     }
 
     /// Drop all per-terminal row caches (used after atlas eviction).
+    #[allow(dead_code)]
     pub fn clear_all_row_caches(&mut self) {
+        self.clear_all_row_caches_for(FullRebuildTrigger::MissingRowCache);
+    }
+
+    pub(crate) fn clear_all_row_caches_for(&mut self, trigger: FullRebuildTrigger) {
+        self.pending_full_rebuild = Some(trigger);
         self.row_caches.clear();
         self.row_revisions.clear();
         self.grid_visual_states.clear();
@@ -448,6 +459,7 @@ impl RenderContext {
         self.instance_upload_ranges.clear();
         self.lcd_upload_ranges.clear();
         self.layout_dirty_terminals.clear();
+        self.capacity_overflow_terminals.clear();
     }
 
     pub(crate) fn prepare_terminal_layouts(&mut self, pane_infos: &[crate::ui::PaneInfo]) {
@@ -458,11 +470,13 @@ impl RenderContext {
                 self.terminal_layouts
                     .get(&info.terminal_id)
                     .map(|layout| {
-                        if layout.columns != info.cols
-                            || layout.rows != info.rows
-                            || layout.col_offset != info.col_offset
-                            || layout.row_offset != info.row_offset
-                        {
+                        if !layout.matches_geometry(
+                            info.cols,
+                            info.rows,
+                            info.col_offset,
+                            info.row_offset,
+                            stride,
+                        ) {
                             return true;
                         }
                         let cached_stride = self

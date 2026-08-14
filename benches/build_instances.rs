@@ -536,31 +536,62 @@ fn bench_incremental_multi_pane_layout_change(c: &mut Criterion) {
         .map(|i| SAMPLE_ROWS[i % SAMPLE_ROWS.len()])
         .collect();
     let colors = make_colors(COLS);
+    let row_cache: Vec<Vec<CellVertex>> = rows
+        .iter()
+        .map(|&text| {
+            let (_, vertices) = build_row_vertices(
+                text,
+                &colors,
+                &font_config,
+                &mut shaper,
+                &mut atlas,
+                &mut color_atlas,
+                &queue,
+            );
+            vertices
+        })
+        .collect();
+    let mut pane_layout = [(0.0_f32, 0.0_f32), (40.0_f32, 0.0_f32)];
+    let mut pane_instances = vec![Vec::with_capacity(COLS * ROWS); 2];
+    for (pane, &(col_offset, row_offset)) in pane_layout.iter().enumerate() {
+        for (row_idx, cached) in row_cache.iter().enumerate() {
+            apply_row_offset(
+                cached,
+                col_offset,
+                row_offset + row_idx as f32,
+                &mut pane_instances[pane],
+            );
+        }
+    }
     let mut output = Vec::with_capacity(COLS * ROWS * 2);
 
     c.bench_function("incremental_multi_pane_layout_change", |b| {
         b.iter(|| {
-            output.clear();
-            for (pane_col_offset, pane_row_offset) in [(0.0, 0.0), (40.0, 0.0)] {
-                for (row_idx, &text) in rows.iter().enumerate() {
-                    let (_, vertices) = build_row_vertices(
-                        text,
-                        &colors,
-                        &font_config,
-                        &mut shaper,
-                        &mut atlas,
-                        &mut color_atlas,
-                        &queue,
-                    );
+            let next_layout = if pane_layout[1] == (40.0, 0.0) {
+                [(0.0, 0.0), (36.0, 1.0)]
+            } else {
+                [(0.0, 0.0), (40.0, 0.0)]
+            };
+            for pane in 0..pane_layout.len() {
+                if pane_layout[pane] == next_layout[pane] {
+                    continue;
+                }
+                pane_instances[pane].clear();
+                for (row_idx, cached) in row_cache.iter().enumerate() {
                     apply_row_offset(
-                        &vertices,
-                        pane_col_offset,
-                        pane_row_offset + row_idx as f32,
-                        &mut output,
+                        cached,
+                        next_layout[pane].0,
+                        next_layout[pane].1 + row_idx as f32,
+                        &mut pane_instances[pane],
                     );
                 }
             }
-            output.len()
+            pane_layout = next_layout;
+            output.clear();
+            for pane in &pane_instances {
+                output.extend_from_slice(pane);
+            }
+            std::hint::black_box(output.len())
         });
     });
 }
