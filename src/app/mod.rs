@@ -579,6 +579,8 @@ impl App {
             self.ui.remove_terminal_state(tid);
             if let Some(rc) = &mut self.render_ctx {
                 rc.row_caches.remove(&tid);
+                rc.row_revisions.remove(&tid);
+                rc.grid_visual_states.remove(&tid);
             }
         }
         self.dispatch_lua_events();

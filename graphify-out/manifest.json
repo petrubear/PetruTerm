@@ -110,8 +110,8 @@
     "semantic_hash": "3c939a39113759f2b5198318c292fb40"
   },
   "src/app/frame.rs": {
-    "mtime": 1786716931.1389024,
-    "ast_hash": "fc59a816cadcc7aadf3e09120818aa90",
+    "mtime": 1786719397.051364,
+    "ast_hash": "0662fbfc91cc30f2f770ed8fecd3d085",
     "semantic_hash": ""
   },
   "src/app/hover_link.rs": {
@@ -140,13 +140,13 @@
     "semantic_hash": "ae3c69410c793edf20303f015c217e87"
   },
   "src/app/mod.rs": {
-    "mtime": 1786717200.6546555,
-    "ast_hash": "b8999ae354f262d9585018deb23f91f8",
+    "mtime": 1786719397.0549912,
+    "ast_hash": "7e0b6fcc46d8fa84cf4b3c1c918c1cc8",
     "semantic_hash": ""
   },
   "src/app/mux/mod.rs": {
-    "mtime": 1786716982.706885,
-    "ast_hash": "2757424d9c294dcee3badb117f3a20e7",
+    "mtime": 1786717453.1764822,
+    "ast_hash": "c5fa189322dd0071a88a6f9920e7273c",
     "semantic_hash": ""
   },
   "src/app/mux/snapshot.rs": {
@@ -165,8 +165,8 @@
     "semantic_hash": ""
   },
   "src/app/renderer/mod.rs": {
-    "mtime": 1786716508.1333776,
-    "ast_hash": "d0853fbbb75a261640789f61d6060be6",
+    "mtime": 1786719388.9122245,
+    "ast_hash": "30573d5f3a678599612cb6e565525dee",
     "semantic_hash": ""
   },
   "src/app/renderer/overlay.rs": {
@@ -175,8 +175,8 @@
     "semantic_hash": "2b4e18a09fbe7e8cf153b8200ede240b"
   },
   "src/app/renderer/terminal.rs": {
-    "mtime": 1786716523.4522192,
-    "ast_hash": "1851d236fb3859beda5e25ef1b4c142d",
+    "mtime": 1786717426.1539764,
+    "ast_hash": "e14eafe7b306becef11e513aaaeb661c",
     "semantic_hash": ""
   },
   "src/app/ui/git.rs": {
@@ -667,6 +667,11 @@
   "docs/superpowers/specs/2026-08-14-performance-roi-terminal-rendering-design.md": {
     "mtime": 1786715320.1496449,
     "ast_hash": "818831798391c273055853dc65e27c1e",
+    "semantic_hash": ""
+  },
+  "src/app/renderer/damage.rs": {
+    "mtime": 1786717421.3390965,
+    "ast_hash": "c3b6a17c806e2e2fba94d4bd2be1b894",
     "semantic_hash": ""
   }
 }

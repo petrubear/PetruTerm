@@ -2,7 +2,7 @@ use anyhow::Result;
 use winit::event_loop::ActiveEventLoop;
 
 use super::mux::{FlagHintOverlay, GhostOverlay, Mux, SyntaxOverlay};
-use super::renderer::{RenderContext, SidebarDrawParams};
+use super::renderer::{DirtyRows, GridVisualState, RenderContext, SidebarDrawParams};
 use super::App;
 use crate::ui::PaneInfo;
 
@@ -118,6 +118,8 @@ impl App {
             self.ui.remove_terminal_state(tid);
             if let Some(rc) = &mut self.render_ctx {
                 rc.row_caches.remove(&tid);
+                rc.row_revisions.remove(&tid);
+                rc.grid_visual_states.remove(&tid);
             }
             if self.mux.close_terminal(tid) {
                 return true;
@@ -1179,6 +1181,7 @@ fn build_all_pane_instances(
     // while the buffer is filled by mux. Returned at the end of the function.
     let mut cell_data_scratch = std::mem::take(&mut rc.cell_data_scratch);
     let mut last_scratch_tid = rc.scratch_terminal_id.take();
+    let mut dirty_rows = DirtyRows::default();
     for info in pane_infos {
         // If the terminal changed (tab switch or split panes with different terminals),
         // clear the scratch buffer so collect_grid_cells_for treats all rows as damaged.
@@ -1315,11 +1318,31 @@ fn build_all_pane_instances(
                     ),
                 })
             });
+        let selection_active = mux
+            .terminals
+            .get(info.terminal_id)
+            .and_then(|slot| slot.as_ref())
+            .map(|terminal| terminal.with_term(|term| term.selection.is_some()))
+            .unwrap_or(false);
+        let visual_state_changed = rc.update_grid_visual_state(
+            info.terminal_id,
+            GridVisualState {
+                search_active: search_arg.is_some(),
+                selection_active,
+                syntax_row: syntax_overlay.as_ref().map(|overlay| overlay.viewport_row),
+                ghost_row: ghost_overlay.as_ref().map(|overlay| overlay.viewport_row),
+                flag_hint_row: flag_hint_overlay
+                    .as_ref()
+                    .map(|overlay| overlay.viewport_row),
+            },
+        );
+        let force_full = terminal_changed || visual_state_changed;
         mux.collect_grid_cells_for(
             info.terminal_id,
             &mut cell_data_scratch,
+            &mut dirty_rows,
             search_arg,
-            terminal_changed,
+            force_full,
             syntax_overlay.as_ref(),
             ghost_overlay.as_ref(),
             flag_hint_overlay.as_ref(),
@@ -1330,6 +1353,7 @@ fn build_all_pane_instances(
             config,
             font,
             info.terminal_id,
+            &dirty_rows,
             info.col_offset,
             info.row_offset,
         )?;

@@ -1,4 +1,5 @@
 use crate::app::pty_schedule::WakeupGate;
+use crate::app::renderer::DirtyRows;
 use crate::config::Config;
 use crate::term::{Osc133Marker, PtyEvent, Terminal};
 use crate::ui::search_bar::SearchMatch;
@@ -906,6 +907,7 @@ impl Mux {
         &self,
         terminal_id: usize,
         buf: &mut Vec<(String, Vec<(AnsiColor, AnsiColor, CellStyle)>)>,
+        dirty_rows: &mut DirtyRows,
         search: Option<(&[SearchMatch], usize)>,
         force_full: bool,
         syntax: Option<&SyntaxOverlay>,
@@ -915,6 +917,7 @@ impl Mux {
         #[cfg(feature = "profiling")]
         let _span = tracing::info_span!("collect_grid_cells").entered();
 
+        dirty_rows.clear();
         let Some(Some(terminal)) = self.terminals.get(terminal_id) else {
             buf.clear();
             return;
@@ -949,15 +952,37 @@ impl Mux {
         // as last frame, giving a row-cache hit in build_instances without grid reads.
         // REC-PERF-03: integrates alacritty_terminal's TermDamage API.
         let can_skip = !force_full && sel_range.is_none() && search.is_none();
-        let damage_set: Option<rustc_hash::FxHashSet<usize>> = {
-            use alacritty_terminal::term::TermDamage;
-            match term.damage() {
-                TermDamage::Full => None,
-                TermDamage::Partial(iter) if can_skip => Some(iter.map(|l| l.line).collect()),
-                _ => None,
+        use alacritty_terminal::term::TermDamage;
+        let term_damage = term.damage();
+        if force_full || !can_skip {
+            dirty_rows.mark_all(rows);
+        } else {
+            match term_damage {
+                TermDamage::Full => dirty_rows.mark_all(rows),
+                TermDamage::Partial(iter) => {
+                    for line in iter {
+                        dirty_rows.mark(line.line);
+                    }
+                }
             }
-        };
+        }
         term.reset_damage();
+        let cursor_row = {
+            let content = term.renderable_content();
+            (content.display_offset == 0).then_some(content.cursor.point.line.0.max(0) as usize)
+        };
+        if let Some(row) = cursor_row.filter(|row| *row < rows) {
+            dirty_rows.mark(row);
+        }
+        if let Some(syntax) = syntax {
+            dirty_rows.mark(syntax.viewport_row);
+        }
+        if let Some(ghost) = ghost {
+            dirty_rows.mark(ghost.viewport_row);
+        }
+        if let Some(flag_hint) = flag_hint {
+            dirty_rows.mark(flag_hint.viewport_row);
+        }
 
         // Resize to exact row count, keeping existing allocations.
         if buf.len() < rows {
@@ -970,10 +995,10 @@ impl Mux {
 
         for (row, (text, colors)) in buf.iter_mut().enumerate() {
             // Skip undamaged rows — but never skip ghost/hint rows (they change every keypress).
-            if let Some(ref ds) = damage_set {
+            if !dirty_rows.is_dirty(row) {
                 let is_ghost_row = ghost.map(|g| g.viewport_row == row).unwrap_or(false);
                 let is_hint_row = flag_hint.map(|h| h.viewport_row == row).unwrap_or(false);
-                if !ds.contains(&row) && !is_ghost_row && !is_hint_row {
+                if !is_ghost_row && !is_hint_row {
                     continue;
                 }
             }

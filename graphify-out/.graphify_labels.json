@@ -97,10 +97,17 @@
   "95": "Global Constraints",
   "96": "Global Constraints",
   "97": ".rasterize_lcd_to_atlas",
+  "98": "app/ui/mod.rs",
   "99": "GRAPH-ARCH-01 Chat Header LLM View Slice Implementation Plan",
   "100": "Active Context Archive",
   "101": ".new",
   "102": "cfdict_str",
   "103": "keybind_view.rs",
-  "104": ".resumed"
+  "104": ".resumed",
+  "105": ".handle_palette_action",
+  "106": ".build_instances",
+  "107": "RenamePrompt",
+  "108": "String",
+  "109": "WindowConfig",
+  "110": "spawn_acp_connect"
 }

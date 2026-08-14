@@ -22,13 +22,17 @@ use crate::ui::{CommandPalette, PaneSeparator, Tab};
 use alacritty_terminal::vte::ansi::Color as AnsiColor;
 
 mod chat;
+mod damage;
 mod overlay;
 mod terminal;
+
+pub(crate) use damage::{DirtyRows, RowRevisionMap};
 
 /// Cache for a single shaped row to avoid re-shaping every frame.
 #[derive(Clone)]
 pub struct RowCacheEntry {
     pub hash: u64,
+    pub revision: u64,
     pub instances: Vec<CellVertex>,
     pub lcd_instances: Vec<CellVertex>,
 }
@@ -44,6 +48,15 @@ impl RowCache {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct GridVisualState {
+    pub(crate) search_active: bool,
+    pub(crate) selection_active: bool,
+    pub(crate) syntax_row: Option<usize>,
+    pub(crate) ghost_row: Option<usize>,
+    pub(crate) flag_hint_row: Option<usize>,
+}
+
 /// Manages GPU resources, font shaping, and the rendering loop.
 pub struct RenderContext {
     pub renderer: GpuRenderer,
@@ -52,6 +65,10 @@ pub struct RenderContext {
     pub atlas_generation: usize,
     /// Per-terminal row caches, keyed by terminal_id.
     pub row_caches: HashMap<usize, RowCache>,
+    /// Per-terminal revisions for rows invalidated by PTY or UI damage.
+    pub row_revisions: HashMap<usize, RowRevisionMap>,
+    /// Visual state used to invalidate rows when transient overlays disappear.
+    pub grid_visual_states: HashMap<usize, GridVisualState>,
     pub instances: Vec<CellVertex>,
     pub lcd_instances: Vec<CellVertex>,
     /// Cached GPU instances for the AI chat panel — rebuilt only when `ChatPanel::dirty`.
@@ -230,6 +247,8 @@ impl RenderContext {
             scale_factor,
             atlas_generation: 0,
             row_caches: HashMap::new(),
+            row_revisions: HashMap::new(),
+            grid_visual_states: HashMap::new(),
             instances: Vec::new(),
             lcd_instances: Vec::new(),
             panel_cache_term_cols: 0,
@@ -391,6 +410,19 @@ impl RenderContext {
     /// Drop all per-terminal row caches (used after atlas eviction).
     pub fn clear_all_row_caches(&mut self) {
         self.row_caches.clear();
+        self.row_revisions.clear();
+        self.grid_visual_states.clear();
+    }
+
+    pub(crate) fn update_grid_visual_state(
+        &mut self,
+        terminal_id: usize,
+        state: GridVisualState,
+    ) -> bool {
+        self.grid_visual_states
+            .insert(terminal_id, state)
+            .map(|previous| previous != state)
+            .unwrap_or(true)
     }
 
     #[allow(clippy::too_many_arguments)]

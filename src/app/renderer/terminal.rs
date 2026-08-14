@@ -21,6 +21,7 @@ impl RenderContext {
         config: &Config,
         font: &crate::config::schema::FontConfig,
         terminal_id: usize,
+        dirty_rows: &DirtyRows,
         col_offset: usize,
         row_offset: usize,
     ) -> Result<(), crate::renderer::atlas::AtlasError> {
@@ -28,7 +29,10 @@ impl RenderContext {
         let _span = tracing::info_span!("build_instances", rows = cell_data.len()).entered();
 
         let n = cell_data.len();
-        self.frame_metrics.dirty_rows = self.frame_metrics.dirty_rows.saturating_add(n);
+        self.frame_metrics.dirty_rows = self
+            .frame_metrics
+            .dirty_rows
+            .saturating_add(dirty_rows.len());
 
         // Ensure the per-terminal row cache exists and has enough slots.
         {
@@ -40,12 +44,37 @@ impl RenderContext {
                 cache.rows.resize(n, None);
             }
         }
+        {
+            let revisions = self.row_revisions.entry(terminal_id).or_default();
+            for row in 0..n {
+                if dirty_rows.is_dirty(row) {
+                    revisions.mark(row);
+                }
+            }
+        }
 
         // ── Phase 1: serial — shape + rasterize cache misses, populate row_caches ──────
         //
         // No vertex emission here. All emission happens in phase 2 so that
         // the cache is fully populated before the parallel read pass begins.
         for (row_idx, (text, raw_colors)) in cell_data.iter().enumerate() {
+            let revision = self
+                .row_revisions
+                .get(&terminal_id)
+                .map(|revisions| revisions.revision(row_idx))
+                .unwrap_or(0);
+            let cache_entry = self
+                .row_caches
+                .get(&terminal_id)
+                .and_then(|cache| cache.rows.get(row_idx))
+                .and_then(|entry| entry.as_ref());
+            if !dirty_rows.is_dirty(row_idx)
+                && cache_entry.is_some_and(|entry| entry.revision == revision)
+            {
+                self.shape_cache_hits = self.shape_cache_hits.saturating_add(1);
+                continue;
+            }
+
             self.colors_scratch.clear();
             self.colors_scratch
                 .extend(raw_colors.iter().map(|(fg, bg, _)| {
@@ -63,16 +92,20 @@ impl RenderContext {
 
             let row_hash = calculate_row_hash(text, colors, styles);
 
-            // Cache hit: increment counter and skip shaping for this row.
-            let is_hit = self
-                .row_caches
-                .get(&terminal_id)
-                .and_then(|c| c.rows.get(row_idx))
-                .and_then(|e| e.as_ref())
-                .is_some_and(|e| e.hash == row_hash);
+            // A dirty row can still have unchanged content (for example, a cursor
+            // move). Reuse its shaped vertices after refreshing the revision.
+            let is_hit = cache_entry.is_some_and(|entry| entry.hash == row_hash);
 
             if is_hit {
                 self.shape_cache_hits = self.shape_cache_hits.saturating_add(1);
+                if let Some(entry) = self
+                    .row_caches
+                    .get_mut(&terminal_id)
+                    .and_then(|cache| cache.rows.get_mut(row_idx))
+                    .and_then(|entry| entry.as_mut())
+                {
+                    entry.revision = revision;
+                }
                 continue;
             }
             self.shape_cache_misses = self.shape_cache_misses.saturating_add(1);
@@ -202,6 +235,7 @@ impl RenderContext {
                 if row_idx < cache.rows.len() {
                     cache.rows[row_idx] = Some(RowCacheEntry {
                         hash: row_hash,
+                        revision,
                         instances: row_instances,
                         lcd_instances: row_lcd_instances,
                     });
