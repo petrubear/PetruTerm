@@ -1,5 +1,30 @@
 use super::*;
 
+#[allow(dead_code)]
+pub(crate) fn ordered_overlay_indices(
+    cursor: usize,
+    palette: &[usize],
+    context_menu: &[usize],
+) -> Vec<usize> {
+    let mut ordered = Vec::with_capacity(1 + palette.len() + context_menu.len());
+    ordered.push(cursor);
+    ordered.extend_from_slice(palette);
+    ordered.extend_from_slice(context_menu);
+    ordered
+}
+
+fn effective_dirty_rows(
+    dirty_rows: &DirtyRows,
+    row_count: usize,
+    cache_complete: bool,
+) -> DirtyRows {
+    if cache_complete {
+        dirty_rows.clone()
+    } else {
+        DirtyRows::full_rebuild(row_count)
+    }
+}
+
 impl RenderContext {
     /// Build and append cell instances for one pane's terminal.
     ///
@@ -22,10 +47,14 @@ impl RenderContext {
         let _span = tracing::info_span!("build_instances", rows = cell_data.len()).entered();
 
         let n = cell_data.len();
+        let cache_complete = self.row_caches.get(&terminal_id).is_some_and(|cache| {
+            cache.rows.len() >= n && cache.rows.iter().take(n).all(Option::is_some)
+        });
+        let effective_dirty = effective_dirty_rows(dirty_rows, n, cache_complete);
         self.frame_metrics.dirty_rows = self
             .frame_metrics
             .dirty_rows
-            .saturating_add(dirty_rows.len());
+            .saturating_add(effective_dirty.len());
 
         // Ensure the per-terminal row cache exists and has enough slots.
         {
@@ -37,10 +66,11 @@ impl RenderContext {
                 cache.rows.resize(n, None);
             }
         }
+
         {
             let revisions = self.row_revisions.entry(terminal_id).or_default();
             for row in 0..n {
-                if dirty_rows.is_dirty(row) {
+                if effective_dirty.is_dirty(row) {
                     revisions.mark(row);
                 }
             }
@@ -58,7 +88,7 @@ impl RenderContext {
                 .get(&terminal_id)
                 .and_then(|cache| cache.rows.get(row_idx))
                 .and_then(|entry| entry.as_ref());
-            if !dirty_rows.is_dirty(row_idx)
+            if !effective_dirty.is_dirty(row_idx)
                 && cache_entry.is_some_and(|entry| entry.revision == revision)
             {
                 self.shape_cache_hits = self.shape_cache_hits.saturating_add(1);
@@ -270,6 +300,7 @@ impl RenderContext {
             .unwrap_or(false);
         if needs_growth {
             self.grow_terminal_row_capacity(terminal_id, required)?;
+            self.layout_dirty_terminals.insert(terminal_id);
         }
 
         let Some(layout) = self.terminal_layouts.get_mut(&terminal_id) else {
@@ -554,5 +585,29 @@ impl RenderContext {
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{effective_dirty_rows, ordered_overlay_indices};
+    use crate::app::renderer::DirtyRows;
+
+    #[test]
+    fn missing_row_cache_forces_full_rebuild() {
+        let mut dirty = DirtyRows::default();
+        dirty.mark(1);
+
+        let rebuilt = effective_dirty_rows(&dirty, 4, false);
+
+        assert!(rebuilt.is_full());
+        assert!((0..4).all(|row| rebuilt.is_dirty(row)));
+    }
+
+    #[test]
+    fn cursor_overlay_precedes_palette_and_context_menu() {
+        let ordered = ordered_overlay_indices(3, &[7, 8], &[11, 12]);
+
+        assert_eq!(ordered, vec![3, 7, 8, 11, 12]);
     }
 }

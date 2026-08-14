@@ -18,9 +18,57 @@ pub struct Workspace {
 pub(crate) struct PtyEventBatch {
     pub(crate) data_ids: Vec<usize>,
     pub(crate) exited: Vec<usize>,
+    pub(crate) has_pending: bool,
+    events: VecDeque<PtyBatchEvent>,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum PtyBatchEvent {
+    DataReady(usize),
+    Exit(usize),
+    Osc133,
+    ScreenCleared,
 }
 
 impl PtyEventBatch {
+    #[allow(dead_code)]
+    pub(crate) fn from_events(events: impl IntoIterator<Item = PtyBatchEvent>) -> Self {
+        let events = events.into_iter().collect::<VecDeque<_>>();
+        Self {
+            has_pending: !events.is_empty(),
+            events,
+            ..Self::default()
+        }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn drain_work(&mut self, budget: usize) -> Self {
+        let mut drained = Self::default();
+        for _ in 0..budget {
+            let Some(event) = self.events.pop_front() else {
+                break;
+            };
+            match event {
+                PtyBatchEvent::DataReady(id) => {
+                    if !drained.data_ids.contains(&id) {
+                        drained.data_ids.push(id);
+                    }
+                }
+                PtyBatchEvent::Exit(id) => {
+                    if !drained.exited.contains(&id) {
+                        drained.exited.push(id);
+                    }
+                }
+                PtyBatchEvent::Osc133 | PtyBatchEvent::ScreenCleared => {}
+            }
+            drained.events.push_back(event);
+        }
+        self.has_pending = !self.events.is_empty();
+        drained.has_pending = self.has_pending;
+        drained
+    }
+
     pub(crate) fn merge(&mut self, other: Self) {
         for id in other.data_ids {
             if !self.data_ids.contains(&id) {
@@ -32,8 +80,12 @@ impl PtyEventBatch {
                 self.exited.push(id);
             }
         }
+        self.has_pending |= other.has_pending;
+        self.events.extend(other.events);
     }
 }
+
+pub(crate) const PTY_EVENT_WORK_BUDGET: usize = 256;
 
 /// Archived tabs+panes for an inactive workspace (used during workspace switch).
 pub(super) struct WorkspaceData {
@@ -329,61 +381,70 @@ impl Mux {
         let mut data_ids: Vec<usize> = Vec::new();
         let mut exited: Vec<usize> = Vec::new();
         let mut exit_codes: Vec<(usize, i32)> = Vec::new();
+        let mut work = 0usize;
+        let mut has_pending = false;
         self.osc133_events.clear();
         let mut osc133_pending: Vec<(usize, Osc133Marker)> = Vec::new();
-        for (id, terminal_slot) in self.terminals.iter_mut().enumerate() {
+        'terminals: for (id, terminal_slot) in self.terminals.iter_mut().enumerate() {
             let Some(terminal) = terminal_slot else {
                 continue;
             };
             loop {
+                if work >= PTY_EVENT_WORK_BUDGET {
+                    has_pending = true;
+                    break 'terminals;
+                }
                 use crossbeam_channel::TryRecvError;
                 match terminal.pty.rx.try_recv() {
-                    Ok(event) => match event {
-                        PtyEvent::DataReady => {
-                            if !data_ids.contains(&id) {
-                                data_ids.push(id);
+                    Ok(event) => {
+                        work += 1;
+                        match event {
+                            PtyEvent::DataReady => {
+                                if !data_ids.contains(&id) {
+                                    data_ids.push(id);
+                                }
+                            }
+                            PtyEvent::TitleChanged(t) => {
+                                log::debug!("PTY title: {t}");
+                            }
+                            PtyEvent::Exit(code) => {
+                                log::info!("PTY shell exited (terminal {id}, code {code}).");
+                                exit_codes.push((id, code));
+                                if !exited.contains(&id) {
+                                    exited.push(id);
+                                }
+                            }
+                            PtyEvent::Bell => {}
+                            PtyEvent::ClipboardStore(text) => {
+                                std::thread::spawn(move || {
+                                    let _ = arboard::Clipboard::new()
+                                        .and_then(|mut cb| cb.set_text(text));
+                                });
+                            }
+                            PtyEvent::ClipboardLoad(fmt) => {
+                                let tx = terminal.pty.tx.clone();
+                                std::thread::spawn(move || {
+                                    let text = arboard::Clipboard::new()
+                                        .ok()
+                                        .and_then(|mut cb| cb.get_text().ok())
+                                        .unwrap_or_default();
+                                    let _ = tx.send(PtyEvent::PtyWrite(fmt(&text)));
+                                });
+                            }
+                            PtyEvent::PtyWrite(text) => {
+                                terminal.write_input(text.as_bytes());
+                            }
+                            PtyEvent::Osc133(marker) => {
+                                osc133_pending.push((id, marker));
+                            }
+                            PtyEvent::ScreenCleared => {
+                                terminal.block_manager.clear();
+                                // Drop any OSC 133 events queued before this clear so that
+                                // apply_osc133_events() does not re-create blocks we just erased.
+                                osc133_pending.retain(|(pid, _)| *pid != id);
                             }
                         }
-                        PtyEvent::TitleChanged(t) => {
-                            log::debug!("PTY title: {t}");
-                        }
-                        PtyEvent::Exit(code) => {
-                            log::info!("PTY shell exited (terminal {id}, code {code}).");
-                            exit_codes.push((id, code));
-                            if !exited.contains(&id) {
-                                exited.push(id);
-                            }
-                        }
-                        PtyEvent::Bell => {}
-                        PtyEvent::ClipboardStore(text) => {
-                            std::thread::spawn(move || {
-                                let _ =
-                                    arboard::Clipboard::new().and_then(|mut cb| cb.set_text(text));
-                            });
-                        }
-                        PtyEvent::ClipboardLoad(fmt) => {
-                            let tx = terminal.pty.tx.clone();
-                            std::thread::spawn(move || {
-                                let text = arboard::Clipboard::new()
-                                    .ok()
-                                    .and_then(|mut cb| cb.get_text().ok())
-                                    .unwrap_or_default();
-                                let _ = tx.send(PtyEvent::PtyWrite(fmt(&text)));
-                            });
-                        }
-                        PtyEvent::PtyWrite(text) => {
-                            terminal.write_input(text.as_bytes());
-                        }
-                        PtyEvent::Osc133(marker) => {
-                            osc133_pending.push((id, marker));
-                        }
-                        PtyEvent::ScreenCleared => {
-                            terminal.block_manager.clear();
-                            // Drop any OSC 133 events queued before this clear so that
-                            // apply_osc133_events() does not re-create blocks we just erased.
-                            osc133_pending.retain(|(pid, _)| *pid != id);
-                        }
-                    },
+                    }
                     Err(TryRecvError::Disconnected) => {
                         log::warn!("PTY channel disconnected.");
                         break;
@@ -397,7 +458,12 @@ impl Mux {
             self.retain_closed_terminal(id);
         }
         self.osc133_events.extend(osc133_pending);
-        PtyEventBatch { data_ids, exited }
+        PtyEventBatch {
+            data_ids,
+            exited,
+            has_pending,
+            ..PtyEventBatch::default()
+        }
     }
 
     /// Process accumulated OSC 133 events and update each pane's BlockManager.
@@ -1210,7 +1276,10 @@ impl Mux {
 
 #[cfg(test)]
 mod tests {
-    use super::{push_search_match, SearchMatch, MAX_SEARCH_MATCHES};
+    use super::{
+        push_search_match, PtyBatchEvent, PtyEventBatch, SearchMatch, MAX_SEARCH_MATCHES,
+        PTY_EVENT_WORK_BUDGET,
+    };
 
     #[test]
     fn push_search_match_truncates_only_after_limit_is_exceeded() {
@@ -1221,6 +1290,40 @@ mod tests {
         assert_eq!(matches.len(), MAX_SEARCH_MATCHES);
         assert!(push_search_match(&mut matches, 0, MAX_SEARCH_MATCHES, 1));
         assert_eq!(matches.len(), MAX_SEARCH_MATCHES);
+    }
+
+    #[test]
+    fn pty_batch_work_budget_leaves_pending_data_for_next_drain() {
+        let mut events = (0..PTY_EVENT_WORK_BUDGET + 2)
+            .map(PtyBatchEvent::DataReady)
+            .collect::<Vec<_>>();
+        events.extend([
+            PtyBatchEvent::Exit(900),
+            PtyBatchEvent::Osc133,
+            PtyBatchEvent::ScreenCleared,
+        ]);
+        let mut batch = PtyEventBatch::from_events(events);
+
+        let first = batch.drain_work(PTY_EVENT_WORK_BUDGET);
+        assert_eq!(first.events.len(), PTY_EVENT_WORK_BUDGET);
+        assert!(first.has_pending);
+        assert_eq!(first.data_ids.len(), PTY_EVENT_WORK_BUDGET);
+
+        let second = batch.drain_work(PTY_EVENT_WORK_BUDGET);
+        assert!(!second.has_pending);
+        assert_eq!(
+            second.data_ids,
+            vec![PTY_EVENT_WORK_BUDGET, PTY_EVENT_WORK_BUDGET + 1]
+        );
+        assert_eq!(second.exited, vec![900]);
+        assert!(second
+            .events
+            .iter()
+            .any(|event| matches!(event, PtyBatchEvent::Osc133)));
+        assert!(second
+            .events
+            .iter()
+            .any(|event| matches!(event, PtyBatchEvent::ScreenCleared)));
     }
 }
 

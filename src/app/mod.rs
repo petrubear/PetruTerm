@@ -1932,12 +1932,13 @@ impl ApplicationHandler<()> for App {
         self.mux.apply_osc133_events();
         let had_exit = !batch.exited.is_empty();
         let had_pty_data = !batch.data_ids.is_empty();
+        let has_pending_pty = batch.has_pending;
         let data_count = batch.data_ids.len();
         for id in &batch.data_ids {
             self.update_terminal_shell_ctx(*id);
         }
         self.pending_pty_batch.merge(batch);
-        if had_exit {
+        if had_exit || has_pending_pty {
             self.request_redraw();
         }
         if had_pty_data {

@@ -7,6 +7,28 @@ use super::App;
 use crate::renderer::upload::merge_upload_ranges;
 use crate::ui::PaneInfo;
 
+pub(crate) fn blink_only_render(
+    cursor_blink_dirty: bool,
+    data_empty: bool,
+    had_ai: bool,
+    had_ai_block: bool,
+    pending_pty_redraw: bool,
+) -> bool {
+    cursor_blink_dirty && data_empty && !had_ai && !had_ai_block && !pending_pty_redraw
+}
+
+#[allow(dead_code)]
+pub(crate) fn terminal_upload_ranges_for_blink(
+    blink_only: bool,
+    ranges: &[crate::renderer::UploadRange],
+) -> Vec<crate::renderer::UploadRange> {
+    if blink_only {
+        Vec::new()
+    } else {
+        ranges.to_vec()
+    }
+}
+
 impl App {
     /// Fast-poll grace window (ms). After PTY input, `about_to_wait` polls at
     /// `PTY_ECHO_GRACE_POLL_MS` for this long so the common immediate echo
@@ -344,11 +366,13 @@ impl App {
         // When only cursor blink changed (no PTY data, no AI events, no panel
         // cursor), skip the full cell rebuild and update just the cursor vertex.
         // The GPU instance buffer retains cell content from the previous full frame.
-        let blink_only = self.cursor_blink_dirty
-            && data_ids.is_empty()
-            && !had_ai
-            && !had_ai_block
-            && !self.pending_pty_redraw;
+        let blink_only = blink_only_render(
+            self.cursor_blink_dirty,
+            data_ids.is_empty(),
+            had_ai,
+            had_ai_block,
+            self.pending_pty_redraw,
+        );
         if blink_only {
             self.cursor_blink_dirty = false;
             if let Some(rc) = &mut self.render_ctx {
@@ -1455,4 +1479,19 @@ fn static_hash(parts: &[&[u8]]) -> u64 {
         p.hash(&mut h);
     }
     h.finish()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{blink_only_render, terminal_upload_ranges_for_blink};
+    use crate::renderer::UploadRange;
+
+    #[test]
+    fn blink_only_render_changes_only_overlay_slot_zero() {
+        let ranges = [UploadRange { start: 4, end: 8 }];
+
+        assert!(blink_only_render(true, true, false, false, false));
+        assert!(terminal_upload_ranges_for_blink(true, &ranges).is_empty());
+        assert_eq!(terminal_upload_ranges_for_blink(false, &ranges), ranges);
+    }
 }

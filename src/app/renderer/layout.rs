@@ -185,9 +185,34 @@ impl TerminalInstanceLayout {
     }
 }
 
+/// Compare the complete contents of persistent row storage.
+///
+/// The comparison is deliberately slot-based: row slots include transparent
+/// padding, which is part of the observable GPU state even when a row has fewer
+/// visible instances than its capacity.
+#[allow(dead_code)]
+pub(crate) fn row_storage_equivalent(
+    full: &[CellVertex],
+    incremental: &[CellVertex],
+    slots: &[RowSlot],
+) -> bool {
+    if full.len() != incremental.len() {
+        return false;
+    }
+    slots.iter().all(|slot| {
+        let Some(end) = slot.start.checked_add(slot.capacity) else {
+            return false;
+        };
+        end <= full.len()
+            && end <= incremental.len()
+            && bytemuck::cast_slice::<CellVertex, u8>(&full[slot.start..end])
+                == bytemuck::cast_slice::<CellVertex, u8>(&incremental[slot.start..end])
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::TerminalInstanceLayout;
+    use super::{row_storage_equivalent, TerminalInstanceLayout};
     use crate::renderer::cell::CellVertex;
     use bytemuck::Zeroable;
 
@@ -246,5 +271,76 @@ mod tests {
         assert_eq!(slot.len, 0);
         assert_eq!(slot.lcd_len, 1);
         assert_eq!(layout.row_slot(0).unwrap().lcd_len, 1);
+    }
+
+    #[test]
+    fn full_and_incremental_row_storage_are_equivalent() {
+        let mut full_layout = TerminalInstanceLayout::rebuild(7, 4, 4, 2, 3, 4);
+        let mut incremental_layout = TerminalInstanceLayout::rebuild(7, 4, 4, 2, 3, 4);
+        let mut full = vec![CellVertex::zeroed(); full_layout.storage_len()];
+        let mut incremental = vec![CellVertex::zeroed(); incremental_layout.storage_len()];
+
+        let rows = |row: usize, len: usize| {
+            (0..len)
+                .map(|col| CellVertex {
+                    grid_pos: [col as f32, row as f32],
+                    glyph_size: [1.0 + row as f32, 1.0],
+                    ..CellVertex::zeroed()
+                })
+                .collect::<Vec<_>>()
+        };
+
+        for row in 0..4 {
+            let vertices = rows(row, row % 3 + 1);
+            full_layout.write_row(row, &vertices, &mut full).unwrap();
+            incremental_layout
+                .write_row(row, &vertices, &mut incremental)
+                .unwrap();
+            full_layout
+                .write_lcd_row(row, &vertices, &mut full)
+                .unwrap();
+            incremental_layout
+                .write_lcd_row(row, &vertices, &mut incremental)
+                .unwrap();
+        }
+
+        for row in [1, 3] {
+            let vertices = rows(row, 3);
+            full_layout.write_row(row, &vertices, &mut full).unwrap();
+            incremental_layout
+                .write_row(row, &vertices, &mut incremental)
+                .unwrap();
+            full_layout
+                .write_lcd_row(row, &vertices, &mut full)
+                .unwrap();
+            incremental_layout
+                .write_lcd_row(row, &vertices, &mut incremental)
+                .unwrap();
+        }
+
+        assert!(row_storage_equivalent(
+            &full,
+            &incremental,
+            &full_layout.slots
+        ));
+        assert_eq!(
+            full_layout.slots.iter().map(|slot| slot.len).sum::<usize>(),
+            10
+        );
+        assert_eq!(
+            full_layout
+                .slots
+                .iter()
+                .map(|slot| slot.lcd_len)
+                .sum::<usize>(),
+            10
+        );
+        for slot in &incremental_layout.slots {
+            let padding = &incremental[slot.start + slot.len..slot.start + slot.capacity];
+            assert!(padding
+                .iter()
+                .all(|vertex| bytemuck::bytes_of(vertex)
+                    == bytemuck::bytes_of(&CellVertex::zeroed())));
+        }
     }
 }

@@ -5,7 +5,7 @@ pub(crate) struct RowRange {
     pub(crate) end: usize,
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct DirtyRows {
     rows: Vec<usize>,
     full: bool,
@@ -92,6 +92,30 @@ impl DirtyRows {
         self.full = false;
         self.full_count = 0;
     }
+
+    pub(crate) fn full_rebuild(row_count: usize) -> Self {
+        let mut rows = Self::default();
+        rows.mark_all(row_count);
+        rows
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum FullRebuildTrigger {
+    TerminalResize,
+    PaneGeometryChange,
+    FontMetricRefresh,
+    ThemeColorChange,
+    AtlasGenerationChange,
+    MissingRowCache,
+    RowSlotCapacityOverflow,
+    InvalidGpuUploadRange,
+}
+
+#[allow(dead_code)]
+pub(crate) fn rows_for_full_rebuild(_trigger: FullRebuildTrigger, row_count: usize) -> DirtyRows {
+    DirtyRows::full_rebuild(row_count)
 }
 
 #[derive(Debug, Default)]
@@ -129,7 +153,7 @@ impl RowRevisionMap {
 
 #[cfg(test)]
 mod tests {
-    use super::{DirtyRows, RowRange, RowRevisionMap};
+    use super::{rows_for_full_rebuild, DirtyRows, FullRebuildTrigger, RowRange, RowRevisionMap};
 
     #[test]
     fn dirty_rows_merge_and_sort_ranges() {
@@ -160,5 +184,26 @@ mod tests {
 
         assert_eq!(revisions.revision(2), first);
         assert!(revisions.revision(4) > first);
+    }
+
+    #[test]
+    fn every_full_rebuild_trigger_marks_all_visible_rows() {
+        let triggers = [
+            FullRebuildTrigger::TerminalResize,
+            FullRebuildTrigger::PaneGeometryChange,
+            FullRebuildTrigger::FontMetricRefresh,
+            FullRebuildTrigger::ThemeColorChange,
+            FullRebuildTrigger::AtlasGenerationChange,
+            FullRebuildTrigger::MissingRowCache,
+            FullRebuildTrigger::RowSlotCapacityOverflow,
+            FullRebuildTrigger::InvalidGpuUploadRange,
+        ];
+
+        for trigger in triggers {
+            let rows = rows_for_full_rebuild(trigger, 6);
+            assert!(rows.is_full());
+            assert_eq!(rows.len(), 6);
+            assert!((0..6).all(|row| rows.is_dirty(row)));
+        }
     }
 }

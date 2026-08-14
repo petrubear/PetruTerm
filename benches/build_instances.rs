@@ -500,10 +500,10 @@ fn bench_build_frame_dirty_rows(c: &mut Criterion) {
     let mut group = c.benchmark_group("build_frame_dirty_rows");
 
     for (label, dirty_rows) in [
-        ("one", vec![0]),
-        ("eight_contiguous", (4..12).collect()),
-        ("scattered", vec![0, 3, 7, 11, 15, 19, 22]),
-        ("all", (0..ROWS).collect()),
+        ("incremental_one_dirty_row", vec![0]),
+        ("incremental_eight_contiguous_rows", (4..12).collect()),
+        ("incremental_scattered_rows", vec![0, 3, 7, 11, 15, 19, 22]),
+        ("incremental_full_damage", (0..ROWS).collect()),
     ] {
         group.bench_function(BenchmarkId::from_parameter(label), |b| {
             b.iter(|| {
@@ -527,6 +527,44 @@ fn bench_build_frame_dirty_rows(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_incremental_multi_pane_layout_change(c: &mut Criterion) {
+    let (device, queue) = create_headless_wgpu();
+    let mut atlas = GlyphAtlas::new(&device);
+    let mut color_atlas = ColorAtlas::new(&device);
+    let (mut shaper, font_config) = make_shaper();
+    let rows: Vec<&str> = (0..ROWS)
+        .map(|i| SAMPLE_ROWS[i % SAMPLE_ROWS.len()])
+        .collect();
+    let colors = make_colors(COLS);
+    let mut output = Vec::with_capacity(COLS * ROWS * 2);
+
+    c.bench_function("incremental_multi_pane_layout_change", |b| {
+        b.iter(|| {
+            output.clear();
+            for (pane_col_offset, pane_row_offset) in [(0.0, 0.0), (40.0, 0.0)] {
+                for (row_idx, &text) in rows.iter().enumerate() {
+                    let (_, vertices) = build_row_vertices(
+                        text,
+                        &colors,
+                        &font_config,
+                        &mut shaper,
+                        &mut atlas,
+                        &mut color_atlas,
+                        &queue,
+                    );
+                    apply_row_offset(
+                        &vertices,
+                        pane_col_offset,
+                        pane_row_offset + row_idx as f32,
+                        &mut output,
+                    );
+                }
+            }
+            output.len()
+        });
+    });
+}
+
 criterion_group!(
     benches,
     bench_build_row_miss,
@@ -536,5 +574,6 @@ criterion_group!(
     bench_build_frame_hit_large_serial,
     bench_build_frame_hit_large_par,
     bench_build_frame_dirty_rows,
+    bench_incremental_multi_pane_layout_change,
 );
 criterion_main!(benches);
