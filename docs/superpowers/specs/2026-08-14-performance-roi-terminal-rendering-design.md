@@ -141,6 +141,41 @@ Validate with idle, interactive, high-output, scroll, resize, and multi-pane
 runtime traces. Compare p50/p95 input-to-pixel latency, CPU time, wakeups,
 bytes uploaded per frame, frame time, and output throughput.
 
+## Task 7 Measurement Record
+
+Instrumentation now labels each debug/HUD frame as `idle`, `interactive`,
+`pty_output`, `scroll`, `resize`, or `multi_pane`. It reports the observed
+incremental terminal/LCD upload bytes and ranges alongside the equivalent
+full-buffer byte/range count; overlay and rectangle uploads remain in the
+existing total upload counter. No threshold was changed: the existing 4 ms
+PTY coalescing window, 8 ms echo poll, and batch limits were not retuned
+because this environment did not provide an equivalent interactive runtime
+trace.
+
+| Machine / profile | Scenario | Baseline p50/p95 | Incremental p50/p95 | Baseline upload bytes | Incremental upload bytes | Throughput | Regressions / limitations |
+|---|---|---:|---:|---:|---:|---:|---|
+| Apple M4 Max, 14 CPU cores, 32-core GPU, 36 GB; macOS 26.5.2; release/optimized | idle, focused | N/A | N/A | N/A | N/A | N/A | GUI timing, wakeups/sec, and unchanged-frame writes were not safely observable from this non-interactive CLI session. |
+| Same | interactive typing/paste | N/A | N/A | N/A | N/A | N/A | No keyboard/paste sample could be driven equivalently; the debug path retains the existing 4 ms/8 ms latency safeguards. |
+| Same | 10,000-line PTY output | N/A | N/A | N/A | N/A | N/A | No controlled PTY producer/window trace was run; no throughput or CPU speedup is claimed. |
+| Same | scroll / resize / multi-pane | N/A | N/A | N/A | N/A | N/A | GUI scroll, resize, font-scale, and pane movement measurements were unavailable. |
+| Same; Criterion release bench | 80×24, one dirty row | 300 KiB / 1 range-pair (equivalent full terminal+LCD write) | 12.5 KiB / 1 range-pair | 307,200 | 12,800 | N/A | Deterministic byte accounting only; it is not a GPU-device throughput measurement. |
+| Same; Criterion release bench | 80×24, eight dirty rows | 300 KiB / 1 range-pair | 100.0 KiB / 8 range-pairs before merge | 307,200 | 102,400 | N/A | Range count is pre-merge row accounting; adjacent ranges are coalesced by production upload planning. |
+| Same; Criterion release bench | 80×24, full damage | 300 KiB / 1 range-pair | 300 KiB / 1 range-pair after merge | 307,200 | 307,200 | N/A | Full-damage equivalence is intentional; no incremental advantage is claimed. |
+
+The current Criterion observations were: `build_frame_miss` 34.561–34.740
+µs, `build_frame_hit` 787.63–789.12 ns, one dirty row 882.11–887.17 ns,
+eight contiguous rows 11.623–11.682 µs, scattered rows 9.3087–9.3502 µs,
+full damage 34.987–35.157 µs, large serial hits 10.239–10.301 µs, and large
+parallel hits 100.06–113.73 µs. These are current measurements, not an
+equivalent before/after runtime baseline; repository Criterion change
+annotations therefore are not treated as a Task 7 speedup claim.
+
+The HUD and `RUST_LOG=petruterm=debug` path now expose scenario, redraw/wakeup
+counts, dirty/rebuilt rows, actual upload bytes/ranges, and comparable full
+versus incremental terminal/LCD counters. GUI/device values, input latency
+percentiles, output throughput, CPU utilization, and visible-tearing checks
+remain N/A until a controlled interactive run can collect them.
+
 ## Execution Tasks
 
 1. Add baseline metrics and repeatable performance scenarios.

@@ -2,6 +2,7 @@ use anyhow::Result;
 use winit::event_loop::ActiveEventLoop;
 
 use super::mux::{FlagHintOverlay, GhostOverlay, Mux, SyntaxOverlay};
+use super::perf::FrameScenario;
 use super::renderer::{
     DirtyRows, FullRebuildTrigger, GridVisualState, RenderContext, SidebarDrawParams,
 };
@@ -341,6 +342,7 @@ impl App {
         let _span = tracing::info_span!("redraw_frame").entered();
 
         let frame_start = std::time::Instant::now();
+        let wakeups = std::mem::take(&mut self.wakeups_since_frame);
 
         if let Some(rc) = &mut self.render_ctx {
             rc.frame_counter = rc.frame_counter.wrapping_add(1);
@@ -350,11 +352,26 @@ impl App {
         let batch = std::mem::take(&mut self.pending_pty_batch);
         let data_ids = batch.data_ids;
         let exited = batch.exited;
+        let scenario = match self.frame_scenario {
+            FrameScenario::Idle if !data_ids.is_empty() => {
+                if batch.has_pending || self.last_pty_batch_size > 2 {
+                    FrameScenario::PtyOutput
+                } else {
+                    FrameScenario::Interactive
+                }
+            }
+            FrameScenario::Idle if self.mux.active_pane_count() > 1 => FrameScenario::MultiPane,
+            other => other,
+        };
+        self.frame_scenario = FrameScenario::Idle;
         if let Some(rc) = &mut self.render_ctx {
             rc.frame_metrics.pty_terminals = rc
                 .frame_metrics
                 .pty_terminals
                 .saturating_add(data_ids.len());
+            rc.frame_metrics.scenario = scenario;
+            rc.frame_metrics.wakeups = wakeups;
+            rc.frame_metrics.redraws = 1;
         }
         self.mux.apply_osc133_events();
         if self.close_exited_terminals(exited) {
@@ -430,6 +447,17 @@ impl App {
                 rc.last_gpu_upload_bytes = cursor_upload_bytes;
                 rc.frame_metrics
                     .record_upload(cursor_upload_bytes, usize::from(cursor_upload_bytes > 0));
+                log::debug!(
+                    "frame-metrics scenario={} redraws={} wakeups={} dirty_rows={} rebuilt_rows={} upload_bytes={} full_upload_bytes={} incremental_upload_bytes={}",
+                    rc.frame_metrics.scenario.label(),
+                    rc.frame_metrics.redraws,
+                    rc.frame_metrics.wakeups,
+                    rc.frame_metrics.dirty_rows,
+                    rc.frame_metrics.rebuilt_rows,
+                    rc.frame_metrics.upload_bytes,
+                    rc.frame_metrics.full_upload_bytes,
+                    rc.frame_metrics.incremental_upload_bytes,
+                );
                 rc.renderer.set_terminal_cell_count(rc.last_terminal_count);
                 rc.renderer.set_overlay_count(rc.last_overlay_count);
                 let _ = rc.renderer.render();
@@ -696,6 +724,12 @@ impl App {
                     active_tid,
                 );
             }
+            // `build_all_pane_instances` resets per-frame metrics, so attach the
+            // event-loop snapshot after the CPU build and before the HUD renders.
+            rc.frame_metrics.scenario = scenario;
+            rc.frame_metrics.wakeups = wakeups;
+            rc.frame_metrics.redraws = 1;
+            rc.frame_metrics.pty_terminals = data_ids.len();
 
             // Pane separator lines (hidden when a pane is zoomed).
             let sep_pad_x = content_pad_x;
@@ -1229,6 +1263,19 @@ impl App {
                     0
                 }
             };
+            let full_terminal_bytes = rc
+                .terminal_instances
+                .len()
+                .saturating_add(rc.terminal_lcd_instances.len())
+                .saturating_mul(std::mem::size_of::<crate::renderer::cell::CellVertex>());
+            let full_terminal_ranges = usize::from(!rc.terminal_instances.is_empty())
+                + usize::from(!rc.terminal_lcd_instances.is_empty());
+            rc.frame_metrics.record_terminal_uploads(
+                full_terminal_bytes,
+                full_terminal_ranges,
+                terminal_bytes.saturating_add(lcd_bytes),
+                instance_upload_ranges.len() + lcd_upload_ranges.len(),
+            );
             rc.last_gpu_upload_bytes = terminal_bytes + lcd_bytes + overlay_bytes + rect_bytes;
             rc.frame_metrics.record_upload(
                 rc.last_gpu_upload_bytes,
@@ -1253,6 +1300,23 @@ impl App {
             rc.renderer.set_terminal_cell_count(terminal_count);
             rc.renderer.set_overlay_count(overlay_count);
             rc.last_full_upload_succeeded = true;
+            rc.frame_metrics.scenario = scenario;
+            rc.frame_metrics.wakeups = wakeups;
+            rc.frame_metrics.redraws = 1;
+            log::debug!(
+                "frame-metrics scenario={} redraws={} wakeups={} dirty_rows={} rebuilt_rows={} upload_ranges={} upload_bytes={} full_upload_ranges={} full_upload_bytes={} incremental_upload_ranges={} incremental_upload_bytes={}",
+                rc.frame_metrics.scenario.label(),
+                rc.frame_metrics.redraws,
+                rc.frame_metrics.wakeups,
+                rc.frame_metrics.dirty_rows,
+                rc.frame_metrics.rebuilt_rows,
+                rc.frame_metrics.upload_ranges,
+                rc.frame_metrics.upload_bytes,
+                rc.frame_metrics.full_upload_ranges,
+                rc.frame_metrics.full_upload_bytes,
+                rc.frame_metrics.incremental_upload_ranges,
+                rc.frame_metrics.incremental_upload_bytes,
+            );
             let _ = rc.renderer.render();
 
             // ── Input-to-pixel latency probe (RUST_LOG=petruterm=debug) ─────────

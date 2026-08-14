@@ -596,6 +596,35 @@ fn bench_incremental_multi_pane_layout_change(c: &mut Criterion) {
     });
 }
 
+/// Comparable CPU-side accounting for legacy full terminal/LCD uploads and
+/// incremental row-range uploads. Both paths intentionally exclude overlays.
+fn bench_upload_bytes_comparison(c: &mut Criterion) {
+    let full_instances = COLS * ROWS;
+    let vertex_bytes = std::mem::size_of::<CellVertex>();
+    let full_bytes = full_instances * vertex_bytes * 2;
+    let mut group = c.benchmark_group("upload_bytes_comparison");
+
+    for rows in [1usize, 8, ROWS] {
+        group.bench_with_input(BenchmarkId::new("baseline_full", rows), &rows, |b, _| {
+            b.iter(|| std::hint::black_box(full_bytes));
+        });
+        group.bench_with_input(
+            BenchmarkId::new("incremental_rows", rows),
+            &rows,
+            |b, &rows| {
+                b.iter(|| {
+                    std::hint::black_box(
+                        rows.saturating_mul(COLS)
+                            .saturating_mul(vertex_bytes)
+                            .saturating_mul(2),
+                    )
+                });
+            },
+        );
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_build_row_miss,
@@ -606,5 +635,6 @@ criterion_group!(
     bench_build_frame_hit_large_par,
     bench_build_frame_dirty_rows,
     bench_incremental_multi_pane_layout_change,
+    bench_upload_bytes_comparison,
 );
 criterion_main!(benches);

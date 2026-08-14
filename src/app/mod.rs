@@ -24,6 +24,8 @@ pub(crate) mod pty_schedule;
 mod renderer;
 mod ui;
 
+use perf::FrameScenario;
+
 pub use input::InputHandler;
 pub use menu::AppMenu;
 pub use mux::Mux;
@@ -83,6 +85,10 @@ pub struct App {
     needs_redraw: bool,
     /// PTY events drained by `about_to_wait` and consumed by the next redraw.
     pending_pty_batch: mux::PtyEventBatch,
+    /// Workload label attached to the next rendered frame for debug metrics.
+    frame_scenario: FrameScenario,
+    /// Native event-loop wakeups observed since the previous rendered frame.
+    wakeups_since_frame: usize,
 
     /// Cached pane separator geometry from the last render frame (TD-PERF-24).
     /// Avoids recomputing separator layout on every CursorMoved event.
@@ -176,6 +182,8 @@ impl App {
             cursor_blink_dirty: false,
             needs_redraw: false,
             pending_pty_batch: mux::PtyEventBatch::default(),
+            frame_scenario: FrameScenario::Idle,
+            wakeups_since_frame: 0,
             cached_cwd: None,
             sidebar: SidebarState::default(),
             last_frame_at: std::time::Instant::now(),
@@ -618,6 +626,7 @@ impl App {
         // 8ms wakeups per keystroke, undoing the idle/battery-saver gating.
         if self.input.pty_written {
             self.note_pty_input();
+            self.frame_scenario = FrameScenario::Interactive;
         }
         self.request_redraw();
     }
@@ -1397,6 +1406,7 @@ impl App {
         if lines == 0 {
             return;
         }
+        self.frame_scenario = FrameScenario::Scroll;
         if self.mouse_in_panel() {
             if lines > 0 {
                 self.ui.panel_mut().scroll_down(lines as usize);
@@ -1827,6 +1837,7 @@ impl ApplicationHandler<()> for App {
                 self.handle_redraw(event_loop);
             }
             WindowEvent::Resized(size) => {
+                self.frame_scenario = FrameScenario::Resize;
                 if let Some(rc) = &mut self.render_ctx {
                     rc.renderer.resize(size.width, size.height);
                 }
@@ -1835,6 +1846,7 @@ impl ApplicationHandler<()> for App {
                 self.request_redraw();
             }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                self.frame_scenario = FrameScenario::Resize;
                 if let Some(rc) = &mut self.render_ctx {
                     if let Err(err) = rc.refresh_text_metrics(&self.config, scale_factor as f32) {
                         log::warn!(
@@ -1889,6 +1901,10 @@ impl ApplicationHandler<()> for App {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        self.wakeups_since_frame = self.wakeups_since_frame.saturating_add(1);
+        if let Some(rc) = &mut self.render_ctx {
+            rc.frame_metrics.wakeups = self.wakeups_since_frame;
+        }
         // Drain native menu events. muda uses an internal static channel when no
         // custom set_event_handler is registered; about_to_wait runs after every
         // OS event (including the FocusGained that firing a menu item triggers).

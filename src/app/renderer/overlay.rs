@@ -1394,6 +1394,9 @@ impl RenderContext {
         let shape_misses = self.shape_cache_misses;
         let instance_count = self.last_instance_count;
         let upload_kb = self.last_gpu_upload_bytes as f32 / 1024.0;
+        let scenario = self.frame_metrics.scenario.label();
+        let full_upload_kb = self.frame_metrics.full_upload_bytes as f32 / 1024.0;
+        let incremental_upload_kb = self.frame_metrics.incremental_upload_bytes as f32 / 1024.0;
 
         // ── Build HUD text lines ─────────────────────────────────────────────
         let frame_fg = if avg_ms > 16.67 { warn_fg } else { value_fg };
@@ -1428,6 +1431,23 @@ impl RenderContext {
             (format!(" {:10} {:.1}%", "atlas", atlas_pct), value_fg),
             (
                 format!(" {:10} {:.1} KB/frame", "upload", upload_kb),
+                value_fg,
+            ),
+            (format!(" {:10} {}", "scenario", scenario), value_fg),
+            (
+                format!(
+                    " {:10} inc:{:.1} full:{:.1} KB",
+                    "terminal", incremental_upload_kb, full_upload_kb
+                ),
+                value_fg,
+            ),
+            (
+                format!(
+                    " {:10} inc:{} full:{}",
+                    "writes",
+                    self.frame_metrics.incremental_upload_ranges,
+                    self.frame_metrics.full_upload_ranges
+                ),
                 value_fg,
             ),
         ];
