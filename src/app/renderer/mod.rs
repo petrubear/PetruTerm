@@ -28,11 +28,10 @@ mod overlay;
 mod terminal;
 
 pub(crate) use damage::{
-    request_full_rebuild, rows_for_full_rebuild, take_build_damage, DirtyRows, FullRebuildTrigger,
-    RowRevisionMap,
+    rows_for_full_rebuild, BuildInvalidationState, DirtyRows, FullRebuildTrigger, RowRevisionMap,
 };
 pub(crate) use layout::TerminalInstanceLayout;
-pub(crate) use terminal::plan_overlay_upload;
+pub(crate) use terminal::OverlayUploadState;
 
 /// Cache for a single shaped row to avoid re-shaping every frame.
 #[derive(Clone)]
@@ -88,7 +87,7 @@ pub struct RenderContext {
     /// Terminals whose layout was rebuilt during the current frame.
     pub(crate) layout_dirty_terminals: std::collections::HashSet<usize>,
     pub(crate) capacity_overflow_terminals: std::collections::HashSet<usize>,
-    pub(crate) pending_full_rebuild: Option<FullRebuildTrigger>,
+    pub(crate) build_invalidation: BuildInvalidationState,
     pub instances: Vec<CellVertex>,
     /// Cached GPU instances for the AI chat panel — rebuilt only when `ChatPanel::dirty`.
     pub panel_instances_cache: Vec<CellVertex>,
@@ -276,7 +275,7 @@ impl RenderContext {
             terminal_layouts: HashMap::new(),
             layout_dirty_terminals: std::collections::HashSet::new(),
             capacity_overflow_terminals: std::collections::HashSet::new(),
-            pending_full_rebuild: None,
+            build_invalidation: BuildInvalidationState::default(),
             instances: Vec::new(),
             panel_cache_term_cols: 0,
             panel_instances_cache: Vec::new(),
@@ -452,7 +451,7 @@ impl RenderContext {
     }
 
     pub(crate) fn clear_all_row_caches_for(&mut self, trigger: FullRebuildTrigger) {
-        request_full_rebuild(&mut self.pending_full_rebuild, trigger);
+        self.build_invalidation.invalidate(trigger);
         self.row_caches.clear();
         self.row_revisions.clear();
         self.grid_visual_states.clear();
@@ -506,6 +505,8 @@ impl RenderContext {
             return;
         }
 
+        self.build_invalidation
+            .invalidate(FullRebuildTrigger::PaneGeometryChange);
         self.terminal_layouts.clear();
         self.terminal_instances.clear();
         self.terminal_lcd_instances.clear();

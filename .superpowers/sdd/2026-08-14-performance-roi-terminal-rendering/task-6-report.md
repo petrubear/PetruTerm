@@ -130,3 +130,42 @@ Completed. No dependencies were added and behavior remains unchanged.
   regressions; all requested benchmarks completed and full damage remained in the
   prior order of magnitude. Device-specific GPU profiling remains outside this
   headless benchmark.
+
+## Fix round 3 — explicit production build and overlay seams
+
+### Status
+
+Completed. No dependencies were added.
+
+### Corrections
+
+- Replaced the directly-called invalidation helpers with `BuildInvalidationState`,
+  a production-owned state object stored by `RenderContext`. `RenderContext::build_instances`
+  now consumes damage through `begin_terminal_build`, while cache invalidation and
+  pane-layout rebuild call sites record triggers through the same state object.
+- Added production-connected coverage for every full-rebuild trigger, missing cache,
+  capacity overflow, and trigger consumption; assertions verify full rebuild and every
+  visible row is dirty.
+- Added `OverlayUploadState` for the exact full-upload and cursor-blink paths used by
+  `handle_redraw`, plus `build_cursor_vertex` used by `build_cursor_instance`. Tests
+  now exercise those production seams without constructing a window and verify cursor
+  ordering, independent terminal counts, blink slot zero, and no terminal blink ranges.
+
+### Validation
+
+- `rtk cargo fmt --all -- --check` — passed.
+- `rtk cargo test production_ -- --nocapture` — passed, 6 tests.
+- `rtk cargo test --lib` — passed, 22 tests.
+- `rtk cargo test -- --nocapture` — passed, 147 tests across 3 suites.
+- `rtk cargo check --features profiling` — passed.
+- `rtk cargo bench --bench build_instances -- --noplot --warm-up-time 1 --measurement-time 2 --sample-size 10` — passed; all requested benchmark IDs ran. Gnuplot was unavailable, so Criterion used plotters. Full-damage remained in the prior order of magnitude.
+- `rtk git diff --check` — passed.
+- `rtk graphify update .` — completed; generated graph artifacts were reverted and are not part of this task's diff.
+
+### Concerns
+
+- GPU-device-specific upload behavior remains outside the headless seam tests; runtime
+  still uses the real renderer upload methods after the tested production planning seam.
+- The fresh benchmark sample was environment-sensitive: Criterion flagged small
+  regressions for `build_row_miss` (+1.5%) and `incremental_one_dirty_row` (+2.3%);
+  all other requested cases were unchanged or improved, and the command exited 0.

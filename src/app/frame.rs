@@ -3,7 +3,7 @@ use winit::event_loop::ActiveEventLoop;
 
 use super::mux::{FlagHintOverlay, GhostOverlay, Mux, SyntaxOverlay};
 use super::renderer::{
-    plan_overlay_upload, DirtyRows, FullRebuildTrigger, GridVisualState, RenderContext,
+    DirtyRows, FullRebuildTrigger, GridVisualState, OverlayUploadState, RenderContext,
     SidebarDrawParams,
 };
 use super::App;
@@ -34,20 +34,6 @@ pub(crate) fn terminal_upload_ranges_for_blink(
 
 pub(crate) const fn blink_overlay_slot() -> usize {
     0
-}
-
-pub(crate) fn blink_overlay_vertex(
-    template: crate::renderer::cell::CellVertex,
-    blink_on: bool,
-) -> crate::renderer::cell::CellVertex {
-    if blink_on {
-        template
-    } else {
-        crate::renderer::cell::CellVertex {
-            bg: [0.0, 0.0, 0.0, 0.0],
-            ..template
-        }
-    }
 }
 
 pub(crate) fn upload_failure_rebuild_trigger(
@@ -416,11 +402,12 @@ impl App {
                 let terminal_ranges =
                     terminal_upload_ranges_for_blink(true, &rc.instance_upload_ranges);
                 let overlay_plan =
-                    plan_overlay_upload(rc.last_terminal_count, &rc.instances, terminal_ranges);
+                    OverlayUploadState::new(rc.last_terminal_count, &rc.instances, terminal_ranges)
+                        .plan();
                 debug_assert!(overlay_plan.cursor_first);
                 debug_assert!(overlay_plan.terminal_upload_ranges_empty);
                 let cursor_upload = if let Some(v) = rc.cursor_vertex_template {
-                    let upload_v = blink_overlay_vertex(v, blink_on);
+                    let upload_v = OverlayUploadState::blink_vertex(v, blink_on);
                     let Some(cursor_slot) = rc.instances.first_mut() else {
                         self.needs_redraw = true;
                         return;
@@ -1196,11 +1183,12 @@ impl App {
             let merged_instance_upload_ranges = merge_upload_ranges(&mut rc.instance_upload_ranges);
             let instance_upload_ranges =
                 terminal_upload_ranges_for_blink(false, &merged_instance_upload_ranges);
-            let overlay_plan = plan_overlay_upload(
+            let overlay_plan = OverlayUploadState::new(
                 rc.terminal_instance_count(),
                 &rc.instances,
                 &instance_upload_ranges,
-            );
+            )
+            .plan();
             debug_assert!(overlay_plan.cursor_first);
             let terminal_count = overlay_plan.terminal_count;
             let overlay_count = overlay_plan.overlay_count;
@@ -1529,12 +1517,10 @@ fn static_hash(parts: &[&[u8]]) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        blink_only_render, blink_overlay_slot, blink_overlay_vertex,
-        terminal_upload_ranges_for_blink, upload_failure_rebuild_trigger,
+        blink_only_render, blink_overlay_slot, terminal_upload_ranges_for_blink,
+        upload_failure_rebuild_trigger,
     };
-    use crate::app::renderer::{
-        plan_overlay_upload, request_full_rebuild, take_build_damage, DirtyRows,
-    };
+    use crate::app::renderer::{BuildInvalidationState, DirtyRows, OverlayUploadState};
     use crate::renderer::cell::{CellVertex, FLAG_CURSOR};
     use crate::renderer::UploadRange;
     use bytemuck::Zeroable;
@@ -1550,7 +1536,7 @@ mod tests {
             CellVertex::zeroed(),
             CellVertex::zeroed(),
         ];
-        let full_plan = plan_overlay_upload(42, &overlays, &ranges);
+        let full_plan = OverlayUploadState::new(42, &overlays, &ranges).plan();
 
         assert!(blink_only_render(true, true, false, false, false));
         assert_eq!(blink_overlay_slot(), 0);
@@ -1565,17 +1551,21 @@ mod tests {
         assert_eq!(full_plan.overlay_count, 3);
         assert!(!full_plan.terminal_upload_ranges_empty);
 
-        let blink_plan = plan_overlay_upload(
+        let blink_plan = OverlayUploadState::new(
             full_plan.terminal_count,
             &overlays,
             terminal_upload_ranges_for_blink(true, &ranges),
-        );
+        )
+        .plan();
         assert!(blink_plan.terminal_upload_ranges_empty);
         assert_eq!(blink_plan.cursor_index, Some(blink_overlay_slot()));
 
         let template = overlays[0];
-        let blink_off = blink_overlay_vertex(template, false);
-        assert_eq!(blink_overlay_vertex(template, true).bg, template.bg);
+        let blink_off = OverlayUploadState::blink_vertex(template, false);
+        assert_eq!(
+            OverlayUploadState::blink_vertex(template, true).bg,
+            template.bg
+        );
         assert_eq!(blink_off.grid_pos, template.grid_pos);
         assert_eq!(blink_off.atlas_uv, template.atlas_uv);
         assert_eq!(blink_off.fg, template.fg);
@@ -1589,9 +1579,9 @@ mod tests {
     #[test]
     fn production_upload_fallback_requests_full_rebuild_for_all_visible_rows() {
         let trigger = upload_failure_rebuild_trigger(true, false, true).unwrap();
-        let mut pending = None;
-        request_full_rebuild(&mut pending, trigger);
-        let damage = take_build_damage(&mut pending, None, &DirtyRows::default(), 5, true);
+        let mut state = BuildInvalidationState::default();
+        state.invalidate(trigger);
+        let damage = state.begin_terminal_build(&DirtyRows::default(), 5, true, false);
 
         assert!(damage.full_rebuild);
         assert!((0..5).all(|row| damage.rows.is_dirty(row)));
