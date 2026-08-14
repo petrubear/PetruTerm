@@ -4,6 +4,7 @@ use winit::event_loop::ActiveEventLoop;
 use super::mux::{FlagHintOverlay, GhostOverlay, Mux, SyntaxOverlay};
 use super::renderer::{DirtyRows, GridVisualState, RenderContext, SidebarDrawParams};
 use super::App;
+use crate::renderer::upload::merge_upload_ranges;
 use crate::ui::PaneInfo;
 
 impl App {
@@ -352,16 +353,13 @@ impl App {
             self.cursor_blink_dirty = false;
             if let Some(rc) = &mut self.render_ctx {
                 if !rc.last_full_upload_succeeded {
-                    rc.renderer.set_cell_count(0);
-                    let _ = rc.renderer.render();
+                    self.needs_redraw = true;
                     return;
                 }
                 let blink_on = self.input.cursor_blink_on;
-                // Upload cursor (or a transparent placeholder) at content_end so the
-                // status bar / tab bar / scroll bar at content_end+1.. remain in the
-                // GPU buffer and are drawn. cell_count = last_instance_count draws
-                // everything; last_overlay_start preserves correct overlay split.
-                if let Some(v) = rc.cursor_vertex_template {
+                // The cursor is the first dynamic overlay, so blink updates do not
+                // touch persistent terminal or LCD storage.
+                let cursor_upload = if let Some(v) = rc.cursor_vertex_template {
                     let upload_v = if blink_on {
                         v
                     } else {
@@ -371,43 +369,28 @@ impl App {
                             ..v
                         }
                     };
-                    let cursor_uploaded = rc
-                        .renderer
-                        .upload_instances(std::slice::from_ref(&upload_v), rc.content_end);
-                    let lcd_uploaded = if rc.renderer.lcd_enabled() {
-                        let use_lcd_upload = rc.prepare_lcd_upload(blink_on);
-                        if use_lcd_upload {
-                            rc.renderer.upload_lcd_instances(&rc.lcd_upload_instances)
-                        } else {
-                            rc.renderer.upload_lcd_instances(&rc.terminal_lcd_instances)
-                        }
-                    } else {
-                        true
-                    };
-                    if !cursor_uploaded || !lcd_uploaded {
-                        rc.renderer.set_cell_count(0);
-                        let _ = rc.renderer.render();
+                    let Some(cursor_slot) = rc.instances.first_mut() else {
+                        self.needs_redraw = true;
                         return;
-                    }
+                    };
+                    *cursor_slot = upload_v;
+                    rc.renderer.upload_overlay_instance(0, &upload_v)
                 } else {
-                    let lcd_uploaded = if rc.renderer.lcd_enabled() {
-                        let use_lcd_upload = rc.prepare_lcd_upload(blink_on);
-                        if use_lcd_upload {
-                            rc.renderer.upload_lcd_instances(&rc.lcd_upload_instances)
-                        } else {
-                            rc.renderer.upload_lcd_instances(&rc.terminal_lcd_instances)
-                        }
-                    } else {
-                        true
-                    };
-                    if !lcd_uploaded {
-                        rc.renderer.set_cell_count(0);
-                        let _ = rc.renderer.render();
+                    Ok(0)
+                };
+                let cursor_upload_bytes = match cursor_upload {
+                    Ok(bytes) => bytes,
+                    Err(error) => {
+                        log::error!("cursor overlay upload failed: {error:#}");
+                        self.needs_redraw = true;
                         return;
                     }
-                }
-                rc.renderer.set_cell_count(rc.last_instance_count);
-                rc.renderer.set_overlay_start(rc.last_overlay_start);
+                };
+                rc.last_gpu_upload_bytes = cursor_upload_bytes;
+                rc.frame_metrics
+                    .record_upload(cursor_upload_bytes, usize::from(cursor_upload_bytes > 0));
+                rc.renderer.set_terminal_cell_count(rc.last_terminal_count);
+                rc.renderer.set_overlay_count(rc.last_overlay_count);
                 let _ = rc.renderer.render();
             }
             return;
@@ -1075,8 +1058,6 @@ impl App {
             }
 
             // ── Overlays (search bar, palette, context menu) ─────────────────────
-            // Record the split point so the GPU renders these in a separate pass.
-            let overlay_start = rc.terminal_instances.len() + rc.instances.len();
             if self.ui.search_bar.visible {
                 rc.build_search_bar_instances(
                     &self.ui.search_bar,
@@ -1153,43 +1134,67 @@ impl App {
             // ── GPU upload ──────────────────────────────────────────────────────
             let terminal_count = rc.terminal_instance_count();
             let overlay_count = rc.instances.len();
+            rc.last_terminal_count = terminal_count;
+            rc.last_overlay_count = overlay_count;
             rc.last_instance_count = terminal_count + overlay_count;
-            rc.last_overlay_start = overlay_start;
-            {
-                use crate::renderer::cell::CellVertex;
-                use crate::renderer::rounded_rect::RoundedRectInstance;
-                let instance_bytes =
-                    (terminal_count + overlay_count) * std::mem::size_of::<CellVertex>();
-                let lcd_bytes = rc.terminal_lcd_instances.len() * std::mem::size_of::<CellVertex>();
-                let rect_bytes =
-                    rc.rect_instances.len() * std::mem::size_of::<RoundedRectInstance>();
-                rc.last_gpu_upload_bytes = instance_bytes + lcd_bytes + rect_bytes;
-                let upload_ranges = usize::from(instance_bytes > 0)
-                    + usize::from(lcd_bytes > 0)
-                    + usize::from(rect_bytes > 0);
-                rc.frame_metrics
-                    .record_upload(rc.last_gpu_upload_bytes, upload_ranges);
-            }
-            rc.renderer.upload_rect_instances(&rc.rect_instances);
-            rc.renderer.set_overlay_start(overlay_start);
-            let terminal_uploaded = rc.renderer.upload_instances(&rc.terminal_instances, 0);
-            let overlays_uploaded = rc.renderer.upload_instances(&rc.instances, terminal_count);
-            let lcd_uploaded = if rc.renderer.lcd_enabled() {
-                let use_lcd_upload = rc.prepare_lcd_upload(self.input.cursor_blink_on);
-                if use_lcd_upload {
-                    rc.renderer.upload_lcd_instances(&rc.lcd_upload_instances)
-                } else {
-                    rc.renderer.upload_lcd_instances(&rc.terminal_lcd_instances)
+            let instance_upload_ranges = merge_upload_ranges(&mut rc.instance_upload_ranges);
+            let lcd_upload_ranges = merge_upload_ranges(&mut rc.lcd_upload_ranges);
+            let rect_bytes = rc.renderer.upload_rect_instances(&rc.rect_instances);
+            let terminal_upload = rc
+                .renderer
+                .upload_instance_ranges(&rc.terminal_instances, &instance_upload_ranges);
+            let lcd_upload = rc
+                .renderer
+                .upload_lcd_ranges(&rc.terminal_lcd_instances, &lcd_upload_ranges);
+            let overlay_upload = rc.renderer.upload_overlay_instances(&rc.instances);
+
+            let terminal_succeeded = terminal_upload.is_ok();
+            let lcd_succeeded = lcd_upload.is_ok();
+            let overlay_succeeded = overlay_upload.is_ok();
+            let terminal_bytes = match terminal_upload {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    log::error!("terminal instance upload failed: {error:#}");
+                    0
                 }
-            } else {
-                true
             };
-            if terminal_uploaded && overlays_uploaded && lcd_uploaded {
-                rc.renderer.set_cell_count(terminal_count + overlay_count);
+            let lcd_bytes = match lcd_upload {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    log::error!("LCD instance upload failed: {error:#}");
+                    0
+                }
+            };
+            let overlay_bytes = match overlay_upload {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    log::error!("overlay instance upload failed: {error:#}");
+                    0
+                }
+            };
+            let uploads_succeeded = terminal_succeeded && lcd_succeeded && overlay_succeeded;
+            rc.last_gpu_upload_bytes = terminal_bytes + lcd_bytes + overlay_bytes + rect_bytes;
+            rc.frame_metrics.record_upload(
+                rc.last_gpu_upload_bytes,
+                instance_upload_ranges.len()
+                    + lcd_upload_ranges.len()
+                    + usize::from(overlay_bytes > 0)
+                    + usize::from(rect_bytes > 0),
+            );
+            if uploads_succeeded {
+                rc.renderer.set_terminal_cell_count(terminal_count);
+                rc.renderer.set_overlay_count(overlay_count);
                 rc.last_full_upload_succeeded = true;
             } else {
-                rc.renderer.set_cell_count(0);
+                // The range APIs reject invalid storage bounds instead of clamping
+                // missing rows. Drop cached terminal geometry and rebuild on the next
+                // redraw so a transient storage mismatch cannot persist.
+                rc.clear_all_row_caches();
+                rc.renderer.set_terminal_cell_count(0);
+                rc.renderer.set_overlay_count(0);
                 rc.last_full_upload_succeeded = false;
+                self.needs_redraw = true;
+                return;
             }
             let _ = rc.renderer.render();
 

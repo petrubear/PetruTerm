@@ -12,12 +12,33 @@ use crate::renderer::cell::{CellUniforms, CellVertex};
 use crate::renderer::lcd_atlas::LcdGlyphAtlas;
 use crate::renderer::pipeline::{CellPipeline, CellPipelineBgAware, CellPipelineLcd};
 use crate::renderer::rounded_rect::{RoundedRectInstance, RoundedRectPipeline};
+use crate::renderer::upload::UploadRange;
 
 /// Maximum number of cell instances per frame (cols × rows + overdraw headroom).
 const INITIAL_INSTANCE_CAPACITY: usize = 32_768;
+const MAX_OVERLAY_INSTANCES: usize = 32_768;
 
 /// Maximum number of rounded rect instances per frame (tab bar pills + overdraw).
 const MAX_RECT_INSTANCES: usize = 1024;
+
+fn validate_upload_range(range: UploadRange, instance_len: usize) -> Result<()> {
+    if range.start >= range.end {
+        return Err(anyhow::anyhow!(
+            "invalid upload range {}..{}",
+            range.start,
+            range.end
+        ));
+    }
+    if range.end > instance_len {
+        return Err(anyhow::anyhow!(
+            "upload range {}..{} exceeds instance slice length {}",
+            range.start,
+            range.end,
+            instance_len
+        ));
+    }
+    Ok(())
+}
 
 /// Core wgpu renderer: owns the surface, device, queue, pipeline, and glyph atlas.
 pub struct GpuRenderer {
@@ -44,10 +65,9 @@ pub struct GpuRenderer {
     bg_aware_atlas_bind_group: wgpu::BindGroup,
     instance_buffer: wgpu::Buffer,
     instance_capacity: usize,
-    cell_count: usize,
-    /// Index into the instance buffer where overlay instances start (palette, context menu).
-    /// Instances before this index are rendered first (bg+glyph); overlays rendered after.
-    overlay_start: usize,
+    terminal_cell_count: usize,
+    overlay_instance_buffer: wgpu::Buffer,
+    overlay_instance_count: usize,
 
     // LCD subpixel AA resources
     lcd_pipeline: Option<CellPipelineLcd>,
@@ -241,6 +261,12 @@ impl GpuRenderer {
                 | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
+        let overlay_instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("overlay instances"),
+            size: (MAX_OVERLAY_INSTANCES * std::mem::size_of::<CellVertex>()) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
 
         // LCD subpixel AA resources (created only if LCD AA is enabled in config)
         let lcd_pipeline = if config.font.lcd_antialiasing {
@@ -312,8 +338,9 @@ impl GpuRenderer {
             bg_aware_atlas_bind_group,
             instance_buffer,
             instance_capacity: INITIAL_INSTANCE_CAPACITY,
-            cell_count: 0,
-            overlay_start: 0,
+            terminal_cell_count: 0,
+            overlay_instance_buffer,
+            overlay_instance_count: 0,
             lcd_pipeline,
             lcd_atlas,
             lcd_atlas_bind_group,
@@ -376,42 +403,132 @@ impl GpuRenderer {
             .write_buffer(&self.uniform_buffer, 16, bytemuck::cast_slice(&pad));
     }
 
-    /// Upload cell instances for this frame. Supports partial updates via offset.
-    pub fn upload_instances(&mut self, instances: &[CellVertex], offset: usize) -> bool {
+    /// Upload only the changed ranges of persistent terminal instances.
+    pub fn upload_instance_ranges(
+        &mut self,
+        instances: &[CellVertex],
+        ranges: &[UploadRange],
+    ) -> Result<usize> {
         #[cfg(feature = "profiling")]
-        let _span = tracing::info_span!("upload_instance_ranges", count = instances.len(), offset)
-            .entered();
+        let _span = tracing::info_span!(
+            "upload_instance_ranges",
+            count = instances.len(),
+            ranges = ranges.len()
+        )
+        .entered();
 
-        let count = instances.len();
-        let Some(required) = offset.checked_add(count) else {
-            log::error!("upload_instances size overflow: offset={offset} count={count}");
-            self.cell_count = 0;
-            return false;
+        for range in ranges {
+            validate_upload_range(*range, instances.len())?;
+        }
+        if !self.ensure_instance_capacity(instances.len()) {
+            return Err(anyhow::anyhow!(
+                "terminal instance storage exceeds the device buffer limit"
+            ));
+        }
+
+        let mut bytes_written = 0usize;
+        for range in ranges {
+            let bytes = bytemuck::cast_slice(&instances[range.start..range.end]);
+            let byte_offset = range
+                .start
+                .checked_mul(std::mem::size_of::<CellVertex>())
+                .ok_or_else(|| anyhow::anyhow!("terminal upload byte offset overflow"))?;
+            self.queue
+                .write_buffer(&self.instance_buffer, byte_offset as u64, bytes);
+            bytes_written = bytes_written
+                .checked_add(bytes.len())
+                .ok_or_else(|| anyhow::anyhow!("terminal upload byte count overflow"))?;
+        }
+        Ok(bytes_written)
+    }
+
+    /// Upload only the changed ranges of persistent LCD instances.
+    pub fn upload_lcd_ranges(
+        &mut self,
+        instances: &[CellVertex],
+        ranges: &[UploadRange],
+    ) -> Result<usize> {
+        for range in ranges {
+            validate_upload_range(*range, instances.len())?;
+        }
+        if self.lcd_pipeline.is_none() {
+            self.lcd_instance_count = 0;
+            return Ok(0);
+        }
+        if !self.ensure_lcd_instance_capacity(instances.len()) {
+            return Err(anyhow::anyhow!(
+                "LCD instance storage exceeds the device buffer limit"
+            ));
+        }
+
+        let mut bytes_written = 0usize;
+        for range in ranges {
+            let bytes = bytemuck::cast_slice(&instances[range.start..range.end]);
+            let byte_offset = range
+                .start
+                .checked_mul(std::mem::size_of::<CellVertex>())
+                .ok_or_else(|| anyhow::anyhow!("LCD upload byte offset overflow"))?;
+            self.queue
+                .write_buffer(&self.lcd_instance_buffer, byte_offset as u64, bytes);
+            bytes_written = bytes_written
+                .checked_add(bytes.len())
+                .ok_or_else(|| anyhow::anyhow!("LCD upload byte count overflow"))?;
+        }
+        self.lcd_instance_count = instances.len();
+        Ok(bytes_written)
+    }
+
+    /// Upload the dynamic cursor and UI overlay buffer.
+    pub fn upload_overlay_instances(&mut self, instances: &[CellVertex]) -> Result<usize> {
+        if instances.len() > MAX_OVERLAY_INSTANCES {
+            return Err(anyhow::anyhow!(
+                "overlay instance count {} exceeds capacity {}",
+                instances.len(),
+                MAX_OVERLAY_INSTANCES
+            ));
+        }
+        let bytes = bytemuck::cast_slice(instances);
+        if !bytes.is_empty() {
+            self.queue
+                .write_buffer(&self.overlay_instance_buffer, 0, bytes);
+        }
+        self.overlay_instance_count = instances.len();
+        Ok(bytes.len())
+    }
+
+    /// Update one dynamic overlay slot without rewriting the remaining overlays.
+    pub fn upload_overlay_instance(
+        &mut self,
+        index: usize,
+        instance: &CellVertex,
+    ) -> Result<usize> {
+        let Some(end) = index.checked_add(1) else {
+            return Err(anyhow::anyhow!("overlay instance index overflow"));
         };
-        if !self.ensure_instance_capacity(required) {
-            self.cell_count = 0;
-            return false;
+        if end > MAX_OVERLAY_INSTANCES {
+            return Err(anyhow::anyhow!(
+                "overlay instance index {} exceeds capacity {}",
+                index,
+                MAX_OVERLAY_INSTANCES
+            ));
         }
-        if count > 0 {
-            self.queue.write_buffer(
-                &self.instance_buffer,
-                (offset * std::mem::size_of::<CellVertex>()) as u64,
-                bytemuck::cast_slice(instances),
-            );
-        }
-        // cell_count is the total count to draw, set by the caller.
-        true
+        let Some(byte_offset) = index.checked_mul(std::mem::size_of::<CellVertex>()) else {
+            return Err(anyhow::anyhow!("overlay upload byte offset overflow"));
+        };
+        self.queue.write_buffer(
+            &self.overlay_instance_buffer,
+            byte_offset as u64,
+            bytemuck::bytes_of(instance),
+        );
+        Ok(std::mem::size_of::<CellVertex>())
     }
 
-    pub fn set_cell_count(&mut self, count: usize) {
-        self.cell_count = count;
+    pub fn set_terminal_cell_count(&mut self, count: usize) {
+        self.terminal_cell_count = count;
     }
 
-    /// Set the index at which overlay instances (palette, context menu) begin.
-    /// These are rendered in a separate bg+glyph pass AFTER the main pass so
-    /// overlay backgrounds cover terminal glyphs underneath.
-    pub fn set_overlay_start(&mut self, start: usize) {
-        self.overlay_start = start;
+    pub fn set_overlay_count(&mut self, count: usize) {
+        self.overlay_instance_count = count;
     }
 
     /// Render a single frame: combined pass for bg and glyphs.
@@ -473,30 +590,20 @@ impl GpuRenderer {
                 pass.draw(0..6, 0..self.rect_instance_count as u32);
             }
 
-            if self.cell_count > 0 {
-                let main_end = (self.overlay_start as u32).min(self.cell_count as u32);
-                let overlay_end = self.cell_count as u32;
-                let overlay_start = main_end;
-
-                // Bind shared resources once; bg_pipeline and cell_pipeline share
-                // the same layouts at slots 0/1 and the same vertex buffer.
-                // Pipeline switches within the same pass do not invalidate bind groups.
+            if self.terminal_cell_count > 0 || self.overlay_instance_count > 0 {
+                // ── Terminal pass ───────────────────────────────────────────────
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                 pass.set_bind_group(1, &self.atlas_bind_group, &[]);
                 pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
 
-                // ── Main pass: terminal + static UI ──────────────────────────────
-                if main_end > 0 {
+                if self.terminal_cell_count > 0 {
                     pass.set_pipeline(&self.pipeline.bg_pipeline);
-                    pass.draw(0..6, 0..main_end);
+                    pass.draw(0..6, 0..self.terminal_cell_count as u32);
 
                     pass.set_pipeline(&self.pipeline.cell_pipeline);
-                    pass.draw(0..6, 0..main_end);
+                    pass.draw(0..6, 0..self.terminal_cell_count as u32);
                 }
 
-                // ── LCD pass (terminal glyphs) — drawn BEFORE overlay so overlay bg covers them ──
-                // The LCD pass changes slots 0/1 and vertex slot 0; restore them afterward
-                // so the overlay pass can draw without re-specifying all shared state.
                 if self.lcd_instance_count > 0 {
                     if let Some(ref lcd_pipeline) = self.lcd_pipeline {
                         pass.set_pipeline(&lcd_pipeline.lcd_pipeline);
@@ -505,22 +612,21 @@ impl GpuRenderer {
                         pass.set_bind_group(2, &self.lcd_atlas_bind_group, &[]);
                         pass.set_vertex_buffer(0, self.lcd_instance_buffer.slice(..));
                         pass.draw(0..6, 0..self.lcd_instance_count as u32);
-
-                        pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                        pass.set_bind_group(1, &self.atlas_bind_group, &[]);
-                        pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
                     }
                 }
 
-                // ── Overlay pass: palette, context menu ─────────────────────────
-                // Rendered AFTER main glyphs (and LCD pass) so overlay backgrounds
-                // cover all terminal text underneath.
-                if overlay_start < overlay_end {
+                // ── Overlay pass ────────────────────────────────────────────────
+                // Drawn after terminal and LCD glyphs so cursor/UI backgrounds cover
+                // terminal text underneath without mutating persistent LCD storage.
+                if self.overlay_instance_count > 0 {
+                    pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                    pass.set_bind_group(1, &self.atlas_bind_group, &[]);
+                    pass.set_vertex_buffer(0, self.overlay_instance_buffer.slice(..));
                     pass.set_pipeline(&self.pipeline.bg_pipeline);
-                    pass.draw(0..6, overlay_start..overlay_end);
+                    pass.draw(0..6, 0..self.overlay_instance_count as u32);
 
                     pass.set_pipeline(&self.pipeline.cell_pipeline);
-                    pass.draw(0..6, overlay_start..overlay_end);
+                    pass.draw(0..6, 0..self.overlay_instance_count as u32);
                 }
             }
         }
@@ -551,7 +657,7 @@ impl GpuRenderer {
     }
 
     /// Upload rounded rect instances for this frame (TD-013). Must be called before `render()`.
-    pub fn upload_rect_instances(&mut self, instances: &[RoundedRectInstance]) {
+    pub fn upload_rect_instances(&mut self, instances: &[RoundedRectInstance]) -> usize {
         let count = instances.len().min(MAX_RECT_INSTANCES);
         if instances.len() > MAX_RECT_INSTANCES {
             log::warn!(
@@ -567,32 +673,7 @@ impl GpuRenderer {
             );
         }
         self.rect_instance_count = count;
-    }
-
-    /// Upload LCD cell instances for this frame. Must be called before `render()`.
-    pub fn upload_lcd_instances(&mut self, instances: &[CellVertex]) -> bool {
-        if self.lcd_pipeline.is_none() {
-            self.lcd_instance_count = 0;
-            return true;
-        }
-        let count = instances.len();
-        if !self.ensure_lcd_instance_capacity(count) {
-            self.lcd_instance_count = 0;
-            return false;
-        }
-        if count > 0 {
-            self.queue.write_buffer(
-                &self.lcd_instance_buffer,
-                0,
-                bytemuck::cast_slice(instances),
-            );
-        }
-        self.lcd_instance_count = count;
-        true
-    }
-
-    pub fn lcd_enabled(&self) -> bool {
-        self.lcd_pipeline.is_some()
+        count * std::mem::size_of::<RoundedRectInstance>()
     }
 
     fn ensure_instance_capacity(&mut self, required: usize) -> bool {

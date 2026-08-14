@@ -277,12 +277,20 @@ impl RenderContext {
                 "terminal instance layout is missing".to_string(),
             ));
         };
-        layout
+        let slot = layout
             .write_row(row, instances, &mut self.terminal_instances)
             .map_err(|error| crate::renderer::atlas::AtlasError::Other(error.to_string()))?;
-        layout
+        let lcd_slot = layout
             .write_lcd_row(row, lcd_instances, &mut self.terminal_lcd_instances)
             .map_err(|error| crate::renderer::atlas::AtlasError::Other(error.to_string()))?;
+        self.instance_upload_ranges.push(UploadRange {
+            start: slot.start,
+            end: slot.start.saturating_add(slot.capacity),
+        });
+        self.lcd_upload_ranges.push(UploadRange {
+            start: lcd_slot.start,
+            end: lcd_slot.start.saturating_add(lcd_slot.capacity),
+        });
         Ok(())
     }
 
@@ -336,9 +344,6 @@ impl RenderContext {
                 ..v
             }
         });
-
-        self.lcd_cursor_patch = matches!(info.shape, CursorShape::Block | CursorShape::HollowBlock)
-            .then_some((v.grid_pos, config.colors.cursor_bg));
     }
 
     /// Draw 1-pixel separator lines between panes.

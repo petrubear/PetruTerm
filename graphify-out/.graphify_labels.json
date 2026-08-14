@@ -105,5 +105,12 @@
   "103": "keybind_view.rs",
   "104": ".resumed",
   "105": ".ui_style",
-  "106": ".build_instances"
+  "106": ".build_instances",
+  "107": "translate_key",
+  "108": "TextShaperConfig",
+  "109": "gpu.rs",
+  "110": "resolve_color",
+  "111": "run_session",
+  "112": "PtyEvent",
+  "113": "spawn_acp_connect"
 }

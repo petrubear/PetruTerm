@@ -13,7 +13,7 @@ use crate::llm::chat_panel::{
 use crate::llm::markdown::{AnnotatedLine, BlockKind, ParseState, SpanKind, TokenKind};
 use crate::renderer::cell::{CellVertex, FLAG_COLOR_GLYPH, FLAG_CURSOR, FLAG_LCD};
 use crate::renderer::rounded_rect::RoundedRectInstance;
-use crate::renderer::GpuRenderer;
+use crate::renderer::{GpuRenderer, UploadRange};
 use crate::term::color::resolve_color;
 use crate::term::{CursorInfo, CursorShape};
 use crate::ui::info_overlay::InfoOverlay;
@@ -75,10 +75,10 @@ pub struct RenderContext {
     pub(crate) terminal_instances: Vec<CellVertex>,
     /// Persistent terminal LCD instances, arranged in the same row slots.
     pub(crate) terminal_lcd_instances: Vec<CellVertex>,
-    /// Temporary LCD upload data used when a block cursor changes the cell background.
-    pub(crate) lcd_upload_instances: Vec<CellVertex>,
-    /// LCD cursor background patch for the current focused cursor.
-    pub(crate) lcd_cursor_patch: Option<([f32; 2], [f32; 4])>,
+    /// GPU ranges changed in persistent terminal storage this frame.
+    pub(crate) instance_upload_ranges: Vec<UploadRange>,
+    /// GPU ranges changed in persistent LCD storage this frame.
+    pub(crate) lcd_upload_ranges: Vec<UploadRange>,
     /// Layout metadata for each visible terminal pane.
     pub(crate) terminal_layouts: HashMap<usize, TerminalInstanceLayout>,
     /// Terminals whose layout was rebuilt during the current frame.
@@ -159,11 +159,10 @@ pub struct RenderContext {
     pub shape_cache_misses: u64,
     pub(crate) frame_metrics: crate::app::perf::FrameMetrics,
     pub last_instance_count: usize,
+    pub last_terminal_count: usize,
+    pub last_overlay_count: usize,
     /// Whether the most recent complete frame upload succeeded.
     pub last_full_upload_succeeded: bool,
-    /// overlay_start from the last full frame — used by the blink fast path so it
-    /// can keep overlay rendering correct without a full rebuild.
-    pub last_overlay_start: usize,
     /// Bytes written to GPU buffers in the current frame (instances + LCD + rects).
     pub last_gpu_upload_bytes: usize,
 
@@ -266,8 +265,8 @@ impl RenderContext {
             grid_visual_states: HashMap::new(),
             terminal_instances: Vec::new(),
             terminal_lcd_instances: Vec::new(),
-            lcd_upload_instances: Vec::new(),
-            lcd_cursor_patch: None,
+            instance_upload_ranges: Vec::new(),
+            lcd_upload_ranges: Vec::new(),
             terminal_layouts: HashMap::new(),
             layout_dirty_terminals: std::collections::HashSet::new(),
             instances: Vec::new(),
@@ -297,8 +296,9 @@ impl RenderContext {
             shape_cache_misses: 0,
             frame_metrics: crate::app::perf::FrameMetrics::default(),
             last_instance_count: 0,
+            last_terminal_count: 0,
+            last_overlay_count: 0,
             last_full_upload_succeeded: false,
-            last_overlay_start: 0,
             last_gpu_upload_bytes: 0,
             scroll_bar_state: None,
             scroll_bar_cache: Vec::new(),
@@ -391,8 +391,9 @@ impl RenderContext {
         self.cursor_vertex_template = None;
         self.content_end = 0;
         self.last_instance_count = 0;
+        self.last_terminal_count = 0;
+        self.last_overlay_count = 0;
         self.last_full_upload_succeeded = false;
-        self.last_overlay_start = 0;
 
         Ok(())
     }
@@ -417,7 +418,6 @@ impl RenderContext {
             shrink_vec(&mut self.instances);
             shrink_vec(&mut self.terminal_instances);
             shrink_vec(&mut self.terminal_lcd_instances);
-            shrink_vec(&mut self.lcd_upload_instances);
             shrink_vec(&mut self.panel_instances_cache);
             shrink_vec(&mut self.rect_instances);
             shrink_vec(&mut self.scratch_chars);
@@ -428,8 +428,9 @@ impl RenderContext {
         }
         self.instances.clear();
         self.rect_instances.clear();
+        self.instance_upload_ranges.clear();
+        self.lcd_upload_ranges.clear();
         self.layout_dirty_terminals.clear();
-        self.lcd_cursor_patch = None;
         if self.terminal_layouts.is_empty() {
             self.terminal_instances.clear();
             self.terminal_lcd_instances.clear();
@@ -444,8 +445,8 @@ impl RenderContext {
         self.terminal_layouts.clear();
         self.terminal_instances.clear();
         self.terminal_lcd_instances.clear();
-        self.lcd_upload_instances.clear();
-        self.lcd_cursor_patch = None;
+        self.instance_upload_ranges.clear();
+        self.lcd_upload_ranges.clear();
         self.layout_dirty_terminals.clear();
     }
 
@@ -512,6 +513,14 @@ impl RenderContext {
         let zero = bytemuck::Zeroable::zeroed();
         self.terminal_instances.resize(base, zero);
         self.terminal_lcd_instances.resize(base, zero);
+        if base > 0 {
+            let full_range = UploadRange {
+                start: 0,
+                end: base,
+            };
+            self.instance_upload_ranges.push(full_range);
+            self.lcd_upload_ranges.push(full_range);
+        }
     }
 
     pub(crate) fn take_layout_dirty(&mut self, terminal_id: usize) -> bool {
@@ -520,27 +529,6 @@ impl RenderContext {
 
     pub(crate) fn terminal_instance_count(&self) -> usize {
         self.terminal_instances.len()
-    }
-
-    pub(crate) fn prepare_lcd_upload(&mut self, cursor_blink_on: bool) -> bool {
-        let Some((cursor_pos, cursor_bg)) = self.lcd_cursor_patch else {
-            self.lcd_upload_instances.clear();
-            return false;
-        };
-        if !cursor_blink_on {
-            self.lcd_upload_instances.clear();
-            return false;
-        }
-
-        self.lcd_upload_instances.clear();
-        self.lcd_upload_instances
-            .extend_from_slice(&self.terminal_lcd_instances);
-        for vertex in &mut self.lcd_upload_instances {
-            if vertex.grid_pos == cursor_pos {
-                vertex.bg = cursor_bg;
-            }
-        }
-        true
     }
 
     pub(crate) fn grow_terminal_row_capacity(
@@ -615,9 +603,16 @@ impl RenderContext {
         let zero = bytemuck::Zeroable::zeroed();
         self.terminal_instances.clear();
         self.terminal_lcd_instances.clear();
-        self.lcd_upload_instances.clear();
         self.terminal_instances.resize(base, zero);
         self.terminal_lcd_instances.resize(base, zero);
+        if base > 0 {
+            let full_range = UploadRange {
+                start: 0,
+                end: base,
+            };
+            self.instance_upload_ranges.push(full_range);
+            self.lcd_upload_ranges.push(full_range);
+        }
 
         for (tid, row, instances, lcd_instances) in cached_rows {
             let Some(layout) = self.terminal_layouts.get_mut(&tid) else {
