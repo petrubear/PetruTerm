@@ -11,6 +11,7 @@ use std::sync::{Arc, OnceLock};
 use std::thread::JoinHandle;
 use winit::event_loop::EventLoopProxy;
 
+use crate::app::pty_schedule::WakeupGate;
 use crate::config::Config;
 use crate::term::osc133::{EraseScanner, Osc133Marker, Osc133Scanner};
 
@@ -48,6 +49,7 @@ pub struct PtyEventProxy {
     /// Raw PTY master fd used for direct PtyWrite responses (cursor position, etc.).
     pub master_fd: RawFd,
     pub(crate) qos_set: Arc<OnceLock<()>>,
+    pub(crate) wakeup_gate: Arc<WakeupGate>,
     /// Serializes concurrent writes to `master_fd` from the reader thread (PtyWrite
     /// responses) and the main thread (keyboard input via `Pty::write`).
     pub(crate) write_mutex: Arc<parking_lot::Mutex<()>>,
@@ -89,7 +91,9 @@ impl EventListener for PtyEventProxy {
             Ok(_) => {}
             Err(_) => log::debug!("pty_backpressure_hit: channel full, event dropped"),
         }
-        let _ = self.wakeup.send_event(());
+        if self.wakeup_gate.signal() {
+            let _ = self.wakeup.send_event(());
+        }
     }
 }
 
@@ -128,6 +132,7 @@ impl Pty {
         cell_width: u16,
         cell_height: u16,
         wakeup: EventLoopProxy<()>,
+        wakeup_gate: Arc<WakeupGate>,
         working_directory: Option<std::path::PathBuf>,
         term_config: alacritty_terminal::term::Config,
         term_size: &crate::term::TermSize,
@@ -156,6 +161,7 @@ impl Pty {
             wakeup: wakeup.clone(),
             master_fd,
             qos_set: Arc::new(OnceLock::new()),
+            wakeup_gate: Arc::clone(&wakeup_gate),
             write_mutex: Arc::clone(&write_mutex),
         };
 
@@ -175,14 +181,24 @@ impl Pty {
         let term_clone = Arc::clone(&term);
         let tx_clone = tx.clone();
         let wakeup_clone = wakeup.clone();
+        let wakeup_gate_clone = Arc::clone(&wakeup_gate);
         let reader_thread = std::thread::Builder::new()
             .name("pty-reader".into())
-            .spawn(move || reader_loop(master_fd, term_clone, tx_clone, wakeup_clone))
+            .spawn(move || {
+                reader_loop(
+                    master_fd,
+                    term_clone,
+                    tx_clone,
+                    wakeup_clone,
+                    wakeup_gate_clone,
+                )
+            })
             .context("failed to spawn pty reader thread")?;
 
         // ── 8. Start child monitor thread ─────────────────────────────────
         let tx_clone2 = tx.clone();
         let wakeup_clone2 = wakeup.clone();
+        let wakeup_gate_clone2 = Arc::clone(&wakeup_gate);
         let child_thread = std::thread::Builder::new()
             .name("pty-child".into())
             .spawn(move || {
@@ -202,7 +218,9 @@ impl Pty {
                 log::info!("PTY child exited with code {code}");
                 drop(child); // explicit: ensures child is cleaned up
                 let _ = tx_clone2.try_send(PtyEvent::Exit(code));
-                let _ = wakeup_clone2.send_event(());
+                if wakeup_gate_clone2.signal() {
+                    let _ = wakeup_clone2.send_event(());
+                }
             })
             .context("failed to spawn pty child monitor")?;
 
@@ -422,6 +440,7 @@ fn reader_loop(
     term: Arc<FairMutex<Term<PtyEventProxy>>>,
     tx: Sender<PtyEvent>,
     wakeup: EventLoopProxy<()>,
+    wakeup_gate: Arc<WakeupGate>,
 ) {
     let mut processor: VteProcessor<StdSyncHandler> = VteProcessor::new();
     let mut scanner = Osc133Scanner::new();
@@ -457,7 +476,9 @@ fn reader_loop(
 
         // Notify main thread that new data is available.
         let _ = tx.try_send(PtyEvent::DataReady);
-        let _ = wakeup.send_event(());
+        if wakeup_gate.signal() {
+            let _ = wakeup.send_event(());
+        }
     }
     log::debug!("PTY reader thread exiting");
 }

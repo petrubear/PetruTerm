@@ -21,6 +21,7 @@ use alacritty_terminal::Term;
 use anyhow::Result;
 use std::sync::Arc;
 
+use crate::app::pty_schedule::WakeupGate;
 use crate::config::Config;
 use winit::event_loop::EventLoopProxy;
 
@@ -84,6 +85,7 @@ impl Terminal {
         cell_width: u16,
         cell_height: u16,
         wakeup: EventLoopProxy<()>,
+        wakeup_gate: Arc<WakeupGate>,
         working_directory: Option<std::path::PathBuf>,
     ) -> Result<Self> {
         let term_config = TermConfig {
@@ -105,6 +107,7 @@ impl Terminal {
             cell_width,
             cell_height,
             wakeup,
+            wakeup_gate,
             working_directory,
             term_config,
             &size,

@@ -1,3 +1,4 @@
+use crate::app::pty_schedule::WakeupGate;
 use crate::config::Config;
 use crate::term::{Osc133Marker, PtyEvent, Terminal};
 use crate::ui::search_bar::SearchMatch;
@@ -10,6 +11,27 @@ mod workspace;
 pub struct Workspace {
     pub id: usize,
     pub name: String,
+}
+
+#[derive(Default)]
+pub(crate) struct PtyEventBatch {
+    pub(crate) data_ids: Vec<usize>,
+    pub(crate) exited: Vec<usize>,
+}
+
+impl PtyEventBatch {
+    pub(crate) fn merge(&mut self, other: Self) {
+        for id in other.data_ids {
+            if !self.data_ids.contains(&id) {
+                self.data_ids.push(id);
+            }
+        }
+        for id in other.exited {
+            if !self.exited.contains(&id) {
+                self.exited.push(id);
+            }
+        }
+    }
 }
 
 /// Archived tabs+panes for an inactive workspace (used during workspace switch).
@@ -26,6 +48,7 @@ use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::vte::ansi::{Color as AnsiColor, Rgb};
 use anyhow::Result;
 use std::collections::VecDeque;
+use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
 
 use crate::font::CellStyle;
@@ -158,6 +181,7 @@ pub struct Mux {
     /// Insertion order of closed terminal IDs so we can evict the oldest stale
     /// entries from `terminal_exit_codes` / `terminal_final_output`.
     closed_terminal_order: VecDeque<usize>,
+    pub(crate) wakeup_gate: Arc<WakeupGate>,
 }
 
 impl Mux {
@@ -181,6 +205,7 @@ impl Mux {
             terminal_exit_codes: std::collections::HashMap::new(),
             terminal_final_output: std::collections::HashMap::new(),
             closed_terminal_order: VecDeque::new(),
+            wakeup_gate: Arc::new(WakeupGate::new()),
         }
     }
 
@@ -258,6 +283,7 @@ impl Mux {
             cell_w,
             cell_h,
             wakeup_proxy,
+            Arc::clone(&self.wakeup_gate),
             working_directory,
         )?;
         let id = self.next_terminal_id;
@@ -290,14 +316,15 @@ impl Mux {
     }
 
     /// Poll PTY events for all terminals.
-    /// Returns `(terminals_with_data, exited_terminal_ids)`.
+    /// Returns the terminals with data and terminals that exited since the last drain.
     /// `terminals_with_data` lists every terminal ID that received a `DataReady` event
     /// so callers can update per-terminal state (e.g. shell context) for the right pane.
-    pub fn poll_pty_events(&mut self) -> (Vec<usize>, Vec<usize>) {
+    pub fn poll_pty_events(&mut self) -> PtyEventBatch {
         #[cfg(feature = "profiling")]
         let _span =
             tracing::info_span!("poll_pty_events", terminal_count = self.terminals.len()).entered();
 
+        self.wakeup_gate.begin_drain();
         let mut data_ids: Vec<usize> = Vec::new();
         let mut exited: Vec<usize> = Vec::new();
         let mut exit_codes: Vec<(usize, i32)> = Vec::new();
@@ -369,7 +396,7 @@ impl Mux {
             self.retain_closed_terminal(id);
         }
         self.osc133_events.extend(osc133_pending);
-        (data_ids, exited)
+        PtyEventBatch { data_ids, exited }
     }
 
     /// Process accumulated OSC 133 events and update each pane's BlockManager.
@@ -620,7 +647,16 @@ impl Mux {
         command: &str,
         args: &[String],
     ) -> usize {
-        match Terminal::new(config, cols, rows, cell_w, cell_h, wakeup, cwd) {
+        match Terminal::new(
+            config,
+            cols,
+            rows,
+            cell_w,
+            cell_h,
+            wakeup,
+            Arc::clone(&self.wakeup_gate),
+            cwd,
+        ) {
             Ok(terminal) => {
                 let new_id = self.next_terminal_id;
                 self.next_terminal_id += 1;
@@ -720,6 +756,7 @@ impl Mux {
             cell_w,
             cell_h,
             wakeup_proxy,
+            Arc::clone(&self.wakeup_gate),
             working_directory,
         ) {
             Ok(terminal) => {

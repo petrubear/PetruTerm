@@ -20,6 +20,7 @@ mod layout;
 mod menu;
 mod mux;
 pub(crate) mod perf;
+pub(crate) mod pty_schedule;
 mod renderer;
 mod ui;
 
@@ -80,6 +81,8 @@ pub struct App {
     cursor_blink_dirty: bool,
     /// Latched by event handlers and flushed once per loop iteration in about_to_wait.
     needs_redraw: bool,
+    /// PTY events drained by `about_to_wait` and consumed by the next redraw.
+    pending_pty_batch: mux::PtyEventBatch,
 
     /// Cached pane separator geometry from the last render frame (TD-PERF-24).
     /// Avoids recomputing separator layout on every CursorMoved event.
@@ -172,6 +175,7 @@ impl App {
             window_focused: true,
             cursor_blink_dirty: false,
             needs_redraw: false,
+            pending_pty_batch: mux::PtyEventBatch::default(),
             cached_cwd: None,
             sidebar: SidebarState::default(),
             last_frame_at: std::time::Instant::now(),
@@ -1675,38 +1679,9 @@ impl App {
 }
 
 impl ApplicationHandler<()> for App {
-    fn user_event(&mut self, event_loop: &ActiveEventLoop, _event: ()) {
-        let (data_ids, exited) = self.mux.poll_pty_events();
-        self.mux.apply_osc133_events();
-        let had_exit = !exited.is_empty();
-        if self.close_exited_terminals(exited) {
-            event_loop.exit();
-            return;
-        }
-        if had_exit {
-            self.request_redraw();
-        }
-
-        // PTY data: mark pending but do NOT request_redraw immediately.
-        // about_to_wait will fire the render after a short coalescing window (4ms),
-        // ensuring multi-batch TUI updates (erase + redraw) are shown as one frame.
-        // Exception: small batches (≤2 events) are likely keyboard echo — render immediately.
-        if !data_ids.is_empty() {
-            self.last_pty_batch_size = data_ids.len();
-            self.pending_pty_redraw = true;
-            self.last_pty_activity = std::time::Instant::now();
-            for id in &data_ids {
-                self.update_terminal_shell_ctx(*id);
-            }
-            self.refresh_status_cache();
-            self.extend_pty_echo_grace();
-            // Adaptive coalescing: keyboard echo has small batches — skip the wait.
-            if data_ids.len() <= 2 {
-                self.pending_pty_redraw = false;
-                self.request_redraw();
-            }
-        }
-
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: ()) {
+        // PTY channels are drained from about_to_wait so one loop iteration has
+        // a single normal drain point. This event only wakes the event loop.
         self.flush_pending_pty_run();
         self.flush_pending_agent_action();
         self.flush_pending_paste();
@@ -1828,6 +1803,12 @@ impl ApplicationHandler<()> for App {
             }
             WindowEvent::Occluded(occluded) => {
                 self.window_occluded = occluded;
+                if !occluded
+                    && (!self.pending_pty_batch.data_ids.is_empty()
+                        || !self.pending_pty_batch.exited.is_empty())
+                {
+                    self.request_redraw();
+                }
             }
             WindowEvent::Focused(focused) => {
                 self.window_focused = focused;
@@ -1942,33 +1923,30 @@ impl ApplicationHandler<()> for App {
             }
         }
 
-        // Drain any PTY events that arrived since user_event last ran.
-        // This catches batches that slipped in after user_event drained the channel,
-        // and keeps last_pty_activity accurate for coalescing.
-        let (data_ids, exited) = self.mux.poll_pty_events();
+        // Drain PTY events at one normal point per loop iteration. The wakeup
+        // gate coalesces reader-thread notifications; data is retained until
+        // the next redraw so rendering never has to poll the PTY channels.
+        let batch = self.mux.poll_pty_events();
         self.mux.apply_osc133_events();
-        let had_exit = !exited.is_empty();
-        if self.close_exited_terminals(exited) {
-            event_loop.exit();
-            return;
+        let had_exit = !batch.exited.is_empty();
+        let had_pty_data = !batch.data_ids.is_empty();
+        let data_count = batch.data_ids.len();
+        for id in &batch.data_ids {
+            self.update_terminal_shell_ctx(*id);
         }
+        self.pending_pty_batch.merge(batch);
         if had_exit {
             self.request_redraw();
         }
-        let had_pty_data = !data_ids.is_empty();
         if had_pty_data {
-            self.last_pty_batch_size = data_ids.len();
+            self.last_pty_batch_size = data_count;
             self.pending_pty_redraw = true;
             self.last_pty_activity = std::time::Instant::now();
-            // Update per-terminal shell context only for terminals that fired (TD-PERF-01).
             // Refresh CWD for the active pane (TD-PERF-02).
-            for id in &data_ids {
-                self.update_terminal_shell_ctx(*id);
-            }
             self.refresh_status_cache();
             self.extend_pty_echo_grace();
             // Adaptive coalescing: small batches (≤2) are keyboard echo — skip the wait.
-            if data_ids.len() <= 2 {
+            if data_count <= 2 {
                 self.pending_pty_redraw = false;
                 self.request_redraw();
             }

@@ -307,7 +307,9 @@ impl App {
         }
 
         self.check_config_reload();
-        let (data_ids, exited) = self.mux.poll_pty_events();
+        let batch = std::mem::take(&mut self.pending_pty_batch);
+        let data_ids = batch.data_ids;
+        let exited = batch.exited;
         if let Some(rc) = &mut self.render_ctx {
             rc.frame_metrics.pty_terminals = rc
                 .frame_metrics
@@ -318,9 +320,6 @@ impl App {
         if self.close_exited_terminals(exited) {
             event_loop.exit();
             return;
-        }
-        for id in &data_ids {
-            self.update_terminal_shell_ctx(*id);
         }
         let panel_ai = self.ui.poll_ai_events();
         let block_ai = self.ui.poll_ai_block_events();
