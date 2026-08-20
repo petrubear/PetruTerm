@@ -13,18 +13,24 @@ A developer-first GPU-accelerated terminal emulator written in Rust. Built for s
 - **GPU rendering** via wgpu (Metal on macOS) — 60/120 fps, sub-8 ms input-to-pixel latency
 - **Full terminal emulation** — xterm-256color, truecolor, bracketed paste, SGR mouse, OSC 52 clipboard
 - **Font ligatures** — HarfBuzz shaping with `calt`, `liga`, `dlig` OpenType features; per-word shape cache
+- **Bold/italic rendering** — SGR bold/italic mapped automatically to the installed font family's own bold/italic/bold-italic faces via fontdb; no separate font path to configure
 - **Emoji & color glyphs** — full RGBA emoji rendering via Apple Color Emoji (and any color font)
+- **Floating UI + macOS blur** — translucent vibrancy behind panels and the sidebar (`config.window.blur`)
 - **Tabs & split panes** — tmux-style keybinds, binary-tree layout; each pane has an independent PTY; exiting a shell closes only that pane
-- **Workspaces** — named workspaces with independent tab sets; save and restore layouts with `Leader+W+s` / `Leader+W+L`; auto-save on exit configurable
+- **Workspaces** — named workspaces with independent tab sets; save and restore layouts with `Leader+W+s` / `Leader+W+L`; auto-save on exit and/or on switch, both configurable
+- **Sidebar** — collapsible VSCode-style drawer (`Leader+e+e`) with four `Tab`-cycled sections: Workspaces, MCP, Skills, Steering
 - **Status bar** — configurable plain or powerline bottom bar with leader mode, CWD, git branch, exit code, and time
 - **Input decoration** — syntax highlighting for shell commands (valid command = green, flags = cyan, strings = yellow), ghost text from shell history, inline flag hints on the row below the cursor
 - **Kitty keyboard protocol** — `Shift+Enter`, `Ctrl+Enter`, and other disambiguated key sequences work correctly in Neovim, Claude Code CLI, and other KKP-aware apps
 - **AI agent panel** — context-aware chat with file attachment, NL→command, explain output, fix errors, write files; agent can propose and run commands with confirmation
+- **ACP agent backend** — point the AI panel at an external Agent Client Protocol process (e.g. Claude Code) instead of a direct LLM API; switch on the fly with `/agent`
 - **LLM tool use** — AI agent can read files, list directories, write files, and run commands (sandboxed to CWD, with confirmation)
+- **Skills** — reusable `SKILL.md` prompts loaded from global and per-project directories, browsable from the sidebar or via `/skills`
+- **Steering** — always-on custom instructions injected into every AI request, global and per-project (project wins on name clash)
 - **Inline AI block** — `Ctrl+Space` for quick NL→shell command without leaving the terminal
-- **Multiple LLM providers** — OpenRouter, Ollama, LM Studio, GitHub Copilot; per-pane independent chat history
+- **Multiple LLM providers** — OpenRouter, Ollama, LM Studio, GitHub Copilot; per-pane independent chat history; switch model or agent at runtime with `/model` / `/agent`
 - **MCP (Model Context Protocol)** — connect the AI agent to external tools (databases, APIs, filesystems) via JSON-configured MCP servers; use `/mcp` in the panel to list active servers and tools
-- **Right-click context menu** — Copy, Paste, Clear, and **Ask AI** (sends selection directly to chat panel)
+- **Contextual right-click menus** — selection (Copy, Paste, Clear, **Ask AI**), hovered links (Open Link, Copy Link), command output blocks (Copy Output, Re-run Command), failed-command exit-code info, and a per-tab color picker
 - **Command palette** — fuzzy-search for all actions (`Leader+o`)
 - **Snippets** — Tab-expandable text templates, configurable in Lua
 - **Lua configuration** — hot-reload on save, no restart required
@@ -134,6 +140,8 @@ config.font_size    = 14
 config.font_features = { "calt=1", "liga=1", "dlig=0" }
 ```
 
+Bold and italic text (SGR bold/italic from the shell) render using the same family's own bold/italic/bold-italic font files, resolved automatically via fontdb — there is no separate `bold_font`/`italic_font` key to set. If the installed family has no dedicated bold or italic face, PetruTerm falls back to its regular face.
+
 #### Colors
 
 `config.colors` accepts a table with the following hex string keys:
@@ -186,6 +194,7 @@ config.colors = {
 | `initial_height`  | number\|nil | `nil`                                    | Initial window height in pixels.                                                                                                     |
 | `opacity`         | number      | `1.0`                                    | Window opacity (0.0–1.0).                                                                                                            |
 | `borderless`      | bool        | `false`                                  | Remove all window chrome.                                                                                                            |
+| `blur`            | string\|bool | `false`                                  | macOS vibrancy behind the window: `"dark"`, `"light"`, or `false`/omitted to disable. Softens `ui_surface*` panel colors automatically. |
 
 ```lua
 config.window = {
@@ -195,8 +204,11 @@ config.window = {
     initial_width   = 1400,
     initial_height  = 900,
     opacity = 0.96,
+    blur    = "dark",
 }
 ```
+
+When `blur` is set (or `opacity < 1.0`), panel and sidebar backgrounds (`ui_surface`, `ui_surface_hover`) automatically render with reduced alpha so the vibrancy/translucency shows through.
 
 #### Tab bar
 
@@ -247,6 +259,24 @@ config.shell_integration = true
 
 ---
 
+### Workspaces
+
+| Key                                 | Type | Default | Description                                              |
+| ------------------------------------ | ---- | ------- | ---------------------------------------------------------- |
+| `config.workspaces.auto_save_on_exit`   | bool | `true`  | Save the layout of every workspace automatically on quit. |
+| `config.workspaces.auto_save_on_switch` | bool | `false` | Save a workspace's layout automatically when you switch away from it (`Leader+W+j/k`), in addition to on exit. |
+
+```lua
+config.workspaces = {
+    auto_save_on_exit   = true,
+    auto_save_on_switch = true,
+}
+```
+
+See [Sidebar](#sidebar) for browsing and restoring saved workspaces.
+
+---
+
 ### `keybinds.lua` — Key bindings
 
 #### Leader key
@@ -256,6 +286,12 @@ config.leader = { key = "f", mods = "CTRL", timeout_ms = 1000 }
 ```
 
 Press `Ctrl+F`, release, then press the bound key within `timeout_ms` milliseconds.
+
+#### Keyboard
+
+| Key                          | Type | Default | Description                                                          |
+| ----------------------------- | ---- | ------- | ---------------------------------------------------------------------- |
+| `config.keyboard.option_as_meta` | bool | `false` | Send `Option+key` as a Meta-prefixed escape sequence (Emacs/readline-style) instead of the macOS accented-character input. |
 
 #### Hardcoded system bindings (not configurable)
 
@@ -280,7 +316,7 @@ Press `Ctrl+F`, release, then press the bound key within `timeout_ms` millisecon
 | `Leader+a+e`          | Explain last terminal output                               |
 | `Leader+a+f`          | Fix last error                                             |
 | `Leader+a+z`          | Undo last AI file write                                    |
-| `Leader+e+e`          | Toggle workspace sidebar                                   |
+| `Leader+e+e`          | Toggle sidebar (Workspaces / MCP / Skills / Steering — see [Sidebar](#sidebar)) |
 | `Leader+w`            | New workspace                                              |
 | `Leader+W+n`          | New workspace                                              |
 | `Leader+W+&`          | Close workspace                                            |
@@ -371,6 +407,7 @@ config.llm = {
 | Key             | Type        | Default                                   | Description                                                                               |
 | --------------- | ----------- | ----------------------------------------- | ----------------------------------------------------------------------------------------- |
 | `enabled`       | bool        | `false`                                   | Master switch. Set to `true` to enable all AI features.                                   |
+| `backend`       | string      | `"provider"`                              | `"provider"` — talk to `provider`/`model` directly. `"agent"` — drive the panel via an external ACP process (see [Agent backend (ACP)](#agent-backend-acp) below). |
 | `provider`      | string      | `"openrouter"`                            | LLM provider: `"openrouter"`, `"ollama"`, `"lmstudio"`, or `"copilot"`.                   |
 | `model`         | string      | `"meta-llama/llama-3.1-8b-instruct:free"` | Model identifier. Format depends on the provider.                                         |
 | `api_key`       | string\|nil | `nil`                                     | API key. Use `os.getenv("VAR")` to avoid hardcoding secrets. See provider defaults below. |
@@ -394,6 +431,38 @@ config.llm = {
 | `explain_output` | bool | `true`  | Explain last terminal output (`Leader+a+e`).                         |
 | `fix_last_error` | bool | `true`  | Suggest a fix for the last failed command (`Leader+a+f`).            |
 | `context_chat`   | bool | `true`  | Multi-turn chat panel with CWD, exit code, and last command context. |
+
+#### `ui` table
+
+| Key            | Type   | Default | Description                             |
+| -------------- | ------ | ------- | ---------------------------------------- |
+| `width_cols`   | number | `55`    | Chat panel width, in terminal columns.   |
+
+```lua
+config.llm.ui = { width_cols = 70 }
+```
+
+#### Agent backend (ACP)
+
+Set `backend = "agent"` to have the AI panel talk to an external [Agent Client Protocol](https://agentclientprotocol.com) process instead of a direct LLM provider. `provider`/`model`/`api_key` are ignored in this mode.
+
+| Key                 | Type        | Default | Description                                                             |
+| -------------------- | ----------- | ------- | -------------------------------------------------------------------------- |
+| `agent.command`      | string      | —       | Executable to launch as the ACP agent.                                    |
+| `agent.args`         | string[]    | `{}`    | Arguments passed to `agent.command`.                                      |
+| `agent.env`          | table       | `{}`    | Extra environment variables for the agent process, as `{KEY = "value"}`.  |
+| `agent.display_name` | string\|nil | `nil`   | Override the name shown in the chat header (`◈ <name>`); defaults to the command basename. |
+
+```lua
+config.llm.backend = "agent"
+config.llm.agent = {
+    command = "npx",
+    args    = { "-y", "@agentclientprotocol/claude-agent-acp" },
+    env     = {},
+}
+```
+
+The chat header shows `◈ <agent>` in agent mode vs `✦ <model>` in provider mode. Use `/agent` in the panel input to view or switch the agent command at runtime, and `/model` to view or switch model in provider mode — each is disabled in the other backend.
 
 #### Local provider examples
 
@@ -458,6 +527,18 @@ security find-generic-password -s PetruTerm -a GITHUB_COPILOT_OAUTH_TOKEN -w
 
 ---
 
+### `notifications.lua` — Notifications
+
+| Key                        | Type   | Default   | Description                                            |
+| --------------------------- | ------ | --------- | ---------------------------------------------------------- |
+| `config.notifications.style` | string | `"toast"` | `"toast"` — in-app toast notifications. `"native"` — macOS Notification Center. |
+
+```lua
+config.notifications = { style = "native" }
+```
+
+---
+
 ## AI Agent Panel
 
 Open with `Leader+a+a`. Press again to close. Use `Leader+A` to move focus between the terminal and the panel without closing it.
@@ -484,6 +565,19 @@ Attached files are injected into the LLM system message before every query. The 
 | `Ctrl+S`        | Submit query (alternative)  |
 | `Esc`           | Close panel / dismiss error |
 | `/q` or `/quit` | Close panel                 |
+
+### Slash commands
+
+Typed as the entire chat input:
+
+| Command             | Description                                                              |
+| --------------------- | --------------------------------------------------------------------------- |
+| `/model [name]`      | Show or switch the LLM model (provider backend only).                      |
+| `/agent [command]`   | Show or switch the ACP agent command (agent backend only).                 |
+| `/mcp`                | List connected MCP servers and their tools.                                |
+| `/skills [filter]`   | List loaded skills, optionally filtered by name.                           |
+| `/clear` or `/reset` | Clear the current chat history.                                            |
+| `/q` or `/quit`      | Close the panel.                                                            |
 
 ### Ask AI from context menu
 
@@ -513,6 +607,55 @@ A 4-row overlay at the bottom of the terminal for quick NL→command generation:
 | `Enter` (typing)       | Submit query                     |
 | `Enter` (result ready) | Execute suggested command in PTY |
 | `Esc`                  | Close                            |
+
+---
+
+## Sidebar
+
+A collapsible VSCode-style drawer, toggled with `Leader+e+e` (closed with `Escape` while it has focus). It has four sections, cycled with `Tab` / `Shift+Tab`:
+
+| Section        | Contents                                                                 |
+| --------------- | ------------------------------------------------------------------------- |
+| **Workspaces** | Saved workspace layouts — browse, restore, rename, delete.               |
+| **MCP**        | Connected MCP servers and their tools (same data as `/mcp`).             |
+| **Skills**     | Loaded `SKILL.md` files — browse and inspect (see [Skills](#skills)).    |
+| **Steering**   | Active steering files — browse and inspect (see [Steering](#steering)). |
+
+### Skills
+
+Reusable prompt snippets, one per directory, with a `SKILL.md` file describing when and how the AI should use them:
+
+```
+~/.config/petruterm/skills/<name>/SKILL.md   # global, available in every project
+<project>/.petruterm/skills/<name>/SKILL.md  # project-local
+```
+
+New skill directories require explicit trust approval before their contents are loaded. List what's currently loaded with `/skills` in the chat panel, or browse them in the sidebar's Skills section.
+
+### Steering
+
+Always-on custom instructions injected into every AI request, without needing to attach a file manually:
+
+```
+~/.config/petruterm/steering/*.md   # global
+<project>/.petruterm/steering/*.md  # project-local — wins on a filename clash with a global one
+```
+
+Like skills, a new steering directory requires trust approval before it's read. Browse active steering files in the sidebar's Steering section.
+
+---
+
+## Context Menu
+
+Right-click surfaces a different menu depending on what's under the cursor:
+
+| Context                        | Actions                                                          |
+| -------------------------------- | ---------------------------------------------------------------- |
+| Selected text                   | Copy, Paste, Clear, **Ask AI** (sends the selection to the chat panel, opening it if closed) |
+| A hovered URL                   | Open Link, Copy Link                                             |
+| A command's output block        | Copy Output (`Leader+y`), Re-run Command (`Leader+r`)             |
+| A failed command (non-zero exit) | Shows the failed command text with a Copy Command action         |
+| A tab                            | Set a per-tab accent color, picked from the active theme's bright palette |
 
 ---
 
@@ -608,19 +751,27 @@ Place an `AGENTS.md` file in your project root to give the AI panel automatic co
 
 ```
 ~/.config/petruterm/
-├── config.lua            # Entry point — require and compose modules
-├── ui.lua                # Font, colors, window, status bar
-├── perf.lua              # Scrollback, FPS, GPU
-├── keybinds.lua          # Leader key and all bindings
-├── llm.lua               # AI provider and features
-├── plugins/              # Auto-scanned Lua plugins
+├── config.lua             # Entry point — require and compose modules
+├── ui.lua                 # Font, colors, window, status bar
+├── perf.lua               # Scrollback, FPS, GPU
+├── keybinds.lua           # Leader key and all bindings
+├── llm.lua                # AI provider/agent and features
+├── snippets.lua           # Tab-expandable snippets
+├── notifications.lua      # Toast vs native notification style
+├── plugins/               # Auto-scanned Lua plugins
+├── skills/                # SKILL.md prompts, one directory per skill (see Skills)
+│   └── <name>/SKILL.md
+├── steering/              # Always-on AI instructions, one .md per file (see Steering)
 ├── mcp/
-│   └── mcp.json          # MCP server definitions (filesystem, postgres, …)
-└── shell-integration.zsh # Optional: source in ~/.zshrc
+│   └── mcp.json           # MCP server definitions (filesystem, postgres, …)
+└── shell-integration.zsh  # Optional: source in ~/.zshrc
 ```
+
+A project directory can add its own `.petruterm/skills/` and `.petruterm/steering/` alongside the global ones above.
 
 ### Performance notes
 
+- Persistent row storage: shaped cell instances live in stable per-row GPU slots; a frame re-uploads only the rows that actually changed instead of rebuilding the whole pane's vertex buffer.
 - Row cache: unchanged terminal rows are served from a per-pane shape cache — HarfBuzz runs only on dirty rows.
 - Damage tracking: alacritty's `TermDamage` API skips grid reads for undamaged rows when no selection or search is active.
 - Cursor overlay: cursor blink updates a single GPU vertex without rebuilding the cell buffer.
@@ -633,4 +784,4 @@ Place an `AGENTS.md` file in your project root to give the AI panel automatic co
 
 ## License
 
-MIT
+[MIT](LICENSE)
