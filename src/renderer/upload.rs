@@ -32,15 +32,16 @@ pub fn account_terminal_uploads(
     lcd_enabled: bool,
 ) -> TerminalUploadAccounting {
     let full_bytes = terminal_vertices
-        .saturating_add(lcd_enabled.then_some(lcd_vertices).unwrap_or(0))
+        .saturating_add(if lcd_enabled { lcd_vertices } else { 0 })
         .saturating_mul(element_size);
     let full_ranges =
         usize::from(terminal_vertices > 0) + usize::from(lcd_enabled && lcd_vertices > 0);
-    let incremental_bytes = upload_ranges_bytes(terminal_ranges, element_size).saturating_add(
-        lcd_enabled
-            .then(|| upload_ranges_bytes(lcd_ranges, element_size))
-            .unwrap_or(0),
-    );
+    let incremental_bytes =
+        upload_ranges_bytes(terminal_ranges, element_size).saturating_add(if lcd_enabled {
+            upload_ranges_bytes(lcd_ranges, element_size)
+        } else {
+            0
+        });
     let incremental_ranges = terminal_ranges.len() + usize::from(lcd_enabled) * lcd_ranges.len();
     TerminalUploadAccounting {
         full_bytes,

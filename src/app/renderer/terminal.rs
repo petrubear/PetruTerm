@@ -1,5 +1,15 @@
 use super::*;
 
+/// Tracks the single LCD instance whose `bg` was overwritten to `cursor_bg`
+/// so a Block/HollowBlock cursor blends correctly against an LCD glyph
+/// underneath it. `index` is into `RenderContext::terminal_lcd_instances`.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct LcdCursorPatch {
+    index: usize,
+    original_bg: [f32; 4],
+    patched_bg: [f32; 4],
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) struct RenderOverlayState;
 
@@ -393,14 +403,21 @@ impl RenderContext {
     /// Must be called AFTER `build_instances` for all panes and BEFORE any overlay
     /// instances so that `content_end` accurately marks the cell/cursor boundary.
     /// Stores a blink-on template in `cursor_vertex_template` for the fast blink path.
+    #[allow(clippy::too_many_arguments)]
     pub fn build_cursor_instance(
         &mut self,
         info: &CursorInfo,
         blink_on: bool,
         col_offset: usize,
         row_offset: usize,
+        terminal_id: usize,
         config: &Config,
     ) {
+        // Undo last frame's LCD background patch (if any) before computing
+        // this frame's cursor, so a moved/blinked-off cursor never leaves a
+        // stale cursor_bg baked into an LCD glyph's persistent instance.
+        self.restore_lcd_cursor_patch();
+
         let cw = self.shaper.cell_width;
         let ch = self.shaper.cell_height;
         let Some(v) = self.overlay_state.build_cursor_overlay(
@@ -419,6 +436,75 @@ impl RenderContext {
             v
         } else {
             self.overlay_state.plan_cursor_blink_overlay(v, false)
+        });
+
+        // fs_lcd blends subpixel AA against the vertex's own `bg` (unlike
+        // fs_main, which is premultiplied over the framebuffer), so an LCD
+        // glyph under a Block/HollowBlock cursor must see cursor_bg or its
+        // AA fringes against the glyph's original (now-covered) background.
+        // Beam/underline cursors cover too little of the cell to bother.
+        if matches!(info.shape, CursorShape::Block | CursorShape::HollowBlock) {
+            self.apply_lcd_cursor_patch(terminal_id, info.row, v.grid_pos, config.colors.cursor_bg);
+        }
+    }
+
+    /// Restore the LCD instance patched by a previous `build_cursor_instance`
+    /// call to its original background, if it still holds the patched value.
+    fn restore_lcd_cursor_patch(&mut self) {
+        let Some(patch) = self.lcd_cursor_patch.take() else {
+            return;
+        };
+        if let Some(vertex) = self.terminal_lcd_instances.get_mut(patch.index) {
+            if vertex.bg == patch.patched_bg {
+                vertex.bg = patch.original_bg;
+                self.lcd_upload_ranges.push(UploadRange {
+                    start: patch.index,
+                    end: patch.index + 1,
+                });
+            }
+        }
+    }
+
+    /// Overwrite the LCD instance at `cursor_gp` (within `terminal_id`'s row
+    /// `row`) with `cursor_bg`, recording enough to undo it next frame.
+    fn apply_lcd_cursor_patch(
+        &mut self,
+        terminal_id: usize,
+        row: usize,
+        cursor_gp: [f32; 2],
+        cursor_bg: [f32; 4],
+    ) {
+        let Some(slot) = self
+            .terminal_layouts
+            .get(&terminal_id)
+            .and_then(|layout| layout.row_slot(row))
+        else {
+            return;
+        };
+        let end = slot
+            .start
+            .saturating_add(slot.lcd_len)
+            .min(self.terminal_lcd_instances.len());
+        let Some(index) = self.terminal_lcd_instances[slot.start.min(end)..end]
+            .iter()
+            .position(|vertex| vertex.grid_pos == cursor_gp)
+            .map(|offset| slot.start + offset)
+        else {
+            return;
+        };
+        let original_bg = self.terminal_lcd_instances[index].bg;
+        if original_bg == cursor_bg {
+            return;
+        }
+        self.terminal_lcd_instances[index].bg = cursor_bg;
+        self.lcd_upload_ranges.push(UploadRange {
+            start: index,
+            end: index + 1,
+        });
+        self.lcd_cursor_patch = Some(LcdCursorPatch {
+            index,
+            original_bg,
+            patched_bg: cursor_bg,
         });
     }
 

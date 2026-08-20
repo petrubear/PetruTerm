@@ -1,4 +1,5 @@
 use crate::renderer::cell::CellVertex;
+use thiserror::Error;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct RowSlot {
@@ -8,45 +9,21 @@ pub(crate) struct RowSlot {
     pub(crate) lcd_len: usize,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Error)]
 pub(crate) enum RowWriteError {
+    #[error("row is outside the terminal layout")]
     InvalidRow,
+    #[error("row {row} has {actual} instances but its slot capacity is {capacity}")]
     CapacityExceeded {
         row: usize,
         capacity: usize,
         actual: usize,
     },
-    StorageTooSmall {
-        required: usize,
-        actual: usize,
-    },
+    #[error("terminal storage needs {required} slots but has {actual}")]
+    StorageTooSmall { required: usize, actual: usize },
+    #[error("terminal row geometry overflows")]
     GeometryOverflow,
 }
-
-impl std::fmt::Display for RowWriteError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::InvalidRow => write!(f, "row is outside the terminal layout"),
-            Self::CapacityExceeded {
-                row,
-                capacity,
-                actual,
-            } => write!(
-                f,
-                "row {row} has {actual} instances but its slot capacity is {capacity}"
-            ),
-            Self::StorageTooSmall { required, actual } => {
-                write!(
-                    f,
-                    "terminal storage needs {required} slots but has {actual}"
-                )
-            }
-            Self::GeometryOverflow => write!(f, "terminal row geometry overflows"),
-        }
-    }
-}
-
-impl std::error::Error for RowWriteError {}
 
 #[derive(Clone, Debug)]
 pub(crate) struct TerminalInstanceLayout {
@@ -89,7 +66,6 @@ impl TerminalInstanceLayout {
         }
     }
 
-    #[allow(dead_code)]
     pub(crate) fn row_slot(&self, row: usize) -> Option<RowSlot> {
         self.slots.get(row).copied()
     }
@@ -170,7 +146,7 @@ impl TerminalInstanceLayout {
         for (index, vertex) in vertices.iter().enumerate() {
             let mut global = *vertex;
             global.grid_pos[0] += self.col_offset as f32;
-            global.grid_pos[1] += global_row as f32;
+            global.grid_pos[1] = global_row as f32;
             storage[slot.start + index] = global;
         }
         for index in vertices.len()..slot.capacity {
@@ -247,6 +223,20 @@ mod tests {
         assert_eq!(storage[slot.start].grid_pos, [4.0, 5.0]);
         assert_eq!(storage[slot.start + 1].grid_pos, [0.0, 0.0]);
         assert_eq!(storage[slot.start + 1].glyph_size, [0.0, 0.0]);
+    }
+
+    #[test]
+    fn write_row_replaces_cached_row_coordinate_with_slot_row() {
+        let mut layout = TerminalInstanceLayout::rebuild(7, 4, 3, 0, 0, 4);
+        let local = CellVertex {
+            grid_pos: [1.0, 1.0],
+            ..CellVertex::zeroed()
+        };
+        let mut storage = vec![CellVertex::zeroed(); layout.storage_len()];
+
+        let slot = layout.write_row(1, &[local], &mut storage).unwrap();
+
+        assert_eq!(storage[slot.start].grid_pos, [1.0, 1.0]);
     }
 
     #[test]

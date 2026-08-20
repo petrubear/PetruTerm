@@ -1,28 +1,18 @@
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[allow(dead_code)]
-pub(crate) struct RowRange {
-    pub(crate) start: usize,
-    pub(crate) end: usize,
-}
-
+// Row-range coalescing already lives in `merge_upload_ranges`
+// (src/renderer/upload.rs), which is what the live GPU upload path actually
+// uses. DirtyRows only needs O(1) membership tracking, not a second
+// sort-and-coalesce implementation.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) struct DirtyRows {
-    rows: Vec<usize>,
+    rows: std::collections::HashSet<usize>,
     full: bool,
     full_count: usize,
 }
 
 impl DirtyRows {
     pub(crate) fn mark(&mut self, row: usize) {
-        if !self.full && !self.rows.contains(&row) {
-            self.rows.push(row);
-        }
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn mark_range(&mut self, start: usize, end: usize) {
-        for row in start..end {
-            self.mark(row);
+        if !self.full {
+            self.rows.insert(row);
         }
     }
 
@@ -36,7 +26,6 @@ impl DirtyRows {
         self.full || self.rows.contains(&row)
     }
 
-    #[allow(dead_code)]
     pub(crate) fn is_full(&self) -> bool {
         self.full
     }
@@ -47,44 +36,6 @@ impl DirtyRows {
         } else {
             self.rows.len()
         }
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn ranges(&self, row_count: usize) -> Vec<RowRange> {
-        if self.full {
-            return if row_count == 0 {
-                Vec::new()
-            } else {
-                vec![RowRange {
-                    start: 0,
-                    end: row_count,
-                }]
-            };
-        }
-
-        let mut rows: Vec<usize> = self
-            .rows
-            .iter()
-            .copied()
-            .filter(|row| *row < row_count)
-            .collect();
-        rows.sort_unstable();
-        rows.dedup();
-
-        let mut ranges: Vec<RowRange> = Vec::new();
-        for row in rows {
-            if let Some(last) = ranges.last_mut() {
-                if row <= last.end {
-                    last.end = last.end.max(row + 1);
-                    continue;
-                }
-            }
-            ranges.push(RowRange {
-                start: row,
-                end: row + 1,
-            });
-        }
-        ranges
     }
 
     pub(crate) fn clear(&mut self) {
@@ -156,6 +107,12 @@ impl RenderBuildState {
     }
 
     /// Resolve the damage consumed directly by `RenderContext::build_instances`.
+    ///
+    /// A pending whole-frame trigger is only *peeked* here, not consumed: a
+    /// frame with multiple terminals (split panes, multiple tabs' hidden
+    /// panes) must apply it to every terminal it builds this frame, not just
+    /// the first one processed. Call `clear_pending_full_rebuild` once after
+    /// every terminal for the frame has gone through this method.
     pub(crate) fn resolve_terminal_build(
         &mut self,
         terminal_id: usize,
@@ -166,7 +123,7 @@ impl RenderBuildState {
         let invalidation = self
             .pending_terminal_rebuilds
             .remove(&terminal_id)
-            .or_else(|| self.pending_full_rebuild.take());
+            .or(self.pending_full_rebuild);
         let rows = if let Some(trigger) = invalidation {
             rows_for_full_rebuild(trigger, row_count)
         } else if cache_complete {
@@ -178,6 +135,15 @@ impl RenderBuildState {
             full_rebuild: rows.is_full(),
             rows,
         }
+    }
+
+    /// Clear the pending whole-frame rebuild trigger. Call once per frame,
+    /// after every terminal built that frame has consumed it via
+    /// `resolve_terminal_build`. Per-terminal triggers are untouched — they
+    /// stay pending for a terminal that wasn't built this frame (e.g. a
+    /// hidden pane) until it actually gets built.
+    pub(crate) fn clear_pending_full_rebuild(&mut self) {
+        self.pending_full_rebuild = None;
     }
 }
 
@@ -216,18 +182,7 @@ impl RowRevisionMap {
 
 #[cfg(test)]
 mod tests {
-    use super::{DirtyRows, FullRebuildTrigger, RenderBuildState, RowRange, RowRevisionMap};
-
-    #[test]
-    fn dirty_rows_merge_and_sort_ranges() {
-        let mut rows = DirtyRows::default();
-        rows.mark(5);
-        rows.mark_range(1, 3);
-        rows.mark(3);
-        rows.mark(4);
-
-        assert_eq!(rows.ranges(8), vec![RowRange { start: 1, end: 6 }]);
-    }
+    use super::{DirtyRows, FullRebuildTrigger, RenderBuildState, RowRevisionMap};
 
     #[test]
     fn full_damage_covers_requested_rows() {
@@ -270,9 +225,32 @@ mod tests {
             assert!(damage.full_rebuild);
             assert_eq!(damage.rows.len(), 6);
             assert!((0..6).all(|row| damage.rows.is_dirty(row)));
+            // Still pending within the same frame — a second terminal built
+            // before the frame ends must see it too.
+            let same_frame = state.resolve_terminal_build(1, &DirtyRows::default(), 6, true);
+            assert!(same_frame.full_rebuild);
+            state.clear_pending_full_rebuild();
             let next = state.resolve_terminal_build(0, &DirtyRows::default(), 6, true);
             assert!(!next.full_rebuild);
         }
+    }
+
+    #[test]
+    fn pending_full_rebuild_applies_to_every_terminal_built_in_the_frame() {
+        let mut state = RenderBuildState::default();
+        state.request_full_rebuild(FullRebuildTrigger::ThemeColorChange);
+
+        // A frame with a split pane builds terminal 0 then terminal 1 before
+        // the frame ends. Both must see the pending full rebuild — not just
+        // whichever terminal happened to be built first.
+        let first = state.resolve_terminal_build(0, &DirtyRows::default(), 4, true);
+        let second = state.resolve_terminal_build(1, &DirtyRows::default(), 4, true);
+        assert!(first.full_rebuild);
+        assert!(second.full_rebuild);
+
+        state.clear_pending_full_rebuild();
+        let after_frame = state.resolve_terminal_build(0, &DirtyRows::default(), 4, true);
+        assert!(!after_frame.full_rebuild);
     }
 
     #[test]

@@ -212,6 +212,10 @@ pub struct Mux {
     /// entries from `terminal_exit_codes` / `terminal_final_output`.
     closed_terminal_order: VecDeque<usize>,
     pub(crate) wakeup_gate: Arc<WakeupGate>,
+    /// Rotating start index for `poll_pty_events` so a terminal that floods
+    /// output (exhausting `PTY_EVENT_WORK_BUDGET` by itself) doesn't
+    /// permanently starve terminals processed after it in iteration order.
+    next_poll_start: usize,
 }
 
 impl Mux {
@@ -236,6 +240,7 @@ impl Mux {
             terminal_final_output: std::collections::HashMap::new(),
             closed_terminal_order: VecDeque::new(),
             wakeup_gate: Arc::new(WakeupGate::new()),
+            next_poll_start: 0,
         }
     }
 
@@ -365,8 +370,18 @@ impl Mux {
         let mut pending_events = 0usize;
         self.osc133_events.clear();
         let mut osc133_pending: Vec<(usize, Osc133Marker)> = Vec::new();
-        'terminals: for (id, terminal_slot) in self.terminals.iter_mut().enumerate() {
-            let Some(terminal) = terminal_slot else {
+        let len = self.terminals.len();
+        // Rotate the starting terminal each call so a terminal that floods
+        // output (using up the whole shared budget by itself) doesn't always
+        // go first and starve every terminal after it in iteration order.
+        let start = if len == 0 {
+            0
+        } else {
+            self.next_poll_start % len
+        };
+        for offset in 0..len {
+            let id = (start + offset) % len;
+            let Some(terminal) = self.terminals[id].as_mut() else {
                 continue;
             };
             let rx = terminal.pty.rx.clone();
@@ -421,8 +436,12 @@ impl Mux {
             if terminal_has_pending {
                 has_pending = true;
                 pending_events = pending_events.saturating_add(rx.len());
-                break 'terminals;
             }
+        }
+        // Next call starts one past whichever terminal we began with this time,
+        // so repeated flooding by the same terminal can't monopolize the start slot.
+        if len > 0 {
+            self.next_poll_start = (start + 1) % len;
         }
         for (id, code) in exit_codes {
             self.terminal_exit_codes.insert(id, code);
@@ -436,7 +455,6 @@ impl Mux {
             data_events,
             data_bytes,
             pending_events,
-            ..PtyEventBatch::default()
         }
     }
 

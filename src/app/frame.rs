@@ -157,9 +157,7 @@ impl App {
             self.terminal_shell_ctxs.remove(&tid);
             self.ui.remove_terminal_state(tid);
             if let Some(rc) = &mut self.render_ctx {
-                rc.row_caches.remove(&tid);
-                rc.row_revisions.remove(&tid);
-                rc.grid_visual_states.remove(&tid);
+                rc.clear_terminal_state(tid);
             }
             if self.mux.close_terminal(tid) {
                 return true;
@@ -433,6 +431,15 @@ impl App {
                 );
                 debug_assert!(overlay_plan.cursor_first);
                 debug_assert!(overlay_plan.terminal_upload_ranges_empty);
+                // debug_assert! is a no-op in release builds. If some future overlay
+                // (search bar, palette, sidebar, ...) ever gets pushed into
+                // rc.instances before the cursor, patching instances[0] below would
+                // silently corrupt that overlay's vertex instead of the cursor's.
+                // Fall back to a full redraw rather than trust the invariant blindly.
+                if !overlay_plan.cursor_first || !overlay_plan.terminal_upload_ranges_empty {
+                    self.needs_redraw = true;
+                    return;
+                }
                 let cursor_upload = if let Some(v) = rc.cursor_vertex_template {
                     let upload_v = rc.overlay_state.plan_cursor_blink_overlay(v, blink_on);
                     let Some(cursor_slot) = rc.instances.first_mut() else {
@@ -1286,7 +1293,7 @@ impl App {
             let overlay_plan = rc.overlay_state.plan_production_upload(
                 rc.terminal_instance_count(),
                 &rc.instances,
-                &instance_upload_ranges,
+                instance_upload_ranges,
             );
             debug_assert!(overlay_plan.cursor_first);
             let terminal_count = overlay_plan.terminal_count;
@@ -1297,7 +1304,7 @@ impl App {
             let rect_bytes = rc.renderer.upload_rect_instances(&rc.rect_instances);
             let terminal_upload = rc
                 .renderer
-                .upload_instance_ranges(&rc.terminal_instances, &instance_upload_ranges);
+                .upload_instance_ranges(&rc.terminal_instances, instance_upload_ranges);
             let lcd_upload = rc
                 .renderer
                 .upload_lcd_ranges(&rc.terminal_lcd_instances, &lcd_upload_ranges);
@@ -1633,6 +1640,10 @@ fn build_all_pane_instances(
     }
     rc.cell_data_scratch = cell_data_scratch;
     rc.scratch_terminal_id = last_scratch_tid;
+    // Every terminal built this frame has now had a chance to consume the
+    // pending whole-frame trigger via resolve_terminal_build — clear it so
+    // it doesn't leak into a future frame's unrelated rebuild.
+    rc.build_state.clear_pending_full_rebuild();
 
     // Record content boundary before cursor — used by the fast blink path.
     rc.content_end = rc.terminal_instances.len();
@@ -1650,6 +1661,7 @@ fn build_all_pane_instances(
                 cursor_blink_on,
                 info.col_offset,
                 info.row_offset,
+                info.terminal_id,
                 config,
             );
         } else {

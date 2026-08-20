@@ -82,6 +82,11 @@ pub struct RenderContext {
     pub(crate) instance_upload_ranges: Vec<UploadRange>,
     /// GPU ranges changed in persistent LCD storage this frame.
     pub(crate) lcd_upload_ranges: Vec<UploadRange>,
+    /// In-place LCD background patch applied under a Block/HollowBlock cursor
+    /// (fs_lcd blends against the vertex's own bg). Undone at the start of the
+    /// next `build_cursor_instance` call so it never lingers once the cursor
+    /// moves or blinks off, without marking the row dirty for a full rewrite.
+    lcd_cursor_patch: Option<terminal::LcdCursorPatch>,
     /// Layout metadata for each visible terminal pane.
     pub(crate) terminal_layouts: HashMap<usize, TerminalInstanceLayout>,
     /// Terminals whose layout was rebuilt during the current frame.
@@ -272,6 +277,7 @@ impl RenderContext {
             terminal_lcd_instances: Vec::new(),
             instance_upload_ranges: Vec::new(),
             lcd_upload_ranges: Vec::new(),
+            lcd_cursor_patch: None,
             terminal_layouts: HashMap::new(),
             layout_dirty_terminals: std::collections::HashSet::new(),
             build_state: RenderBuildState::default(),
