@@ -648,27 +648,17 @@ impl GpuRenderer {
                 multiview_mask: None,
             });
 
-            // Rounded rect pass (TD-013: pill tab bar) — drawn before cell backgrounds
-            if self.rect_instance_count > 0 {
-                pass.set_pipeline(&self.rect_pipeline.pipeline);
-                pass.set_bind_group(0, &self.rect_pipeline.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, self.rect_instance_buffer.slice(..));
-                pass.draw(0..6, 0..self.rect_instance_count as u32);
-            }
-
-            if self.terminal_cell_count > 0 || self.overlay_instance_count > 0 {
+            if self.terminal_cell_count > 0 {
                 // ── Terminal pass ───────────────────────────────────────────────
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                 pass.set_bind_group(1, &self.atlas_bind_group, &[]);
                 pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
 
-                if self.terminal_cell_count > 0 {
-                    pass.set_pipeline(&self.pipeline.bg_pipeline);
-                    pass.draw(0..6, 0..self.terminal_cell_count as u32);
+                pass.set_pipeline(&self.pipeline.bg_pipeline);
+                pass.draw(0..6, 0..self.terminal_cell_count as u32);
 
-                    pass.set_pipeline(&self.pipeline.cell_pipeline);
-                    pass.draw(0..6, 0..self.terminal_cell_count as u32);
-                }
+                pass.set_pipeline(&self.pipeline.cell_pipeline);
+                pass.draw(0..6, 0..self.terminal_cell_count as u32);
 
                 if self.lcd_instance_count > 0 {
                     if let Some(ref lcd_pipeline) = self.lcd_pipeline {
@@ -680,20 +670,34 @@ impl GpuRenderer {
                         pass.draw(0..6, 0..self.lcd_instance_count as u32);
                     }
                 }
+            }
 
-                // ── Overlay pass ────────────────────────────────────────────────
-                // Drawn after terminal and LCD glyphs so cursor/UI backgrounds cover
-                // terminal text underneath without mutating persistent LCD storage.
-                if self.overlay_instance_count > 0 {
-                    pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                    pass.set_bind_group(1, &self.atlas_bind_group, &[]);
-                    pass.set_vertex_buffer(0, self.overlay_instance_buffer.slice(..));
-                    pass.set_pipeline(&self.pipeline.bg_pipeline);
-                    pass.draw(0..6, 0..self.overlay_instance_count as u32);
+            // Rounded rect pass (tab-bar pill, panel/modal backgrounds, separators, …).
+            // Drawn after the terminal pass (not before it, as TD-013 originally had
+            // it for the tab-bar pill) so panel backgrounds — search bar, command
+            // palette, sidebar, toast, HUD, … — correctly occlude terminal text
+            // underneath instead of terminal glyphs painting over them. Still drawn
+            // before the overlay pass so overlay text/pills render on top of it.
+            if self.rect_instance_count > 0 {
+                pass.set_pipeline(&self.rect_pipeline.pipeline);
+                pass.set_bind_group(0, &self.rect_pipeline.uniform_bind_group, &[]);
+                pass.set_vertex_buffer(0, self.rect_instance_buffer.slice(..));
+                pass.draw(0..6, 0..self.rect_instance_count as u32);
+            }
 
-                    pass.set_pipeline(&self.pipeline.cell_pipeline);
-                    pass.draw(0..6, 0..self.overlay_instance_count as u32);
-                }
+            // ── Overlay pass ────────────────────────────────────────────────────
+            // Drawn after terminal/LCD glyphs and rects so cursor/UI text covers
+            // terminal text and panel backgrounds underneath without mutating
+            // persistent LCD storage.
+            if self.overlay_instance_count > 0 {
+                pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                pass.set_bind_group(1, &self.atlas_bind_group, &[]);
+                pass.set_vertex_buffer(0, self.overlay_instance_buffer.slice(..));
+                pass.set_pipeline(&self.pipeline.bg_pipeline);
+                pass.draw(0..6, 0..self.overlay_instance_count as u32);
+
+                pass.set_pipeline(&self.pipeline.cell_pipeline);
+                pass.draw(0..6, 0..self.overlay_instance_count as u32);
             }
         }
 
