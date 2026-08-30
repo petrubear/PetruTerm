@@ -34,13 +34,15 @@ Rewrite is scoped to `src/app/renderer/*`, `src/ui/*`, the event-loop/input-disp
 
 ## Terminal grid text rendering
 
-Highest-risk, most consequential decision, resolved by default rather than left open:
+Highest-risk, most consequential decision. Verified against gpui's actual source (`zed-industries/zed`, `main`, fetched 2026-08-30) rather than left as an assumption:
 
-**Default: keep `cosmic-text` shaping, gpui only paints.** `TerminalGridElement::paint()` blits the already-rasterized glyph atlas (from PetruTerm's existing `cosmic-text` + `freetype`/`swash` pipeline) into gpui's paint context as textured quads — the same shape as `iced::Shader` or `egui`'s paint callbacks. `alacritty_terminal`'s grid model and cell→glyph mapping are untouched; only the compositing target changes.
+**Default: use gpui's native `text_system()` / glyph sprite atlas, matching Zed's own precedent.** Zed's real terminal renderer (`crates/terminal_view/src/terminal_element.rs`) does not maintain a custom pre-rasterized glyph atlas — it shapes and paints text through gpui's own pipeline (`window.text_system().shape_line(...)` → `ShapedLine::paint()`, or `Window::paint_glyph()` for single pre-shaped glyphs), and hand-rolls quad painting (`Window::paint_quad()`) only for backgrounds, selection, cursor, and subcell box-drawing characters. `TerminalGridElement` follows the same structure: gpui's text system does shaping/rasterization/caching; custom code is limited to walking `alacritty_terminal`'s grid, batching same-style runs, and painting backgrounds/cursor/selection/box-drawing — per the "don't reinvent" principle, no custom glyph atlas gets built.
 
-This is a deliberate choice, not an open question to explore at implementation time. Reasoning: Zed's own terminal panel (built on gpui, by the gpui team) has known ligature-rendering problems even with `calt`/`liga` correctly configured — checked against the user's own Zed config, which has both set correctly, ruling out user error. Zed's *editor buffer* (not its terminal) is the component that shapes ligatures reliably, which points at gpui's native text path being weaker specifically for monospace-grid/terminal contexts — exactly the component PetruTerm is building. Reusing `cosmic-text`, which already renders ligatures correctly in PetruTerm today, avoids the failure class entirely rather than risking rediscovering it.
+**Why the earlier "reuse cosmic-text to dodge gpui's text path" reasoning doesn't hold up:** Zed's terminal panel does have a real, currently open ligature bug (`zed-industries/zed#11127`, confirmed with `calt`/`liga` set correctly — matches the user's own Zed config) and a second, terminal-specific one (`#48699`) where a ligature renders at the wrong (too-narrow) width *only* in the terminal panel, not the editor buffer, using the same font. Since Zed's terminal doesn't use a custom atlas either, "avoid gpui's text path" isn't actually the mechanism that would dodge this — the pattern in #48699 (correct in the buffer, wrong in the terminal, same font) points instead at a **monospace-grid cell-width vs. variable-width shaped-ligature-glyph mismatch**, specific to terminal-grid rendering, not a defect tied to which library shapes the glyph. PetruTerm's current renderer already reconciles this correctly (ligatures render right today per AGENTS.md's feature list) — that reconciliation logic (wherever it lives in `src/app/renderer/terminal.rs`/`src/font/shaper.rs`) is what has to survive the port, applied on top of gpui's shaped output, regardless of which pipeline shapes the glyph.
 
-Only fall back to gpui's native text/glyph-atlas path if M0 (below) finds the cosmic-text-shapes/gpui-paints seam doesn't work at all — not as a first choice.
+**M0 must explicitly reproduce #11127/#48699's symptom** (a ligature sequence like `->` or `===`, rendered via `text_system()`) as a go/no-go check, alongside the repaint-reliability check below. Fall back to a custom `cosmic-text`-shapes/`paint_image`-blits-atlas path (the original default) only if gpui's native text pipeline can't be made to reconcile cell width with ligature glyph width — not as a first choice.
+
+**Dependency note (verified):** `gpui` is published on crates.io (`0.2.2`), but the companion crate needed for app bootstrap, `gpui_platform` (provides `application()` / the `Platform` impl per OS), is **not** on crates.io — it must be pulled from `https://github.com/zed-industries/zed` via git. gpui is pre-1.0 with frequent breaking changes; pin an exact git `rev` for `gpui_platform` (and match `gpui`'s version to what that rev's workspace uses) rather than tracking a branch, and commit `Cargo.lock`.
 
 ## Input handling
 
@@ -62,12 +64,12 @@ Given prior first-hand experience with this exact failure mode, M0 and M1 (below
 
 **Milestones**, each an independent go/no-go checkpoint:
 
-1. **M0 — Foundation spike.** gpui window running; `TerminalGridElement` painting the grid via cosmic-text-shapes/gpui-paints; leader-key dispatch wired for one real action (e.g. split); manual repaint-reliability check. Determines whether M1+ proceeds as designed or the text-rendering/keybinding fallbacks are needed.
+1. **M0 — Foundation spike.** gpui window running (via `gpui_platform`, pinned git rev); `TerminalGridElement` painting the grid via gpui's native `text_system()`; leader-key dispatch wired for one real action (e.g. split) via gpui's chorded keybinding, if it covers the leader+timeout+context shape; manual repaint-reliability check; manual reproduction of the #11127/#48699 ligature-width symptom. Determines whether M1+ proceeds as designed or the text-rendering/keybinding fallbacks are needed.
 2. **M1 — Grid at parity.** Cursor, selection, scrollback, ligatures, emoji, LCD subpixel AA matching `master`. Chrome can be minimal/placeholder — bar is "the terminal itself is not a regression," verified by dogfood + the repaint check.
 3. **M2 — Core chrome.** Tabs, status bar, pane splits/resize/zoom — daily-use surfaces needed before the branch is dogfoodable at all.
 4. **M3 — Sidebars.** Workspace nav + AI chat panel, with real gpui styling/animation — the feature that motivated this migration.
 5. **M4 — Remaining surfaces.** Command palette, context menu, search bar, info overlay/toasts.
-6. **M5 — Cleanup & merge.** Delete the old wgpu/winit renderer and `src/ui/*` draw code; drop now-unused deps (`freetype`/`font-kit`) only if M0 ends up choosing gpui's native text path instead of the cosmic-text default; merge to `master`.
+6. **M5 — Cleanup & merge.** Delete the old wgpu/winit renderer and `src/ui/*` draw code; drop now-unused deps (`cosmic-text`, `freetype`, `font-kit`) if M0's default (gpui's native text path) held — keep them only if the custom-atlas fallback was needed instead; merge to `master`.
 
 Each milestone must be independently testable/dogfoodable before the next starts.
 
