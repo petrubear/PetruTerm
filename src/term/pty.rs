@@ -125,7 +125,7 @@ impl Pty {
     ///
     /// Returns `(Pty, Arc<FairMutex<Term<PtyEventProxy>>>)`.
     #[allow(clippy::too_many_arguments)]
-    pub fn spawn(
+    pub(crate) fn spawn(
         config: &Config,
         cols: u16,
         rows: u16,

@@ -105,7 +105,7 @@ impl RenderContext {
     ///
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::type_complexity)]
-    pub fn build_instances(
+    pub(crate) fn build_instances(
         &mut self,
         cell_data: &[(String, Vec<(AnsiColor, AnsiColor, CellStyle)>)],
         config: &Config,

@@ -79,7 +79,7 @@ impl Terminal {
     /// `cell_width` / `cell_height` are physical pixel dimensions of one cell
     /// (used in the TIOCSWINSZ ioctl for image-protocol-aware programs).
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub(crate) fn new(
         config: &Config,
         cols: u16,
         rows: u16,

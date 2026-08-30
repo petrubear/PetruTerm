@@ -354,7 +354,7 @@ impl Mux {
     /// Returns the terminals with data and terminals that exited since the last drain.
     /// `terminals_with_data` lists every terminal ID that received a `DataReady` event
     /// so callers can update per-terminal state (e.g. shell context) for the right pane.
-    pub fn poll_pty_events(&mut self) -> PtyEventBatch {
+    pub(crate) fn poll_pty_events(&mut self) -> PtyEventBatch {
         #[cfg(feature = "profiling")]
         let _span =
             tracing::info_span!("poll_pty_events", terminal_count = self.terminals.len()).entered();
@@ -961,7 +961,7 @@ impl Mux {
     /// When `search` is `Some`, cells that match the query are recolored in-place.
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::type_complexity)]
-    pub fn collect_grid_cells_for(
+    pub(crate) fn collect_grid_cells_for(
         &self,
         terminal_id: usize,
         buf: &mut Vec<(String, Vec<(AnsiColor, AnsiColor, CellStyle)>)>,

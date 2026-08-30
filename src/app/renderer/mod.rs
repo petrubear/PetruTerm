@@ -71,9 +71,9 @@ pub struct RenderContext {
     /// Per-terminal row caches, keyed by terminal_id.
     pub row_caches: HashMap<usize, RowCache>,
     /// Per-terminal revisions for rows invalidated by PTY or UI damage.
-    pub row_revisions: HashMap<usize, RowRevisionMap>,
+    pub(crate) row_revisions: HashMap<usize, RowRevisionMap>,
     /// Visual state used to invalidate rows when transient overlays disappear.
-    pub grid_visual_states: HashMap<usize, GridVisualState>,
+    pub(crate) grid_visual_states: HashMap<usize, GridVisualState>,
     /// Persistent terminal cell instances, arranged in stable row slots.
     pub(crate) terminal_instances: Vec<CellVertex>,
     /// Persistent terminal LCD instances, arranged in the same row slots.
