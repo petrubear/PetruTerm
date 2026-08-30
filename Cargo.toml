@@ -9,6 +9,10 @@ license = "MIT"
 name = "petruterm"
 path = "src/main.rs"
 
+[[bin]]
+name = "gpui-petruterm"
+path = "src/bin/gpui_petruterm.rs"
+
 [lib]
 name = "petruterm"
 path = "src/lib.rs"
