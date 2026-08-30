@@ -122,6 +122,11 @@ mimalloc = { version = "0.1", default-features = false }
 # Native menu bar (macOS menu bar, Windows/Linux app menus)
 muda = "0.18"
 
+# GPU-native chrome UI framework (gpui migration spike — M0)
+# Pinned to the last stable release (crates.io 0.2.2 == tag commit 69e2130295c2649963eb639fc70b4f2ee8ea1624).
+# Do NOT track zed-industries/zed main — main had a live text-rendering regression at the time this was pinned.
+gpui = "=0.2.2"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.5"
 objc2-app-kit = { version = "0.2", features = ["NSWindow", "NSView", "NSApplication"] }
