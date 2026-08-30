@@ -424,7 +424,9 @@ git commit -m "[gpui-migration] feat: Render one live shell terminal via Termina
 
 ### Task 4: Verify the two named risks from the spec — repaint reliability and the ligature-width bug
 
-**Files:** none (verification task; fixes if needed land as amendments to Task 3's files).
+**Files:**
+- Create (if the repaint check fails): amendments to `src/gpui_shell/mod.rs` (Task 3's file) — a polling-based repaint stand-in, per Step 1.
+- Modify: `docs/superpowers/specs/2026-08-30-gpui-chrome-migration-design.md` (Step 3 appends the new `## M0 Findings` section).
 
 **Interfaces:** none new.
 
@@ -460,6 +462,8 @@ git commit -m "[gpui-migration] docs: Record M0 repaint-reliability and ligature
 
 **Files:**
 - Modify: `src/gpui_shell/mod.rs`
+- Modify: `src/bin/gpui_petruterm.rs` (keybinding registration happens in `main`, alongside `cx.open_window`, per Step 1)
+- Modify: `docs/superpowers/specs/2026-08-30-gpui-chrome-migration-design.md` (Step 5 appends to the `## M0 Findings` section Task 4 created)
 
 **Interfaces:**
 - Consumes: `GpuiShellRoot.terminals: Vec<Rc<Terminal>>` (Task 3) — this task pushes a second entry.
