@@ -83,6 +83,134 @@ Scoped tightly, per the guiding principles — no infrastructure built to simula
 - **Keybind regression checklist:** before M5 merges, every entry in AGENTS.md's keybind table is manually exercised against the gpui build.
 - **Standard gates apply before the M5 merge:** `cargo clippy`, `cargo fmt`, `scripts/ci-local.sh`.
 
+## M0 Findings (2026-08-30, human dogfood on gpui 0.2.2, real macOS window)
+
+**Repaint reliability: initially FAIL, then FIXED.** PTY output arriving async on a background reader
+thread never triggered a gpui repaint on its own — `cx.notify()` was only ever called from `on_key_down`,
+so output stayed invisible until the next unrelated keystroke. Reproduced exactly the
+`gotcha_lost_pty_echo_wakeup`/Zed-vi-mode class of bug this check exists to catch, confirmed for real rather
+than by inspection. Fixed with the spec-sanctioned M0 stand-in: a `cx.spawn` background loop polling
+`cx.notify()` at ~30Hz. Verified fixed by the user directly (delayed output now appears with no manual
+nudge). Real event-driven wakeup (PTY output directly notifying gpui, no polling) is real work, deferred to
+M1 as the spec already anticipated.
+
+**Ligature rendering: FAIL, confirmed real, not a config or approach mistake.** Default gives no ligatures
+(gpui's default font/text_style; `TerminalGridElement` also shaped one character at a time, which makes
+ligature substitution structurally impossible regardless of font — a shaper can only substitute e.g. `->`
+for its combined glyph when both characters are in the same shaped run). Fixed the structural issue (shape
+each full row as one `TextRun`) and switched to `MonoLisaCode Nerd Font` (the project's actual configured
+ligature font) with explicit `calt`/`liga` `FontFeatures` set to 1. Nerd Font icon glyphs in the user's shell
+prompt render correctly with this font (confirms the font itself resolves and basic glyph lookup works) —
+but `-> == != >=` still renders as literal separate characters, reproduced identically across two separate
+test rounds. Icon rendering success does not prove GSUB ligature substitution is wired up for an app-
+constructed `Font`+`FontFeatures` value — those are different code paths (cmap lookup vs. shaping-time
+substitution), and this result says the latter isn't working through gpui's public API at this version, for
+this font, despite doing the structurally correct thing on our end. This matches the real, still-open Zed
+issues the spec's original text-rendering section cited (`zed-industries/zed#11127`, `#48699`) — this looks
+like gpui's actual current ceiling for this API surface, not something within our control to fix by trying
+harder here.
+
+**Fallback attempted: cosmic-text-shapes/paint_image-blits-atlas — ALSO FAIL, after real debugging, not
+abandoned early.** Built per the spec's own named fallback: `cosmic_text::Buffer` shapes each grid row
+(`Shaping::Advanced`), rasterized via `SwashCache`/`Buffer::draw` into an RGBA bitmap, painted into gpui via
+`Window::paint_image` (verified against the actual pinned gpui 0.2.2 source, not `main`). Three real bugs
+were found and fixed along the way (not given up on): (1) `FontSystem::new()` only does a bare system-font
+scan and silently fell back to a non-ligature font — fixed by reusing this project's own proven
+`font::loader::build_font_system` (resolves the font by file path via `FontLocator`, reports the font's
+actual internal fontdb family name, which can differ from the config string); (2) the fix above needed the
+right `FontConfig.family` value — the bare `Config::default()` used for M0 has a different code-level
+fallback family (`"JetBrainsMono Nerd Font Mono"`) than what's actually configured for real use
+(`MonoLisaCode Nerd Font`), which the font locator couldn't find at all (hard panic, no graceful fallback) —
+fixed by setting the family explicitly; (3) removed a speculative explicit `cosmic_text::FontFeatures`/
+`FeatureTag::enable(calt/liga)` call that this project's own proven, working code
+(`font::shaper::make_attrs`) never uses — that function's own `_font_config: &FontConfig` parameter is
+unused; ligatures in the existing wgpu renderer come from `Shaping::Advanced`'s defaults alone, not explicit
+feature flags. After all three fixes — using the exact proven call shape, correct font, correct family
+resolution — **ligatures still do not render**, reproduced identically.
+
+Researched further per the user's explicit request before attempting a fourth fix: `pop-os/cosmic-term`
+(cosmic-text's own official reference terminal application) has an open, unresolved issue
+(`pop-os/cosmic-term#157`, reported March 2024, JetBrainsMono Nerd Font) reporting the same class of bug —
+"some ligatures render, others don't." Its source (`src/terminal.rs`) was read directly: it builds one
+`BufferLine` per row from `alacritty_terminal`'s `grid().display_iter()` with `Shaping::Advanced` —
+architecturally the same row-based approach built here, not something idiosyncratic to this project's code.
+At this point the working theory was "an ecosystem-wide, currently-unsolved terminal-grid ligature
+limitation" — **this theory was WRONG, overturned by a direct test the user proposed and confirmed:**
+
+**Root cause found: a locally broken/customized MonoLisa font file, not gpui or cosmic-text — and not even
+MonoLisa's format generally.** Swapping only the font family (all other code unchanged — same
+`build_font_system` resolution, same `Shaping::Advanced`) from `MonoLisaCode Nerd Font` to `PragmataPro Mono
+Liga` (confirmed installed on the test machine) fixed ligature rendering — `->`, `!=`, `>=` all rendered as
+correct, single combined glyphs, screenshot-verified. This isolated the problem to the MonoLisa font
+specifically and confirmed the cosmic-text fallback pipeline (row-based `Shaping::Advanced`, `SwashCache::
+draw`, `paint_image`) works correctly. Further investigation (MonoLisa's specimen page, `monolisa.dev/
+specimen/code`) found the actual mechanism: MonoLisa gates its `->`/`==`/`!=`/`>=`-style combinations behind
+OpenType Character Variant tags (`cv01`-`cv09`+ — "Arrows (cv08)", "Equal combinations (cv09)", matching the
+exact glyphs tested), not `calt`/`liga`/stylistic-sets — explaining why the proven `calt`/`liga`-only call
+shape (correct for every other font in this project) never worked for MonoLisa. Explicit `cv01`-`cv09`
+`FontFeatures` were added to `terminal_element.rs` to request them directly.
+
+**Then the user found the actual, final answer:** their installed MonoLisa font was a locally *customized*
+build (via MonoLisa's own customizer tool, which — per its FAQ — can "freeze" a chosen feature set into the
+font file, potentially stripping others) that had ligatures broken as an artifact of that customization —
+not a stock MonoLisa limitation, not a gpui/cosmic-text defect, not even something this project's code could
+have detected or fixed. Installing a fresh, non-customized MonoLisa font file fixed ligatures immediately.
+The vendor FAQ's "weak feature support" framing was a real but ultimately secondary factor — the decisive one
+was a broken local font file. (The `cv01`-`cv09` fix may or may not still be necessary against a fresh
+MonoLisa install — not yet re-isolated — but is harmless to keep: a superset of feature requests, not a
+behavior change for fonts that don't define those tags. The gpui-native path's original MonoLisa failure, and
+the separate, real `cosmic-term#157`/Zed `#11127`/`#48699` issues, were never re-tested against a fresh font
+install — this project's actual blocking question is answered regardless: ligatures work through the chosen
+fallback, with a working font file.)
+
+**Follow-on, separate finding (not a blocker):** `TerminalGridElement`'s `cell_width`/`cell_height` are
+hardcoded constants (`px(9.0)`/`px(18.0)`) tuned loosely for the spike, not derived from the actual font's
+real glyph metrics. With `PragmataPro Mono Liga` (narrower natural glyph width than what those constants
+assume), the cursor quad renders visibly oversized relative to the text. Expected and appropriately deferred
+— real font-metrics-driven cell sizing belongs to M1's "grid at parity" pass, not M0's proof-of-concept.
+
+**Final result: PASS, with the project's real default font.** After installing a fresh, non-customized
+MonoLisaCode Nerd Font, the user re-ran the exact same check (`echo '-> == != >='`) against the current code
+(cosmic-text fallback, `build_font_system` font resolution, explicit `cv01`-`cv09` `FontFeatures`) and
+confirmed: ligatures render correctly. M0's own question — "can this architecture render ligature-correct
+terminal text under gpui at all, with the project's actual configured font" — is answered yes, via the
+fallback. No product decision to defer; this works as shipped in the M0 spike's committed state.
+
+**Leader-key chorded dispatch (Task 5): PASS.** `KeyBinding::new("ctrl-f %", SplitDemo, None)` — a bare,
+non-modifier-chord leader key — worked via gpui's native chord matcher on the first attempt, no fallback to
+a hand-rolled timeout state machine needed.
+
+**Backspace: FAIL, fixed as a targeted addition (not originally in the spec's M0 scope).** Backspace has no
+`key_char` (a control key, not printable text), so the spike's minimal char-forwarding `on_key_down` never
+saw it — user flagged this as blocking basic dogfooding. Fixed via the same action/keybinding pattern
+already proven for the leader-key split (`KeyBinding::new("backspace", Backspace, None)`, sends `0x7f` to
+match what the existing wgpu app's real `key_map::translate_key` sends). Verified fixed by the user.
+
+**Arrow keys / shell history / atuin: not working, confirmed expected and out of scope.** Same category as
+backspace was (control keys with no `key_char`), not given a targeted fix since the spec's own scoping is
+explicit: "Full key-event mapping (control chars, KKP, etc.) is out of scope for the spike." Real work for
+whichever milestone builds out full keyboard parity, reusing PetruTerm's existing, already-correct
+`src/app/input/mod.rs`/`key_map` translation logic rather than reimplementing it against gpui.
+
+**Unplanned but required fix, not in the original spec text:** `term::Pty`/`term::Terminal::new`'s wakeup
+mechanism was hard-coupled to `winit::event_loop::EventLoopProxy<()>`. Constructing ANY `winit::event_loop::
+EventLoop` in the same process as gpui's own macOS Cocoa run loop crashes on startup — even one, even never
+run (winit registers itself as the process-wide `NSApplication` delegate as a side effect of construction
+alone, which conflicts fatally with gpui's separate Cocoa run loop). The spec had deferred this decoupling
+to M2, assuming an unused throwaway `EventLoop` could sidestep it for M0 — that assumption was wrong. Fixed
+by introducing `term::pty::Wakeup = Arc<dyn Fn() + Send + Sync>`, replacing the concrete winit type at the
+`Pty`/`Terminal::new` boundary; the existing `petruterm` binary's `Mux` call sites wrap their real
+`EventLoopProxy<()>` into a `Wakeup` at that boundary, unchanged above it. Reviewed and confirmed
+behaviorally identical to the original for the existing binary (no regression risk).
+
+**Known M0 shortcut, real follow-up needed (user flagged explicitly):** the font family
+(`"MonoLisaCode Nerd Font"`) and the `cv01`-`cv09` OpenType feature list in `terminal_element.rs` are
+hardcoded constants, not read from the user's real config. This spike never loads the user's Lua config
+(`~/.config/petruterm/*.lua`) — it only uses `Config::default()` with the family field overridden inline.
+Font family/features must become real settings (read from the user's actual config, the same way the
+existing wgpu renderer's `FontConfig` already works) before this is anything more than a spike — this is not
+something to leave hardcoded once the chrome migration moves past M0. Tracked here so it isn't lost.
+
 ## Explicitly out of scope / not being built
 
 - No custom hit-testing framework — gpui's layout tree replaces it.

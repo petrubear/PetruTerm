@@ -127,6 +127,15 @@ muda = "0.18"
 # Do NOT track zed-industries/zed main — main had a live text-rendering regression at the time this was pinned.
 gpui = "=0.2.2"
 
+# Image buffer + gpui's RenderImage/Frame types (M0 ligature fallback: cosmic-text
+# rasterizes the terminal grid to an RGBA bitmap, painted via Window::paint_image).
+# Exact-pinned to match what's already resolved transitively via gpui in Cargo.lock.
+image = "=0.25.10"
+
+# SmallVec<[Frame; 1]> for gpui::RenderImage::new — also already resolved
+# transitively via gpui; pinned to match.
+smallvec = "=1.15.2"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.5"
 objc2-app-kit = { version = "0.2", features = ["NSWindow", "NSView", "NSApplication"] }

@@ -88,6 +88,17 @@ use crate::font::CellStyle;
 /// ever increments.
 const MAX_CLOSED_TERMINALS: usize = 100;
 
+/// Wrap a real winit `EventLoopProxy<()>` into `term::pty::Wakeup`, the
+/// event-loop-agnostic closure type `Terminal::new`/`Pty::spawn` accept.
+/// `Mux`'s own public API keeps taking `EventLoopProxy<()>` directly (this
+/// wrapping happens only at the `Terminal::new` boundary) so nothing above
+/// this module needs to change.
+fn eventloop_wakeup(proxy: EventLoopProxy<()>) -> crate::term::Wakeup {
+    Arc::new(move || {
+        let _ = proxy.send_event(());
+    })
+}
+
 /// Per-column fg override for the active input row (I-2 syntax highlight).
 pub struct SyntaxOverlay {
     /// Viewport row (0-based from top) containing the active input line.
@@ -317,7 +328,7 @@ impl Mux {
             rows,
             cell_w,
             cell_h,
-            wakeup_proxy,
+            eventloop_wakeup(wakeup_proxy),
             Arc::clone(&self.wakeup_gate),
             working_directory,
         )?;
@@ -712,7 +723,7 @@ impl Mux {
             rows,
             cell_w,
             cell_h,
-            wakeup,
+            eventloop_wakeup(wakeup),
             Arc::clone(&self.wakeup_gate),
             cwd,
         ) {
@@ -814,7 +825,7 @@ impl Mux {
             rows,
             cell_w,
             cell_h,
-            wakeup_proxy,
+            eventloop_wakeup(wakeup_proxy),
             Arc::clone(&self.wakeup_gate),
             working_directory,
         ) {

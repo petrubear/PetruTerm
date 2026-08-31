@@ -9,11 +9,21 @@ use std::os::fd::RawFd;
 use std::os::unix::process::CommandExt;
 use std::sync::{Arc, OnceLock};
 use std::thread::JoinHandle;
-use winit::event_loop::EventLoopProxy;
 
 use crate::app::pty_schedule::WakeupGate;
 use crate::config::Config;
 use crate::term::osc133::{EraseScanner, Osc133Marker, Osc133Scanner};
+
+/// Wakeup callback invoked whenever new PTY data / a child-exit event is
+/// ready, so the owning UI framework can schedule a redraw. Decoupled from
+/// any concrete event-loop type (e.g. `winit::event_loop::EventLoopProxy`)
+/// so this module has no hard dependency on winit — callers wrap whatever
+/// their real event loop needs into this closure. On macOS, constructing a
+/// `winit::event_loop::EventLoop` has a process-global side effect (it
+/// registers itself as the `NSApplication` delegate) even if never run, so
+/// non-winit UI hosts (e.g. gpui) must not construct one just to get a
+/// wakeup handle — a no-op `Wakeup` is fine for those.
+pub type Wakeup = Arc<dyn Fn() + Send + Sync>;
 
 /// Events emitted by the PTY reader thread to the main thread.
 pub enum PtyEvent {
@@ -45,7 +55,7 @@ pub enum PtyEvent {
 #[derive(Clone)]
 pub struct PtyEventProxy {
     pub tx: Sender<PtyEvent>,
-    pub wakeup: EventLoopProxy<()>,
+    pub wakeup: Wakeup,
     /// Raw PTY master fd used for direct PtyWrite responses (cursor position, etc.).
     pub master_fd: RawFd,
     pub(crate) qos_set: Arc<OnceLock<()>>,
@@ -92,7 +102,7 @@ impl EventListener for PtyEventProxy {
             Err(_) => log::debug!("pty_backpressure_hit: channel full, event dropped"),
         }
         if self.wakeup_gate.signal() {
-            let _ = self.wakeup.send_event(());
+            (self.wakeup)();
         }
     }
 }
@@ -131,7 +141,7 @@ impl Pty {
         rows: u16,
         cell_width: u16,
         cell_height: u16,
-        wakeup: EventLoopProxy<()>,
+        wakeup: Wakeup,
         wakeup_gate: Arc<WakeupGate>,
         working_directory: Option<std::path::PathBuf>,
         term_config: alacritty_terminal::term::Config,
@@ -219,7 +229,7 @@ impl Pty {
                 drop(child); // explicit: ensures child is cleaned up
                 let _ = tx_clone2.try_send(PtyEvent::Exit(code));
                 if wakeup_gate_clone2.signal() {
-                    let _ = wakeup_clone2.send_event(());
+                    wakeup_clone2();
                 }
             })
             .context("failed to spawn pty child monitor")?;
@@ -439,7 +449,7 @@ fn reader_loop(
     master_fd: RawFd,
     term: Arc<FairMutex<Term<PtyEventProxy>>>,
     tx: Sender<PtyEvent>,
-    wakeup: EventLoopProxy<()>,
+    wakeup: Wakeup,
     wakeup_gate: Arc<WakeupGate>,
 ) {
     let mut processor: VteProcessor<StdSyncHandler> = VteProcessor::new();
@@ -477,7 +487,7 @@ fn reader_loop(
         // Notify main thread that new data is available.
         let _ = tx.try_send(PtyEvent::DataReady(n));
         if wakeup_gate.signal() {
-            let _ = wakeup.send_event(());
+            wakeup();
         }
     }
     log::debug!("PTY reader thread exiting");

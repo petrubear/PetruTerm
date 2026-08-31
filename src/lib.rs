@@ -5,6 +5,7 @@
 pub mod app;
 pub mod config;
 pub mod font;
+pub mod gpui_shell;
 pub mod i18n;
 pub mod llm;
 pub mod platform;

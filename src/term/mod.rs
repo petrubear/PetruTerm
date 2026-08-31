@@ -10,7 +10,7 @@ pub use alacritty_terminal::vte::ansi::CursorShape;
 pub use blocks::BlockManager;
 pub use input_shadow::InputShadow;
 pub use osc133::Osc133Marker;
-pub use pty::{Pty, PtyEvent, PtyEventProxy};
+pub use pty::{Pty, PtyEvent, PtyEventProxy, Wakeup};
 
 use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::index::{Column, Direction, Line, Point};
@@ -23,7 +23,6 @@ use std::sync::Arc;
 
 use crate::app::pty_schedule::WakeupGate;
 use crate::config::Config;
-use winit::event_loop::EventLoopProxy;
 
 /// Cursor rendering info extracted from the terminal for one frame.
 #[derive(Debug, Clone, Copy)]
@@ -85,7 +84,7 @@ impl Terminal {
         rows: u16,
         cell_width: u16,
         cell_height: u16,
-        wakeup: EventLoopProxy<()>,
+        wakeup: Wakeup,
         wakeup_gate: Arc<WakeupGate>,
         working_directory: Option<std::path::PathBuf>,
     ) -> Result<Self> {
