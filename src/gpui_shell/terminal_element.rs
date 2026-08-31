@@ -41,6 +41,27 @@ pub fn set_font_config(font_config: FontConfig) {
         .expect("set_font_config called more than once");
 }
 
+/// Rebuild `FONT_SYSTEM`'s cached font/family for a new config, on hot-reload.
+/// Unlike `set_font_config` (set-once, for startup), this may be called
+/// repeatedly. Also clears `LAST_IMAGE`'s cache — its entries are keyed on
+/// content hash, not font identity, so a stale cache entry from the old font
+/// would otherwise be served until content next changes.
+pub fn reload_font_config(font_config: FontConfig) {
+    let (new_font_system, new_family, _face_id, _path, _face_index) =
+        match crate::font::loader::build_font_system(&font_config) {
+            Ok(v) => v,
+            Err(e) => {
+                log::error!("gpui-shell: failed to reload font on config change: {e:#}");
+                return;
+            }
+        };
+    FONT_SYSTEM.with_borrow_mut(|(font_system, actual_family)| {
+        *font_system = new_font_system;
+        *actual_family = new_family;
+    });
+    LAST_IMAGE.with_borrow_mut(|cache| cache.clear());
+}
+
 // `FontSystem::new()` only does a bare system-font scan — it will NOT find
 // MonoLisaCode Nerd Font unless that exact family is fully OS-registered,
 // and will silently fall back to some default monospace with no ligature

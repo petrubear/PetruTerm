@@ -7,7 +7,8 @@
 pub mod terminal_element;
 
 use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use std::time::Duration;
 
@@ -70,6 +71,47 @@ pub(crate) fn spawn_terminal(
     Ok((Rc::new(terminal), wakeup_gate))
 }
 
+/// Shared between the config-watcher thread and `GpuiShellRoot`'s poll/wake
+/// loop: `Some(config)` once a reload has happened and hasn't been applied
+/// yet. `Mutex` because construction and consumption happen on different
+/// threads; contention is negligible (checked at most ~30Hz, written only on
+/// an actual file change).
+static PENDING_CONFIG_RELOAD: Mutex<Option<Config>> = Mutex::new(None);
+static CONFIG_CHANGED: AtomicBool = AtomicBool::new(false);
+
+/// Spawn a dedicated thread running `ConfigWatcher`'s blocking watch loop
+/// (the same notify-based watcher the wgpu `petruterm` binary uses), and
+/// hand reloaded configs to `GpuiShellRoot`'s poll loop via
+/// `PENDING_CONFIG_RELOAD`/`CONFIG_CHANGED` — gpui has no cross-thread wake
+/// bridge in this version (see `spawn_terminal`'s doc comment), so pushing
+/// data directly into gpui from this thread isn't an option.
+fn spawn_config_watcher() {
+    std::thread::spawn(|| {
+        let watcher = match crate::config::watcher::ConfigWatcher::new(&crate::config::config_dir())
+        {
+            Ok(w) => w,
+            Err(e) => {
+                log::error!("gpui-shell: failed to start config watcher: {e:#}");
+                return;
+            }
+        };
+        loop {
+            if watcher
+                .wait_timeout(std::time::Duration::from_secs(3600))
+                .is_some()
+            {
+                match crate::config::reload() {
+                    Ok((config, _lua)) => {
+                        *PENDING_CONFIG_RELOAD.lock().unwrap() = Some(config);
+                        CONFIG_CHANGED.store(true, Ordering::Release);
+                    }
+                    Err(e) => log::error!("gpui-shell: config reload failed: {e:#}"),
+                }
+            }
+        }
+    });
+}
+
 /// The `Render` root view for the gpui-petruterm spike window.
 pub struct GpuiShellRoot {
     pub terminals: Vec<Rc<Terminal>>,
@@ -85,6 +127,8 @@ pub struct GpuiShellRoot {
 
 impl GpuiShellRoot {
     pub fn new(cx: &mut Context<Self>, config: Config) -> Self {
+        spawn_config_watcher();
+
         let (terminal, gate) =
             spawn_terminal(80, 24, 9, 18, &config).expect("spawn initial terminal");
 
@@ -106,6 +150,27 @@ impl GpuiShellRoot {
                 cx.background_executor()
                     .timer(Duration::from_millis(33))
                     .await;
+
+                if CONFIG_CHANGED.swap(false, Ordering::AcqRel) {
+                    if let Some(new_config) = PENDING_CONFIG_RELOAD.lock().unwrap().take() {
+                        let font_config = new_config.font.clone();
+                        terminal_element::reload_font_config(font_config);
+                        // Apply the new config AND force a repaint unconditionally
+                        // — a config change must show up even if no terminal has
+                        // pending PTY output at this exact tick (the gate check
+                        // below only fires on PTY activity, not config changes).
+                        let applied = this
+                            .update(cx, |this: &mut Self, cx| {
+                                this.config = new_config;
+                                cx.notify();
+                            })
+                            .is_ok();
+                        if !applied {
+                            break; // window/entity gone
+                        }
+                    }
+                }
+
                 let alive = this
                     .update(cx, |this: &mut Self, cx| {
                         if this.wakeup_gates.iter().any(|g| g.take_pending()) {
