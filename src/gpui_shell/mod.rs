@@ -12,8 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use gpui::{
-    actions, div, prelude::*, px, App, Context, FocusHandle, Focusable, KeyDownEvent, Render,
-    Window,
+    actions, div, prelude::*, App, Context, FocusHandle, Focusable, KeyDownEvent, Render, Window,
 };
 
 use crate::app::pty_schedule::WakeupGate;
@@ -167,10 +166,13 @@ impl Render for GpuiShellRoot {
             .on_action(cx.listener(Self::on_backspace))
             .flex()
             .size_full()
-            .children(self.terminals.iter().map(|t| TerminalGridElement {
-                terminal: t.clone(),
-                cell_width: px(9.0),
-                cell_height: px(18.0),
+            .children(self.terminals.iter().map(|t| {
+                let (cell_width, cell_height) = terminal_element::measured_cell_size();
+                TerminalGridElement {
+                    terminal: t.clone(),
+                    cell_width,
+                    cell_height,
+                }
             }))
     }
 }

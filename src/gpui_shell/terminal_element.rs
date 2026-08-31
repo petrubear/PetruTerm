@@ -20,7 +20,7 @@ use cosmic_text::{
     Shaping, SwashCache, Wrap,
 };
 use gpui::{
-    fill, point, size, App, Bounds, Corners, Element, ElementId, GlobalElementId,
+    fill, point, px, size, App, Bounds, Corners, Element, ElementId, GlobalElementId,
     InspectorElementId, IntoElement, LayoutId, Pixels, RenderImage, Style, Window,
 };
 use image::{Frame, RgbaImage};
@@ -90,6 +90,39 @@ struct CachedFrame {
     /// (cell size or window scale factor changing bitmap resolution).
     content_hash: u64,
     image: Arc<RenderImage>,
+}
+
+/// Real cell width/height for the configured font at `FONT_SIZE`, measured by
+/// shaping a sample string and reading its advance width — the same
+/// technique `font::shaper::TextShaper::measure_cell()`'s fallback branch
+/// uses, ported here rather than importing that (wgpu-atlas-coupled) type.
+/// Computed fresh each call — cheap (one shape of a short string), and
+/// Task 4 needs to be able to recompute this when the font changes on
+/// config reload.
+pub fn measured_cell_size() -> (Pixels, Pixels) {
+    FONT_SYSTEM.with_borrow_mut(|(font_system, actual_family)| {
+        let metrics = Metrics::new(FONT_SIZE, FONT_SIZE * 1.2);
+        let mut buffer = Buffer::new(font_system, metrics);
+        let mut buffer = buffer.borrow_with(font_system);
+        buffer.set_size(Some(1000.0), Some(1000.0));
+
+        let attrs = Attrs::new().family(Family::Name(actual_family.as_str()));
+        // 16 `M`s, matching TextShaper::measure_cell's own sample — wide
+        // enough for a stable average, short enough to stay off any line-wrap
+        // boundary at this buffer width.
+        buffer.set_text("MMMMMMMMMMMMMMMM", &attrs, Shaping::Advanced, None);
+        buffer.shape_until_scroll(true);
+
+        let run_width = buffer
+            .layout_runs()
+            .next()
+            .map(|run| run.line_w)
+            .unwrap_or(FONT_SIZE * 0.6 * 16.0);
+        let cell_width = (run_width / 16.0).max(1.0);
+        let cell_height = metrics.line_height.max(1.0);
+
+        (px(cell_width), px(cell_height))
+    })
 }
 
 const FONT_SIZE: f32 = 14.0;
