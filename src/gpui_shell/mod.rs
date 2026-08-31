@@ -12,8 +12,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use gpui::{
-    App, Context, FocusHandle, Focusable, KeyDownEvent, Render, Window, actions, div, prelude::*,
-    px,
+    actions, div, prelude::*, px, App, Context, FocusHandle, Focusable, KeyDownEvent, Render,
+    Window,
 };
 
 use crate::app::pty_schedule::WakeupGate;
@@ -48,11 +48,25 @@ actions!(gpui_shell_spike, [SplitDemo, Backspace]);
 /// trigger for PTY data is a separate concern for a later task (M0's
 /// repaint-reliability check); a no-op wakeup is correct and sufficient
 /// here.
-pub fn spawn_terminal(cols: u16, rows: u16, cell_w: u16, cell_h: u16) -> anyhow::Result<Rc<Terminal>> {
+pub fn spawn_terminal(
+    cols: u16,
+    rows: u16,
+    cell_w: u16,
+    cell_h: u16,
+) -> anyhow::Result<Rc<Terminal>> {
     let config = Config::default();
     let wakeup: crate::term::Wakeup = Arc::new(|| {});
     let wakeup_gate = Arc::new(WakeupGate::new());
-    let terminal = Terminal::new(&config, cols, rows, cell_w, cell_h, wakeup, wakeup_gate, None)?;
+    let terminal = Terminal::new(
+        &config,
+        cols,
+        rows,
+        cell_w,
+        cell_h,
+        wakeup,
+        wakeup_gate,
+        None,
+    )?;
     Ok(Rc::new(terminal))
 }
 
@@ -82,7 +96,9 @@ impl GpuiShellRoot {
         // ~30Hz poll is the spec-sanctioned, deliberately simple M0 fix.
         cx.spawn(async move |this, cx| {
             loop {
-                cx.background_executor().timer(Duration::from_millis(33)).await;
+                cx.background_executor()
+                    .timer(Duration::from_millis(33))
+                    .await;
                 if this.update(cx, |_, cx| cx.notify()).is_err() {
                     break; // window/entity gone
                 }

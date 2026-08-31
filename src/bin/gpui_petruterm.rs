@@ -1,4 +1,6 @@
-use gpui::{App, Application, Bounds, KeyBinding, WindowBounds, WindowOptions, prelude::*, px, size};
+use gpui::{
+    prelude::*, px, size, App, Application, Bounds, KeyBinding, WindowBounds, WindowOptions,
+};
 use petruterm::gpui_shell::{Backspace, GpuiShellRoot, SplitDemo};
 
 fn main() {
