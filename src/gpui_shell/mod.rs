@@ -4,6 +4,7 @@
 // `TerminalGridElement` (see `terminal_element.rs`). Keyboard input is
 // forwarded from gpui's key-down events straight to the PTY.
 
+mod key_map;
 pub mod terminal_element;
 
 use std::rc::Rc;
@@ -195,13 +196,15 @@ impl GpuiShellRoot {
     }
 
     fn on_key_down(&mut self, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
-        // M0 minimal: forward printable characters only. Full key-event mapping
-        // (control chars, KKP, etc.) is out of scope for the spike.
-        if let Some(ch) = &event.keystroke.key_char {
-            if let Some(terminal) = self.terminals.get(self.active_terminal) {
-                terminal.write_input(ch.as_bytes());
-                cx.notify();
-            }
+        let Some(terminal) = self.terminals.get(self.active_terminal) else {
+            return;
+        };
+        let mode = terminal.with_term(|term| *term.mode());
+        if let Some(bytes) =
+            key_map::translate_key(&event.keystroke, mode, self.config.keyboard.option_as_meta)
+        {
+            terminal.write_input(&bytes);
+            cx.notify();
         }
     }
 
