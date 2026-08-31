@@ -1,8 +1,10 @@
-// gpui chrome migration (M0 spike): live terminal rendering root.
+// gpui chrome migration (M0 foundation spike + M1a foundation fixes): live
+// terminal rendering root.
 //
 // Owns one or more `term::Terminal` instances and renders them through
 // `TerminalGridElement` (see `terminal_element.rs`). Keyboard input is
-// forwarded from gpui's key-down events straight to the PTY.
+// forwarded from gpui's key-down events straight to the PTY via `key_map`'s
+// full key-event mapping.
 
 mod key_map;
 pub mod terminal_element;
@@ -22,17 +24,11 @@ use crate::config::Config;
 use crate::term::Terminal;
 use terminal_element::TerminalGridElement;
 
-// M0 spike: proves leader-key chorded dispatch (gpui's native keymap matcher)
-// reaches real business logic by spawning a second live terminal. The
-// keybinding itself is registered in `main` (see `src/bin/gpui_petruterm.rs`),
-// per gpui's keymap-registration convention.
-//
-// `Backspace` is a targeted fix for the one control key that blocked basic
-// dogfooding (it has no `key_char`, so `on_key_down`'s minimal char-forwarding
-// never sees it) — not a start on full key-event mapping, which stays out of
-// scope for the spike (see `src/app/input/mod.rs`'s real `key_map` module for
-// what that actually requires).
-actions!(gpui_shell_spike, [SplitDemo, Backspace]);
+// Proves gpui's native keymap dispatch (leader-key chorded matching) reaches
+// real business logic by spawning a second live terminal. The keybinding
+// itself is registered in `main` (see `src/bin/gpui_petruterm.rs`), per
+// gpui's keymap-registration convention.
+actions!(gpui_shell_spike, [SplitDemo]);
 
 /// Spawn one real terminal (shell + PTY + alacritty grid).
 ///
@@ -50,13 +46,20 @@ actions!(gpui_shell_spike, [SplitDemo, Backspace]);
 /// calls `cx.notify()` when the PTY actually produced output (M1a), rather
 /// than gpui's own cross-thread wake (no `spawn_blocking`-style bridge
 /// exists in gpui 0.2.2's `BackgroundExecutor` to drive that from here).
+///
+/// Cell pixel size for the PTY winsize comes from `terminal_element::
+/// measured_cell_size()` — the same real, font-metrics-driven value the
+/// render path uses (previously hardcoded `9, 18` here, disagreeing with
+/// whatever the render path actually painted; both now read one cached
+/// source of truth, kept in sync across config reloads).
 pub(crate) fn spawn_terminal(
     cols: u16,
     rows: u16,
-    cell_w: u16,
-    cell_h: u16,
     config: &Config,
 ) -> anyhow::Result<(Rc<Terminal>, Arc<WakeupGate>)> {
+    let (cell_width, cell_height) = terminal_element::measured_cell_size();
+    let cell_w = f32::from(cell_width).round().max(1.0) as u16;
+    let cell_h = f32::from(cell_height).round().max(1.0) as u16;
     let wakeup: crate::term::Wakeup = Arc::new(|| {});
     let wakeup_gate = Arc::new(WakeupGate::new());
     let terminal = Terminal::new(
@@ -86,7 +89,14 @@ static CONFIG_CHANGED: AtomicBool = AtomicBool::new(false);
 /// `PENDING_CONFIG_RELOAD`/`CONFIG_CHANGED` — gpui has no cross-thread wake
 /// bridge in this version (see `spawn_terminal`'s doc comment), so pushing
 /// data directly into gpui from this thread isn't an option.
-fn spawn_config_watcher() {
+///
+/// Call exactly once, at startup (`main()`, alongside `terminal_element::
+/// set_font_config`) — not from `GpuiShellRoot::new`. `PENDING_CONFIG_RELOAD`/
+/// `CONFIG_CHANGED` are process-global statics; a second call (e.g. one per
+/// window, if this app ever opens more than one) would spawn a second
+/// watcher thread racing the first over the same slot, with no guarantee
+/// either window's poll loop sees every update.
+pub fn spawn_config_watcher() {
     std::thread::spawn(|| {
         let watcher = match crate::config::watcher::ConfigWatcher::new(&crate::config::config_dir())
         {
@@ -128,10 +138,7 @@ pub struct GpuiShellRoot {
 
 impl GpuiShellRoot {
     pub fn new(cx: &mut Context<Self>, config: Config) -> Self {
-        spawn_config_watcher();
-
-        let (terminal, gate) =
-            spawn_terminal(80, 24, 9, 18, &config).expect("spawn initial terminal");
+        let (terminal, gate) = spawn_terminal(80, 24, &config).expect("spawn initial terminal");
 
         // M0 repaint-reliability stand-in (per the migration spec): PTY output
         // arrives on a background reader thread, decoupled from any gpui
@@ -155,13 +162,19 @@ impl GpuiShellRoot {
                 if CONFIG_CHANGED.swap(false, Ordering::AcqRel) {
                     if let Some(new_config) = PENDING_CONFIG_RELOAD.lock().unwrap().take() {
                         let font_config = new_config.font.clone();
-                        terminal_element::reload_font_config(font_config);
                         // Apply the new config AND force a repaint unconditionally
                         // — a config change must show up even if no terminal has
                         // pending PTY output at this exact tick (the gate check
                         // below only fires on PTY activity, not config changes).
+                        // reload_font_config needs `&mut App` (to drop the
+                        // outgoing font's cached frames from the GPU sprite
+                        // atlas, not just clear the Rust-side handles) — only
+                        // available inside this closure via `cx`'s `DerefMut<
+                        // Target = App>`, so the call lives here rather than
+                        // before `this.update`.
                         let applied = this
                             .update(cx, |this: &mut Self, cx| {
+                                terminal_element::reload_font_config(font_config, cx);
                                 this.config = new_config;
                                 cx.notify();
                             })
@@ -213,7 +226,7 @@ impl GpuiShellRoot {
     /// spawning a second live shell terminal side-by-side. Routes input to
     /// the newly spawned terminal so a human can verify it independently.
     fn on_split_demo(&mut self, _: &SplitDemo, _window: &mut Window, cx: &mut Context<Self>) {
-        match spawn_terminal(80, 24, 9, 18, &self.config) {
+        match spawn_terminal(80, 24, &self.config) {
             Ok((terminal, gate)) => {
                 self.terminals.push(terminal);
                 self.wakeup_gates.push(gate);
@@ -221,15 +234,6 @@ impl GpuiShellRoot {
                 cx.notify();
             }
             Err(e) => log::error!("gpui-shell spike: failed to spawn split terminal: {e:#}"),
-        }
-    }
-
-    /// Fired by the `backspace` binding — sends DEL (0x7f), matching what the
-    /// existing wgpu app's real key_map::translate_key sends for Backspace.
-    fn on_backspace(&mut self, _: &Backspace, _window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(terminal) = self.terminals.get(self.active_terminal) {
-            terminal.write_input(&[0x7f]);
-            cx.notify();
         }
     }
 }
@@ -247,7 +251,6 @@ impl Render for GpuiShellRoot {
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::on_key_down))
             .on_action(cx.listener(Self::on_split_demo))
-            .on_action(cx.listener(Self::on_backspace))
             .flex()
             .size_full()
             .children(self.terminals.iter().map(|t| {
