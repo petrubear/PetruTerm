@@ -43,17 +43,18 @@ actions!(gpui_shell_spike, [SplitDemo, Backspace]);
 /// fatally (a winit `EventLoop` half-installs a delegate it never actually
 /// runs, and AppKit ends up routing an event through it, which panics: "a
 /// delegate was not configured on the application"). No winit APIs must be
-/// called anywhere in this module. Wiring an actual gpui-side repaint
-/// trigger for PTY data is a separate concern for a later task (M0's
-/// repaint-reliability check); a no-op wakeup is correct and sufficient
-/// here.
-pub fn spawn_terminal(
+/// called anywhere in this module. Returns the terminal's `WakeupGate`
+/// alongside it: `GpuiShellRoot`'s poll loop checks it each tick and only
+/// calls `cx.notify()` when the PTY actually produced output (M1a), rather
+/// than gpui's own cross-thread wake (no `spawn_blocking`-style bridge
+/// exists in gpui 0.2.2's `BackgroundExecutor` to drive that from here).
+pub(crate) fn spawn_terminal(
     cols: u16,
     rows: u16,
     cell_w: u16,
     cell_h: u16,
     config: &Config,
-) -> anyhow::Result<Rc<Terminal>> {
+) -> anyhow::Result<(Rc<Terminal>, Arc<WakeupGate>)> {
     let wakeup: crate::term::Wakeup = Arc::new(|| {});
     let wakeup_gate = Arc::new(WakeupGate::new());
     let terminal = Terminal::new(
@@ -63,10 +64,10 @@ pub fn spawn_terminal(
         cell_w,
         cell_h,
         wakeup,
-        wakeup_gate,
+        Arc::clone(&wakeup_gate),
         None,
     )?;
-    Ok(Rc::new(terminal))
+    Ok((Rc::new(terminal), wakeup_gate))
 }
 
 /// The `Render` root view for the gpui-petruterm spike window.
@@ -79,11 +80,13 @@ pub struct GpuiShellRoot {
     /// most-recently-spawned terminal.
     active_terminal: usize,
     config: Config,
+    wakeup_gates: Vec<Arc<WakeupGate>>,
 }
 
 impl GpuiShellRoot {
     pub fn new(cx: &mut Context<Self>, config: Config) -> Self {
-        let terminal = spawn_terminal(80, 24, 9, 18, &config).expect("spawn initial terminal");
+        let (terminal, gate) =
+            spawn_terminal(80, 24, 9, 18, &config).expect("spawn initial terminal");
 
         // M0 repaint-reliability stand-in (per the migration spec): PTY output
         // arrives on a background reader thread, decoupled from any gpui
@@ -91,15 +94,26 @@ impl GpuiShellRoot {
         // nothing repaints the terminal grid until an unrelated event (e.g.
         // the next keystroke) incidentally triggers one, reproducing the
         // exact `gotcha_lost_pty_echo_wakeup`/Zed-vi-mode class of bug this
-        // spike exists to catch. A real event-driven wakeup (PTY output
-        // directly notifying gpui, no polling) is real work for M1; this
-        // ~30Hz poll is the spec-sanctioned, deliberately simple M0 fix.
+        // spike exists to catch. M0 called `cx.notify()` unconditionally on
+        // every tick (measured ~21-24% idle CPU); M1a gates that on each
+        // terminal's `WakeupGate` so a tick with no PTY activity since the
+        // last check is a no-op — still up to 33ms repaint latency, but no
+        // wasted relayout/repaint when nothing happened. gpui 0.2.2 has no
+        // `spawn_blocking`-style bridge from `BackgroundExecutor` to drive a
+        // true cross-thread wake instead (see `spawn_terminal`'s doc comment).
         cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor()
                     .timer(Duration::from_millis(33))
                     .await;
-                if this.update(cx, |_, cx| cx.notify()).is_err() {
+                let alive = this
+                    .update(cx, |this: &mut Self, cx| {
+                        if this.wakeup_gates.iter().any(|g| g.take_pending()) {
+                            cx.notify();
+                        }
+                    })
+                    .is_ok();
+                if !alive {
                     break; // window/entity gone
                 }
             }
@@ -111,6 +125,7 @@ impl GpuiShellRoot {
             focus_handle: cx.focus_handle(),
             active_terminal: 0,
             config,
+            wakeup_gates: vec![gate],
         }
     }
 
@@ -131,8 +146,9 @@ impl GpuiShellRoot {
     /// the newly spawned terminal so a human can verify it independently.
     fn on_split_demo(&mut self, _: &SplitDemo, _window: &mut Window, cx: &mut Context<Self>) {
         match spawn_terminal(80, 24, 9, 18, &self.config) {
-            Ok(terminal) => {
+            Ok((terminal, gate)) => {
                 self.terminals.push(terminal);
+                self.wakeup_gates.push(gate);
                 self.active_terminal = self.terminals.len() - 1;
                 cx.notify();
             }
