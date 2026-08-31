@@ -217,12 +217,15 @@ M1 as originally scoped (cursor, selection, scrollback, ligatures, emoji, LCD su
 plus the M0-flagged follow-ups: real settings, event-driven repaint, real cell metrics) is broad enough to
 decompose rather than plan as one piece, per the user's explicit choice. Order, by dependency:
 
-1. **M1a — Foundation fixes** (designed below): real settings wiring, event-driven repaint, real
-   font-metrics-driven cell sizing. Nothing else can be built *correctly* until these land — cursor/selection
-   positioning depends on real cell metrics, and the wrong font makes everything downstream moot.
-2. **M1b — Grid parity**: cursor, selection, scrollback. The core "does this feel like the same terminal"
-   milestone, built on M1a's correct metrics. Not yet designed — brainstorm this once M1a is implemented and
-   verified.
+1. **M1a — Foundation fixes** (designed below, **COMPLETE**): real settings wiring, event-driven repaint, real
+   font-metrics-driven cell sizing, plus full key-event mapping (an unplanned addition, discovered mid-work).
+   Nothing else could be built *correctly* until these landed — cursor/selection positioning depends on real
+   cell metrics, and the wrong font makes everything downstream moot.
+2. **M1b — Grid parity** (designed below): ANSI colors, cursor shapes/blink, selection + copy + mouse-report
+   passthrough, scrollback + visual scrollbar. The core "does this feel like the same terminal" milestone,
+   built on M1a's correct metrics. Colors were folded in after M0/M1a work revealed the gpui grid renders
+   everything in one fixed foreground/background — a bigger fidelity gap than anything the milestone
+   originally named, and architecturally the same code path selection-highlight needs anyway.
 3. **M1c — Visual polish**: emoji, LCD subpixel AA. Lowest risk, least foundational, last. Not yet designed.
 
 ### M1a — Foundation Fixes: Design
@@ -273,6 +276,89 @@ smart-poll fallback's "only notify when `WakeupGate` has something pending" chec
 independent of gpui/rendering. Standard gates apply: `scripts/ci-local.sh` (clippy, fmt, `cargo test --lib`,
 audit) is the real project gate — not the narrower `cargo build`/`cargo test` substitute that let two real
 findings slip through M0 until its final whole-branch review caught them.
+
+### M1b — Grid Parity: Design
+
+M1a's foundation work (real settings, real cell metrics, event-driven repaint, config hot-reload, full
+key-event mapping) is complete and merged into this branch. M1b builds the actual "does this feel like the
+same terminal" surface on top of it: ANSI colors, cursor shapes, selection, scrollback, and their input
+handling. All four pieces share one architectural decision and reuse proven logic already in the codebase —
+this is substantially a porting/wiring job, not new terminal-emulation logic.
+
+**Mouse-handling architecture.** Each `TerminalGridElement` owns its own mouse handling — inside `paint()`
+(which already has `bounds: Bounds<Pixels>` and the real cell metrics), register gpui's
+`window.on_mouse_event::<MouseDownEvent/MouseMoveEvent/MouseUpEvent/ScrollWheelEvent>`, scoped to that
+element's own bounds. Pixel-to-cell math reuses the same `bounds.origin`/cell-size arithmetic `paint()`
+already does for cursor positioning. This mirrors the element's existing self-contained design (it already
+owns cursor/text painting math scoped to its own bounds) and avoids the alternative — the parent `div`
+owning all mouse handling — which would need extra plumbing to track each child element's bounds across
+frames just for hit-testing, since gpui's flex layout doesn't expose child bounds until paint completes. The
+one thing that must reach back to `GpuiShellRoot` is click-to-focus when there are split panes: a small
+`on_focus` callback passed into each `TerminalGridElement` at construction time (in `render()`'s
+`.children(...)` closure, which has `cx.listener` access), invoked on mouse-down.
+
+**ANSI colors.** The gpui grid currently renders every cell in one fixed foreground
+(`TEXT_COLOR = CosmicColor::rgb(0xf8, 0xf8, 0xf2)`) on one fixed background — `cell.fg`/`cell.bg` are never
+read. Fix: extend `paint()`'s row-building loop (which currently only pushes `cell.c` into `grid_rows`) to
+also collect `(AnsiColor, AnsiColor, CellStyle { bold, italic })` per cell, ported directly from
+`src/app/mux/mod.rs`'s existing row-building logic — including its inverse-video swap
+(`cell.flags.contains(Flags::INVERSE)` swaps fg/bg). Resolve colors via `term::color::resolve_color()`
+(`src/term/color.rs`) — already a pure function taking `AnsiColor` + `ColorScheme`, no wgpu coupling, reused
+as-is. Per-cell backgrounds are baked into the rasterized bitmap as filled rects before glyphs are drawn.
+Each row is split into per-color/per-style spans before cosmic-text shaping (one `Attrs` per span instead of
+one per row) — ligatures still shape correctly within a span; a color boundary landing mid-ligature is the
+same accepted edge case the wgpu renderer already lives with. `CachedFrame`'s `content_hash` extends to
+cover the color/style data (not just character text) so the frame cache still invalidates correctly when
+only colors change (e.g. a re-colored but textually-identical prompt redraw).
+
+**Selection highlight.** Reuses the exact same mechanism as colors, not a separate overlay: selected cells
+get their fg/bg swapped before resolution, exactly like `src/app/mux/mod.rs`'s `cell_in_selection()` check
+(ported as-is). `content_hash` also covers the current selection range.
+
+**Cursor shapes + blink.** `Terminal::cursor_info()` already returns real shape (`Block`/`HollowBlock`/
+`Underline`/`Beam`/`Hidden`) — port the pixel-geometry table from `src/app/renderer/terminal.rs`'s
+`build_cursor_overlay` (Block/HollowBlock: full cell; Underline: bottom 2px; Beam: left 2px). `HollowBlock`
+(vs `Block`) is shown when a pane isn't the split-focus target — reuses the same `is_active`-style signal
+`TerminalGridElement` needs for click-to-focus, alongside the `on_focus` callback. Blink piggybacks on the
+existing 33ms poll loop in `GpuiShellRoot::new`: a toggle every 530ms (matching
+`update_cursor_blink`'s existing threshold in the wgpu app) calls `cx.notify()`, reset to visible-on by any
+keystroke — no new timer infrastructure.
+
+**Selection input, copy, mouse-report passthrough.** Click-drag selection ports `src/app/input/mod.rs`'s
+`register_click` algorithm as-is (500ms same-cell window, click-count capped at 3, mapping 1→`SelectionType::
+Simple`, 2→`Semantic`, 3→`Lines`). Mouse-down calls `terminal.start_selection`, mouse-move while the button
+is held calls `terminal.update_selection`, mouse-up finalizes (both already exist on `Terminal`). Copy uses
+gpui's own `cx.write_to_clipboard(ClipboardItem::new_string(terminal.selection_text()))` — gpui-native,
+not the wgpu app's `arboard` dependency, per this migration's standing preference for gpui's own primitives
+over hand-rolled/external equivalents where they cover the need. Before treating a click as local selection,
+check `terminal.mouse_mode_flags()` (already exists) — if the terminal has mouse reporting enabled (vim,
+tmux), send the escape sequence instead, porting `send_mouse_report`'s SGR (`\x1b[<{btn};{col};{row}M/m`) and
+legacy X10 (`\x1b[M{btn+32}{col+32}{row+32}`, press-only) formats as-is.
+
+**Scrollback + scrollbar.** Scroll wheel: gpui's `ScrollWheelEvent` delta converts to a line delta and calls
+`terminal.scroll_display()` (already exists); unchanged behavior elsewhere (new PTY output or a keypress
+still calls `scroll_to_bottom()`). Visual scrollbar: ports `src/app/renderer/overlay.rs`'s
+`build_scroll_bar_instances` geometry as-is — a 6px-wide thumb on the right edge, sized
+`(screen_rows / total_lines) * screen_rows` and positioned at `(1 - display_offset/history_size) * slack`
+(display_offset=0 → thumb at bottom), drawn as a quad in `paint()` using `scrollback_info()` (already
+exists). Drag-to-scroll on the thumb is new interaction handled by the same `TerminalGridElement` mouse
+code: mouse-down inside the scrollbar's 6px strip starts a drag instead of a text selection; mouse-move
+while dragging maps the new Y position back to a `display_offset` and calls `scroll_display`.
+
+**File organization.** `terminal_element.rs` is already 457 lines (over this project's 400-line module
+convention) before this milestone, and M1b adds substantially more — the split M1a's own whole-branch review
+flagged as "plan before, not during" is due now. Split along the new responsibilities this milestone
+introduces: font/metrics state (already fairly self-contained post-M1a) into its own file; the
+color-resolution + cosmic-text rasterization logic (the single biggest addition) into its own file; the new
+mouse-event handling (selection drag, click-count, mouse-report, scrollbar drag) into its own file — leaving
+`terminal_element.rs` as orchestration, gluing metrics + rasterization + cursor + scrollbar painting
+together via the `Element` impl. Exact file boundaries and task decomposition are a `writing-plans` decision.
+
+**Testing.** Same discipline as M0/M1a: dogfood for anything GPU/rendering/mouse-pixel-math — not
+unit-tested. Pure logic worth unit tests: click-count → `SelectionType` mapping, mouse-report
+escape-sequence byte formatting (SGR/legacy X10), scrollbar thumb geometry (`thumb_rows`/`thumb_start` from
+screen_rows/history_size/display_offset), and the selection/inverse-video fg/bg-swap logic.
+`scripts/ci-local.sh` remains the real gate.
 
 ## Explicitly out of scope / not being built
 
