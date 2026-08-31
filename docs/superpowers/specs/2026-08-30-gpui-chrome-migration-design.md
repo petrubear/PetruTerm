@@ -211,6 +211,69 @@ Font family/features must become real settings (read from the user's actual conf
 existing wgpu renderer's `FontConfig` already works) before this is anything more than a spike — this is not
 something to leave hardcoded once the chrome migration moves past M0. Tracked here so it isn't lost.
 
+## M1 — Grid at Parity (decomposed into ordered slices)
+
+M1 as originally scoped (cursor, selection, scrollback, ligatures, emoji, LCD subpixel AA matching `master`,
+plus the M0-flagged follow-ups: real settings, event-driven repaint, real cell metrics) is broad enough to
+decompose rather than plan as one piece, per the user's explicit choice. Order, by dependency:
+
+1. **M1a — Foundation fixes** (designed below): real settings wiring, event-driven repaint, real
+   font-metrics-driven cell sizing. Nothing else can be built *correctly* until these land — cursor/selection
+   positioning depends on real cell metrics, and the wrong font makes everything downstream moot.
+2. **M1b — Grid parity**: cursor, selection, scrollback. The core "does this feel like the same terminal"
+   milestone, built on M1a's correct metrics. Not yet designed — brainstorm this once M1a is implemented and
+   verified.
+3. **M1c — Visual polish**: emoji, LCD subpixel AA. Lowest risk, least foundational, last. Not yet designed.
+
+### M1a — Foundation Fixes: Design
+
+**Settings wiring.** `gpui_petruterm.rs`'s `main()` calls the real `config::load() -> Result<(Config,
+mlua::Lua)>` (already used by the wgpu app — resolves `~/.config/petruterm/config.lua`, falls back to
+embedded defaults) once at startup, instead of `Config::default()` with hardcoded overrides. `gpui_shell`'s
+`spawn_terminal`/`TerminalGridElement` take the real `Config` instead of building their own. Hot-reload
+included (user's explicit choice, not deferred): the existing `ConfigWatcher` (`config::watcher`, a
+`notify`-based file watcher already built, delivering changed paths over an `mpsc::Receiver`) gets bridged
+into gpui — a background thread loops on `ConfigWatcher::wait_timeout(...)`, and on a change calls
+`config::reload()` and pushes the new `Config` across to `GpuiShellRoot` (which gets a `config: Config`
+field that swaps in on reload). The cross-thread bridge mechanism is shared with repaint wake, below — "PTY
+output arrived" and "config file changed" are the same shape of problem (an external thread producing an
+event gpui's main thread needs to notice and act on).
+
+**Event-driven repaint.** M0's ~30Hz unconditional poll (`cx.spawn` timer loop calling `cx.notify()`
+regardless of whether anything changed) measured ~21-24% idle CPU — real, but the spec-sanctioned M0
+stand-in, correctly scoped as "real work deferred" at the time. This is that real work, with an explicit
+default and fallback (same pattern that served M0 well throughout):
+
+- **Default:** research gpui's actual cross-thread wake API — not yet verified, this is the real open
+  engineering question for M1a. Likely shape: gpui's background executor can run a blocking task (e.g.
+  `cx.background_executor().spawn(async move { blocking_channel_recv() })`), and once that resolves inside
+  gpui's own async world, the same `WeakEntity::update`/`cx.notify()` pattern already proven in M0 applies.
+  Both the PTY `Wakeup` closure and the config-watcher's changed-path channel feed into this one bridge. If
+  this holds, repaints happen immediately on real events, zero idle cost.
+- **Fallback**, if that research comes up short: not a return to the unconditional poll, but a **smart
+  poll** using `WakeupGate` (already exists in the app, `pending: AtomicBool` — referenced but never fully
+  wired in M0, per its own Minor finding #4). The loop still runs on a timer, but only calls `cx.notify()`
+  when `WakeupGate` actually has something pending — cutting idle CPU to near-zero without solving the
+  harder cross-thread-async problem. A real, working fallback, not a placeholder.
+
+**Cell metrics.** `font::shaper::TextShaper::measure_cell()` already computes real cell width/height (via
+FreeType metrics, or a shaped-sample-string fallback) — but it's a private method on a `TextShaper` tied to
+the wgpu-oriented glyph-atlas machinery, not something `gpui_shell` can call directly without dragging that
+in. Since `gpui_shell` already builds its own `cosmic_text::FontSystem`/`Buffer` (via `build_font_system`,
+from M0), the right-sized move is porting the *technique* (shape a sample string, read its real advance
+width; use the font's line-height metric for cell height) into `gpui_shell`'s own font-init code, not
+importing `TextShaper` wholesale. Computed once at startup and again on config hot-reload if the font
+changes, stored alongside `FONT_SYSTEM`/`SWASH_CACHE`, replacing the `px(9.0)`/`px(18.0)` constants
+everywhere they're currently used (grid sizing, cursor quad, row positioning) — this also closes the
+glyph-position-drift gap M0's findings named as the real cost behind "the cursor renders oversized."
+
+**Testing.** Same discipline as M0: dogfood for anything GPU/rendering/async-plumbing — not unit-tested, per
+this migration's established approach. The one piece of real, pure business logic worth a unit test: the
+smart-poll fallback's "only notify when `WakeupGate` has something pending" check, a plain boolean condition
+independent of gpui/rendering. Standard gates apply: `scripts/ci-local.sh` (clippy, fmt, `cargo test --lib`,
+audit) is the real project gate — not the narrower `cargo build`/`cargo test` substitute that let two real
+findings slip through M0 until its final whole-branch review caught them.
+
 ## Explicitly out of scope / not being built
 
 - No custom hit-testing framework — gpui's layout tree replaces it.
