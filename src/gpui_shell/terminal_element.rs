@@ -25,8 +25,21 @@ use gpui::{
 };
 use image::{Frame, RgbaImage};
 
-use crate::config::Config;
+use crate::config::schema::FontConfig;
 use crate::term::Terminal;
+
+/// Set once from `main()`, before any window or `TerminalGridElement` exists.
+/// `FONT_SYSTEM`'s thread-local initializer reads from this instead of a
+/// hardcoded literal — see `set_font_config`.
+static FONT_CONFIG: std::sync::OnceLock<FontConfig> = std::sync::OnceLock::new();
+
+/// Must be called exactly once, before the first paint (i.e. before
+/// `cx.open_window(...)` in `main()`). Panics if called twice.
+pub fn set_font_config(font_config: FontConfig) {
+    FONT_CONFIG
+        .set(font_config)
+        .expect("set_font_config called more than once");
+}
 
 // `FontSystem::new()` only does a bare system-font scan — it will NOT find
 // MonoLisaCode Nerd Font unless that exact family is fully OS-registered,
@@ -44,15 +57,11 @@ use crate::term::Terminal;
 // main thread, so a plain `RefCell` is enough here).
 thread_local! {
     static FONT_SYSTEM: RefCell<(FontSystem, String)> = RefCell::new({
-        // `Config::default()`'s bare font family ("JetBrainsMono Nerd Font
-        // Mono") is a code-level fallback, not what's actually configured —
-        // the real app loads the user's Lua config (`config/default/*.lua`,
-        // MonoLisaCode Nerd Font) at startup, which this M0 spike never
-        // does. Override just the family/feature fields explicitly instead.
-        let mut config = Config::default();
-        config.font.family = "MonoLisaCode Nerd Font".into();
+        let font_config = FONT_CONFIG
+            .get()
+            .expect("set_font_config must be called before the first paint");
         let (font_system, actual_family, _face_id, _path, _face_index) =
-            crate::font::loader::build_font_system(&config.font)
+            crate::font::loader::build_font_system(font_config)
                 .expect("load configured font for terminal ligature rendering");
         (font_system, actual_family)
     });

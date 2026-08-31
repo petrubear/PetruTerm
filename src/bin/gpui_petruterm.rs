@@ -1,32 +1,30 @@
 use gpui::{
     prelude::*, px, size, App, Application, Bounds, KeyBinding, WindowBounds, WindowOptions,
 };
-use petruterm::gpui_shell::{Backspace, GpuiShellRoot, SplitDemo};
+use petruterm::gpui_shell::{terminal_element, Backspace, GpuiShellRoot, SplitDemo};
 
 fn main() {
-    Application::new().run(|cx: &mut App| {
-        // M0 spike: leader-key chord (`Ctrl+F %`, per AGENTS.md's leader key)
-        // spawns a second live terminal, proving gpui's native keymap matcher
-        // reaches real business logic. See `GpuiShellRoot::on_split_demo`.
+    // Real user config (~/.config/petruterm/config.lua, falling back to the
+    // embedded default) — the same function the wgpu app uses at startup.
+    // No hot-reload yet (M1a Task 4 adds it); this replaces M0's hardcoded
+    // `Config::default()` + inline font override.
+    let (config, _lua) = petruterm::config::load().expect("load config for gpui-petruterm");
+    terminal_element::set_font_config(config.font.clone());
+
+    Application::new().run(move |cx: &mut App| {
         cx.bind_keys([
             KeyBinding::new("ctrl-f %", SplitDemo, None),
-            // Backspace has no `key_char` (it's a control key, not printable
-            // text), so `on_key_down`'s minimal M0 handling never sees it.
-            // Full key-event mapping is still out of scope for the spike
-            // (see `src/app/input/mod.rs`'s real `key_map::translate_key` for
-            // what the actual chrome migration will need) — this one binding
-            // is a targeted fix for the single most common key that blocks
-            // basic dogfooding, not a start on reimplementing that module.
             KeyBinding::new("backspace", Backspace, None),
         ]);
 
         let bounds = Bounds::centered(None, size(px(900.0), px(600.0)), cx);
+        let config = config.clone();
         cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 ..Default::default()
             },
-            |_, cx| cx.new(GpuiShellRoot::new),
+            move |_, cx| cx.new(move |cx| GpuiShellRoot::new(cx, config)),
         )
         .unwrap();
         cx.activate(true);

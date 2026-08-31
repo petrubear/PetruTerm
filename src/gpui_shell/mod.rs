@@ -53,12 +53,12 @@ pub fn spawn_terminal(
     rows: u16,
     cell_w: u16,
     cell_h: u16,
+    config: &Config,
 ) -> anyhow::Result<Rc<Terminal>> {
-    let config = Config::default();
     let wakeup: crate::term::Wakeup = Arc::new(|| {});
     let wakeup_gate = Arc::new(WakeupGate::new());
     let terminal = Terminal::new(
-        &config,
+        config,
         cols,
         rows,
         cell_w,
@@ -79,11 +79,12 @@ pub struct GpuiShellRoot {
     /// prove a split terminal is independently live. Defaults to the
     /// most-recently-spawned terminal.
     active_terminal: usize,
+    config: Config,
 }
 
 impl GpuiShellRoot {
-    pub fn new(cx: &mut Context<Self>) -> Self {
-        let terminal = spawn_terminal(80, 24, 9, 18).expect("spawn initial terminal");
+    pub fn new(cx: &mut Context<Self>, config: Config) -> Self {
+        let terminal = spawn_terminal(80, 24, 9, 18, &config).expect("spawn initial terminal");
 
         // M0 repaint-reliability stand-in (per the migration spec): PTY output
         // arrives on a background reader thread, decoupled from any gpui
@@ -110,6 +111,7 @@ impl GpuiShellRoot {
             terminals: vec![terminal],
             focus_handle: cx.focus_handle(),
             active_terminal: 0,
+            config,
         }
     }
 
@@ -129,7 +131,7 @@ impl GpuiShellRoot {
     /// spawning a second live shell terminal side-by-side. Routes input to
     /// the newly spawned terminal so a human can verify it independently.
     fn on_split_demo(&mut self, _: &SplitDemo, _window: &mut Window, cx: &mut Context<Self>) {
-        match spawn_terminal(80, 24, 9, 18) {
+        match spawn_terminal(80, 24, 9, 18, &self.config) {
             Ok(terminal) => {
                 self.terminals.push(terminal);
                 self.active_terminal = self.terminals.len() - 1;
