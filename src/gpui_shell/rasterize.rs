@@ -113,8 +113,8 @@ pub fn rasterize_grid(
 ) -> Option<Arc<RenderImage>> {
     terminal.with_term(|term| {
         let content = term.renderable_content();
-        let cols = terminal.cols as usize;
-        let rows = terminal.rows as usize;
+        let cols = terminal.cols.get() as usize;
+        let rows = terminal.rows.get() as usize;
         if cols == 0 || rows == 0 {
             return None;
         }

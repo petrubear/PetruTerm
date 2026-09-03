@@ -12,7 +12,7 @@
 use std::rc::Rc;
 
 use gpui::{
-    fill, point, size, App, Bounds, Corners, Element, ElementId, GlobalElementId,
+    fill, point, px, size, App, Bounds, Corners, Element, ElementId, GlobalElementId,
     InspectorElementId, IntoElement, LayoutId, Pixels, Style, Window,
 };
 
@@ -25,6 +25,8 @@ pub struct TerminalGridElement {
     pub cell_width: Pixels,
     pub cell_height: Pixels,
     pub colors: crate::config::schema::ColorScheme,
+    pub is_active: bool,
+    pub cursor_blink_on: bool,
 }
 
 impl IntoElement for TerminalGridElement {
@@ -54,8 +56,8 @@ impl Element for TerminalGridElement {
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
-        let cols = self.terminal.cols as f32;
-        let rows = self.terminal.rows as f32;
+        let cols = self.terminal.cols.get() as f32;
+        let rows = self.terminal.rows.get() as f32;
         let mut style = Style::default();
         style.size.width = (self.cell_width * cols).into();
         style.size.height = (self.cell_height * rows).into();
@@ -101,20 +103,82 @@ impl Element for TerminalGridElement {
             let _ = window.paint_image(bounds, Corners::default(), render_image, 0, false);
         }
 
-        // Cursor.
+        // Cursor. Shape from Terminal::cursor_info() (DECSCUSR / default),
+        // geometry ported from src/app/renderer/terminal.rs's
+        // build_cursor_overlay. HollowBlock swaps in for Block when this
+        // pane isn't the split-focus target -- matches the wgpu renderer's
+        // convention for showing which pane has keyboard focus.
         let cursor = self.terminal.cursor_info();
-        if cursor.visible {
+        if cursor.visible && self.cursor_blink_on {
+            use alacritty_terminal::vte::ansi::CursorShape;
+            let shape = if !self.is_active && cursor.shape == CursorShape::Block {
+                CursorShape::HollowBlock
+            } else {
+                cursor.shape
+            };
+            let cell_w = self.cell_width;
+            let cell_h = self.cell_height;
             let cursor_origin = point(
-                bounds.origin.x + self.cell_width * (cursor.col as f32),
-                bounds.origin.y + self.cell_height * (cursor.row as f32),
+                bounds.origin.x + cell_w * (cursor.col as f32),
+                bounds.origin.y + cell_h * (cursor.row as f32),
             );
-            window.paint_quad(fill(
-                Bounds {
-                    origin: cursor_origin,
-                    size: size(self.cell_width, self.cell_height),
-                },
-                gpui::rgba(0xf8f8f280),
-            ));
+            let (offset, geom_size) = match shape {
+                CursorShape::Block | CursorShape::HollowBlock => {
+                    (point(px(0.0), px(0.0)), size(cell_w, cell_h))
+                }
+                CursorShape::Underline => (
+                    point(px(0.0), (cell_h - px(2.0)).max(px(0.0))),
+                    size(cell_w, px(2.0)),
+                ),
+                CursorShape::Beam => (point(px(0.0), px(0.0)), size(px(2.0), cell_h)),
+                CursorShape::Hidden => return,
+            };
+            let quad_bounds = Bounds {
+                origin: point(cursor_origin.x + offset.x, cursor_origin.y + offset.y),
+                size: geom_size,
+            };
+            if shape == CursorShape::HollowBlock {
+                // Outline only -- four thin edge rects, not a filled quad,
+                // so the cell's own content stays visible underneath.
+                let t = px(1.0);
+                let color = gpui::rgba(0xf8f8f2ff);
+                window.paint_quad(fill(
+                    Bounds {
+                        origin: quad_bounds.origin,
+                        size: size(geom_size.width, t),
+                    },
+                    color,
+                ));
+                window.paint_quad(fill(
+                    Bounds {
+                        origin: point(
+                            quad_bounds.origin.x,
+                            quad_bounds.origin.y + geom_size.height - t,
+                        ),
+                        size: size(geom_size.width, t),
+                    },
+                    color,
+                ));
+                window.paint_quad(fill(
+                    Bounds {
+                        origin: quad_bounds.origin,
+                        size: size(t, geom_size.height),
+                    },
+                    color,
+                ));
+                window.paint_quad(fill(
+                    Bounds {
+                        origin: point(
+                            quad_bounds.origin.x + geom_size.width - t,
+                            quad_bounds.origin.y,
+                        ),
+                        size: size(t, geom_size.height),
+                    },
+                    color,
+                ));
+            } else {
+                window.paint_quad(fill(quad_bounds, gpui::rgba(0xf8f8f280)));
+            }
         }
     }
 }

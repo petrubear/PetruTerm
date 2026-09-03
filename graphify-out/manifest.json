@@ -110,8 +110,8 @@
     "semantic_hash": "3c939a39113759f2b5198318c292fb40"
   },
   "src/app/frame.rs": {
-    "mtime": 1788127088.0270548,
-    "ast_hash": "9feb22254203292141423b5b07150604",
+    "mtime": 1788476664.4314446,
+    "ast_hash": "da58776940f84850e08ead82a584c84c",
     "semantic_hash": ""
   },
   "src/app/hover_link.rs": {
@@ -145,8 +145,8 @@
     "semantic_hash": ""
   },
   "src/app/mux/mod.rs": {
-    "mtime": 1788146767.593268,
-    "ast_hash": "35da2d726660312909b2ab65557506d8",
+    "mtime": 1788476668.7358952,
+    "ast_hash": "f7de9744cbc2f97677b173d9bcec1f79",
     "semantic_hash": ""
   },
   "src/app/mux/snapshot.rs": {
@@ -445,8 +445,8 @@
     "semantic_hash": "813413b4adbe9973b81c95e61863dc30"
   },
   "src/term/mod.rs": {
-    "mtime": 1788146767.593247,
-    "ast_hash": "b8fa0977ee9138d0b19defad838de787",
+    "mtime": 1788476654.2847579,
+    "ast_hash": "f435f6ebc7d39c737c4c35a8f52924aa",
     "semantic_hash": ""
   },
   "src/term/osc133.rs": {
@@ -700,18 +700,18 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/mod.rs": {
-    "mtime": 1788457429.299289,
-    "ast_hash": "12609a4e6b0ebdc52fb35be1ddb4a0b6",
+    "mtime": 1788476731.7391672,
+    "ast_hash": "aa70d730c0688e2f9b28144f01de9251",
     "semantic_hash": ""
   },
   "src/gpui_shell/rasterize.rs": {
-    "mtime": 1788473645.8338447,
-    "ast_hash": "5b2879bb4e0b40cc300c6bb19835bed8",
+    "mtime": 1788476677.932231,
+    "ast_hash": "8d8077abd1d4a1e09b456a3e9368002b",
     "semantic_hash": ""
   },
   "src/gpui_shell/terminal_element.rs": {
-    "mtime": 1788457429.299313,
-    "ast_hash": "a5d90f1e4f2a36a5186243c3f3eda900",
+    "mtime": 1788476673.447561,
+    "ast_hash": "437d7f19496cf2374bdf990d4c84f442",
     "semantic_hash": ""
   },
   "docs/superpowers/plans/2026-08-30-gpui-chrome-migration-m0.md": {

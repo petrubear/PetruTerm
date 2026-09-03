@@ -136,6 +136,8 @@ pub struct GpuiShellRoot {
     active_terminal: usize,
     config: Config,
     wakeup_gates: Vec<Arc<WakeupGate>>,
+    cursor_blink_on: bool,
+    cursor_last_blink: std::time::Instant,
 }
 
 impl GpuiShellRoot {
@@ -189,7 +191,18 @@ impl GpuiShellRoot {
 
                 let alive = this
                     .update(cx, |this: &mut Self, cx| {
-                        if this.wakeup_gates.iter().any(|g| g.take_pending()) {
+                        let mut should_notify = this.wakeup_gates.iter().any(|g| g.take_pending());
+                        // Blink at the same 530ms cadence the wgpu app uses
+                        // (Input::update_cursor_blink). Piggybacks on this
+                        // already-running 33ms poll loop instead of a new
+                        // timer.
+                        if this.cursor_last_blink.elapsed() >= std::time::Duration::from_millis(530)
+                        {
+                            this.cursor_blink_on = !this.cursor_blink_on;
+                            this.cursor_last_blink = std::time::Instant::now();
+                            should_notify = true;
+                        }
+                        if should_notify {
                             cx.notify();
                         }
                     })
@@ -207,10 +220,14 @@ impl GpuiShellRoot {
             active_terminal: 0,
             config,
             wakeup_gates: vec![gate],
+            cursor_blink_on: true,
+            cursor_last_blink: std::time::Instant::now(),
         }
     }
 
     fn on_key_down(&mut self, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
+        self.cursor_blink_on = true;
+        self.cursor_last_blink = std::time::Instant::now();
         let Some(terminal) = self.terminals.get(self.active_terminal) else {
             return;
         };
@@ -227,8 +244,45 @@ impl GpuiShellRoot {
     /// Proves gpui's native keymap dispatch can reach real business logic:
     /// spawning a second live shell terminal side-by-side. Routes input to
     /// the newly spawned terminal so a human can verify it independently.
-    fn on_split_demo(&mut self, _: &SplitDemo, _window: &mut Window, cx: &mut Context<Self>) {
-        match spawn_terminal(80, 24, &self.config) {
+    ///
+    /// Every pane is laid out in one horizontal flex row with equal implicit
+    /// share (see `render`'s `.children(...)`), so each of the `n` resulting
+    /// panes gets roughly `viewport_width / n` of the window. Every existing
+    /// pane was still carrying its PRE-split column count -- until this fix,
+    /// the new pane (and every pane already on screen) kept requesting a
+    /// full-width `TerminalGridElement` box regardless of how many columns
+    /// its half (or third, ...) of the window can actually show. That
+    /// mismatch is what a real terminal's SIGWINCH-driven reflow exists to
+    /// prevent: with the PTY still reporting the old, too-wide column count,
+    /// the shell's own cursor-positioning escapes (e.g. a right-prompt
+    /// segment written near column 78) land at a grid column far past what's
+    /// actually visible in the narrower pane, which is exactly the
+    /// "blinking indicator way out of place" symptom -- the cursor render
+    /// path (`terminal_element.rs`) was already using `cursor.col` correctly;
+    /// the column itself was wrong. Recomputing every pane's cols/rows from
+    /// the real viewport and calling `Terminal::resize` (now `&self` --
+    /// `Cell<u16>`, see `Terminal::cols`'s doc comment -- so it's callable
+    /// through the `Rc<Terminal>` panes are shared as) keeps the PTY's
+    /// understanding of its own size in sync with what's actually painted,
+    /// the same invariant `mux::resize_all` maintains for the wgpu renderer.
+    fn on_split_demo(&mut self, _: &SplitDemo, window: &mut Window, cx: &mut Context<Self>) {
+        let (cell_width, cell_height) = font_state::measured_cell_size();
+        let viewport = window.viewport_size();
+        let pane_count = self.terminals.len() + 1;
+        let cols = ((f32::from(viewport.width) / f32::from(cell_width)) / pane_count as f32)
+            .floor()
+            .max(1.0) as u16;
+        let rows = (f32::from(viewport.height) / f32::from(cell_height))
+            .floor()
+            .max(1.0) as u16;
+        let scrollback = self.config.scrollback_lines as usize;
+        let cell_w = f32::from(cell_width).round().max(1.0) as u16;
+        let cell_h = f32::from(cell_height).round().max(1.0) as u16;
+        for t in &self.terminals {
+            t.resize(cols, rows, scrollback, cell_w, cell_h);
+        }
+
+        match spawn_terminal(cols, rows, &self.config) {
             Ok((terminal, gate)) => {
                 self.terminals.push(terminal);
                 self.wakeup_gates.push(gate);
@@ -255,13 +309,15 @@ impl Render for GpuiShellRoot {
             .on_action(cx.listener(Self::on_split_demo))
             .flex()
             .size_full()
-            .children(self.terminals.iter().map(|t| {
+            .children(self.terminals.iter().enumerate().map(|(idx, t)| {
                 let (cell_width, cell_height) = font_state::measured_cell_size();
                 TerminalGridElement {
                     terminal: t.clone(),
                     cell_width,
                     cell_height,
                     colors: self.config.colors.clone(),
+                    is_active: idx == self.active_terminal,
+                    cursor_blink_on: self.cursor_blink_on,
                 }
             }))
     }

@@ -19,6 +19,7 @@ use alacritty_terminal::sync::FairMutex;
 use alacritty_terminal::term::{Config as TermConfig, TermMode};
 use alacritty_terminal::Term;
 use anyhow::Result;
+use std::cell::Cell;
 use std::sync::Arc;
 
 use crate::app::pty_schedule::WakeupGate;
@@ -62,9 +63,14 @@ pub struct Terminal {
     pub term: Arc<FairMutex<Term<PtyEventProxy>>>,
     /// The PTY (process I/O, input notifier).
     pub pty: Pty,
-    /// Current terminal dimensions.
-    pub cols: u16,
-    pub rows: u16,
+    /// Current terminal dimensions. `Cell` rather than plain `u16` so
+    /// `resize` can take `&self`: callers hold terminals behind `Rc<Terminal>`
+    /// (gpui_shell, for cheap sharing into per-frame render elements) where
+    /// `&mut Terminal` isn't obtainable without an unsound `Rc::get_mut`
+    /// assumption. Every other piece of resizable state here (`term`, `pty`)
+    /// is already interior-mutable for the same reason.
+    pub cols: Cell<u16>,
+    pub rows: Cell<u16>,
     /// PID of the shell child process (for CWD resolution).
     pub child_pid: u32,
     /// OSC 133 command block tracker for this pane.
@@ -118,8 +124,8 @@ impl Terminal {
         Ok(Self {
             term,
             pty,
-            cols,
-            rows,
+            cols: Cell::new(cols),
+            rows: Cell::new(rows),
             child_pid,
             block_manager: BlockManager::new(),
             input_shadow: InputShadow::new(),
@@ -128,15 +134,15 @@ impl Terminal {
 
     /// Resize the terminal grid and PTY.
     pub fn resize(
-        &mut self,
+        &self,
         cols: u16,
         rows: u16,
         scrollback: usize,
         cell_width: u16,
         cell_height: u16,
     ) {
-        self.cols = cols;
-        self.rows = rows;
+        self.cols.set(cols);
+        self.rows.set(rows);
 
         let new_size = TermSize {
             cols: cols as usize,

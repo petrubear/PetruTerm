@@ -672,7 +672,7 @@ impl App {
                 if let Some(m) = self.ui.search_bar.current_match().cloned() {
                     if let Some(terminal) = self.mux.active_terminal() {
                         let (disp_off, _) = terminal.scrollback_info();
-                        let screen_rows = terminal.rows as i32;
+                        let screen_rows = terminal.rows.get() as i32;
                         // Target: center the match in the viewport.
                         let target_offset = (screen_rows / 2 - m.grid_line).max(0) as usize;
                         let delta = disp_off as i32 - target_offset as i32;
@@ -1570,7 +1570,7 @@ fn build_all_pane_instances(
                     return None;
                 }
                 let cursor = t.cursor_info();
-                if !cursor.visible || cursor.row + 1 >= t.rows as usize {
+                if !cursor.visible || cursor.row + 1 >= t.rows.get() as usize {
                     return None;
                 }
                 use crate::term::tokenizer::{tokenize_command, TokenKind};

@@ -306,7 +306,7 @@ impl Mux {
 
     pub fn active_terminal_size(&self) -> (usize, usize) {
         if let Some(t) = self.active_terminal() {
-            return (t.cols as usize, t.rows as usize);
+            return (t.cols.get() as usize, t.rows.get() as usize);
         }
         (80, 24)
     }
