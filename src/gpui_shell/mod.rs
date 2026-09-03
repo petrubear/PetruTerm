@@ -8,6 +8,7 @@
 
 pub mod font_state;
 mod key_map;
+mod rasterize;
 pub mod terminal_element;
 
 use std::rc::Rc;
@@ -260,6 +261,7 @@ impl Render for GpuiShellRoot {
                     terminal: t.clone(),
                     cell_width,
                     cell_height,
+                    colors: self.config.colors.clone(),
                 }
             }))
     }

@@ -107,10 +107,16 @@
   "105": ".ui_style",
   "106": ".build_instances",
   "107": "translate_key",
-  "108": "TextShaperConfig",
   "109": "gpu.rs",
   "110": "resolve_color",
   "111": "run_session",
   "112": "PtyEvent",
-  "113": "spawn_acp_connect"
+  "113": "spawn_acp_connect",
+  "114": "translate_key",
+  "115": "Global Constraints",
+  "116": "Global Constraints",
+  "118": "run_session",
+  "119": ".resumed",
+  "120": ".ui_style",
+  "121": "AiPollResult"
 }

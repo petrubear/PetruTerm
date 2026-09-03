@@ -4,11 +4,13 @@
 // under the project's 400-line module convention before adding more to it).
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashSet;
 
-use cosmic_text::{Attrs, Buffer, Family, FontSystem, Metrics, Shaping};
+use cosmic_text::{fontdb, Attrs, Buffer, Family, FontSystem, Metrics, Shaping};
 use gpui::{px, App, Pixels};
 
 use crate::config::schema::FontConfig;
+use crate::font::shaper::FreeTypeCmapLookup;
 
 /// Set once from `main()`, before any window or `TerminalGridElement` exists.
 /// `FONT_SYSTEM`'s thread-local initializer reads from this instead of a
@@ -31,10 +33,10 @@ pub fn set_font_config(font_config: FontConfig) {
 /// and `gpui_shell::spawn_terminal` both read).
 ///
 /// Takes `&mut App` to explicitly free the outgoing frames' GPU sprite-atlas
-/// entries (see `terminal_element::evict_all_frames`'s doc comment for why
+/// entries (see `rasterize::evict_all`'s doc comment for why
 /// `cache.clear()` alone would leak GPU memory).
 pub fn reload_font_config(font_config: FontConfig, cx: &mut App) {
-    let (new_font_system, new_family, _face_id, _path, _face_index) =
+    let (new_font_system, new_family, face_id, path, face_index) =
         match crate::font::loader::build_font_system(&font_config) {
             Ok(v) => v,
             Err(e) => {
@@ -49,21 +51,29 @@ pub fn reload_font_config(font_config: FontConfig, cx: &mut App) {
         font_config.size,
         font_config.line_height,
     );
+    let primary_face_ids = collect_primary_face_ids(&font_system, face_id, &new_family);
+    let ft_cmap = FreeTypeCmapLookup::new(&path, face_index, font_config.size);
+    if ft_cmap.is_none() {
+        log::warn!(
+            "gpui-shell: FreeType cmap lookup unavailable after font reload -- Nerd Font PUA icons may not render."
+        );
+    }
     FONT_SYSTEM.with_borrow_mut(|state| {
         state.font_system = font_system;
         state.family = new_family;
         state.size = font_config.size;
         state.line_height = font_config.line_height;
+        state.primary_font_id = face_id;
+        state.primary_face_ids = primary_face_ids;
+        state.ft_cmap = ft_cmap;
     });
     CELL_SIZE.set(cell_size);
 
     // Evict every cached rasterized frame -- they're keyed on content hash,
     // not font identity, so every one is stale the moment the font changes.
-    // This calls back into `terminal_element` (not inlined here) because
-    // that's where the frame cache lives; Task 2 of this plan moves both the
-    // cache and this call's target into a new `rasterize` module, updating
-    // this one call site as part of that move.
-    crate::gpui_shell::terminal_element::evict_all_frames(cx);
+    // This calls back into `rasterize` (not inlined here) because that's
+    // where the frame cache lives.
+    crate::gpui_shell::rasterize::evict_all(cx);
 }
 
 /// `FontSystem` + the real config values that feed shaping/metrics, cached
@@ -77,6 +87,66 @@ struct FontState {
     size: f32,
     /// Line height multiplier — real `config.font.line_height`.
     line_height: f32,
+    /// fontdb face ID of the configured primary font. Needed to build a
+    /// corrected `CacheKey` when a PUA glyph has to be re-pointed at this
+    /// face (see `PuaContext`).
+    primary_font_id: fontdb::ID,
+    /// Every fontdb face ID belonging to the primary font's family (regular,
+    /// bold, italic, bold-italic). A shaped glyph is a true *fallback* only
+    /// when its `font_id` is NOT in this set — using the whole family avoids
+    /// false-positive PUA overrides when cosmic-text legitimately picks the
+    /// bold or italic face of the same font.
+    primary_face_ids: HashSet<fontdb::ID>,
+    /// Direct FreeType cmap handle on the primary font file. `None` is a
+    /// valid outcome (FreeType init/face-open failure) — the PUA override
+    /// then simply never fires.
+    ft_cmap: Option<FreeTypeCmapLookup>,
+}
+
+/// Read-only view of the PUA-correction state, handed to `rasterize` by
+/// `with_font_system` so it can fix up misrouted Nerd Font icon glyphs.
+///
+/// Why this is needed: Nerd Font patches routinely ship malformed or missing
+/// OS/2 Unicode-range bits. fontdb derives coverage from those bits, so
+/// cosmic-text either reports `glyph_id == 0` for a Private-Use-Area icon
+/// codepoint, or silently routes it to some *other* fallback face that has no
+/// such icon — even when `Family::Name(primary)` was requested explicitly.
+/// `FreeTypeCmapLookup` reads the font's cmap directly (`FT_Get_Char_Index`),
+/// bypassing the OS/2 check entirely, which is ground truth. This is the exact
+/// same correction `font::shaper` applies for the wgpu renderer (see its
+/// `should_override` block); without it the gpui path renders Nerd Font icons
+/// from the wrong face, which reads visually as split/fragmented glyphs.
+pub(crate) struct PuaContext<'a> {
+    pub primary_font_id: fontdb::ID,
+    pub primary_face_ids: &'a HashSet<fontdb::ID>,
+    pub ft_cmap: Option<&'a FreeTypeCmapLookup>,
+}
+
+/// Collect every fontdb face ID sharing `face_id`'s canonical family name —
+/// ported from `font::shaper::TextShaper::new`, which builds `primary_face_ids`
+/// the same way for the same reason.
+fn collect_primary_face_ids(
+    font_system: &FontSystem,
+    face_id: fontdb::ID,
+    actual_family: &str,
+) -> HashSet<fontdb::ID> {
+    let canonical_family = font_system
+        .db()
+        .face(face_id)
+        .and_then(|f| f.families.first())
+        .map(|(name, _)| name.clone())
+        .unwrap_or_else(|| actual_family.to_string());
+
+    font_system
+        .db()
+        .faces()
+        .filter(|face| {
+            face.families
+                .iter()
+                .any(|(name, _)| name.eq_ignore_ascii_case(&canonical_family))
+        })
+        .map(|face| face.id)
+        .collect()
 }
 
 // `FontSystem::new()` only does a bare system-font scan — it will NOT find
@@ -93,14 +163,24 @@ thread_local! {
         let font_config = FONT_CONFIG
             .get()
             .expect("set_font_config must be called before the first paint");
-        let (font_system, family, _face_id, _path, _face_index) =
+        let (font_system, family, face_id, path, face_index) =
             crate::font::loader::build_font_system(font_config)
                 .expect("load configured font for terminal ligature rendering");
+        let primary_face_ids = collect_primary_face_ids(&font_system, face_id, &family);
+        let ft_cmap = FreeTypeCmapLookup::new(&path, face_index, font_config.size);
+        if ft_cmap.is_none() {
+            log::warn!(
+                "gpui-shell: FreeType cmap lookup unavailable -- Nerd Font PUA icons may not render."
+            );
+        }
         FontState {
             font_system,
             family,
             size: font_config.size,
             line_height: font_config.line_height,
+            primary_font_id: face_id,
+            primary_face_ids,
+            ft_cmap,
         }
     });
 
@@ -160,9 +240,22 @@ pub fn font_size() -> f32 {
     FONT_SYSTEM.with_borrow(|state| state.size)
 }
 
-/// Run `f` with mutable access to the current `FontSystem` and an immutable
-/// borrow of the resolved font family name. Used by `rasterize` (cosmic-text's
-/// `Buffer` needs `&mut FontSystem` to shape text).
-pub fn with_font_system<R>(f: impl FnOnce(&mut FontSystem, &str) -> R) -> R {
-    FONT_SYSTEM.with_borrow_mut(|state| f(&mut state.font_system, &state.family))
+/// Run `f` with mutable access to the current `FontSystem`, an immutable
+/// borrow of the resolved font family name, and the PUA-correction context.
+/// Used by `rasterize` (cosmic-text's `Buffer` needs `&mut FontSystem` to
+/// shape text, and the glyph-draw pass needs `PuaContext` to fix up misrouted
+/// Nerd Font icons).
+///
+/// All three come from one `FONT_SYSTEM` borrow deliberately: they live in the
+/// same `RefCell`, so handing them out via two separate accessors would panic
+/// the moment `rasterize` nested them.
+pub(crate) fn with_font_system<R>(f: impl FnOnce(&mut FontSystem, &str, PuaContext<'_>) -> R) -> R {
+    FONT_SYSTEM.with_borrow_mut(|state| {
+        let pua = PuaContext {
+            primary_font_id: state.primary_font_id,
+            primary_face_ids: &state.primary_face_ids,
+            ft_cmap: state.ft_cmap.as_ref(),
+        };
+        f(&mut state.font_system, &state.family, pua)
+    })
 }

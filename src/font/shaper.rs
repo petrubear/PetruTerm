@@ -26,8 +26,11 @@ use crate::renderer::lcd_atlas::LcdGlyphAtlas;
 /// The supplementary PUA planes cover emoji-style icons in some icon fonts.
 /// The additional symbol codepoints (Power, Octicons, Arrows) live outside PUA but
 /// are commonly patched into Nerd Fonts and also lack OS/2 coverage bits.
+///
+/// Also used by `gpui_shell::rasterize` (the gpui chrome's own rasterizer needs
+/// the exact same PUA correction this module applies for the wgpu path).
 #[inline]
-fn is_pua(ch: char) -> bool {
+pub(crate) fn is_pua(ch: char) -> bool {
     let c = ch as u32;
     matches!(c,
         0xE000..=0xF8FF   |  // BMP PUA — all Nerd Font icon blocks (Devicons, FA, Seti, etc.)
@@ -180,13 +183,17 @@ fn build_attr_list<'a>(
 // One FT_Library + FT_Face per TextShaper. Drop impl releases both. In practice there is a
 // single global TextShaper, so the cost is two pointers. If multiple shapers are ever needed,
 // wrap in Arc<Mutex<FreeTypeCmapLookup>> and share across instances.
-struct FreeTypeCmapLookup {
+pub(crate) struct FreeTypeCmapLookup {
     library: freetype::freetype::FT_Library,
     face: freetype::freetype::FT_Face,
 }
 
 impl FreeTypeCmapLookup {
-    fn new(font_path: &std::path::Path, face_index: u32, font_size: f32) -> Option<Self> {
+    pub(crate) fn new(
+        font_path: &std::path::Path,
+        face_index: u32,
+        font_size: f32,
+    ) -> Option<Self> {
         use freetype::freetype as ft;
 
         let mut library: ft::FT_Library = std::ptr::null_mut();
@@ -243,7 +250,7 @@ impl FreeTypeCmapLookup {
 
     /// Returns the glyph index for `ch` from the font's cmap, or None if the
     /// character is not in the font.
-    fn get_glyph_index(&self, ch: char) -> Option<u32> {
+    pub(crate) fn get_glyph_index(&self, ch: char) -> Option<u32> {
         use freetype::freetype as ft;
         let idx = unsafe { ft::FT_Get_Char_Index(self.face, ch as ft::FT_ULong) };
         if idx == 0 || idx > u16::MAX as u32 {
