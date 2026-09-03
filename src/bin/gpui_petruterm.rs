@@ -1,14 +1,14 @@
 use gpui::{
     prelude::*, px, size, App, Application, Bounds, KeyBinding, WindowBounds, WindowOptions,
 };
-use petruterm::gpui_shell::{spawn_config_watcher, terminal_element, GpuiShellRoot, SplitDemo};
+use petruterm::gpui_shell::{font_state, spawn_config_watcher, GpuiShellRoot, SplitDemo};
 
 fn main() {
     // Real user config (~/.config/petruterm/config.lua, falling back to the
     // embedded default) — the same function the wgpu app uses at startup.
     // This replaces M0's hardcoded `Config::default()` + inline font override.
     let (config, _lua) = petruterm::config::load().expect("load config for gpui-petruterm");
-    terminal_element::set_font_config(config.font.clone());
+    font_state::set_font_config(config.font.clone());
 
     // Startup-once, like `set_font_config` above — not per-window. See
     // `spawn_config_watcher`'s doc comment for why calling it more than once

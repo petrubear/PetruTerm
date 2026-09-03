@@ -6,6 +6,7 @@
 // forwarded from gpui's key-down events straight to the PTY via `key_map`'s
 // full key-event mapping.
 
+pub mod font_state;
 mod key_map;
 pub mod terminal_element;
 
@@ -57,7 +58,7 @@ pub(crate) fn spawn_terminal(
     rows: u16,
     config: &Config,
 ) -> anyhow::Result<(Rc<Terminal>, Arc<WakeupGate>)> {
-    let (cell_width, cell_height) = terminal_element::measured_cell_size();
+    let (cell_width, cell_height) = font_state::measured_cell_size();
     let cell_w = f32::from(cell_width).round().max(1.0) as u16;
     let cell_h = f32::from(cell_height).round().max(1.0) as u16;
     let wakeup: crate::term::Wakeup = Arc::new(|| {});
@@ -174,7 +175,7 @@ impl GpuiShellRoot {
                         // before `this.update`.
                         let applied = this
                             .update(cx, |this: &mut Self, cx| {
-                                terminal_element::reload_font_config(font_config, cx);
+                                font_state::reload_font_config(font_config, cx);
                                 this.config = new_config;
                                 cx.notify();
                             })
@@ -254,7 +255,7 @@ impl Render for GpuiShellRoot {
             .flex()
             .size_full()
             .children(self.terminals.iter().map(|t| {
-                let (cell_width, cell_height) = terminal_element::measured_cell_size();
+                let (cell_width, cell_height) = font_state::measured_cell_size();
                 TerminalGridElement {
                     terminal: t.clone(),
                     cell_width,
