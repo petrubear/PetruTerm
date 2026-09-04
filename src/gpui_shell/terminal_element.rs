@@ -132,63 +132,91 @@ impl Element for TerminalGridElement {
                 bounds.origin.x + cell_w * (cursor.col as f32),
                 bounds.origin.y + cell_h * (cursor.row as f32),
             );
-            let (offset, geom_size) = match shape {
+            // `cursor.visible` (checked above) is false whenever
+            // `Terminal::cursor_info` reports `Hidden`, so this arm is
+            // unreachable today -- `None` here rather than an early
+            // `return` from `paint()` anyway, since a bare `return` from
+            // the middle of a growing `paint()` is a trap for whoever adds
+            // code after the cursor block next (the scrollbar below
+            // already almost was that code).
+            let geom = match shape {
                 CursorShape::Block | CursorShape::HollowBlock => {
-                    (point(px(0.0), px(0.0)), size(cell_w, cell_h))
+                    Some((point(px(0.0), px(0.0)), size(cell_w, cell_h)))
                 }
-                CursorShape::Underline => (
+                CursorShape::Underline => Some((
                     point(px(0.0), (cell_h - px(2.0)).max(px(0.0))),
                     size(cell_w, px(2.0)),
-                ),
-                CursorShape::Beam => (point(px(0.0), px(0.0)), size(px(2.0), cell_h)),
-                CursorShape::Hidden => return,
+                )),
+                CursorShape::Beam => Some((point(px(0.0), px(0.0)), size(px(2.0), cell_h))),
+                CursorShape::Hidden => None,
             };
-            let quad_bounds = Bounds {
-                origin: point(cursor_origin.x + offset.x, cursor_origin.y + offset.y),
-                size: geom_size,
-            };
-            if shape == CursorShape::HollowBlock {
-                // Outline only -- four thin edge rects, not a filled quad,
-                // so the cell's own content stays visible underneath.
-                let t = px(1.0);
-                let color = gpui::rgba(0xf8f8f2ff);
-                window.paint_quad(fill(
-                    Bounds {
-                        origin: quad_bounds.origin,
-                        size: size(geom_size.width, t),
-                    },
-                    color,
-                ));
-                window.paint_quad(fill(
-                    Bounds {
-                        origin: point(
-                            quad_bounds.origin.x,
-                            quad_bounds.origin.y + geom_size.height - t,
-                        ),
-                        size: size(geom_size.width, t),
-                    },
-                    color,
-                ));
-                window.paint_quad(fill(
-                    Bounds {
-                        origin: quad_bounds.origin,
-                        size: size(t, geom_size.height),
-                    },
-                    color,
-                ));
-                window.paint_quad(fill(
-                    Bounds {
-                        origin: point(
-                            quad_bounds.origin.x + geom_size.width - t,
-                            quad_bounds.origin.y,
-                        ),
-                        size: size(t, geom_size.height),
-                    },
-                    color,
-                ));
-            } else {
-                window.paint_quad(fill(quad_bounds, gpui::rgba(0xf8f8f280)));
+            if let Some((offset, geom_size)) = geom {
+                let quad_bounds = Bounds {
+                    origin: point(cursor_origin.x + offset.x, cursor_origin.y + offset.y),
+                    size: geom_size,
+                };
+                if shape == CursorShape::HollowBlock {
+                    // Outline only -- four thin edge rects, not a filled quad,
+                    // so the cell's own content stays visible underneath.
+                    let t = px(1.0);
+                    let color = gpui::rgba(0xf8f8f2ff);
+                    window.paint_quad(fill(
+                        Bounds {
+                            origin: quad_bounds.origin,
+                            size: size(geom_size.width, t),
+                        },
+                        color,
+                    ));
+                    window.paint_quad(fill(
+                        Bounds {
+                            origin: point(
+                                quad_bounds.origin.x,
+                                quad_bounds.origin.y + geom_size.height - t,
+                            ),
+                            size: size(geom_size.width, t),
+                        },
+                        color,
+                    ));
+                    window.paint_quad(fill(
+                        Bounds {
+                            origin: quad_bounds.origin,
+                            size: size(t, geom_size.height),
+                        },
+                        color,
+                    ));
+                    window.paint_quad(fill(
+                        Bounds {
+                            origin: point(
+                                quad_bounds.origin.x + geom_size.width - t,
+                                quad_bounds.origin.y,
+                            ),
+                            size: size(t, geom_size.height),
+                        },
+                        color,
+                    ));
+                } else {
+                    window.paint_quad(fill(quad_bounds, gpui::rgba(0xf8f8f280)));
+                }
             }
+        }
+
+        // Scrollbar. 6px thumb on the right edge, matching the wgpu app's
+        // build_scroll_bar_instances geometry.
+        let (display_offset, history_size) = self.terminal.scrollback_info();
+        let rows = self.terminal.rows.get() as usize;
+        let (thumb_start, thumb_rows) =
+            mouse::scrollbar_thumb_geometry(rows, history_size, display_offset);
+        if history_size > 0 {
+            window.paint_quad(fill(
+                Bounds {
+                    origin: point(
+                        bounds.origin.x + bounds.size.width - mouse::SCROLLBAR_PX,
+                        bounds.origin.y + self.cell_height * thumb_start as f32,
+                    ),
+                    size: size(mouse::SCROLLBAR_PX, self.cell_height * thumb_rows as f32),
+                },
+                gpui::rgba(0xf8f8f260),
+            ));
         }
     }
 }

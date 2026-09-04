@@ -445,8 +445,8 @@
     "semantic_hash": "813413b4adbe9973b81c95e61863dc30"
   },
   "src/term/mod.rs": {
-    "mtime": 1788476654.2847579,
-    "ast_hash": "f435f6ebc7d39c737c4c35a8f52924aa",
+    "mtime": 1788531414.8031862,
+    "ast_hash": "3dfac9c4570737ad95283565ddc88187",
     "semantic_hash": ""
   },
   "src/term/osc133.rs": {
@@ -700,18 +700,18 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/mod.rs": {
-    "mtime": 1788480086.4476209,
-    "ast_hash": "72426cdb7b71d7fda4527c8bba6b6342",
+    "mtime": 1788531310.052728,
+    "ast_hash": "392f4d0a0699a7cc1ffce08f75ad7da5",
     "semantic_hash": ""
   },
   "src/gpui_shell/rasterize.rs": {
-    "mtime": 1788476677.932231,
-    "ast_hash": "8d8077abd1d4a1e09b456a3e9368002b",
+    "mtime": 1788529151.6709661,
+    "ast_hash": "c8890a202581e83c484b02532ef87d69",
     "semantic_hash": ""
   },
   "src/gpui_shell/terminal_element.rs": {
-    "mtime": 1788477302.82743,
-    "ast_hash": "9d305a5cc4b490b4876c74c5717119dc",
+    "mtime": 1788527949.1307123,
+    "ast_hash": "ef8b93a84f9abcfe0a4abebd208512ef",
     "semantic_hash": ""
   },
   "docs/superpowers/plans/2026-08-30-gpui-chrome-migration-m0.md": {
@@ -735,8 +735,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/mouse.rs": {
-    "mtime": 1788481856.0238512,
-    "ast_hash": "534a63499e7da5753bb366b34ac5ebc3",
+    "mtime": 1788531393.6459405,
+    "ast_hash": "a082790d8c3f59bf5d4e98d03509ab56",
     "semantic_hash": ""
   }
 }

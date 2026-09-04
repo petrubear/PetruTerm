@@ -233,6 +233,13 @@ impl GpuiShellRoot {
         let Some(terminal) = self.terminals.get(self.active_terminal) else {
             return;
         };
+        // Any keystroke -- paste included -- snaps the view back to the
+        // live edge, matching the wgpu app's own key handler
+        // (src/app/input/mod.rs's scroll_to_bottom() call before every key
+        // write). alacritty's grid deliberately pins a scrolled view even
+        // as new output arrives, so without this a key press while
+        // scrolled back leaves its own output landing off-screen.
+        terminal.scroll_to_bottom();
 
         // Cmd+V paste. `key_map::translate_key` never sees this: gpui only
         // populates `key_char` when cmd is NOT held (see its own doc

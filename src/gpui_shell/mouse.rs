@@ -15,21 +15,47 @@ use std::time::Instant;
 
 use alacritty_terminal::selection::SelectionType;
 use gpui::{
-    App, Bounds, DispatchPhase, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
-    Point, Window,
+    px, App, Bounds, DispatchPhase, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    Pixels, Point, Window,
 };
 
 use crate::term::Terminal;
 
 pub type OnFocusCallback = Rc<dyn Fn(&mut Window, &mut App)>;
 
-/// Per-terminal click-tracking state, keyed the same way `rasterize`'s
-/// `LAST_IMAGE` is (the `Rc<Terminal>`'s heap address) -- `TerminalGridElement`
-/// is rebuilt every frame, so this can't live on the element itself.
+/// Width of the scrollbar's hit-test strip and painted thumb, on the right
+/// edge of the terminal's `bounds`. `terminal_element.rs`'s paint code uses
+/// this same constant (not a duplicate) so the hit-test strip and the
+/// painted thumb can never drift apart.
+pub const SCROLLBAR_PX: Pixels = px(6.0);
+
+/// Per-terminal click-tracking and scrollbar-drag state, keyed the same way
+/// `rasterize`'s `LAST_IMAGE` is (the `Rc<Terminal>`'s heap address) --
+/// `TerminalGridElement` is rebuilt every frame, so this can't live on the
+/// element itself.
 struct ClickState {
     last_click_time: Instant,
     last_click_cell: (usize, usize),
     click_count: u32,
+    /// Set by mouse-down when the click lands in the scrollbar strip,
+    /// cleared by mouse-up. While set, mouse-move drags the scrollbar
+    /// thumb instead of extending a text selection.
+    dragging_scrollbar: bool,
+    /// Fractional scroll lines left over from the last wheel event, carried
+    /// to the next one -- see `accumulate_scroll_lines`'s doc comment.
+    scroll_accum: f32,
+}
+
+impl ClickState {
+    fn new() -> Self {
+        ClickState {
+            last_click_time: Instant::now() - std::time::Duration::from_secs(1),
+            last_click_cell: (usize::MAX, usize::MAX),
+            click_count: 0,
+            dragging_scrollbar: false,
+            scroll_accum: 0.0,
+        }
+    }
 }
 
 thread_local! {
@@ -43,11 +69,7 @@ thread_local! {
 pub fn register_click(terminal_key: usize, cell: (usize, usize)) -> u32 {
     const DOUBLE_CLICK_MS: u128 = 500;
     CLICK_STATE.with_borrow_mut(|states| {
-        let state = states.entry(terminal_key).or_insert(ClickState {
-            last_click_time: Instant::now() - std::time::Duration::from_secs(1),
-            last_click_cell: (usize::MAX, usize::MAX),
-            click_count: 0,
-        });
+        let state = states.entry(terminal_key).or_insert_with(ClickState::new);
         let same_cell = state.last_click_cell == cell;
         let within_time = state.last_click_time.elapsed().as_millis() < DOUBLE_CLICK_MS;
         state.click_count = if same_cell && within_time {
@@ -58,6 +80,45 @@ pub fn register_click(terminal_key: usize, cell: (usize, usize)) -> u32 {
         state.last_click_time = Instant::now();
         state.last_click_cell = cell;
         state.click_count
+    })
+}
+
+/// Set/clear the scrollbar-thumb drag flag for `terminal_key`.
+fn set_dragging_scrollbar(terminal_key: usize, dragging: bool) {
+    CLICK_STATE.with_borrow_mut(|states| {
+        states
+            .entry(terminal_key)
+            .or_insert_with(ClickState::new)
+            .dragging_scrollbar = dragging;
+    });
+}
+
+/// Add `raw_lines` (a single wheel event's un-rounded line delta) to
+/// `terminal_key`'s running fractional remainder, then split off and return
+/// the whole-line part, keeping the leftover fraction for next time --
+/// ported from the wgpu app's `scroll_pixel_accum` (`src/app/mod.rs`'s
+/// `handle_scroll`). A trackpad reports many small events per gesture; each
+/// one's delta is frequently under one line's worth of pixels (an 18px cell
+/// swallows anything under ~9px per `.round()`), so rounding each event
+/// independently -- this function's previous behaviour -- silently dropped
+/// most of a gentle scroll. Accumulating first means no motion is lost, just
+/// delayed by at most one line until enough of it has arrived.
+fn accumulate_scroll_lines(terminal_key: usize, raw_lines: f32) -> i32 {
+    CLICK_STATE.with_borrow_mut(|states| {
+        let state = states.entry(terminal_key).or_insert_with(ClickState::new);
+        state.scroll_accum += raw_lines;
+        let lines = state.scroll_accum.trunc();
+        state.scroll_accum -= lines;
+        lines as i32
+    })
+}
+
+/// Whether `terminal_key` is currently mid-drag on its scrollbar thumb.
+fn is_dragging_scrollbar(terminal_key: usize) -> bool {
+    CLICK_STATE.with_borrow(|states| {
+        states
+            .get(&terminal_key)
+            .is_some_and(|s| s.dragging_scrollbar)
     })
 }
 
@@ -88,12 +149,72 @@ pub fn pixel_to_cell(
     (col, row)
 }
 
+/// Whether `position` falls in the scrollbar's hit-test strip: the 6px
+/// column on the right edge of `bounds`, matching the width of the thumb
+/// painted in `terminal_element.rs`'s `paint()`.
+fn in_scrollbar_strip(position: Point<Pixels>, bounds: Bounds<Pixels>) -> bool {
+    position.x >= bounds.origin.x + bounds.size.width - SCROLLBAR_PX
+}
+
+/// Convert a Y pixel position to the scrollback `display_offset` it
+/// represents, by inverting `scrollbar_thumb_geometry`'s `thumb_start`
+/// formula around the thumb's vertical center -- so a click or drag
+/// anywhere in the scrollbar strip centers the thumb under the pointer,
+/// clamped to the track's ends. `thumb_rows`/`slack` don't depend on
+/// `display_offset` in the forward formula, so they're computed once here
+/// with an arbitrary offset (0) purely to get the track geometry.
+fn y_to_display_offset(
+    y: Pixels,
+    bounds: Bounds<Pixels>,
+    cell_height: Pixels,
+    screen_rows: usize,
+    history_size: usize,
+) -> usize {
+    if screen_rows == 0 || history_size == 0 {
+        return 0;
+    }
+    let (_, thumb_rows) = scrollbar_thumb_geometry(screen_rows, history_size, 0);
+    let slack = screen_rows.saturating_sub(thumb_rows);
+    if slack == 0 {
+        return 0;
+    }
+    let row = f32::from(y - bounds.origin.y) / f32::from(cell_height);
+    let thumb_start = (row - thumb_rows as f32 / 2.0).clamp(0.0, slack as f32);
+    let scroll_frac = 1.0 - thumb_start / slack as f32;
+    (scroll_frac * history_size as f32).round() as usize
+}
+
+/// Scrollbar thumb geometry in row units: `(thumb_start, thumb_rows)`.
+/// `display_offset` = 0 means at the bottom of scrollback, `history_size`
+/// means at the top -- matches `Terminal::scrollback_info`'s own convention.
+/// Ported from `src/app/renderer/overlay.rs`'s `build_scroll_bar_instances`
+/// geometry as-is.
+pub fn scrollbar_thumb_geometry(
+    screen_rows: usize,
+    history_size: usize,
+    display_offset: usize,
+) -> (usize, usize) {
+    let total_lines = (screen_rows + history_size).max(1);
+    let thumb_rows = (((screen_rows as f32 / total_lines as f32) * screen_rows as f32).round()
+        as usize)
+        .clamp(1, screen_rows);
+    let slack = screen_rows.saturating_sub(thumb_rows);
+    let scroll_frac = if history_size == 0 {
+        0.0
+    } else {
+        display_offset as f32 / history_size as f32
+    };
+    let thumb_start = ((1.0 - scroll_frac) * slack as f32).round() as usize;
+    (thumb_start, thumb_rows)
+}
+
 /// Register this element's mouse handlers for the current frame (cleared
 /// automatically by gpui after paint -- must be called fresh every
 /// `paint()`, per `Window::on_mouse_event`'s own contract). Handles
-/// click-drag selection and click-to-focus; later tasks in this plan add
-/// mouse-report passthrough and scrollbar-drag checks before this task's
-/// selection logic runs.
+/// click-drag selection, click-to-focus, scrollbar-thumb drag, and the
+/// scroll wheel; mouse-report passthrough (Task 5) and scrollbar-drag
+/// (this task) are checked before selection so neither also starts a
+/// selection or forwards to the remote program.
 pub fn register_mouse_handlers(
     terminal: Rc<Terminal>,
     bounds: Bounds<Pixels>,
@@ -112,6 +233,33 @@ pub fn register_mouse_handlers(
         if !bounds.contains(&event.position) {
             return;
         }
+        let (offset, history_size) = down_terminal.scrollback_info();
+        if history_size > 0 && in_scrollbar_strip(event.position, bounds) {
+            let rows = down_terminal.rows.get() as usize;
+            let target =
+                y_to_display_offset(event.position.y, bounds, cell_height, rows, history_size);
+            // `Terminal::scroll_display`'s delta convention is positive =
+            // toward history, negative = toward the live bottom (verified
+            // against alacritty_terminal's own `Term::scroll_display` --
+            // `Terminal::scroll_display`'s own doc comment has this
+            // backwards, matching a pre-existing wrong comment this task
+            // doesn't touch). `target - offset`, not `offset - target`: the
+            // wgpu app's own two scroll-to-position call sites both negate
+            // the same `offset - target` difference for exactly this reason
+            // (src/app/mod.rs's scroll handler, src/app/frame.rs's search
+            // match centering).
+            let delta = target as i32 - offset as i32;
+            if delta != 0 {
+                down_terminal.scroll_display(delta);
+            }
+            set_dragging_scrollbar(terminal_key, true);
+            window.refresh();
+            return; // scrollbar click: no local selection, no mouse report
+        }
+        // Not a scrollbar click: make sure a stuck flag (e.g. a missed
+        // mouse-up from a drag that ended outside the window) can't wrongly
+        // route this fresh gesture to scroll instead of select.
+        set_dragging_scrollbar(terminal_key, false);
         let (col, row) = pixel_to_cell(event.position, bounds, cell_width, cell_height);
         let (any_mouse, sgr, _) = down_terminal.mouse_mode_flags();
         if any_mouse {
@@ -141,6 +289,23 @@ pub fn register_mouse_handlers(
         if event.pressed_button != Some(MouseButton::Left) {
             return;
         }
+        if is_dragging_scrollbar(terminal_key) {
+            let (offset, history_size) = move_terminal.scrollback_info();
+            if history_size > 0 {
+                let rows = move_terminal.rows.get() as usize;
+                let target =
+                    y_to_display_offset(event.position.y, bounds, cell_height, rows, history_size);
+                // See the mouse-down handler's comment on this same
+                // computation: the delta is target-relative-to-offset, not
+                // the reverse.
+                let delta = target as i32 - offset as i32;
+                if delta != 0 {
+                    move_terminal.scroll_display(delta);
+                }
+                window.refresh();
+            }
+            return; // dragging the scrollbar thumb, not extending a selection
+        }
         if !bounds.contains(&event.position) {
             return;
         }
@@ -162,10 +327,55 @@ pub fn register_mouse_handlers(
         window.refresh();
     });
 
+    let scroll_terminal = terminal.clone();
+    window.on_mouse_event(move |event: &gpui::ScrollWheelEvent, phase, window, _cx| {
+        if phase != DispatchPhase::Bubble {
+            return;
+        }
+        if !bounds.contains(&event.position) {
+            return;
+        }
+        let pixel_delta = event.delta.pixel_delta(cell_height);
+        let raw_lines = f32::from(pixel_delta.y) / f32::from(cell_height);
+        let line_delta = accumulate_scroll_lines(terminal_key, raw_lines);
+        if line_delta == 0 {
+            return;
+        }
+        let (col, row) = pixel_to_cell(event.position, bounds, cell_width, cell_height);
+        let (any_mouse, sgr, _) = scroll_terminal.mouse_mode_flags();
+        if any_mouse {
+            // xterm wheel-report convention: button 64 = wheel up (toward
+            // history), 65 = wheel down (toward the live bottom) -- same
+            // sign as `line_delta` itself (positive = toward history, per
+            // the branch below), so no extra negation here. Capped at 3
+            // reports per gesture, matching the wgpu app's own
+            // handle_scroll: each report triggers a full redraw in the
+            // remote program, and sending more than that per wheel tick is
+            // visible lag, not extra precision.
+            let button = if line_delta > 0 { 64u8 } else { 65u8 };
+            for _ in 0..line_delta.abs().min(3) {
+                if let Some(bytes) = format_mouse_report(button, col, row, true, sgr) {
+                    scroll_terminal.write_input(&bytes);
+                }
+            }
+            window.refresh();
+            return;
+        }
+        scroll_terminal.scroll_display(line_delta);
+        // Without this, an idle-prompt wheel-scroll doesn't repaint until
+        // the poll loop's own next incidental notify (up to 530ms later) --
+        // the same class of lag Task 4's mouse-down/move comments describe.
+        window.refresh();
+    });
+
     let up_terminal = terminal;
     window.on_mouse_event(move |event: &MouseUpEvent, phase, _window, cx| {
         if phase != DispatchPhase::Bubble || event.button != MouseButton::Left {
             return;
+        }
+        if is_dragging_scrollbar(terminal_key) {
+            set_dragging_scrollbar(terminal_key, false);
+            return; // scrollbar release: no mouse report, no clipboard copy
         }
         let (col, row) = pixel_to_cell(event.position, bounds, cell_width, cell_height);
         let (any_mouse, sgr, _) = up_terminal.mouse_mode_flags();
@@ -256,6 +466,35 @@ mod tests {
     }
 
     #[test]
+    fn small_scroll_deltas_accumulate_instead_of_rounding_to_zero() {
+        // Four 0.3-line trackpad events: 0.3, 0.6, 0.9 all round-to-zero
+        // individually, but their running total (1.2 on the fourth) crosses
+        // a whole line.
+        let key = 1001;
+        assert_eq!(accumulate_scroll_lines(key, 0.3), 0);
+        assert_eq!(accumulate_scroll_lines(key, 0.3), 0);
+        assert_eq!(accumulate_scroll_lines(key, 0.3), 0);
+        assert_eq!(accumulate_scroll_lines(key, 0.3), 1);
+    }
+
+    #[test]
+    fn scroll_accumulator_keeps_the_remainder_after_a_whole_line() {
+        let key = 1002;
+        // 1.6 lines in one event: 1 line now, 0.6 carried forward.
+        assert_eq!(accumulate_scroll_lines(key, 1.6), 1);
+        // Another 0.6 arrives: 1.2 total, 1 line out, 0.2 left over.
+        assert_eq!(accumulate_scroll_lines(key, 0.6), 1);
+    }
+
+    #[test]
+    fn scroll_accumulator_is_independent_per_terminal() {
+        assert_eq!(accumulate_scroll_lines(2001, 0.9), 0);
+        // A different terminal's own 0.9 doesn't inherit terminal 2001's
+        // pending remainder.
+        assert_eq!(accumulate_scroll_lines(2002, 0.9), 0);
+    }
+
+    #[test]
     fn sgr_press_format() {
         let bytes = format_mouse_report(0, 4, 9, true, true).unwrap();
         assert_eq!(bytes, b"\x1b[<0;5;10M");
@@ -276,5 +515,64 @@ mod tests {
     #[test]
     fn legacy_x10_release_sends_nothing() {
         assert_eq!(format_mouse_report(0, 4, 9, false, false), None);
+    }
+
+    #[test]
+    fn no_scrollback_thumb_fills_track() {
+        let (start, rows) = scrollbar_thumb_geometry(24, 0, 0);
+        assert_eq!((start, rows), (0, 24));
+    }
+
+    #[test]
+    fn at_bottom_thumb_sits_at_bottom() {
+        let (start, rows) = scrollbar_thumb_geometry(24, 100, 0);
+        assert!(rows < 24); // thumb shrinks once there's scrollback
+        assert_eq!(start + rows, 24); // flush with the bottom of the track
+    }
+
+    #[test]
+    fn at_top_thumb_sits_at_top() {
+        let (start, _rows) = scrollbar_thumb_geometry(24, 100, 100);
+        assert_eq!(start, 0);
+    }
+
+    // 24 rows, 100 lines of history, 18px cells, strip origin at y=0 --
+    // matches `scrollbar_thumb_geometry`'s own test fixtures. Pins
+    // `y_to_display_offset`'s output directly, and documents the sign
+    // convention a scrollbar-drag delta must be computed against
+    // (`target - offset`, not `offset - target` -- seeded by a real bug
+    // caught in task review, where the subtraction was backwards and
+    // scrolled away from the clicked position instead of toward it).
+    fn strip_bounds() -> Bounds<Pixels> {
+        Bounds {
+            origin: point(px(0.0), px(0.0)),
+            size: gpui::size(px(900.0), px(432.0)), // 24 * 18
+        }
+    }
+
+    #[test]
+    fn click_top_of_strip_targets_full_history() {
+        let offset = y_to_display_offset(px(1.0), strip_bounds(), px(18.0), 24, 100);
+        assert_eq!(offset, 100);
+    }
+
+    #[test]
+    fn click_bottom_of_strip_targets_live_bottom() {
+        let offset = y_to_display_offset(px(430.0), strip_bounds(), px(18.0), 24, 100);
+        assert_eq!(offset, 0);
+    }
+
+    #[test]
+    fn drag_delta_sign_points_toward_target() {
+        // At offset=50 (mid-scroll), clicking the top of the strip must
+        // produce a POSITIVE delta (toward more history) -- the exact case
+        // the inverted-subtraction bug got backwards (it produced -50,
+        // which scrolled to the live bottom instead of further back).
+        let target = y_to_display_offset(px(1.0), strip_bounds(), px(18.0), 24, 100);
+        let delta = target as i32 - 50_i32;
+        assert!(
+            delta > 0,
+            "expected a positive (toward-history) delta, got {delta}"
+        );
     }
 }

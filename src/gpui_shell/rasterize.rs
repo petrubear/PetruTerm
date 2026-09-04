@@ -122,6 +122,15 @@ pub fn rasterize_grid(
         let sel_range: Option<SelectionRange> =
             term.selection.as_ref().and_then(|s| s.to_range(term));
 
+        // See `viewport_row`'s doc comment: `display_iter`'s cell line
+        // numbers are buffer-space, not viewport-space, whenever
+        // `display_offset > 0` -- using them as row indices directly (this
+        // file's previous behaviour) drops the scrolled-back view's topmost
+        // rows and misfiles the rest, leaving the bottom of the screen
+        // blank. Invisible at `display_offset == 0`, the only case this
+        // file was exercised under before scrolling existed (Task 6).
+        let display_offset = content.display_offset;
+
         // Ligatures (e.g. `->`, `==`) only exist as a shaper decision across
         // ADJACENT characters in one shaped run, so text is still built one
         // string per row. Colors/style are collected in parallel, one entry
@@ -131,11 +140,9 @@ pub fn rasterize_grid(
         let mut grid_colors: Vec<Vec<CellColorStyle>> =
             (0..rows).map(|_| Vec::with_capacity(cols)).collect();
         for cell in content.display_iter {
-            let row = cell.point.line.0;
-            if row < 0 {
+            let Some(row) = viewport_row(cell.point.line.0, display_offset) else {
                 continue;
-            }
-            let row = row as usize;
+            };
             let col = cell.point.column.0;
             if row >= rows || col >= cols {
                 continue;
@@ -606,6 +613,25 @@ fn blend_pixel(img: &mut RgbaImage, x: u32, y: u32, src: [u8; 3], src_a: u8) {
     img.put_pixel(x, y, image::Rgba(out));
 }
 
+/// Convert a `display_iter` cell's buffer-space line number to the
+/// viewport-relative row it belongs to, or `None` if it falls above the
+/// current viewport (only possible when `line + display_offset < 0`, which
+/// doesn't happen for cells `display_iter` actually yields, but the guard is
+/// cheap and matches the original defensive check this replaces).
+///
+/// `Grid::display_iter` (alacritty_terminal 0.25.1) starts at
+/// `Line(-(display_offset) - 1)` and yields lines
+/// `-display_offset ..= -display_offset + screen_lines - 1` -- i.e. buffer
+/// line 0 is `display_offset` rows down from the top of the viewport, not
+/// the top row itself, whenever the view is scrolled back at all. This is
+/// alacritty's own canonical buffer-to-viewport transform (see
+/// `Term::point_to_viewport`, same formula) -- not a convention invented
+/// here.
+fn viewport_row(line: i32, display_offset: usize) -> Option<usize> {
+    let row = line + display_offset as i32;
+    (row >= 0).then_some(row as usize)
+}
+
 fn to_u8_rgba(c: [f32; 4]) -> [u8; 4] {
     [
         (c[0].clamp(0.0, 1.0) * 255.0).round() as u8,
@@ -619,6 +645,37 @@ fn to_u8_rgba(c: [f32; 4]) -> [u8; 4] {
 mod tests {
     use super::*;
     use alacritty_terminal::vte::ansi::NamedColor;
+
+    // 24-row terminal, scrolled back 10 lines -- the exact fixture the fix
+    // was hand-verified against (`display_iter` yields buffer lines
+    // -10..=13 inclusive; the old code discarded lines -10..-1 and
+    // misfiled 0..13 as if they were viewport rows 0..13, instead of their
+    // real 10..23).
+    #[test]
+    fn viewport_row_maps_buffer_range_onto_full_viewport_with_no_gaps() {
+        let display_offset = 10;
+        let mapped: Vec<usize> = (-10..=13)
+            .map(|line| viewport_row(line, display_offset).unwrap())
+            .collect();
+        let expected: Vec<usize> = (0..24).collect();
+        assert_eq!(mapped, expected);
+    }
+
+    #[test]
+    fn viewport_row_is_identity_when_not_scrolled() {
+        for line in 0..24 {
+            assert_eq!(viewport_row(line, 0), Some(line as usize));
+        }
+    }
+
+    #[test]
+    fn viewport_row_none_above_the_viewport() {
+        // Below the range `display_iter` ever actually yields in practice
+        // (`viewport_row`'s own doc comment), but the guard must still
+        // hold: a buffer line further back than `display_offset` maps
+        // above row 0.
+        assert_eq!(viewport_row(-11, 10), None);
+    }
 
     fn test_scheme() -> ColorScheme {
         let mut scheme = ColorScheme {

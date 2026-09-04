@@ -203,7 +203,12 @@ impl Terminal {
         self.term.lock().selection = None;
     }
 
-    /// Scroll the viewport by `delta` lines (positive = toward bottom, negative = toward history).
+    /// Scroll the viewport by `delta` lines (positive = toward history,
+    /// negative = toward the live bottom -- verified against
+    /// `alacritty_terminal::grid::Grid::scroll_display`'s own
+    /// `Scroll::Delta` handling, which clamps `display_offset + delta`
+    /// into `[0, history_size]`; `display_offset` increasing means further
+    /// back in scrollback).
     pub fn scroll_display(&self, delta: i32) {
         self.term.lock().scroll_display(Scroll::Delta(delta));
     }
