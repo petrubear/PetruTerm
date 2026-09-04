@@ -360,6 +360,180 @@ escape-sequence byte formatting (SGR/legacy X10), scrollbar thumb geometry (`thu
 screen_rows/history_size/display_offset), and the selection/inverse-video fg/bg-swap logic.
 `scripts/ci-local.sh` remains the real gate.
 
+## M2 — Core Chrome: Design
+
+M1 (a/b/c) is complete and merged into this branch: the terminal grid itself — colors, cursor, selection,
+copy, mouse-report passthrough, scrollback, emoji — is at parity with `master`'s wgpu renderer for a single
+terminal (plus a `SplitDemo` proof-of-concept second pane that has none of the real split-tree/tab
+machinery). M2 builds the daily-use chrome around it: tabs, pane splits/resize/zoom, and the status bar —
+the surfaces needed before this branch is usable as an actual terminal, not just a grid-rendering spike.
+Ground truth for every piece below was read from the current wgpu implementation directly (file:line cited
+throughout), not assumed.
+
+**Scope, restated precisely against the parent spec's M2 line** ("Tabs, status bar, pane splits/resize/
+zoom"): tab create/close/switch/rename + the tab bar UI, the pane-split tree (split/close/zoom/focus-by-
+direction/ratio-resize + the draggable separator), the status bar (cwd/git-branch/exit-code/time segments),
+and the leader-key chorded dispatch needed to drive all of the above from the keyboard (M1a's key mapping
+only ever handled *un-chorded* keys — leader sequences are new). Sidebars, AI panel, command palette, context
+menu, and search bar are explicitly M3/M4, not here.
+
+### Architecture decision: port the pane-tree algorithms, replace the rect math with taffy flex
+
+`PaneNode`/`PaneManager` (`src/ui/panes.rs`) is a ratio-based binary split tree with real, non-trivial domain
+algorithms: `split`/`close_focused`/`remove_leaf` (tree mutation), `focus_dir` (nearest-center-in-the-
+target-half-plane search), `adjust_parent_split` (walks to the nearest ancestor `Split` whose axis matches
+the resize direction, preferring the deepest match), and `drag_split_ratio` (keyed by each `Split` node's
+stable `node_id`, immune to concurrent relayout during a drag). These port as-is — the algorithms are the
+value, not the `Rect`-based representation they currently compute into.
+
+What does *not* port as-is is `PaneNode::layout`'s manual recursive `Rect` subdivision and `pane_infos`'s
+manual pixel/cell-grid arithmetic (`src/ui/panes.rs:64-110`, `:429-522`) — gpui's `Div` is backed by a real
+taffy flexbox engine (verified against gpui 0.2.2's own source: `.flex_row()`/`.flex_col()`, `.flex_basis
+(relative(ratio))`, `.flex_1()` all exist as first-class styling methods), which computes exactly this kind
+of nested-ratio layout natively. `PaneTree` (the ported version of `PaneNode`, renamed since it no longer
+carries a `rect` field — taffy owns that now) is walked by `render()` into a nested `div()` tree: a `Split`
+node becomes a `div().flex_row()` (or `.flex_col()` for `Vertical`) with two children, the earlier child
+sized `.flex_basis(relative(node.ratio))` and the later `.flex_basis(relative(1.0 - node.ratio))`; a `Leaf`
+node becomes a `TerminalGridElement` wrapped in a `div().flex_1()`. This eliminates `pane_infos`'s manual
+pixel math and the 1-cell separator inset (`PanePad`) entirely — a real `div()` separator between panes
+(below) supplies its own width, and cosmic-text rasterization already fills exactly its `TerminalGridElement`
+parent's bounds, so no manual padding calculation is needed.
+
+Terminal PTY sizing still needs real column/row counts, which taffy's *rendered* rect gives only after
+layout, not before — `TerminalGridElement::request_layout` already computes its own size from
+`cols × cell_width`, and the reverse direction (given a flex-computed pixel rect, resize the PTY to fit)
+needs a `prepaint`-time (or post-frame) hook that reads back the element's `bounds: Bounds<Pixels>` and calls
+`Terminal::resize(cols, rows, ...)` when it changed since the last frame — mirroring what `mux::resize_all`
+(`src/app/mux/mod.rs:900-922`) already does today (recompute every leaf's pixel rect, resize any terminal
+whose cell dimensions changed), just sourcing the rect from gpui's own layout pass instead of `pane_infos`.
+
+### Tabs
+
+`TabManager`/`Tab`/`tab_display_label` (`src/ui/tabs.rs`, all pure data + one pure string-formatting
+function, zero I/O) port with no changes. `GpuiShellRoot` gains `tabs: TabManager` and changes `terminals:
+Vec<Rc<Terminal>>` to a per-tab structure: each `Tab` now owns a `PaneTree` (the ported `PaneManager`) rather
+than the flat `Vec` `SplitDemo` currently uses — `SplitDemo`'s ad hoc pane list is retired, replaced by real
+`cmd_split`/`cmd_close_pane` (ported from `Mux`, see below) driving a real tab-indexed pane tree.
+
+The tab bar itself: current wgpu visual is flat rects (an active-tab background fill + a bottom accent-color
+underline) plus dimmed text for inactive tabs — *not* the "pill/SDF" shape prior project memory claimed
+(verified directly against `src/app/renderer/overlay.rs:1091-1140`; that memory is stale and is corrected
+here). No hover state exists today either. M2 reproduces exactly this — flat background + underline, active/
+inactive only — as a `div()` row above the pane area, one child `div()` per tab calling `tab_display_label`
+for its text, with `on_mouse_down` calling `TabManager::switch_to_index` directly (gpui's own hit-testing
+replaces `hit_test_tab_bar`'s manual pixel math entirely — that function and its "renderer and hit-test share
+one column-math function" TD-P9-02 workaround have no gpui equivalent because real elements don't need it).
+Tab drag-reordering does not exist in the current app (confirmed: no such code anywhere in the codebase) and
+is not built here either — this is parity work, not a new feature; note it as a candidate for a later
+milestone if wanted, using gpui's `.on_drag()`/`.on_drag_move()` (confirmed present) rather than hand-rolled
+pixel tracking.
+
+### Panes: split, close, zoom, focus-by-direction, resize
+
+`Mux`'s pane-mutation methods (`cmd_split`, `cmd_close_pane`, `cmd_toggle_zoom_pane`, `cmd_focus_pane_dir`,
+`cmd_adjust_pane_ratio`, `cmd_drag_separator` — `src/app/mux/mod.rs:811-896`) are already engine-agnostic:
+each is a thin wrapper calling into `PaneManager`/`PaneTree`, with no wgpu/winit coupling. They port as
+`GpuiShellRoot` methods operating on the active tab's `PaneTree`, called from leader-key dispatch (below).
+`cmd_split` spawns the new terminal *before* mutating the tree (existing TD-018 safety property, preserved)
+using `spawn_terminal` (already exists in `gpui_shell/mod.rs`).
+
+Zoom is *not* tree state in the wgpu app — it's a single `Option<usize>` on `Mux` (`zoomed_pane`), applied as
+a render-time filter that swaps in one full-viewport `PaneInfo` instead of building the real tree's rect
+list for that frame (`src/app/frame.rs:696-715`). Ported the same way: `GpuiShellRoot` gains `zoomed_pane:
+Option<usize>`; `render()`'s children-building logic, when it's `Some(id)`, renders *only* that terminal's
+`TerminalGridElement` at full size instead of walking the `PaneTree` into nested flex `div()`s — same
+"render-time filter, no tree mutation" property, ported to gpui's declarative-tree-building idiom instead of
+an imperative instance-list swap.
+
+Separator drag: no native gpui resize-handle widget exists (confirmed against gpui 0.2.2 source) — a real
+1-cell-wide `div()` is placed between each `Split` node's two children (i.e. exactly where the pane-tree ↔
+flex-tree walk emits a `Split`), styled with `.cursor_col_resize()`/`.cursor_row_resize()` (both confirmed
+present) for the hover affordance, and driven by the same `window.on_mouse_event`-based
+down/move/up pattern this branch already uses for the scrollbar thumb and text selection (`gpui_shell/
+mouse.rs`) — not gpui's drag-and-drop system (`.on_drag()` renders a *new floating preview view* following
+the cursor, the wrong shape for "repaint two flex siblings' `flex_basis` as the pointer moves"). The drag
+arithmetic itself ports as-is: `drag_split_ratio`'s node-id-keyed, mouse-position-relative-to-cached-rect
+formula (`src/ui/panes.rs:664-687`) — "cached rect" here becomes the separator `div()`'s own last-painted
+`bounds`, read the same way `TerminalGridElement`'s mouse handlers already read their own `bounds` in
+`paint()`.
+
+`Leader %`/`"` (split), `Leader x` (close pane), `Leader z` (zoom), `Leader h/j/k/l` (focus direction),
+`Leader Option+arrows` (resize) all call the ported `cmd_*` methods above. The wgpu app's
+sticky-resize-mode state machine (first `Leader Option+Arrow` press enters `resize_mode`, subsequent bare
+arrow presses keep resizing without re-pressing leader, `src/app/input/mod.rs:219-310`) ports as a
+`resize_mode: bool` field alongside the leader state (next section) — same shape, new home.
+
+### Leader-key chorded dispatch
+
+M1a's key handling (`gpui_shell/key_map.rs`) only ever translates a single, un-chorded keystroke into PTY
+bytes — there is no leader-key concept yet. Every new keybind this milestone needs (`Leader c/&/n/b/,/%/"/x/
+z/h/j/k/l`, `Leader Option+arrows`, plus bare `Cmd+1-9`) requires it. gpui does have a native chorded-keymap/
+action-dispatch system (already used for the trivial single-chord `SplitDemo` binding), but a leader
+sequence — prefix key, 1000ms timeout, then a context-free single follow-up key, with `Option+Arrow`
+specifically needing to *stay* active across repeated presses without re-invoking the prefix — is a
+stateful, timing-dependent shape gpui's declarative keymap is not built to express (confirmed: no
+"chord with timeout and a fallback" primitive found in gpui 0.2.2's keymap source). Ported the same way the
+existing wgpu-side hand-rolled state machine already solves it (`src/app/input/mod.rs`'s `leader_active`/
+`leader_deadline`/`leader_prefix` fields, `:25-72`): `GpuiShellRoot` gains the same three fields (plus
+`resize_mode` from above), `on_key_down` checks/sets `leader_active` on the configured leader key, and the
+existing 33ms poll loop (already driving cursor blink) also checks `leader_deadline` each tick to expire a
+stale leader press — no new timer infrastructure, same pattern M1b's blink used. The *mapping* from a
+leader-key sequence to an action stays data-driven from Lua config exactly as today
+(`config::keybind_view::leader_bindings_view`, already engine-agnostic, ported unchanged) — only the
+*dispatch mechanism* (translating gpui's `KeyDownEvent` into that lookup) is new code. `Cmd+1-9` is a
+plain (non-leader) binding, ported as a direct `event.keystroke.modifiers.platform && key is a digit` check
+in `on_key_down`, matching the pattern already used for Cmd+V paste.
+
+### Status bar
+
+`StatusBar`/`StatusBarSegment`/`StatusBar::build` (`src/ui/status_bar.rs`, a pure function over already-
+fetched inputs) port unchanged. Rendered as a `div()` row: each segment is its own `div()` with the
+segment's fg/bg and text, and — since real elements get real hit-testing — `on_mouse_down` on the git-branch
+segment and the exit-code segment directly, replacing `click_kind`'s manual column-math re-derivation
+entirely (same simplification the tab bar gets). Segment content sources:
+
+- **CWD**: `Mux::active_cwd` (`src/app/mux/mod.rs:302-305`, OS `proc_pidinfo`/`/proc/pid/cwd` lookup from the
+  focused terminal's `child_pid`) is already engine-agnostic — called once per relevant state change (tab
+  switch, focus change, matching `refresh_status_cache`'s existing call sites) rather than every frame.
+- **Exit code**: sourced from the same mtime-gated per-PID shell-integration JSON file
+  (`src/llm/shell_context.rs`) the wgpu app already reads — no logic changes, just move the poll call site
+  into the existing 33ms tick loop.
+- **Git branch**: the one genuinely new piece of async plumbing this milestone needs. The wgpu app's version
+  (`src/app/ui/git.rs:6-60`) is real cross-thread machinery — a `tokio::spawn`'d fetch, a channel drained on
+  each tick, a 15s TTL (60s in battery-saver), and a 30s stuck-in-flight recovery timeout — tightly coupled
+  to winit's `about_to_wait` loop. Ports using the bridge pattern this branch already established for config
+  hot-reload (`gpui_shell/mod.rs`'s `PENDING_CONFIG_RELOAD`/`CONFIG_CHANGED` statics, `:82-128`): a
+  `tokio::spawn`'d fetch writes its result into a similar static slot, and the existing 33ms poll loop reads
+  it — same TTL/stuck-recovery *policy*, re-plumbed through gpui's `cx.spawn`/`cx.background_executor()`
+  idiom instead of winit's event loop. Branch checkout (`git_checkout`) and the palette branch-*list* fetch
+  are out of scope here — no command palette exists yet (M4).
+- **Time**: direct `libc` call (`format_time`), no caching concern.
+
+The whole status bar is drawn once per window (reflecting the *focused* terminal regardless of which pane),
+not per-pane or per-tab — matches the current app exactly.
+
+### File organization
+
+New files under `src/gpui_shell/`: `panes.rs` (the ported `PaneTree`/split-tree algorithms — separate from
+`mouse.rs`, which stays scoped to the terminal-grid's own click/drag/scroll handling, not pane-separator
+drag), `tabs.rs` (ported `TabManager`/`Tab`, plus the tab-bar `Render` view), `status_bar.rs` (ported
+`StatusBar`/`StatusBarSegment`, plus the status-bar `Render` view and the git-branch async bridge), `leader.
+rs` (the chorded-dispatch state machine). `mod.rs` grows to own `GpuiShellRoot`'s new fields (`tabs`,
+`zoomed_pane`, leader/resize-mode state) and the top-level `render()` restructuring (tab bar row above, pane
+tree below, status bar row beneath) — expect it to need the same kind of split M1b gave
+`terminal_element.rs` if it grows past the 400-line convention; exact boundaries are a `writing-plans`
+decision once real line counts are known.
+
+### Testing
+
+Same discipline as M0/M1: dogfood for anything GPU/rendering/layout/mouse-pixel-math. Pure logic worth unit
+tests: `PaneTree`'s tree-mutation algorithms (split/close/focus_dir/adjust_ratio — these are exactly the kind
+of business logic the parent spec's "Testing & verification" section already calls out as in-scope,
+independent of this being a chrome milestone), `drag_split_ratio`'s ratio-from-position math,
+`tab_display_label`'s truncation/rename-cursor formatting, `StatusBar::build`'s segment assembly, the
+git-branch fetch's TTL/stuck-recovery decision logic (given fake clock inputs, not real threads/time).
+`scripts/ci-local.sh` remains the real gate.
+
 ## Explicitly out of scope / not being built
 
 - No custom hit-testing framework — gpui's layout tree replaces it.
