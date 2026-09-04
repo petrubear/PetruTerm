@@ -198,7 +198,6 @@ impl Terminal {
     }
 
     /// Clear any active selection.
-    #[allow(dead_code)]
     pub fn clear_selection(&self) {
         self.term.lock().selection = None;
     }

@@ -107,7 +107,7 @@
   "105": ".handle_redraw",
   "106": ".build_instances",
   "107": "app/ui/mod.rs",
-  "108": ".ui_style",
+  "108": "Mux",
   "109": "gpu.rs",
   "110": "resolve_color",
   "111": "run_session",
@@ -116,7 +116,10 @@
   "114": "translate_key",
   "115": "Global Constraints",
   "116": "Global Constraints",
-  "118": "run_session",
+  "117": "Self",
+  "118": "RowRevisionMap",
+  "119": "run_session",
+  "120": "TitleBarStyle",
   "121": "AppMenu",
   "122": "spawn_acp_connect"
 }

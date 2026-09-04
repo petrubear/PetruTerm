@@ -239,7 +239,14 @@ impl GpuiShellRoot {
         // write). alacritty's grid deliberately pins a scrolled view even
         // as new output arrives, so without this a key press while
         // scrolled back leaves its own output landing off-screen.
+        // `cx.notify()` here, not just below: a swallowed key (an unbound
+        // Cmd-combo, e.g.) reaches neither this function's other `notify()`
+        // calls, but scroll_to_bottom() already ran unconditionally above
+        // -- without this, the view would jump to the bottom in Terminal
+        // state but not on screen until the poll loop's own next incidental
+        // repaint (up to 530ms later, the blink toggle).
         terminal.scroll_to_bottom();
+        cx.notify();
 
         // Cmd+V paste. `key_map::translate_key` never sees this: gpui only
         // populates `key_char` when cmd is NOT held (see its own doc

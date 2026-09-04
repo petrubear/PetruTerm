@@ -44,6 +44,27 @@ struct ClickState {
     /// Fractional scroll lines left over from the last wheel event, carried
     /// to the next one -- see `accumulate_scroll_lines`'s doc comment.
     scroll_accum: f32,
+    /// The cell the current gesture's mouse-down landed on, set fresh by
+    /// `start_gesture` on every non-scrollbar mouse-down.
+    gesture_start_cell: (usize, usize),
+    /// Whether the current gesture has moved to a different cell than
+    /// `gesture_start_cell` yet -- i.e. whether this is an actual drag, not
+    /// a plain click. `alacritty_terminal::Selection` starts a real
+    /// (inverted, one-cell) selection on `start_selection` alone, so a
+    /// click with zero or sub-cell movement still leaves a selection
+    /// behind unless something clears it -- see `take_dragged`'s doc
+    /// comment for the consequences of not doing that.
+    dragged: bool,
+    /// Whether THIS pane's own mouse-down started the gesture currently in
+    /// progress -- `true` from `start_gesture` until `take_dragged` ends it.
+    /// `mark_dragged_if_moved` only acts while this is set. Without it, a
+    /// drag that begins in one split pane and overshoots into a neighbour's
+    /// `bounds` would run the neighbour's own `mark_dragged_if_moved`
+    /// (mouse-move handlers gate on `bounds.contains`, not on "did my own
+    /// mouse-down start this"), spuriously marking a pane `dragged` for a
+    /// gesture it never started and corrupting whatever selection it
+    /// already had.
+    gesture_active: bool,
 }
 
 impl ClickState {
@@ -54,6 +75,9 @@ impl ClickState {
             click_count: 0,
             dragging_scrollbar: false,
             scroll_accum: 0.0,
+            gesture_start_cell: (usize::MAX, usize::MAX),
+            dragged: false,
+            gesture_active: false,
         }
     }
 }
@@ -91,6 +115,76 @@ fn set_dragging_scrollbar(terminal_key: usize, dragging: bool) {
             .or_insert_with(ClickState::new)
             .dragging_scrollbar = dragging;
     });
+}
+
+/// Start tracking a fresh non-scrollbar mouse-down gesture at `cell`:
+/// resets `dragged` to false and records `cell` as the point later moves
+/// are compared against. Must be called on every such mouse-down, even one
+/// that turns out to just be a plain click, so a leftover `dragged: true`
+/// from an EARLIER gesture in this pane can never survive into this one.
+fn start_gesture(terminal_key: usize, cell: (usize, usize)) {
+    CLICK_STATE.with_borrow_mut(|states| {
+        let state = states.entry(terminal_key).or_insert_with(ClickState::new);
+        state.dragged = false;
+        state.gesture_start_cell = cell;
+        state.gesture_active = true;
+    });
+}
+
+/// Mark the in-progress gesture as a real drag once `cell` differs from
+/// where it started -- ported from the wgpu app's `mouse_dragged` flag
+/// (`src/app/mod.rs`), which exists for exactly this reason: alacritty's
+/// `Selection::new` on mouse-down already creates a real (inverted,
+/// one-cell) selection, so without distinguishing "moved" from "didn't",
+/// every plain click leaves a lingering highlighted cell and mouse-up's
+/// `selection_text()` returns `Some` for it -- clobbering the system
+/// clipboard with a single stray character on an ordinary click.
+fn mark_dragged_if_moved(terminal_key: usize, cell: (usize, usize)) {
+    CLICK_STATE.with_borrow_mut(|states| {
+        let state = states.entry(terminal_key).or_insert_with(ClickState::new);
+        if state.gesture_active && cell != state.gesture_start_cell {
+            state.dragged = true;
+        }
+    });
+}
+
+/// Force the current gesture's `dragged` flag on, independent of any
+/// subsequent pointer movement -- for the case where the mouse-DOWN itself
+/// already constitutes a complete, intentional selection. `SelectionType::
+/// Semantic`/`Lines` (double/triple click) expand to the whole word/line
+/// from a single point with zero movement (`alacritty_terminal::selection::
+/// Selection::range_semantic`/`range_lines` search left/right from `start
+/// == end`), so treating a double/triple click as an undragged "plain
+/// click" -- the same rule that correctly clears a single click's stray
+/// one-cell selection -- would incorrectly clear the word/line it just
+/// selected on release instead of copying it.
+fn mark_dragged(terminal_key: usize) {
+    CLICK_STATE.with_borrow_mut(|states| {
+        states
+            .entry(terminal_key)
+            .or_insert_with(ClickState::new)
+            .dragged = true;
+    });
+}
+
+/// Read and reset `dragged` in one step -- called once, by mouse-up. A
+/// one-shot read-and-clear (not just a read) matters with multiple split
+/// panes: `MouseUpEvent` has no bounds check (a drag can legitimately end
+/// outside the pane it started in), so EVERY pane's mouse-up handler fires
+/// on every release, not just the pane the gesture happened in. If
+/// `dragged` weren't consumed here, a pane whose own last real drag left it
+/// `true` would keep re-copying its (unrelated, unchanged) selection to the
+/// clipboard on every future release anywhere in the window, silently
+/// racing whichever other pane's release the user actually meant. Also
+/// ends `gesture_active`, so a later drag that merely passes back through
+/// this pane's `bounds` (started and still owned by some OTHER pane) can't
+/// mark this one dragged again -- see `gesture_active`'s doc comment.
+fn take_dragged(terminal_key: usize) -> bool {
+    CLICK_STATE.with_borrow_mut(|states| {
+        let state = states.entry(terminal_key).or_insert_with(ClickState::new);
+        state.gesture_active = false;
+        std::mem::take(&mut state.dragged)
+    })
 }
 
 /// Add `raw_lines` (a single wheel event's un-rounded line delta) to
@@ -135,18 +229,29 @@ pub fn selection_type_for_clicks(clicks: u32) -> SelectionType {
 /// Convert a window-relative mouse position to a (col, row) grid cell,
 /// relative to `bounds`'s origin -- simpler than the wgpu app's
 /// `pixel_to_cell` (no pane padding to account for; `bounds` is already
-/// this element's own painted area).
+/// this element's own painted area), but keeps its grid clamp
+/// (`src/app/layout.rs`): every caller here already gates on
+/// `bounds.contains(&event.position)` first, but `Bounds::contains` is
+/// inclusive on the far edge, so a click on the exact right/bottom boundary
+/// pixel would otherwise resolve to `col == cols` / `row == rows` -- one
+/// past the last real cell -- and reach `Selection::update`/
+/// `format_mouse_report` out of grid range.
 pub fn pixel_to_cell(
     position: Point<Pixels>,
     bounds: Bounds<Pixels>,
     cell_width: Pixels,
     cell_height: Pixels,
+    cols: usize,
+    rows: usize,
 ) -> (usize, usize) {
     let x = f32::from(position.x - bounds.origin.x);
     let y = f32::from(position.y - bounds.origin.y);
     let col = (x / f32::from(cell_width)).floor().max(0.0) as usize;
     let row = (y / f32::from(cell_height)).floor().max(0.0) as usize;
-    (col, row)
+    (
+        col.min(cols.saturating_sub(1)),
+        row.min(rows.saturating_sub(1)),
+    )
 }
 
 /// Whether `position` falls in the scrollbar's hit-test strip: the 6px
@@ -260,7 +365,16 @@ pub fn register_mouse_handlers(
         // mouse-up from a drag that ended outside the window) can't wrongly
         // route this fresh gesture to scroll instead of select.
         set_dragging_scrollbar(terminal_key, false);
-        let (col, row) = pixel_to_cell(event.position, bounds, cell_width, cell_height);
+        let cols = down_terminal.cols.get() as usize;
+        let rows = down_terminal.rows.get() as usize;
+        let (col, row) = pixel_to_cell(event.position, bounds, cell_width, cell_height, cols, rows);
+        start_gesture(terminal_key, (col, row));
+        // Click-to-focus is a chrome concern, like the scrollbar above --
+        // it must run regardless of mouse-report mode, so a click into an
+        // unfocused pane running vim/tmux still moves keyboard focus there
+        // even though the click itself is forwarded as a mouse report
+        // rather than starting a local selection.
+        on_focus(window, cx);
         let (any_mouse, sgr, _) = down_terminal.mouse_mode_flags();
         if any_mouse {
             if let Some(bytes) = format_mouse_report(0, col, row, true, sgr) {
@@ -268,9 +382,14 @@ pub fn register_mouse_handlers(
             }
             return; // mouse-report mode: don't also start a local selection
         }
-        on_focus(window, cx);
         let clicks = register_click(terminal_key, (col, row));
         down_terminal.start_selection(col, row, selection_type_for_clicks(clicks));
+        if clicks > 1 {
+            // See `mark_dragged`'s doc comment: a double/triple click's
+            // word/line selection is already complete from this mouse-down
+            // alone.
+            mark_dragged(terminal_key);
+        }
         // Selection state changed, but nothing else in this frame requested
         // a repaint (a click into the already-active pane skips on_focus's
         // own notify). Without this, gpui only redraws whenever the poll
@@ -309,7 +428,9 @@ pub fn register_mouse_handlers(
         if !bounds.contains(&event.position) {
             return;
         }
-        let (col, row) = pixel_to_cell(event.position, bounds, cell_width, cell_height);
+        let cols = move_terminal.cols.get() as usize;
+        let rows = move_terminal.rows.get() as usize;
+        let (col, row) = pixel_to_cell(event.position, bounds, cell_width, cell_height, cols, rows);
         let (any_mouse, sgr, motion) = move_terminal.mouse_mode_flags();
         if any_mouse {
             if motion {
@@ -319,6 +440,7 @@ pub fn register_mouse_handlers(
             }
             return; // mouse-report mode: don't also extend a local selection
         }
+        mark_dragged_if_moved(terminal_key, (col, row));
         move_terminal.update_selection(col, row);
         // See the mouse-down handler's comment: without this, the selection
         // highlight only catches up to the live drag whenever some other
@@ -341,7 +463,9 @@ pub fn register_mouse_handlers(
         if line_delta == 0 {
             return;
         }
-        let (col, row) = pixel_to_cell(event.position, bounds, cell_width, cell_height);
+        let cols = scroll_terminal.cols.get() as usize;
+        let rows = scroll_terminal.rows.get() as usize;
+        let (col, row) = pixel_to_cell(event.position, bounds, cell_width, cell_height, cols, rows);
         let (any_mouse, sgr, _) = scroll_terminal.mouse_mode_flags();
         if any_mouse {
             // xterm wheel-report convention: button 64 = wheel up (toward
@@ -369,7 +493,7 @@ pub fn register_mouse_handlers(
     });
 
     let up_terminal = terminal;
-    window.on_mouse_event(move |event: &MouseUpEvent, phase, _window, cx| {
+    window.on_mouse_event(move |event: &MouseUpEvent, phase, window, cx| {
         if phase != DispatchPhase::Bubble || event.button != MouseButton::Left {
             return;
         }
@@ -377,7 +501,9 @@ pub fn register_mouse_handlers(
             set_dragging_scrollbar(terminal_key, false);
             return; // scrollbar release: no mouse report, no clipboard copy
         }
-        let (col, row) = pixel_to_cell(event.position, bounds, cell_width, cell_height);
+        let cols = up_terminal.cols.get() as usize;
+        let rows = up_terminal.rows.get() as usize;
+        let (col, row) = pixel_to_cell(event.position, bounds, cell_width, cell_height, cols, rows);
         let (any_mouse, sgr, _) = up_terminal.mouse_mode_flags();
         if any_mouse {
             if let Some(bytes) = format_mouse_report(0, col, row, false, sgr) {
@@ -385,8 +511,20 @@ pub fn register_mouse_handlers(
             }
             return; // mouse-report mode: don't also copy a local selection
         }
-        if let Some(text) = up_terminal.selection_text() {
-            cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+        // Read-and-clear (not just read): see `take_dragged`'s doc comment
+        // for why this must be one-shot with multiple split panes. A real
+        // drag copies; a plain click (or a released-outside-any-pane event
+        // reaching a pane it didn't start in) clears the one-cell selection
+        // `start_selection` leaves behind instead of copying it -- matches
+        // the wgpu app's own mouse-up handler (src/app/mod.rs), which does
+        // the same for exactly the same reason.
+        if take_dragged(terminal_key) {
+            if let Some(text) = up_terminal.selection_text() {
+                cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+            }
+        } else {
+            up_terminal.clear_selection();
+            window.refresh();
         }
     });
 }
@@ -419,6 +557,94 @@ pub fn format_mouse_report(
 mod tests {
     use super::*;
     use gpui::{point, px};
+
+    #[test]
+    fn plain_click_is_not_marked_dragged() {
+        let key = 3001;
+        start_gesture(key, (5, 5));
+        // No move happened -- take_dragged must report false so the
+        // caller clears the selection instead of copying it.
+        assert!(!take_dragged(key));
+    }
+
+    #[test]
+    fn moving_to_a_different_cell_marks_the_gesture_dragged() {
+        let key = 3002;
+        start_gesture(key, (5, 5));
+        mark_dragged_if_moved(key, (6, 5));
+        assert!(take_dragged(key));
+    }
+
+    #[test]
+    fn moving_within_the_same_cell_does_not_count_as_dragged() {
+        let key = 3003;
+        start_gesture(key, (5, 5));
+        // Trackpad jitter that resolves to the same cell repeatedly.
+        mark_dragged_if_moved(key, (5, 5));
+        mark_dragged_if_moved(key, (5, 5));
+        assert!(!take_dragged(key));
+    }
+
+    #[test]
+    fn double_and_triple_click_are_dragged_with_zero_movement() {
+        // A double/triple click's word/line selection is already complete
+        // from the click alone (see `mark_dragged`'s doc comment) -- it
+        // must copy on release even though the pointer never moved.
+        let key = 3008;
+        start_gesture(key, (5, 5));
+        mark_dragged(key);
+        assert!(take_dragged(key));
+    }
+
+    #[test]
+    fn a_pane_that_never_started_the_gesture_is_not_marked_dragged() {
+        // A neighbouring pane's mouse-move handlers gate on their own
+        // `bounds.contains`, not on "did my own mouse-down start this" --
+        // a drag that overshoots from pane A into pane B's bounds must not
+        // mark B dragged, or B's own (unrelated) selection would get
+        // silently mutated and re-copied on the next release anywhere.
+        let key = 3006; // B's key: never had start_gesture called on it here
+        mark_dragged_if_moved(key, (6, 5));
+        assert!(!take_dragged(key));
+    }
+
+    #[test]
+    fn a_pane_whose_gesture_already_ended_is_not_marked_dragged_by_a_later_pass_through() {
+        let key = 3007;
+        start_gesture(key, (5, 5));
+        mark_dragged_if_moved(key, (6, 5));
+        assert!(take_dragged(key)); // this pane's own gesture, consumed normally
+                                    // Some OTHER pane's drag later passes back through this pane's
+                                    // bounds -- must not resurrect `dragged` for a gesture this pane
+                                    // isn't part of anymore.
+        mark_dragged_if_moved(key, (7, 5));
+        assert!(!take_dragged(key));
+    }
+
+    #[test]
+    fn take_dragged_is_one_shot() {
+        let key = 3004;
+        start_gesture(key, (5, 5));
+        mark_dragged_if_moved(key, (6, 5));
+        assert!(take_dragged(key)); // consumed here
+                                    // A later, unrelated release (e.g. another pane's gesture ending)
+                                    // must not see this pane's already-consumed drag as still active --
+                                    // otherwise it would silently re-copy stale content on every future
+                                    // release anywhere in the window.
+        assert!(!take_dragged(key));
+    }
+
+    #[test]
+    fn start_gesture_resets_a_leftover_dragged_flag() {
+        let key = 3005;
+        start_gesture(key, (5, 5));
+        mark_dragged_if_moved(key, (6, 5));
+        // A fresh gesture begins before the previous one's drag flag was
+        // ever consumed (e.g. mouse-up was missed) -- it must not inherit
+        // the stale `true`.
+        start_gesture(key, (1, 1));
+        assert!(!take_dragged(key));
+    }
 
     #[test]
     fn first_click_is_count_one() {
@@ -461,8 +687,35 @@ mod tests {
             origin: point(px(100.0), px(50.0)),
             size: gpui::size(px(800.0), px(600.0)),
         };
-        let cell = pixel_to_cell(point(px(109.0), px(66.0)), bounds, px(9.0), px(18.0));
+        let cell = pixel_to_cell(
+            point(px(109.0), px(66.0)),
+            bounds,
+            px(9.0),
+            px(18.0),
+            80,
+            24,
+        );
         assert_eq!(cell, (1, 0)); // (109-100)/9 = 1.0, (66-50)/18 = 0.888 -> row 0
+    }
+
+    #[test]
+    fn pixel_to_cell_clamps_to_the_last_row_and_column() {
+        let bounds = Bounds {
+            origin: point(px(0.0), px(0.0)),
+            size: gpui::size(px(720.0), px(432.0)), // 80 cols x 24 rows, 9x18 cells
+        };
+        // Bounds::contains is inclusive on the far edge, so a click on the
+        // exact bottom-right pixel must still resolve inside the grid, not
+        // one cell past it.
+        let cell = pixel_to_cell(
+            point(px(719.0), px(431.0)),
+            bounds,
+            px(9.0),
+            px(18.0),
+            80,
+            24,
+        );
+        assert_eq!(cell, (79, 23));
     }
 
     #[test]
