@@ -112,8 +112,15 @@ pub fn register_mouse_handlers(
         if !bounds.contains(&event.position) {
             return;
         }
-        on_focus(window, cx);
         let (col, row) = pixel_to_cell(event.position, bounds, cell_width, cell_height);
+        let (any_mouse, sgr, _) = down_terminal.mouse_mode_flags();
+        if any_mouse {
+            if let Some(bytes) = format_mouse_report(0, col, row, true, sgr) {
+                down_terminal.write_input(&bytes);
+            }
+            return; // mouse-report mode: don't also start a local selection
+        }
+        on_focus(window, cx);
         let clicks = register_click(terminal_key, (col, row));
         down_terminal.start_selection(col, row, selection_type_for_clicks(clicks));
         // Selection state changed, but nothing else in this frame requested
@@ -138,6 +145,15 @@ pub fn register_mouse_handlers(
             return;
         }
         let (col, row) = pixel_to_cell(event.position, bounds, cell_width, cell_height);
+        let (any_mouse, sgr, motion) = move_terminal.mouse_mode_flags();
+        if any_mouse {
+            if motion {
+                if let Some(bytes) = format_mouse_report(32, col, row, true, sgr) {
+                    move_terminal.write_input(&bytes);
+                }
+            }
+            return; // mouse-report mode: don't also extend a local selection
+        }
         move_terminal.update_selection(col, row);
         // See the mouse-down handler's comment: without this, the selection
         // highlight only catches up to the live drag whenever some other
@@ -151,10 +167,42 @@ pub fn register_mouse_handlers(
         if phase != DispatchPhase::Bubble || event.button != MouseButton::Left {
             return;
         }
+        let (col, row) = pixel_to_cell(event.position, bounds, cell_width, cell_height);
+        let (any_mouse, sgr, _) = up_terminal.mouse_mode_flags();
+        if any_mouse {
+            if let Some(bytes) = format_mouse_report(0, col, row, false, sgr) {
+                up_terminal.write_input(&bytes);
+            }
+            return; // mouse-report mode: don't also copy a local selection
+        }
         if let Some(text) = up_terminal.selection_text() {
             cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
         }
     });
+}
+
+/// Format a mouse-report escape sequence for `button` at (col, row),
+/// `pressed` or released, in SGR or legacy X10 mode -- ported from
+/// `src/app/input/mod.rs`'s `send_mouse_report` as-is. Legacy X10 mode
+/// only reports presses (returns `None` on release, matching the original).
+pub fn format_mouse_report(
+    button: u8,
+    col: usize,
+    row: usize,
+    pressed: bool,
+    sgr: bool,
+) -> Option<Vec<u8>> {
+    if sgr {
+        let c = if pressed { 'M' } else { 'm' };
+        Some(format!("\x1b[<{button};{};{}{c}", col + 1, row + 1).into_bytes())
+    } else if pressed {
+        let b = button.saturating_add(32);
+        let x = ((col + 1) as u8).saturating_add(32);
+        let y = ((row + 1) as u8).saturating_add(32);
+        Some(vec![0x1b, b'[', b'M', b, x, y])
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -205,5 +253,28 @@ mod tests {
         };
         let cell = pixel_to_cell(point(px(109.0), px(66.0)), bounds, px(9.0), px(18.0));
         assert_eq!(cell, (1, 0)); // (109-100)/9 = 1.0, (66-50)/18 = 0.888 -> row 0
+    }
+
+    #[test]
+    fn sgr_press_format() {
+        let bytes = format_mouse_report(0, 4, 9, true, true).unwrap();
+        assert_eq!(bytes, b"\x1b[<0;5;10M");
+    }
+
+    #[test]
+    fn sgr_release_format() {
+        let bytes = format_mouse_report(0, 4, 9, false, true).unwrap();
+        assert_eq!(bytes, b"\x1b[<0;5;10m");
+    }
+
+    #[test]
+    fn legacy_x10_press_format() {
+        let bytes = format_mouse_report(0, 4, 9, true, false).unwrap();
+        assert_eq!(bytes, &[0x1b, b'[', b'M', 32, 5 + 32, 10 + 32]);
+    }
+
+    #[test]
+    fn legacy_x10_release_sends_nothing() {
+        assert_eq!(format_mouse_report(0, 4, 9, false, false), None);
     }
 }

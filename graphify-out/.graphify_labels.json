@@ -118,8 +118,6 @@
   "116": "Global Constraints",
   "117": "FreeTypeCmapLookup",
   "118": "run_session",
-  "119": ".rasterize_lcd_to_atlas",
-  "120": ".ui_style",
   "121": "AppMenu",
   "122": "spawn_acp_connect"
 }
