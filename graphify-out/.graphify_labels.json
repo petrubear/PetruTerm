@@ -112,9 +112,13 @@
   "110": "resolve_color",
   "111": "run_session",
   "112": "RenamePrompt",
+  "113": "UploadRange",
   "114": "translate_key",
   "115": "Global Constraints",
   "116": "Global Constraints",
+  "117": "CellVertex",
+  "118": "RenderContext",
   "119": "run_session",
+  "120": "AiPollResult",
   "122": "spawn_acp_connect"
 }

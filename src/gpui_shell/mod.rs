@@ -11,29 +11,24 @@ mod key_map;
 mod mouse;
 mod panes;
 mod rasterize;
+pub mod tabs;
 pub mod terminal_element;
 
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use std::time::Duration;
 
-use gpui::{
-    actions, div, prelude::*, App, Context, FocusHandle, Focusable, KeyDownEvent, Render, Window,
-};
+use gpui::{div, prelude::*, App, Context, FocusHandle, Focusable, KeyDownEvent, Render, Window};
 
 use crate::app::pty_schedule::WakeupGate;
 use crate::config::Config;
 use crate::term::Terminal;
 use mouse::OnFocusCallback;
+use panes::PaneForest;
 use terminal_element::TerminalGridElement;
-
-// Proves gpui's native keymap dispatch (leader-key chorded matching) reaches
-// real business logic by spawning a second live terminal. The keybinding
-// itself is registered in `main` (see `src/bin/gpui_petruterm.rs`), per
-// gpui's keymap-registration convention.
-actions!(gpui_shell_spike, [SplitDemo]);
 
 /// Spawn one real terminal (shell + PTY + alacritty grid).
 ///
@@ -130,22 +125,36 @@ pub fn spawn_config_watcher() {
 
 /// The `Render` root view for the gpui-petruterm spike window.
 pub struct GpuiShellRoot {
-    pub terminals: Vec<Rc<Terminal>>,
+    pub tabs: tabs::TabManager,
+    /// Index-aligned with `tabs`'s tab list -- one PaneForest per tab,
+    /// mirroring Mux.panes: Vec<PaneManager> in the wgpu app exactly.
+    tab_panes: Vec<PaneForest>,
+    /// terminal_id -> live Terminal handle. A tab's PaneForest only stores
+    /// usize ids (matching src/ui/panes.rs's own design); this map is
+    /// where the actual Rc<Terminal> lives, looked up by id wherever a
+    /// leaf's real terminal is needed (paint, key routing, resize).
+    terminals: HashMap<usize, Rc<Terminal>>,
+    /// Not read until Task 3 starts spawning additional terminals (splits,
+    /// new tabs); assigned now so `new()`'s initial terminal (id 0) and
+    /// every later spawn draw ids from one counter.
+    #[allow(dead_code)]
+    next_terminal_id: usize,
     pub focus_handle: FocusHandle,
-    /// Index into `terminals` that keyboard input is routed to. M0 spike
-    /// minimal: no click-to-focus, no visual indicator — just enough to
-    /// prove a split terminal is independently live. Defaults to the
-    /// most-recently-spawned terminal.
-    active_terminal: usize,
     config: Config,
-    wakeup_gates: Vec<Arc<WakeupGate>>,
+    wakeup_gates: HashMap<usize, Arc<WakeupGate>>,
     cursor_blink_on: bool,
     cursor_last_blink: std::time::Instant,
+    /// Not read until Task 3's paint pass populates and consumes it
+    /// (focus_dir/adjust_ratio/drag_separator all need it) -- see
+    /// panes::RectCache's own doc comment.
+    #[allow(dead_code)]
+    rect_cache: panes::RectCache,
 }
 
 impl GpuiShellRoot {
     pub fn new(cx: &mut Context<Self>, config: Config) -> Self {
         let (terminal, gate) = spawn_terminal(80, 24, &config).expect("spawn initial terminal");
+        let terminal_id = 0;
 
         // M0 repaint-reliability stand-in (per the migration spec): PTY output
         // arrives on a background reader thread, decoupled from any gpui
@@ -194,7 +203,8 @@ impl GpuiShellRoot {
 
                 let alive = this
                     .update(cx, |this: &mut Self, cx| {
-                        let mut should_notify = this.wakeup_gates.iter().any(|g| g.take_pending());
+                        let mut should_notify =
+                            this.wakeup_gates.values().any(|g| g.take_pending());
                         // Blink at the same 530ms cadence the wgpu app uses
                         // (Input::update_cursor_blink). Piggybacks on this
                         // already-running 33ms poll loop instead of a new
@@ -217,21 +227,33 @@ impl GpuiShellRoot {
         })
         .detach();
 
+        let mut tabs = tabs::TabManager::new();
+        tabs.new_tab("zsh");
+
+        let mut terminals = HashMap::new();
+        terminals.insert(terminal_id, terminal);
+        let mut wakeup_gates = HashMap::new();
+        wakeup_gates.insert(terminal_id, gate);
+
         Self {
-            terminals: vec![terminal],
+            tabs,
+            tab_panes: vec![PaneForest::new(terminal_id)],
+            terminals,
+            next_terminal_id: terminal_id + 1,
             focus_handle: cx.focus_handle(),
-            active_terminal: 0,
             config,
-            wakeup_gates: vec![gate],
+            wakeup_gates,
             cursor_blink_on: true,
             cursor_last_blink: std::time::Instant::now(),
+            rect_cache: panes::RectCache::default(),
         }
     }
 
     fn on_key_down(&mut self, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
         self.cursor_blink_on = true;
         self.cursor_last_blink = std::time::Instant::now();
-        let Some(terminal) = self.terminals.get(self.active_terminal) else {
+        let active_tid = self.tab_panes[self.tabs.active_index()].focused_terminal;
+        let Some(terminal) = self.terminals.get(&active_tid) else {
             return;
         };
         // Any keystroke -- paste included -- snaps the view back to the
@@ -281,59 +303,6 @@ impl GpuiShellRoot {
             cx.notify();
         }
     }
-
-    /// Demo action fired by the `ctrl-f %` chord (see `main`'s `cx.bind_keys`).
-    /// Proves gpui's native keymap dispatch can reach real business logic:
-    /// spawning a second live shell terminal side-by-side. Routes input to
-    /// the newly spawned terminal so a human can verify it independently.
-    ///
-    /// Every pane is laid out in one horizontal flex row with equal implicit
-    /// share (see `render`'s `.children(...)`), so each of the `n` resulting
-    /// panes gets roughly `viewport_width / n` of the window. Every existing
-    /// pane was still carrying its PRE-split column count -- until this fix,
-    /// the new pane (and every pane already on screen) kept requesting a
-    /// full-width `TerminalGridElement` box regardless of how many columns
-    /// its half (or third, ...) of the window can actually show. That
-    /// mismatch is what a real terminal's SIGWINCH-driven reflow exists to
-    /// prevent: with the PTY still reporting the old, too-wide column count,
-    /// the shell's own cursor-positioning escapes (e.g. a right-prompt
-    /// segment written near column 78) land at a grid column far past what's
-    /// actually visible in the narrower pane, which is exactly the
-    /// "blinking indicator way out of place" symptom -- the cursor render
-    /// path (`terminal_element.rs`) was already using `cursor.col` correctly;
-    /// the column itself was wrong. Recomputing every pane's cols/rows from
-    /// the real viewport and calling `Terminal::resize` (now `&self` --
-    /// `Cell<u16>`, see `Terminal::cols`'s doc comment -- so it's callable
-    /// through the `Rc<Terminal>` panes are shared as) keeps the PTY's
-    /// understanding of its own size in sync with what's actually painted,
-    /// the same invariant `mux::resize_all` maintains for the wgpu renderer.
-    fn on_split_demo(&mut self, _: &SplitDemo, window: &mut Window, cx: &mut Context<Self>) {
-        let (cell_width, cell_height) = font_state::measured_cell_size();
-        let viewport = window.viewport_size();
-        let pane_count = self.terminals.len() + 1;
-        let cols = ((f32::from(viewport.width) / f32::from(cell_width)) / pane_count as f32)
-            .floor()
-            .max(1.0) as u16;
-        let rows = (f32::from(viewport.height) / f32::from(cell_height))
-            .floor()
-            .max(1.0) as u16;
-        let scrollback = self.config.scrollback_lines as usize;
-        let cell_w = f32::from(cell_width).round().max(1.0) as u16;
-        let cell_h = f32::from(cell_height).round().max(1.0) as u16;
-        for t in &self.terminals {
-            t.resize(cols, rows, scrollback, cell_w, cell_h);
-        }
-
-        match spawn_terminal(cols, rows, &self.config) {
-            Ok((terminal, gate)) => {
-                self.terminals.push(terminal);
-                self.wakeup_gates.push(gate);
-                self.active_terminal = self.terminals.len() - 1;
-                cx.notify();
-            }
-            Err(e) => log::error!("gpui-shell spike: failed to spawn split terminal: {e:#}"),
-        }
-    }
 }
 
 impl Focusable for GpuiShellRoot {
@@ -345,33 +314,51 @@ impl Focusable for GpuiShellRoot {
 impl Render for GpuiShellRoot {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         window.focus(&self.focus_handle);
-        let weak = cx.weak_entity();
+
+        let active_index = self.tabs.active_index();
+        let active_tid = self.tab_panes[active_index].focused_terminal;
+        let terminal = self
+            .terminals
+            .get(&active_tid)
+            .expect("focused terminal id has a live Terminal")
+            .clone();
+        let (cell_width, cell_height) = font_state::measured_cell_size();
+        // No click-to-focus target yet -- there's only ever one pane on
+        // screen this task (Task 3 wires real multi-pane focus routing).
+        let on_focus: OnFocusCallback = Rc::new(|_window, _cx| {});
+
+        // Placeholder tab-bar row: just the labels, no click handling yet
+        // (Task 3, once the real render-tree structure exists to attach it
+        // to).
+        let tab_bar =
+            div()
+                .flex()
+                .flex_row()
+                .w_full()
+                .children(self.tabs.tabs().iter().enumerate().map(|(idx, tab)| {
+                    div().px_2().py_1().child(tabs::tab_display_label(
+                        &tab.title,
+                        idx,
+                        idx == active_index,
+                        None,
+                    ))
+                }));
+
         div()
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::on_key_down))
-            .on_action(cx.listener(Self::on_split_demo))
             .flex()
+            .flex_col()
             .size_full()
-            .children(self.terminals.iter().enumerate().map(|(idx, t)| {
-                let (cell_width, cell_height) = font_state::measured_cell_size();
-                let weak = weak.clone();
-                let on_focus: OnFocusCallback = Rc::new(move |_window, cx| {
-                    let _ = weak.update(cx, |this, cx| {
-                        if this.active_terminal != idx {
-                            this.active_terminal = idx;
-                            cx.notify();
-                        }
-                    });
-                });
-                TerminalGridElement {
-                    terminal: t.clone(),
-                    cell_width,
-                    cell_height,
-                    colors: self.config.colors.clone(),
-                    is_active: idx == self.active_terminal,
-                    cursor_blink_on: self.cursor_blink_on,
-                    on_focus,
-                }
+            .child(tab_bar)
+            .child(div().flex().flex_1().child(TerminalGridElement {
+                terminal,
+                cell_width,
+                cell_height,
+                colors: self.config.colors.clone(),
+                is_active: true,
+                cursor_blink_on: self.cursor_blink_on,
+                on_focus,
             }))
     }
 }

@@ -685,8 +685,8 @@
     "semantic_hash": ""
   },
   "src/bin/gpui_petruterm.rs": {
-    "mtime": 1788440258.82546,
-    "ast_hash": "8969659063f3940d1ad0ea61f531a8d4",
+    "mtime": 1788560445.9329154,
+    "ast_hash": "d97ddb2b5dc9ac21e72f72b3bbbcd3ea",
     "semantic_hash": ""
   },
   "src/gpui_shell/font_state.rs": {
@@ -700,8 +700,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/mod.rs": {
-    "mtime": 1788559858.368693,
-    "ast_hash": "b9887150fd8a00e72238a69b1d84d60a",
+    "mtime": 1788560469.6032422,
+    "ast_hash": "4361e125a97b440c427557e97b7f26c2",
     "semantic_hash": ""
   },
   "src/gpui_shell/rasterize.rs": {
@@ -747,6 +747,11 @@
   "docs/superpowers/plans/2026-09-04-gpui-m2-core-chrome.md": {
     "mtime": 1788559725.9181967,
     "ast_hash": "421d0a26a788e5c44e8c2a1278247fde",
+    "semantic_hash": ""
+  },
+  "src/gpui_shell/tabs.rs": {
+    "mtime": 1788560347.0905557,
+    "ast_hash": "3d3b70a14f49ee1f4e946c5a8202af1f",
     "semantic_hash": ""
   }
 }

@@ -1,7 +1,5 @@
-use gpui::{
-    prelude::*, px, size, App, Application, Bounds, KeyBinding, WindowBounds, WindowOptions,
-};
-use petruterm::gpui_shell::{font_state, spawn_config_watcher, GpuiShellRoot, SplitDemo};
+use gpui::{prelude::*, px, size, App, Application, Bounds, WindowBounds, WindowOptions};
+use petruterm::gpui_shell::{font_state, spawn_config_watcher, GpuiShellRoot};
 
 fn main() {
     // Real user config (~/.config/petruterm/config.lua, falling back to the
@@ -16,8 +14,6 @@ fn main() {
     spawn_config_watcher();
 
     Application::new().run(move |cx: &mut App| {
-        cx.bind_keys([KeyBinding::new("ctrl-f %", SplitDemo, None)]);
-
         let bounds = Bounds::centered(None, size(px(900.0), px(600.0)), cx);
         let config = config.clone();
         cx.open_window(
