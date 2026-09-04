@@ -18,7 +18,7 @@ use gpui::{
 
 use crate::term::Terminal;
 
-use super::rasterize;
+use super::{mouse, mouse::OnFocusCallback, rasterize};
 
 pub struct TerminalGridElement {
     pub terminal: Rc<Terminal>,
@@ -27,6 +27,7 @@ pub struct TerminalGridElement {
     pub colors: crate::config::schema::ColorScheme,
     pub is_active: bool,
     pub cursor_blink_on: bool,
+    pub on_focus: OnFocusCallback,
 }
 
 impl IntoElement for TerminalGridElement {
@@ -91,6 +92,15 @@ impl Element for TerminalGridElement {
         // that this base fill already covers it, so the two must agree.
         let [r, g, b, a] = self.colors.background;
         window.paint_quad(fill(bounds, gpui::Rgba { r, g, b, a }));
+
+        mouse::register_mouse_handlers(
+            self.terminal.clone(),
+            bounds,
+            self.cell_width,
+            self.cell_height,
+            self.on_focus.clone(),
+            window,
+        );
 
         if let Some(render_image) = rasterize::rasterize_grid(
             &self.terminal,

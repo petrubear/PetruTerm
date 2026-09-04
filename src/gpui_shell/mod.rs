@@ -8,6 +8,7 @@
 
 pub mod font_state;
 mod key_map;
+mod mouse;
 mod rasterize;
 pub mod terminal_element;
 
@@ -24,6 +25,7 @@ use gpui::{
 use crate::app::pty_schedule::WakeupGate;
 use crate::config::Config;
 use crate::term::Terminal;
+use mouse::OnFocusCallback;
 use terminal_element::TerminalGridElement;
 
 // Proves gpui's native keymap dispatch (leader-key chorded matching) reaches
@@ -231,6 +233,31 @@ impl GpuiShellRoot {
         let Some(terminal) = self.terminals.get(self.active_terminal) else {
             return;
         };
+
+        // Cmd+V paste. `key_map::translate_key` never sees this: gpui only
+        // populates `key_char` when cmd is NOT held (see its own doc
+        // comment), and there's no gpui keybinding action claiming Cmd+V
+        // either, so it falls through as an unbound cmd-combo. Ported from
+        // the wgpu app's own paste path (`frame.rs`'s `flush_pending_paste`)
+        // minus its background-thread dance: that existed to keep arboard's
+        // clipboard read off the main thread (TD-PERF-15), a cost gpui's own
+        // `cx.read_from_clipboard()` doesn't have (a direct, already
+        // in-process platform call).
+        if event.keystroke.modifiers.platform && event.keystroke.key == "v" {
+            if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
+                if terminal.bracketed_paste_mode() {
+                    let mut data = b"\x1b[200~".to_vec();
+                    data.extend_from_slice(text.as_bytes());
+                    data.extend_from_slice(b"\x1b[201~");
+                    terminal.write_input(&data);
+                } else {
+                    terminal.write_input(text.as_bytes());
+                }
+                cx.notify();
+            }
+            return;
+        }
+
         let mode = terminal.with_term(|term| *term.mode());
         if let Some(bytes) =
             key_map::translate_key(&event.keystroke, mode, self.config.keyboard.option_as_meta)
@@ -303,6 +330,7 @@ impl Focusable for GpuiShellRoot {
 impl Render for GpuiShellRoot {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         window.focus(&self.focus_handle);
+        let weak = cx.weak_entity();
         div()
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::on_key_down))
@@ -311,6 +339,15 @@ impl Render for GpuiShellRoot {
             .size_full()
             .children(self.terminals.iter().enumerate().map(|(idx, t)| {
                 let (cell_width, cell_height) = font_state::measured_cell_size();
+                let weak = weak.clone();
+                let on_focus: OnFocusCallback = Rc::new(move |_window, cx| {
+                    let _ = weak.update(cx, |this, cx| {
+                        if this.active_terminal != idx {
+                            this.active_terminal = idx;
+                            cx.notify();
+                        }
+                    });
+                });
                 TerminalGridElement {
                     terminal: t.clone(),
                     cell_width,
@@ -318,6 +355,7 @@ impl Render for GpuiShellRoot {
                     colors: self.config.colors.clone(),
                     is_active: idx == self.active_terminal,
                     cursor_blink_on: self.cursor_blink_on,
+                    on_focus,
                 }
             }))
     }

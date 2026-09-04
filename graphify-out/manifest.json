@@ -700,8 +700,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/mod.rs": {
-    "mtime": 1788476731.7391672,
-    "ast_hash": "aa70d730c0688e2f9b28144f01de9251",
+    "mtime": 1788480086.4476209,
+    "ast_hash": "72426cdb7b71d7fda4527c8bba6b6342",
     "semantic_hash": ""
   },
   "src/gpui_shell/rasterize.rs": {
@@ -710,8 +710,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/terminal_element.rs": {
-    "mtime": 1788476673.447561,
-    "ast_hash": "437d7f19496cf2374bdf990d4c84f442",
+    "mtime": 1788477302.82743,
+    "ast_hash": "9d305a5cc4b490b4876c74c5717119dc",
     "semantic_hash": ""
   },
   "docs/superpowers/plans/2026-08-30-gpui-chrome-migration-m0.md": {
@@ -732,6 +732,11 @@
   "docs/superpowers/specs/2026-08-30-gpui-chrome-migration-design.md": {
     "mtime": 1788206910.5558138,
     "ast_hash": "6d0dba5c5146fedb906f36ba27e6b96d",
+    "semantic_hash": ""
+  },
+  "src/gpui_shell/mouse.rs": {
+    "mtime": 1788479463.5235195,
+    "ast_hash": "af8d24b97bd4d2072def191a203666cf",
     "semantic_hash": ""
   }
 }
