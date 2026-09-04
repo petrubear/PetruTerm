@@ -112,16 +112,9 @@
   "110": "resolve_color",
   "111": "run_session",
   "112": "RenamePrompt",
-  "113": "AiPollResult",
   "114": "translate_key",
   "115": "Global Constraints",
   "116": "Global Constraints",
-  "117": "Self",
-  "118": "RowRevisionMap",
   "119": "run_session",
-  "120": "TitleBarStyle",
-  "121": "AppMenu",
-  "122": "spawn_acp_connect",
-  "123": "mux/mod.rs",
-  "124": "main"
+  "122": "spawn_acp_connect"
 }

@@ -9,6 +9,7 @@
 pub mod font_state;
 mod key_map;
 mod mouse;
+mod panes;
 mod rasterize;
 pub mod terminal_element;
 
