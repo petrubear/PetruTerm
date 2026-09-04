@@ -3089,8 +3089,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_app_mux_mod",
-      "community": 87,
-      "community_name": "Src App",
+      "community": 123,
+      "community_name": "mux/mod.rs",
       "norm_label": "mux/mod.rs"
     },
     {
@@ -3100,8 +3100,8 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "src_app_mux_mod_workspace",
-      "community": 87,
-      "community_name": "Src App",
+      "community": 108,
+      "community_name": "Mux",
       "norm_label": "workspace"
     },
     {
@@ -3122,8 +3122,8 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "src_app_mux_mod_ptyeventbatch",
-      "community": 87,
-      "community_name": "Src App",
+      "community": 123,
+      "community_name": "mux/mod.rs",
       "norm_label": "ptyeventbatch"
     },
     {
@@ -3133,8 +3133,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mux_mod_rs_vec",
-      "community": 41,
-      "community_name": "Src App",
+      "community": 123,
+      "community_name": "mux/mod.rs",
       "norm_label": "vec"
     },
     {
@@ -3144,8 +3144,8 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "src_app_mux_mod_drain_pty_events",
-      "community": 87,
-      "community_name": "Src App",
+      "community": 123,
+      "community_name": "mux/mod.rs",
       "norm_label": "drain_pty_events()"
     },
     {
@@ -3155,8 +3155,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mux_mod_rs_receiver",
-      "community": 87,
-      "community_name": "Src App",
+      "community": 123,
+      "community_name": "mux/mod.rs",
       "norm_label": "receiver"
     },
     {
@@ -3166,8 +3166,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "fnmut",
-      "community": 87,
-      "community_name": "Src App",
+      "community": 123,
+      "community_name": "mux/mod.rs",
       "norm_label": "fnmut"
     },
     {
@@ -3199,8 +3199,8 @@
       "source_location": "L68",
       "_origin": "ast",
       "id": "src_app_mux_mod_workspacedata",
-      "community": 87,
-      "community_name": "Src App",
+      "community": 123,
+      "community_name": "mux/mod.rs",
       "norm_label": "workspacedata"
     },
     {
@@ -3243,8 +3243,8 @@
       "source_location": "L103",
       "_origin": "ast",
       "id": "src_app_mux_mod_syntaxoverlay",
-      "community": 41,
-      "community_name": "Src App",
+      "community": 123,
+      "community_name": "mux/mod.rs",
       "norm_label": "syntaxoverlay"
     },
     {
@@ -3254,7 +3254,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mux_mod_rs_option",
-      "community": 41,
+      "community": 87,
       "community_name": "Src App",
       "norm_label": "option"
     },
@@ -3265,8 +3265,8 @@
       "source_location": "L114",
       "_origin": "ast",
       "id": "src_app_mux_mod_ghostoverlay",
-      "community": 41,
-      "community_name": "Src App",
+      "community": 123,
+      "community_name": "mux/mod.rs",
       "norm_label": "ghostoverlay"
     },
     {
@@ -3276,8 +3276,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mux_mod_rs_ansicolor",
-      "community": 41,
-      "community_name": "Src App",
+      "community": 123,
+      "community_name": "mux/mod.rs",
       "norm_label": "ansicolor"
     },
     {
@@ -3287,8 +3287,8 @@
       "source_location": "L126",
       "_origin": "ast",
       "id": "src_app_mux_mod_flaghintoverlay",
-      "community": 41,
-      "community_name": "Src App",
+      "community": 123,
+      "community_name": "mux/mod.rs",
       "norm_label": "flaghintoverlay"
     },
     {
@@ -3298,8 +3298,8 @@
       "source_location": "L155",
       "_origin": "ast",
       "id": "src_app_mux_mod_push_search_match",
-      "community": 41,
-      "community_name": "Src App",
+      "community": 123,
+      "community_name": "mux/mod.rs",
       "norm_label": "push_search_match()"
     },
     {
@@ -3309,8 +3309,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "searchmatch",
-      "community": 41,
-      "community_name": "Src App",
+      "community": 123,
+      "community_name": "mux/mod.rs",
       "norm_label": "searchmatch"
     },
     {
@@ -3320,8 +3320,8 @@
       "source_location": "L175",
       "_origin": "ast",
       "id": "src_app_mux_mod_shell_quote",
-      "community": 87,
-      "community_name": "Src App",
+      "community": 123,
+      "community_name": "mux/mod.rs",
       "norm_label": "shell_quote()"
     },
     {
@@ -3353,8 +3353,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mux_mod_rs_vecdeque",
-      "community": 87,
-      "community_name": "Src App",
+      "community": 108,
+      "community_name": "Mux",
       "norm_label": "vecdeque"
     },
     {
@@ -3364,8 +3364,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mux_mod_rs_arc",
-      "community": 87,
-      "community_name": "Src App",
+      "community": 108,
+      "community_name": "Mux",
       "norm_label": "arc"
     },
     {
@@ -3452,7 +3452,7 @@
       "source_location": "L302",
       "_origin": "ast",
       "id": "src_app_mux_mod_mux_active_cwd",
-      "community": 41,
+      "community": 87,
       "community_name": "Src App",
       "norm_label": ".active_cwd()"
     },
@@ -3474,8 +3474,8 @@
       "source_location": "L307",
       "_origin": "ast",
       "id": "src_app_mux_mod_mux_active_terminal_size",
-      "community": 41,
-      "community_name": "Src App",
+      "community": 108,
+      "community_name": "Mux",
       "norm_label": ".active_terminal_size()"
     },
     {
@@ -3606,8 +3606,8 @@
       "source_location": "L686",
       "_origin": "ast",
       "id": "src_app_mux_mod_mux_terminal_exit_code",
-      "community": 41,
-      "community_name": "Src App",
+      "community": 108,
+      "community_name": "Mux",
       "norm_label": ".terminal_exit_code()"
     },
     {
@@ -3771,8 +3771,8 @@
       "source_location": "L975",
       "_origin": "ast",
       "id": "src_app_mux_mod_mux_collect_grid_cells_for",
-      "community": 41,
-      "community_name": "Src App",
+      "community": 123,
+      "community_name": "mux/mod.rs",
       "norm_label": ".collect_grid_cells_for()"
     },
     {
@@ -3826,8 +3826,8 @@
       "source_location": "L1303",
       "_origin": "ast",
       "id": "src_app_mux_mod_production_pty_drain_preserves_payload_and_special_events_across_budget",
-      "community": 87,
-      "community_name": "Src App",
+      "community": 123,
+      "community_name": "mux/mod.rs",
       "norm_label": "production_pty_drain_preserves_payload_and_special_events_across_budget()"
     },
     {
@@ -3881,8 +3881,8 @@
       "source_location": "L1363",
       "_origin": "ast",
       "id": "src_app_mux_mod_search_highlight_at",
-      "community": 41,
-      "community_name": "Src App",
+      "community": 123,
+      "community_name": "mux/mod.rs",
       "norm_label": "search_highlight_at()"
     },
     {
@@ -3892,8 +3892,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "fxhashmap",
-      "community": 41,
-      "community_name": "Src App",
+      "community": 123,
+      "community_name": "mux/mod.rs",
       "norm_label": "fxhashmap"
     },
     {
@@ -3903,8 +3903,8 @@
       "source_location": "L1384",
       "_origin": "ast",
       "id": "src_app_mux_mod_syntax_highlight_at",
-      "community": 41,
-      "community_name": "Src App",
+      "community": 123,
+      "community_name": "mux/mod.rs",
       "norm_label": "syntax_highlight_at()"
     },
     {
@@ -7357,8 +7357,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_bin_gpui_petruterm",
-      "community": 47,
-      "community_name": "Src App",
+      "community": 124,
+      "community_name": "main",
       "norm_label": "gpui_petruterm.rs"
     },
     {
@@ -7368,8 +7368,8 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "src_bin_gpui_petruterm_main",
-      "community": 47,
-      "community_name": "Src App",
+      "community": 124,
+      "community_name": "main",
       "norm_label": "main()"
     },
     {
@@ -10525,8 +10525,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_gpui_shell_mod",
-      "community": 47,
-      "community_name": "Src App",
+      "community": 29,
+      "community_name": "Src Llm",
       "norm_label": "gpui_shell/mod.rs"
     },
     {
@@ -10536,8 +10536,8 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "src_gpui_shell_mod_spawn_terminal",
-      "community": 47,
-      "community_name": "Src App",
+      "community": 29,
+      "community_name": "Src Llm",
       "norm_label": "spawn_terminal()"
     },
     {
@@ -10547,8 +10547,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_gpui_shell_mod_rs_result",
-      "community": 47,
-      "community_name": "Src App",
+      "community": 29,
+      "community_name": "Src Llm",
       "norm_label": "result"
     },
     {
@@ -10558,8 +10558,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_gpui_shell_mod_rs_rc",
-      "community": 47,
-      "community_name": "Src App",
+      "community": 29,
+      "community_name": "Src Llm",
       "norm_label": "rc"
     },
     {
@@ -10569,8 +10569,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_gpui_shell_mod_rs_arc",
-      "community": 47,
-      "community_name": "Src App",
+      "community": 29,
+      "community_name": "Src Llm",
       "norm_label": "arc"
     },
     {
@@ -10580,8 +10580,8 @@
       "source_location": "L103",
       "_origin": "ast",
       "id": "src_gpui_shell_mod_spawn_config_watcher",
-      "community": 47,
-      "community_name": "Src App",
+      "community": 124,
+      "community_name": "main",
       "norm_label": "spawn_config_watcher()"
     },
     {
@@ -11578,7 +11578,7 @@
       "label": "attrs_for()",
       "file_type": "code",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L565",
+      "source_location": "L588",
       "_origin": "ast",
       "id": "src_gpui_shell_rasterize_attrs_for",
       "community": 38,
@@ -11611,7 +11611,7 @@
       "label": "blend_pixel()",
       "file_type": "code",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L591",
+      "source_location": "L614",
       "_origin": "ast",
       "id": "src_gpui_shell_rasterize_blend_pixel",
       "community": 38,
@@ -11633,7 +11633,7 @@
       "label": "viewport_row()",
       "file_type": "code",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L630",
+      "source_location": "L653",
       "_origin": "ast",
       "id": "src_gpui_shell_rasterize_viewport_row",
       "community": 38,
@@ -11644,7 +11644,7 @@
       "label": "to_u8_rgba()",
       "file_type": "code",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L635",
+      "source_location": "L658",
       "_origin": "ast",
       "id": "src_gpui_shell_rasterize_to_u8_rgba",
       "community": 38,
@@ -11655,7 +11655,7 @@
       "label": "viewport_row_maps_buffer_range_onto_full_viewport_with_no_gaps()",
       "file_type": "code",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L655",
+      "source_location": "L678",
       "_origin": "ast",
       "id": "src_gpui_shell_rasterize_viewport_row_maps_buffer_range_onto_full_viewport_with_no_gaps",
       "community": 38,
@@ -11666,7 +11666,7 @@
       "label": "viewport_row_is_identity_when_not_scrolled()",
       "file_type": "code",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L665",
+      "source_location": "L688",
       "_origin": "ast",
       "id": "src_gpui_shell_rasterize_viewport_row_is_identity_when_not_scrolled",
       "community": 38,
@@ -11677,7 +11677,7 @@
       "label": "viewport_row_none_above_the_viewport()",
       "file_type": "code",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L672",
+      "source_location": "L695",
       "_origin": "ast",
       "id": "src_gpui_shell_rasterize_viewport_row_none_above_the_viewport",
       "community": 38,
@@ -11688,7 +11688,7 @@
       "label": "test_scheme()",
       "file_type": "code",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L680",
+      "source_location": "L703",
       "_origin": "ast",
       "id": "src_gpui_shell_rasterize_test_scheme",
       "community": 38,
@@ -11699,7 +11699,7 @@
       "label": "plain_cell_resolves_fg_bg_unswapped()",
       "file_type": "code",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L705",
+      "source_location": "L728",
       "_origin": "ast",
       "id": "src_gpui_shell_rasterize_plain_cell_resolves_fg_bg_unswapped",
       "community": 38,
@@ -11710,7 +11710,7 @@
       "label": "inverse_flag_swaps_fg_bg()",
       "file_type": "code",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L719",
+      "source_location": "L742",
       "_origin": "ast",
       "id": "src_gpui_shell_rasterize_inverse_flag_swaps_fg_bg",
       "community": 38,
@@ -11721,7 +11721,7 @@
       "label": "selection_swaps_fg_bg_after_inverse()",
       "file_type": "code",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L733",
+      "source_location": "L756",
       "_origin": "ast",
       "id": "src_gpui_shell_rasterize_selection_swaps_fg_bg_after_inverse",
       "community": 38,
@@ -11732,7 +11732,7 @@
       "label": "inverse_and_selection_compose()",
       "file_type": "code",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L750",
+      "source_location": "L773",
       "_origin": "ast",
       "id": "src_gpui_shell_rasterize_inverse_and_selection_compose",
       "community": 38,
@@ -18313,8 +18313,8 @@
       "source_location": "L868",
       "_origin": "ast",
       "id": "src_renderer_gpu_gpurenderer_size",
-      "community": 47,
-      "community_name": "Src App",
+      "community": 124,
+      "community_name": "main",
       "norm_label": ".size()"
     },
     {
@@ -47159,7 +47159,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L680",
+      "source_location": "L703",
       "weight": 1.0,
       "context": "return_type",
       "_origin": "ast",
@@ -53453,7 +53453,7 @@
       "relation": "imports_from",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L647",
+      "source_location": "L670",
       "weight": 1.0,
       "context": "import",
       "_origin": "ast",
@@ -53465,7 +53465,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L565",
+      "source_location": "L588",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_rasterize",
@@ -53476,7 +53476,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L591",
+      "source_location": "L614",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_rasterize",
@@ -53509,7 +53509,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L750",
+      "source_location": "L773",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_rasterize",
@@ -53520,7 +53520,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L719",
+      "source_location": "L742",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_rasterize",
@@ -53531,7 +53531,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L705",
+      "source_location": "L728",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_rasterize",
@@ -53588,7 +53588,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L733",
+      "source_location": "L756",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_rasterize",
@@ -53599,7 +53599,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L680",
+      "source_location": "L703",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_rasterize",
@@ -53610,7 +53610,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L635",
+      "source_location": "L658",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_rasterize",
@@ -53621,7 +53621,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L630",
+      "source_location": "L653",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_rasterize",
@@ -53632,7 +53632,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L665",
+      "source_location": "L688",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_rasterize",
@@ -53643,7 +53643,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L655",
+      "source_location": "L678",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_rasterize",
@@ -53654,7 +53654,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L672",
+      "source_location": "L695",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_rasterize",
@@ -53678,7 +53678,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L754",
+      "source_location": "L777",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_rasterize_inverse_and_selection_compose",
@@ -53690,7 +53690,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L721",
+      "source_location": "L744",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_rasterize_inverse_flag_swaps_fg_bg",
@@ -53702,7 +53702,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L707",
+      "source_location": "L730",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_rasterize_plain_cell_resolves_fg_bg_unswapped",
@@ -53750,7 +53750,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L735",
+      "source_location": "L758",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_rasterize_selection_swaps_fg_bg_after_inverse",
@@ -53834,7 +53834,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L521",
+      "source_location": "L544",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_rasterize_rasterize_grid",
@@ -53929,7 +53929,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L630",
+      "source_location": "L653",
       "weight": 1.0,
       "context": "return_type",
       "_origin": "ast",
@@ -53941,7 +53941,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L565",
+      "source_location": "L588",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -53953,7 +53953,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L565",
+      "source_location": "L588",
       "weight": 1.0,
       "context": "return_type",
       "_origin": "ast",
@@ -53965,7 +53965,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L591",
+      "source_location": "L614",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -53978,7 +53978,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L658",
+      "source_location": "L681",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_rasterize_viewport_row_maps_buffer_range_onto_full_viewport_with_no_gaps",
@@ -53990,7 +53990,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L751",
+      "source_location": "L774",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_rasterize_inverse_and_selection_compose",
@@ -54002,7 +54002,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L720",
+      "source_location": "L743",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_rasterize_inverse_flag_swaps_fg_bg",
@@ -54014,7 +54014,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L706",
+      "source_location": "L729",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_rasterize_plain_cell_resolves_fg_bg_unswapped",
@@ -54026,7 +54026,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/rasterize.rs",
-      "source_location": "L734",
+      "source_location": "L757",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_rasterize_selection_swaps_fg_bg_after_inverse",
@@ -78802,5 +78802,5 @@
       "source_file": ".github/workflows/release.yml"
     }
   ],
-  "built_at_commit": "b57615cdc142c8d512e41278a244a9a71976bd04"
+  "built_at_commit": "aa8ebe74846a674dfdc9037d54b79a7647bc3588"
 }

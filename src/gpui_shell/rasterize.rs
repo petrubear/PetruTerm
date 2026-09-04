@@ -478,12 +478,35 @@ pub fn rasterize_grid(
                             SwashContent::SubpixelMask => continue,
                         };
 
-                        // Blit position always comes from `physical_glyph`,
-                        // even when the cache key was overridden: `physical()`
-                        // already did the correct hinting/offset math for
-                        // where this glyph sits: only the bitmap identity
-                        // changes on override.
-                        let glyph_x = physical_glyph.x + placement.left;
+                        // Horizontal blit position is grid-anchored to this
+                        // glyph's own column (`col_edges[col_idx]`), NOT
+                        // `physical_glyph.x` (cosmic-text's cumulative
+                        // shaped pen position) -- matches how the wgpu
+                        // renderer always positions a glyph at
+                        // `col * cell_width` (`ShapedGlyph::bearing_x` is a
+                        // small correction on top of that, never the primary
+                        // position; see `src/font/shaper.rs`). For ordinary
+                        // monospace glyphs the two coincide almost exactly
+                        // (confirmed: cosmic-text's own per-glyph advances
+                        // for the primary font already equal `cell_width`),
+                        // so this is a no-op there. It matters for any glyph
+                        // whose natural advance doesn't equal the grid's
+                        // per-column width -- concretely, color emoji: a
+                        // measured 😀 glyph advanced 15px against a 19.2px
+                        // (2-column) budget, and every character shaped
+                        // after it in the same run drifted right by the
+                        // 4.2px difference, compounding with each further
+                        // emoji on the line. `physical_glyph`'s subpixel
+                        // hinting (via `cache_key`) is left untouched --
+                        // that only affects which hinted bitmap variant gets
+                        // rasterized, not where it's drawn, and grid cell
+                        // edges are already whole-pixel (`col_edges: Vec<u32>`)
+                        // so re-deriving a cache key from them would only
+                        // throw away real subpixel hint quality for no gain.
+                        let Some(&col_x) = col_edges.get(col_idx) else {
+                            continue;
+                        };
+                        let glyph_x = col_x as i32 + placement.left;
                         let glyph_y = physical_glyph.y - placement.top;
 
                         for row in 0..placement.height {

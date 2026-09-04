@@ -705,8 +705,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/rasterize.rs": {
-    "mtime": 1788529151.6709661,
-    "ast_hash": "c8890a202581e83c484b02532ef87d69",
+    "mtime": 1788557231.122725,
+    "ast_hash": "a4fb889faddde12fdbedece17390d93e",
     "semantic_hash": ""
   },
   "src/gpui_shell/terminal_element.rs": {

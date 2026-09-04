@@ -1,16 +1,16 @@
 # Graph Report - gpui-migration  (2026-09-04)
 
 ## Corpus Check
-- 145 files · ~226,429 words
+- 145 files · ~226,603 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2248 nodes · 4617 edges · 123 communities (111 shown, 12 thin omitted)
+- 2248 nodes · 4617 edges · 125 communities (113 shown, 12 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 67 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `b57615cd`
+- Built from commit: `aa8ebe74`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -126,6 +126,8 @@
 - TitleBarStyle
 - AppMenu
 - spawn_acp_connect
+- mux/mod.rs
+- main
 
 ## God Nodes (most connected - your core abstractions)
 1. `Config` - 78 edges
@@ -161,7 +163,7 @@
 - **Planning and Specification Backbone** — context_specs_build_phases_document, context_specs_build_phases_archive_document, context_specs_term_specs_document [INFERRED 0.75]
 - **Release Artifact Chain** — github_workflows_release_document, changelog_document, readme_document [INFERRED 0.65]
 
-## Communities (123 total, 12 thin omitted)
+## Communities (125 total, 12 thin omitted)
 
 ### Community 0 - "Src Config"
 Cohesion: 0.16
@@ -272,8 +274,8 @@ Cohesion: 0.15
 Nodes (12): StatusBarColors, format_time(), Default, Option, Path, Self, String, Vec (+4 more)
 
 ### Community 29 - "Src Llm"
-Cohesion: 0.27
-Nodes (7): AtomicBool, gate_sends_once_until_drain(), Arc, Self, signal_during_drain_is_not_lost(), take_pending_clears_and_reports(), WakeupGate
+Cohesion: 0.18
+Nodes (11): AtomicBool, gate_sends_once_until_drain(), Arc, Self, signal_during_drain_is_not_lost(), take_pending_clears_and_reports(), WakeupGate, Arc (+3 more)
 
 ### Community 30 - "Src Llm"
 Cohesion: 0.18
@@ -320,8 +322,8 @@ Cohesion: 0.15
 Nodes (16): AgentRequest, ApiMessage, build_api_messages(), ChatRequest, keychain_api_key(), OpenRouterProvider, ApiMessage, Client (+8 more)
 
 ### Community 41 - "Src App"
-Cohesion: 0.17
-Nodes (16): Column, FxHashMap, Line, SearchMatch, cell_in_selection(), FlagHintOverlay, GhostOverlay, push_search_match() (+8 more)
+Cohesion: 0.30
+Nodes (5): Column, Line, cell_in_selection(), String, SelectionType
 
 ### Community 42 - "Src Llm"
 Cohesion: 0.14
@@ -344,8 +346,8 @@ Cohesion: 0.36
 Nodes (12): bench_rasterize_glyph_ascii(), bench_rasterize_line_ascii(), bench_rasterize_line_ligatures(), bench_rasterize_line_unicode(), make_colors(), make_shaper(), rasterize_one(), CacheKey (+4 more)
 
 ### Community 47 - "Src App"
-Cohesion: 0.13
-Nodes (19): Context, Focusable, FocusHandle, KeyDownEvent, Render, SplitDemo, main(), GpuiShellRoot (+11 more)
+Cohesion: 0.19
+Nodes (13): Context, Focusable, FocusHandle, KeyDownEvent, Render, SplitDemo, GpuiShellRoot, App (+5 more)
 
 ### Community 48 - "Src App"
 Cohesion: 0.21
@@ -448,8 +450,8 @@ Cohesion: 1.00
 Nodes (3): PetruTerm App Icon, Cursor Block, Terminal Prompt Chevron
 
 ### Community 87 - "Src App"
-Cohesion: 0.15
-Nodes (17): FnMut, drain_pty_events(), eventloop_wakeup(), production_pty_drain_preserves_payload_and_special_events_across_budget(), PtyEventBatch, push_search_match_truncates_only_after_limit_is_exceeded(), Arc, EventLoopProxy (+9 more)
+Cohesion: 0.28
+Nodes (8): eventloop_wakeup(), push_search_match_truncates_only_after_limit_is_exceeded(), EventLoopProxy, Option, PathBuf, Result, Self, Wakeup
 
 ### Community 88 - "Src Font"
 Cohesion: 0.12
@@ -515,6 +517,10 @@ Nodes (7): Cell, LcdCursorPatch, OverlayUploadPlan, production_cursor_builder_an
 Cohesion: 0.19
 Nodes (9): Arc, EventLoopProxy, Mux, RenderContext, Self, VecDeque, Window, test_git_branch_in_flight_prevents_duplicate_spawn() (+1 more)
 
+### Community 108 - "Mux"
+Cohesion: 0.11
+Nodes (5): Mux, Arc, HashMap, VecDeque, Workspace
+
 ### Community 109 - "gpu.rs"
 Cohesion: 0.29
 Nodes (10): brighten(), build_usage_hint(), calculate_row_hash(), colors_approx_eq(), pack_color(), resolve_span_fg(), ChatPanel, String (+2 more)
@@ -559,6 +565,10 @@ Nodes (6): Menu, MenuId, AppMenu, Self, Vec, Submenu
 Cohesion: 0.50
 Nodes (4): Runtime, Receiver, Result, spawn_acp_connect()
 
+### Community 123 - "mux/mod.rs"
+Cohesion: 0.22
+Nodes (17): FnMut, FxHashMap, SearchMatch, drain_pty_events(), FlagHintOverlay, GhostOverlay, production_pty_drain_preserves_payload_and_special_events_across_budget(), PtyEventBatch (+9 more)
+
 ## Ambiguous Edges - Review These
 - `Phase 9 UI Restyle Complete` → `Phase 4 Plugin Ecosystem Focus`  [AMBIGUOUS]
   .context/core/ACTIVE_CONTEXT.md · relation: conceptually_related_to
@@ -573,11 +583,11 @@ _Questions this graph is uniquely positioned to answer:_
 
 - **What is the exact relationship between `Phase 9 UI Restyle Complete` and `Phase 4 Plugin Ecosystem Focus`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **Why does `Config` connect `Src Config` to `Src App`, `Src Term`, `Src Renderer`, `Src Llm`, `Src Term`, `Src App`, `Src Config`, `Benches Build Instances.rs`, `Src App`, `Src App`, `Src Llm`, `Src App`, `Src App`, `Src App`, `AcpAgentConfig`, `shaper.rs`, `Src Renderer`, `Src App`, `keybind_view.rs`, `.handle_redraw`, `.build_instances`, `app/ui/mod.rs`, `gpu.rs`, `resolve_color`, `Self`?**
+- **Why does `Config` connect `Src Config` to `Src App`, `Src Term`, `Src Renderer`, `Src Llm`, `Src Term`, `Src App`, `Src Config`, `Benches Build Instances.rs`, `Src App`, `Src Llm`, `Src App`, `Src Llm`, `Src App`, `Src App`, `Src App`, `AcpAgentConfig`, `shaper.rs`, `Src Renderer`, `Src App`, `keybind_view.rs`, `.handle_redraw`, `.build_instances`, `app/ui/mod.rs`, `gpu.rs`, `resolve_color`, `Self`, `mux/mod.rs`?**
   _High betweenness centrality (0.376) - this node is a cross-community bridge._
 - **Why does `FontConfig` connect `Src App` to `Src Config`, `Src Renderer`, `Src Font`, `Src Font`, `.resumed`, `Src App`, `Src App`, `Src App`, `resolve_color`, `Src Llm`, `Self`, `Src App`, `Src App`?**
   _High betweenness centrality (0.116) - this node is a cross-community bridge._
-- **Why does `App` connect `Src App` to `Src Config`, `.handle_mouse_button`, `Src Llm`, `cfdict_str`, `Src Ui`, `Src Llm`, `Src Ui`, `ConfigWatcher`, `Src App`, `Src App`, `Src App`, `AppMenu`, `Src Llm`, `shaper.rs`?**
+- **Why does `App` connect `Src App` to `Src Config`, `.handle_mouse_button`, `Src Llm`, `cfdict_str`, `Src Ui`, `Src Llm`, `Src Llm`, `Src Ui`, `ConfigWatcher`, `Src App`, `Src App`, `AppMenu`, `mux/mod.rs`, `shaper.rs`?**
   _High betweenness centrality (0.102) - this node is a cross-community bridge._
 - **What connects `@modelcontextprotocol/server-filesystem`, `@modelcontextprotocol/server-fetch`, `build_pgo.sh script` to the rest of the system?**
   _101 weakly-connected nodes found - possible documentation gaps or missing edges._
