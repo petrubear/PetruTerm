@@ -710,8 +710,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/terminal_element.rs": {
-    "mtime": 1788566139.35671,
-    "ast_hash": "29e3519426453f3e3c0428be66dc037e",
+    "mtime": 1788575103.846856,
+    "ast_hash": "5fda7671ce0be47ad51c4c5468748ef8",
     "semantic_hash": ""
   },
   "docs/superpowers/plans/2026-08-30-gpui-chrome-migration-m0.md": {

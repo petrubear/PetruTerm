@@ -61873,7 +61873,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/gpui_shell/terminal_element.rs",
-      "source_location": "L143",
+      "source_location": "L162",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_terminal_element_terminalgridelement_paint",
@@ -86267,5 +86267,5 @@
       "source_file": ".github/workflows/release.yml"
     }
   ],
-  "built_at_commit": "4ef28e9d89b1e40375e5b553a4a976fd10c6f397"
+  "built_at_commit": "c2b7a1235e81f18d24a30a05d9e5a7b7c09020ba"
 }
