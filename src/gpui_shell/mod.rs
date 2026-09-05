@@ -8,6 +8,7 @@
 
 pub mod font_state;
 mod key_map;
+mod leader;
 mod mouse;
 mod pane_view;
 mod panes;
@@ -28,6 +29,7 @@ use gpui::{div, prelude::*, App, Context, FocusHandle, Focusable, KeyDownEvent, 
 use crate::app::pty_schedule::WakeupGate;
 use crate::config::Config;
 use crate::term::Terminal;
+use leader::LeaderAction;
 use pane_view::to_rgba;
 use panes::{PaneForest, SplitDir};
 
@@ -157,6 +159,41 @@ pub struct GpuiShellRoot {
     /// (`src/app/frame.rs`, which swaps in a single full-viewport `PaneInfo`
     /// instead of mutating the tree), so unzooming is just dropping this.
     zoomed_pane: Option<usize>,
+    /// Leader-key ("Ctrl+F" by default) chorded-input state -- ported from
+    /// `src/app/input/mod.rs`'s `leader_active`/`leader_deadline`. `true`
+    /// between the leader keypress and the very next keystroke (which is
+    /// then consumed as the chord's second key, whatever it is).
+    leader_active: bool,
+    /// Set when `leader_active` flips true; cleared (by the poll loop, or by
+    /// the next keystroke consuming the chord) once it's no longer needed.
+    /// Checked against `Instant::now()` each poll tick -- see `new()`'s
+    /// `cx.spawn` loop -- so a leader press with no follow-up key expires on
+    /// its own after `config.leader.timeout_ms`.
+    leader_deadline: Option<std::time::Instant>,
+    /// True from a `Leader Option+Arrow` resize until a keystroke arrives
+    /// with Option no longer held (or a non-arrow key) -- lets repeated
+    /// arrow presses keep resizing without re-pressing the leader each time,
+    /// matching `src/app/input/mod.rs`'s own `resize_mode` field.
+    resize_mode: bool,
+    /// Single-key leader dispatch table, built once from `config.keys`'s
+    /// `LEADER`-scoped bindings (`leader::build_leader_map`). Rebuilt
+    /// wholesale on every config reload alongside the rest of `self.config`.
+    leader_map: HashMap<String, LeaderAction>,
+}
+
+/// Maps a gpui named-key string to the resize direction it drives under
+/// `Leader Option+Arrow` / resize-mode continuation. gpui's own arrow-key
+/// strings ("left"/"right"/"up"/"down", see `key_map::translate_key`), not
+/// winit's `NamedKey::Arrow*` variants -- different event model, see this
+/// module's own doc comment on why gpui_shell can't import winit at all.
+fn arrow_key_to_focus_dir(key: &str) -> Option<panes::FocusDir> {
+    match key {
+        "left" => Some(panes::FocusDir::Left),
+        "right" => Some(panes::FocusDir::Right),
+        "up" => Some(panes::FocusDir::Up),
+        "down" => Some(panes::FocusDir::Down),
+        _ => None,
+    }
 }
 
 impl GpuiShellRoot {
@@ -199,6 +236,10 @@ impl GpuiShellRoot {
                         let applied = this
                             .update(cx, |this: &mut Self, cx| {
                                 font_state::reload_font_config(font_config, cx);
+                                this.leader_map = leader::build_leader_map(
+                                    &crate::config::keybind_view::leader_bindings_view(&new_config)
+                                        .bindings,
+                                );
                                 this.config = new_config;
                                 cx.notify();
                             })
@@ -247,6 +288,23 @@ impl GpuiShellRoot {
                             this.cursor_last_blink = std::time::Instant::now();
                             should_notify = true;
                         }
+                        // Leader-deadline expiry: `on_key_down` only ever
+                        // SETS `leader_active`/`leader_deadline` (a key press
+                        // always means the deadline hasn't fired yet, by
+                        // definition -- this loop would have cleared
+                        // `leader_active` first if it had), so expiry has to
+                        // be checked from somewhere that runs independently
+                        // of keystrokes. Piggybacks on this same 33ms tick
+                        // rather than a dedicated timer.
+                        if this.leader_active {
+                            if let Some(deadline) = this.leader_deadline {
+                                if std::time::Instant::now() >= deadline {
+                                    this.leader_active = false;
+                                    this.leader_deadline = None;
+                                    should_notify = true; // status bar's leader indicator needs to clear
+                                }
+                            }
+                        }
                         if should_notify {
                             cx.notify();
                         }
@@ -267,6 +325,10 @@ impl GpuiShellRoot {
         let mut wakeup_gates = HashMap::new();
         wakeup_gates.insert(terminal_id, gate);
 
+        let leader_map = leader::build_leader_map(
+            &crate::config::keybind_view::leader_bindings_view(&config).bindings,
+        );
+
         Self {
             tabs,
             tab_panes: vec![PaneForest::new(terminal_id)],
@@ -279,6 +341,10 @@ impl GpuiShellRoot {
             cursor_last_blink: std::time::Instant::now(),
             rect_cache: Rc::new(RefCell::new(panes::RectCache::default())),
             zoomed_pane: None,
+            leader_active: false,
+            leader_deadline: None,
+            resize_mode: false,
+            leader_map,
         }
     }
 
@@ -383,41 +449,179 @@ impl GpuiShellRoot {
         };
     }
 
+    /// Execute one resolved leader-key action (`on_key_down`'s leader
+    /// dispatch branch). See `leader::LeaderAction`'s doc comment for why
+    /// the set stops at these ten variants.
+    fn dispatch_leader_action(&mut self, action: LeaderAction, cx: &mut Context<Self>) {
+        match action {
+            LeaderAction::NewTab => {
+                let (terminal, gate) = match spawn_terminal(80, 24, &self.config) {
+                    Ok(pair) => pair,
+                    Err(e) => {
+                        log::error!("gpui-shell: failed to spawn terminal for new tab: {e:#}");
+                        return;
+                    }
+                };
+                let terminal_id = self.next_terminal_id;
+                self.next_terminal_id += 1;
+                self.terminals.insert(terminal_id, terminal);
+                self.wakeup_gates.insert(terminal_id, gate);
+                self.tabs.new_tab("zsh");
+                self.tab_panes.push(PaneForest::new(terminal_id));
+                // Same reasoning as `split_focused`: a zoomed pane from the
+                // tab being left would otherwise linger, filling the window
+                // even after the new tab (which has nothing zoomed) becomes
+                // active.
+                self.zoomed_pane = None;
+            }
+            LeaderAction::CloseTab => {
+                // Mirrors `Mux::cmd_close_tab` (src/app/mux/mod.rs:792-807):
+                // drop the active tab from `TabManager`, then reap every
+                // leaf terminal of its `PaneForest` via the same
+                // `reap_pane` helper `close_focused_pane`/
+                // `on_terminal_exited` use, so all three close paths stay in
+                // sync. Guards against closing the last tab -- neither
+                // `cmd_close_tab` nor its caller does, but gpui_shell's
+                // `render()` indexes `self.tab_panes[active_index]`
+                // unconditionally and has no "quit when no tabs remain"
+                // path to catch a resulting empty state.
+                if self.tabs.tab_count() <= 1 {
+                    return;
+                }
+                let active = self.tabs.active_index();
+                if let Some(tab) = self.tabs.active_tab() {
+                    self.tabs.close_tab(tab.id);
+                }
+                if active < self.tab_panes.len() {
+                    let forest = self.tab_panes.remove(active);
+                    for id in forest.root.leaf_ids() {
+                        // SIGHUP before dropping, same deadlock rationale as
+                        // `close_focused_pane`'s own doc comment.
+                        if let Some(terminal) = self.terminals.get(&id) {
+                            terminal.pty.request_exit();
+                        }
+                        self.reap_pane(id);
+                    }
+                }
+            }
+            LeaderAction::NextTab => self.tabs.next_tab(),
+            LeaderAction::PrevTab => self.tabs.prev_tab(),
+            // Documented no-op for this milestone (M2 Task 4 ruling): a real
+            // rename needs a modal/inline text-input flow that doesn't exist
+            // in gpui_shell yet -- that infra belongs to M4 (command-palette
+            // era). `LeaderAction::RenameTab` and `Leader ,` stay wired up
+            // for parity with the wgpu app's full action set; this is a
+            // deliberate scope cut, not an oversight.
+            LeaderAction::RenameTab => {
+                log::info!(
+                    "gpui-shell: tab rename not yet implemented (needs M4 modal-input infra)"
+                );
+                return;
+            }
+            LeaderAction::SplitHorizontal => self.split_focused(SplitDir::Horizontal),
+            LeaderAction::SplitVertical => self.split_focused(SplitDir::Vertical),
+            LeaderAction::ClosePane => self.close_focused_pane(),
+            LeaderAction::ZoomPane => self.toggle_zoom(),
+            LeaderAction::FocusPane(dir) => {
+                let active = self.tabs.active_index();
+                // Clone the Rc first, same reason as `on_drag` in render():
+                // `focus_dir` needs `&mut self.tab_panes[..]` and
+                // `&self.rect_cache`'s contents at once, which a single
+                // `self.` borrow of both fields can't express.
+                let rects = self.rect_cache.clone();
+                let rects = rects.borrow();
+                self.tab_panes[active].focus_dir(dir, &rects);
+            }
+        }
+        cx.notify();
+    }
+
     fn on_key_down(&mut self, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
         self.cursor_blink_on = true;
         self.cursor_last_blink = std::time::Instant::now();
 
-        // TEMPORARY (M2 Task 3 dogfood only): the leader-key dispatch that
-        // owns `Leader %`/`"`/`x`/`z` for real is Task 4's, and it doesn't
-        // exist yet -- without some trigger there is no way to exercise
-        // splits, zoom or separator drag at all. Delete this whole block
-        // once Task 4's real bindings land; nothing else depends on it.
-        // These are unbound Cmd-combos, so they'd otherwise fall through to
-        // the terminal as nothing at all (gpui doesn't populate `key_char`
-        // while cmd is held).
+        // ── Pane-resize mode continuation — Leader Option+Arrow started it
+        // (below); while it's active, subsequent Option+Arrow presses keep
+        // resizing without another leader press. Checked first, like
+        // `src/app/input/mod.rs`'s own top-of-function resize_mode guard:
+        // gpui has no `ModifiersChanged`-equivalent hook wired into
+        // `on_key_down` here, so mode exit is inferred from the next
+        // keystroke instead of Option's key-up -- the first key that isn't
+        // an Option-held arrow clears it.
+        if self.resize_mode {
+            if event.keystroke.modifiers.alt {
+                if let Some(dir) = arrow_key_to_focus_dir(&event.keystroke.key) {
+                    let active = self.tabs.active_index();
+                    self.tab_panes[active].adjust_ratio(dir, 0.05);
+                    cx.notify();
+                    return;
+                }
+            }
+            self.resize_mode = false;
+        }
+
+        // ── Leader key activation ────────────────────────────────────────
+        // Leader-deadline expiry piggybacks on the 33ms poll loop (`new()`'s
+        // `cx.spawn` block) -- this branch only ever SETS leader_active/
+        // leader_deadline, never expires them (a key press always means the
+        // deadline hasn't fired yet, since the poll loop would have cleared
+        // leader_active first if it had).
+        if !self.leader_active
+            && event.keystroke.modifiers.control
+            && !event.keystroke.modifiers.shift
+            && !event.keystroke.modifiers.platform
+            && event.keystroke.key == self.config.leader.key
+        {
+            self.leader_active = true;
+            self.leader_deadline = Some(
+                std::time::Instant::now()
+                    + std::time::Duration::from_millis(self.config.leader.timeout_ms),
+            );
+            cx.notify(); // leader-active indicator (future status bar) needs to see this
+            return;
+        }
+
+        // ── Leader key dispatch ──────────────────────────────────────────
+        if self.leader_active {
+            self.leader_active = false;
+            self.leader_deadline = None;
+
+            // Leader + Option + Arrow → resize (TD-042 parity).
+            if event.keystroke.modifiers.alt {
+                if let Some(dir) = arrow_key_to_focus_dir(&event.keystroke.key) {
+                    let active = self.tabs.active_index();
+                    self.tab_panes[active].adjust_ratio(dir, 0.05);
+                    self.resize_mode = true; // stay in resize mode for subsequent arrows
+                    cx.notify();
+                    return;
+                }
+            }
+
+            // Leader + 1-9 → select tab by index (hardcoded, like Cmd+1-9).
+            if let Ok(n) = event.keystroke.key.parse::<usize>() {
+                if (1..=9).contains(&n) {
+                    self.tabs.switch_to_index(n - 1);
+                    cx.notify();
+                    return;
+                }
+            }
+
+            // Data-driven dispatch for this milestone's ten actions
+            // (c/&/n/b/,/%/"/x/z/h/j/k/l, per config/default/keybinds.lua).
+            if let Some(action) = self.leader_map.get(event.keystroke.key.as_str()).copied() {
+                self.dispatch_leader_action(action, cx);
+            }
+            return;
+        }
+
+        // ── Cmd+1-9 — switch to tab N (standard macOS pattern) ───────────
         if event.keystroke.modifiers.platform {
-            let shift = event.keystroke.modifiers.shift;
-            match event.keystroke.key.to_ascii_lowercase().as_str() {
-                "d" => {
-                    self.split_focused(if shift {
-                        SplitDir::Vertical
-                    } else {
-                        SplitDir::Horizontal
-                    });
+            if let Ok(n) = event.keystroke.key.parse::<usize>() {
+                if (1..=9).contains(&n) {
+                    self.tabs.switch_to_index(n - 1);
                     cx.notify();
                     return;
                 }
-                "w" if shift => {
-                    self.close_focused_pane();
-                    cx.notify();
-                    return;
-                }
-                "z" if shift => {
-                    self.toggle_zoom();
-                    cx.notify();
-                    return;
-                }
-                _ => {}
             }
         }
 
