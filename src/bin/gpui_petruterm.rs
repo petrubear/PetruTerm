@@ -2,6 +2,15 @@ use gpui::{prelude::*, px, size, App, Application, Bounds, WindowBounds, WindowO
 use petruterm::gpui_shell::{font_state, spawn_config_watcher, GpuiShellRoot};
 
 fn main() {
+    // Unlike src/main.rs (the wgpu binary), nothing here ever initialized a
+    // logger -- every `log::info!`/`log::warn!` call anywhere in gpui_shell
+    // (config hot-reload, font loading, PUA lookups, the cell-size line
+    // added while investigating a font-spacing dogfood report) was silently
+    // a no-op with no backend registered to receive it. Same init as
+    // src/main.rs so `RUST_LOG=info cargo run --bin gpui-petruterm` actually
+    // shows something.
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
     // Real user config (~/.config/petruterm/config.lua, falling back to the
     // embedded default) — the same function the wgpu app uses at startup.
     // This replaces M0's hardcoded `Config::default()` + inline font override.
