@@ -338,7 +338,25 @@ impl Pty {
 
 impl Drop for Pty {
     fn drop(&mut self) {
-        self.close_master();
+        // Must run the full SIGHUP-then-join-then-close sequence, not a bare
+        // `close_master()`: whenever the child is still alive, closing the
+        // master while the reader thread sits in `read()` on that same fd
+        // deadlocks on macOS/BSD -- the deadlock `shutdown()`'s own comment
+        // describes, which this impl was previously walking straight into.
+        //
+        // It only ever surfaced on a path that drops a Pty whose shell is
+        // still running. Typing `exit` never hit it (the shell is already
+        // gone, so the reader has already broken out on EIO and `close()`
+        // returns immediately), which is why it stayed hidden until Cmd+Q
+        // and last-tab `Leader &` -- both of which reach `cx.quit()`, and so
+        // drop every live Terminal without signalling its shell first --
+        // hung the whole app at teardown.
+        //
+        // `master_fd < 0` means `shutdown()` already ran; skip, rather than
+        // re-`kill` a pid the OS may since have recycled.
+        if self.master_fd >= 0 {
+            self.shutdown();
+        }
     }
 }
 
