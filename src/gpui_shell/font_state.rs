@@ -45,19 +45,21 @@ pub fn reload_font_config(font_config: FontConfig, cx: &mut App) {
             }
         };
     let mut font_system = new_font_system;
-    let cell_size = compute_cell_size(
-        &mut font_system,
-        &new_family,
-        font_config.size,
-        font_config.line_height,
-    );
-    let primary_face_ids = collect_primary_face_ids(&font_system, face_id, &new_family);
+    // Built before `compute_cell_size`, which now reads its hinted metrics.
     let ft_cmap = FreeTypeCmapLookup::new(&path, face_index, font_config.size);
     if ft_cmap.is_none() {
         log::warn!(
             "gpui-shell: FreeType cmap lookup unavailable after font reload -- Nerd Font PUA icons may not render."
         );
     }
+    let cell_size = compute_cell_size(
+        &mut font_system,
+        &new_family,
+        font_config.size,
+        font_config.line_height,
+        ft_cmap.as_ref(),
+    );
+    let primary_face_ids = collect_primary_face_ids(&font_system, face_id, &new_family);
     FONT_SYSTEM.with_borrow_mut(|state| {
         state.font_system = font_system;
         state.family = new_family;
@@ -190,20 +192,54 @@ thread_local! {
     // `gpui_shell::spawn_terminal` (PTY winsize) read, so the two can never
     // disagree.
     static CELL_SIZE: Cell<(Pixels, Pixels)> = Cell::new(FONT_SYSTEM.with_borrow_mut(|state| {
-        compute_cell_size(&mut state.font_system, &state.family, state.size, state.line_height)
+        compute_cell_size(
+            &mut state.font_system,
+            &state.family,
+            state.size,
+            state.line_height,
+            state.ft_cmap.as_ref(),
+        )
     }));
 }
 
-/// Shape a sample string and read its advance width to get the real cell
-/// width/height for `family` at `size`/`line_height` — the same technique
-/// `font::shaper::TextShaper::measure_cell()`'s fallback branch uses, ported
-/// here rather than importing that (wgpu-atlas-coupled) type.
+/// Real cell width/height for `family` at `size`/`line_height`, mirroring
+/// `font::shaper::TextShaper::measure_cell()`'s two-branch structure: prefer
+/// FreeType's own hinted metrics, and only fall back to shaping a sample
+/// string when FreeType is unavailable.
+///
+/// The FreeType branch is not an optimization — it is what makes the two
+/// renderers agree. FreeType (`FT_LOAD_DEFAULT`) grid-fits each glyph, so its
+/// reported advance is the hinted, whole-pixel one the glyphs are actually
+/// rasterized against; cosmic-text's shaped advance is the font's unhinted
+/// design value. For MonoLisaCode at 16pt those differ (10.0 vs 10.24), and
+/// this file previously used only the shaping branch — so every column sat
+/// 2.4% further right than the glyph ink drawn into it, leaving a visible
+/// sliver of extra space beside every character that the wgpu renderer,
+/// reading the hinted value, never had. That is the "large space between
+/// characters" a dogfood report flagged as present only in gpui-petruterm.
+///
+/// Measured at the LOGICAL font size; `rasterize_grid` multiplies by the
+/// window's scale factor at paint time. `cell_metrics` therefore returns
+/// unrounded values (see its own doc comment) — rounding in logical space
+/// then doubling on a 2x display cannot reproduce the wgpu renderer's
+/// physical-space rounding.
 fn compute_cell_size(
     font_system: &mut FontSystem,
     family: &str,
     size: f32,
     line_height: f32,
+    ft_cmap: Option<&FreeTypeCmapLookup>,
 ) -> (Pixels, Pixels) {
+    if let Some((width, height)) = ft_cmap.and_then(|ft| ft.cell_metrics()) {
+        if width > 0.0 {
+            let cell_height = height.max(size * line_height);
+            log::info!(
+                "gpui-shell: cell size from FreeType: {width:.2}x{cell_height:.2}px (font: '{family}' {size}pt, line_height={line_height})"
+            );
+            return (px(width), px(cell_height));
+        }
+    }
+
     let metrics = Metrics::new(size, size * line_height);
     let mut buffer = Buffer::new(font_system, metrics);
     let mut buffer = buffer.borrow_with(font_system);

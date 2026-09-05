@@ -103,25 +103,6 @@ impl Element for TerminalGridElement {
         let [r, g, b, a] = self.colors.background;
         window.paint_quad(fill(bounds, gpui::Rgba { r, g, b, a }));
 
-        // One-shot diagnostic: log the window's own reported scale factor
-        // the first time any pane paints. Added while investigating a
-        // dogfood report of wide inter-character spacing present only in
-        // gpui-petruterm, not the original wgpu petruterm, for the
-        // identical font/config -- the wgpu renderer bakes its window's
-        // scale factor into the font size it hands to FreeType at load time
-        // (`RendererState::locate_scaled_font`), while gpui_shell keeps the
-        // configured (unscaled) size and multiplies by `window.scale_factor()`
-        // per paint instead; if the two frameworks disagree about what this
-        // display's actual scale factor is, the two renderers would size
-        // text differently despite reading the same `font_size` config.
-        static SCALE_FACTOR_LOGGED: std::sync::Once = std::sync::Once::new();
-        SCALE_FACTOR_LOGGED.call_once(|| {
-            log::info!(
-                "gpui-shell: window.scale_factor() = {}",
-                window.scale_factor()
-            );
-        });
-
         mouse::register_mouse_handlers(
             self.terminal.clone(),
             bounds,

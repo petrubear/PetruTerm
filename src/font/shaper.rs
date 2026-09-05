@@ -260,7 +260,16 @@ impl FreeTypeCmapLookup {
         }
     }
 
-    fn cell_metrics(&self) -> Option<(f32, f32)> {
+    /// Max hinted horizontal advance across printable ASCII, plus the face's
+    /// line height, in pixels at the size this lookup was created with.
+    ///
+    /// Returned UNROUNDED: `measure_cell` (wgpu) rounds these itself, and
+    /// `gpui_shell::font_state::compute_cell_size` needs the raw values
+    /// because it measures at the *logical* font size and only multiplies by
+    /// the window's scale factor later, at paint time -- rounding here would
+    /// round in logical space and then get doubled on a 2x display, which
+    /// cannot reproduce the wgpu renderer's physical-space rounding.
+    pub(crate) fn cell_metrics(&self) -> Option<(f32, f32)> {
         use freetype::freetype as ft;
 
         let size_metrics = unsafe {
@@ -294,7 +303,7 @@ impl FreeTypeCmapLookup {
         }
 
         let height = size_metrics.height as f32 / 64.0;
-        Some((width.round(), height.round()))
+        Some((width, height))
     }
 }
 
@@ -494,8 +503,13 @@ impl TextShaper {
 
     fn measure_cell(&mut self, font_config: &FontConfig) {
         if let Some((width, height)) = self.ft_cmap.as_ref().and_then(|ft| ft.cell_metrics()) {
-            self.cell_width = width;
-            self.cell_height = height.max((font_config.size * font_config.line_height).round());
+            // `cell_metrics` now returns unrounded values (gpui_shell needs
+            // them raw); rounding here keeps this path's output bit-identical
+            // to what it produced when the rounding lived inside it.
+            self.cell_width = width.round();
+            self.cell_height = height
+                .round()
+                .max((font_config.size * font_config.line_height).round());
             log::info!(
                 "Cell size from FreeType: {:.1}x{:.1}px (font: '{}' {}pt, family: '{}')",
                 self.cell_width,
