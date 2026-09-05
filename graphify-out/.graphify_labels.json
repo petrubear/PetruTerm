@@ -123,6 +123,9 @@
   "121": "TermSize",
   "122": "spawn_acp_connect",
   "123": "Config",
+  "124": ".handle_redraw",
+  "125": ".dispatch_leader_action",
+  "126": "exit_code.rs",
   "127": "build_font_system",
-  "130": "UiStyle"
+  "128": "ExitCodeState"
 }
