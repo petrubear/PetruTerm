@@ -1,6 +1,6 @@
 use gpui::{
-    actions, prelude::*, px, size, App, Application, Bounds, Menu, MenuItem, WindowBounds,
-    WindowOptions,
+    actions, prelude::*, px, size, App, Application, Bounds, KeyBinding, Menu, MenuItem,
+    WindowBounds, WindowOptions,
 };
 use petruterm::gpui_shell::{font_state, spawn_config_watcher, GpuiShellRoot};
 
@@ -38,6 +38,15 @@ fn main() {
 
     Application::new().run(move |cx: &mut App| {
         cx.on_action(quit);
+        // `set_menus` alone is NOT enough: it renders a clickable Quit item,
+        // but the keystroke shown beside it (and the one macOS actually
+        // routes) is looked up from the keymap -- `set_menus(menus,
+        // &self.keymap.borrow())` in gpui's own `App::set_menus`. With no
+        // binding registered, Cmd+Q matches nothing and silently does
+        // nothing, which is exactly what the first attempt at this fix
+        // shipped. gpui's own `examples/image_gallery.rs` pairs the two calls
+        // for this reason.
+        cx.bind_keys([KeyBinding::new("cmd-q", Quit, None)]);
         cx.set_menus(vec![Menu {
             name: "petruterm".into(),
             items: vec![MenuItem::action("Quit", Quit)],
