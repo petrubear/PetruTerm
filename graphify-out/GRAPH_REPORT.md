@@ -1,7 +1,7 @@
 # Graph Report - gpui-migration  (2026-09-04)
 
 ## Corpus Check
-- 160 files · ~248,760 words
+- 160 files · ~248,755 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `b98ac604`
+- Built from commit: `679bbec1`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -234,8 +234,8 @@ Cohesion: 0.13
 Nodes (10): label_format_and_truncation(), Default, Into, Option, Self, String, Vec, Tab (+2 more)
 
 ### Community 17 - "Src Term"
-Cohesion: 0.09
-Nodes (16): CursorShape, F, Rc, CursorInfo, process_cwd(), Arc, FairMutex, Option (+8 more)
+Cohesion: 0.10
+Nodes (15): CursorShape, F, CursorInfo, process_cwd(), Arc, FairMutex, Option, PathBuf (+7 more)
 
 ### Community 18 - "Src App"
 Cohesion: 0.12
@@ -366,8 +366,8 @@ Cohesion: 0.24
 Nodes (11): ConfirmDisplay, Path, Self, Vec, compress_diff(), diff_lines(), DiffKind, DiffLine (+3 more)
 
 ### Community 50 - "Benches Rasterize.rs"
-Cohesion: 0.17
-Nodes (16): App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId, IntoElement, LayoutId (+8 more)
+Cohesion: 0.16
+Nodes (17): App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId, IntoElement, LayoutId (+9 more)
 
 ### Community 51 - "Benches Search.rs"
 Cohesion: 0.41
