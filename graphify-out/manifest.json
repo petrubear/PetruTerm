@@ -685,13 +685,13 @@
     "semantic_hash": ""
   },
   "src/bin/gpui_petruterm.rs": {
-    "mtime": 1788560445.9329154,
-    "ast_hash": "d97ddb2b5dc9ac21e72f72b3bbbcd3ea",
+    "mtime": 1788574604.4221642,
+    "ast_hash": "cb2480c072487c1a8a7961f4928a128a",
     "semantic_hash": ""
   },
   "src/gpui_shell/font_state.rs": {
-    "mtime": 1788573315.4257836,
-    "ast_hash": "bb329f8b38271657a16b0f7ca555961b",
+    "mtime": 1788574506.2144694,
+    "ast_hash": "89b3375bc41291cc8c6f0bf3ef2009c9",
     "semantic_hash": ""
   },
   "src/gpui_shell/key_map.rs": {

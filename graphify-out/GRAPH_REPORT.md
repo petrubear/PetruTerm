@@ -1,7 +1,7 @@
 # Graph Report - gpui-migration  (2026-09-04)
 
 ## Corpus Check
-- 151 files · ~247,023 words
+- 151 files · ~247,161 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `bf097fe0`
+- Built from commit: `4ef28e9d`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
