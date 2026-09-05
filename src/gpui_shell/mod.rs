@@ -9,11 +9,13 @@
 pub mod font_state;
 mod key_map;
 mod mouse;
+mod pane_view;
 mod panes;
 mod rasterize;
 pub mod tabs;
 pub mod terminal_element;
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -26,9 +28,8 @@ use gpui::{div, prelude::*, App, Context, FocusHandle, Focusable, KeyDownEvent, 
 use crate::app::pty_schedule::WakeupGate;
 use crate::config::Config;
 use crate::term::Terminal;
-use mouse::OnFocusCallback;
-use panes::PaneForest;
-use terminal_element::TerminalGridElement;
+use pane_view::to_rgba;
+use panes::{PaneForest, SplitDir};
 
 /// Spawn one real terminal (shell + PTY + alacritty grid).
 ///
@@ -134,21 +135,28 @@ pub struct GpuiShellRoot {
     /// where the actual Rc<Terminal> lives, looked up by id wherever a
     /// leaf's real terminal is needed (paint, key routing, resize).
     terminals: HashMap<usize, Rc<Terminal>>,
-    /// Not read until Task 3 starts spawning additional terminals (splits,
-    /// new tabs); assigned now so `new()`'s initial terminal (id 0) and
-    /// every later spawn draw ids from one counter.
-    #[allow(dead_code)]
+    /// `new()`'s initial terminal (id 0) and every later spawn (splits, new
+    /// tabs) draw ids from this one counter.
     next_terminal_id: usize,
     pub focus_handle: FocusHandle,
     config: Config,
     wakeup_gates: HashMap<usize, Arc<WakeupGate>>,
     cursor_blink_on: bool,
     cursor_last_blink: std::time::Instant,
-    /// Not read until Task 3's paint pass populates and consumes it
-    /// (focus_dir/adjust_ratio/drag_separator all need it) -- see
-    /// panes::RectCache's own doc comment.
-    #[allow(dead_code)]
-    rect_cache: panes::RectCache,
+    /// Last-painted pixel bounds of every leaf and split in the active tab,
+    /// refreshed each frame by `pane_view`'s `on_children_prepainted` hooks.
+    /// `Rc<RefCell<_>>` (rather than the plain field Task 1 left here)
+    /// because those hooks are `'static` closures owned by the element tree:
+    /// they have to write into the cache from inside a frame that `render()`
+    /// has already returned from.
+    rect_cache: Rc<RefCell<panes::RectCache>>,
+    /// Render-time zoom filter: when `Some(terminal_id)`, that pane is drawn
+    /// alone, filling the whole content area, and the tab's pane tree is not
+    /// walked at all. Deliberately never written into `PaneTree`/
+    /// `PaneForest` itself -- same design as the wgpu app's own zoom
+    /// (`src/app/frame.rs`, which swaps in a single full-viewport `PaneInfo`
+    /// instead of mutating the tree), so unzooming is just dropping this.
+    zoomed_pane: Option<usize>,
 }
 
 impl GpuiShellRoot {
@@ -205,6 +213,30 @@ impl GpuiShellRoot {
                     .update(cx, |this: &mut Self, cx| {
                         let mut should_notify =
                             this.wakeup_gates.values().any(|g| g.take_pending());
+
+                        // Detect shells that exited on their own (typing
+                        // `exit`, Ctrl+D, a crash) -- nothing else in this
+                        // module reads `Pty::rx`, so without this an exited
+                        // shell's pane just sits there dead until the user
+                        // notices and closes it by hand. Only `Exit` is
+                        // acted on here; other PtyEvent variants (title
+                        // changes, bell, OSC 52 clipboard) are drained too
+                        // so the channel can't grow unbounded, but are
+                        // otherwise a known, pre-existing gap in gpui_shell
+                        // (nothing ever consumed them before this loop
+                        // existed either) -- not this fix's concern.
+                        let mut exited_terminals = Vec::new();
+                        for (&id, terminal) in &this.terminals {
+                            while let Ok(event) = terminal.pty.rx.try_recv() {
+                                if matches!(event, crate::term::PtyEvent::Exit(_)) {
+                                    exited_terminals.push(id);
+                                }
+                            }
+                        }
+                        for id in exited_terminals {
+                            this.on_terminal_exited(id);
+                            should_notify = true;
+                        }
                         // Blink at the same 530ms cadence the wgpu app uses
                         // (Input::update_cursor_blink). Piggybacks on this
                         // already-running 33ms poll loop instead of a new
@@ -245,13 +277,150 @@ impl GpuiShellRoot {
             wakeup_gates,
             cursor_blink_on: true,
             cursor_last_blink: std::time::Instant::now(),
-            rect_cache: panes::RectCache::default(),
+            rect_cache: Rc::new(RefCell::new(panes::RectCache::default())),
+            zoomed_pane: None,
         }
+    }
+
+    /// Spawn a terminal for a new pane and split the focused one around it.
+    /// The new pane's real size is whatever taffy gives it on the next frame
+    /// (`pane_view::fit_terminal` resizes the PTY to match), so the spawn
+    /// dimensions here are only a placeholder.
+    fn split_focused(&mut self, dir: SplitDir) {
+        let (terminal, gate) = match spawn_terminal(80, 24, &self.config) {
+            Ok(pair) => pair,
+            Err(e) => {
+                log::error!("gpui-shell: failed to spawn terminal for split: {e:#}");
+                return;
+            }
+        };
+        let terminal_id = self.next_terminal_id;
+        self.next_terminal_id += 1;
+        self.terminals.insert(terminal_id, terminal);
+        self.wakeup_gates.insert(terminal_id, gate);
+        let active = self.tabs.active_index();
+        self.tab_panes[active].split(dir, terminal_id);
+        // Splitting while zoomed would otherwise create a pane the user
+        // can't see (the zoomed one still fills the window) and move focus
+        // to it -- their next keystroke would go somewhere invisible.
+        self.zoomed_pane = None;
+    }
+
+    /// Close the focused pane and reap its terminal. A no-op when it's the
+    /// tab's last pane (`PaneForest::close_focused` refuses that case --
+    /// closing the last pane is closing the tab, which is Task 4's job).
+    fn close_focused_pane(&mut self) {
+        let active = self.tabs.active_index();
+        let Some(closed) = self.tab_panes[active].close_focused() else {
+            return;
+        };
+        // SIGHUP the shell before dropping our Rc<Terminal> (below): `Drop
+        // for Pty` only closes the master fd (see its own doc comment) --
+        // it does NOT signal the child or wait for the reader thread
+        // first, unlike the full `Pty::shutdown()` sequence, which we
+        // can't call here since `&Rc<Terminal>` never gives `&mut Pty`.
+        // Without this, closing a pane whose shell is still alive and idle
+        // hangs the whole app: closing the master fd while the reader
+        // thread's blocking `read()` on that same fd is still outstanding
+        // deadlocks on macOS/BSD (`Pty::request_exit`'s own doc comment),
+        // and nothing was ever going to make that shell exit on its own.
+        if let Some(terminal) = self.terminals.get(&closed) {
+            terminal.pty.request_exit();
+        }
+        self.reap_pane(closed);
+    }
+
+    /// Auto-close a pane whose shell process has already exited on its own
+    /// (typing `exit`, `Ctrl+D`, the shell crashing) -- detected via
+    /// `PtyEvent::Exit` on `Pty::rx`, drained by the poll loop in `new()`.
+    /// Mirrors the wgpu app's own exit half of `Mux::close_terminal`
+    /// (src/app/mux/mod.rs), minus its "last pane in tab -> close the whole
+    /// tab, quit if no tabs remain" branch: opening/closing tabs is Task 4's
+    /// job (not built yet -- there is exactly one tab today), so a shell
+    /// exiting as the last pane in its tab is left on screen rather than
+    /// torn down here.
+    ///
+    /// No `Pty::request_exit()` call here unlike `close_focused_pane`: the
+    /// child is already gone by the time this runs (that's how we heard
+    /// about it), so the reader thread's blocking `read()` has already
+    /// returned (EOF) rather than being outstanding -- none of the deadlock
+    /// risk `request_exit`'s doc comment describes applies.
+    fn on_terminal_exited(&mut self, terminal_id: usize) {
+        let Some(tab_idx) = self
+            .tab_panes
+            .iter()
+            .position(|p| p.root.leaf_ids().contains(&terminal_id))
+        else {
+            return;
+        };
+        if !self.tab_panes[tab_idx].close_specific(terminal_id) {
+            return;
+        }
+        self.reap_pane(terminal_id);
+    }
+
+    /// Shared teardown for a terminal id that a `PaneForest` has just
+    /// dropped from its tree (either call site above) -- keeps the two from
+    /// drifting out of sync on which bookkeeping needs updating.
+    fn reap_pane(&mut self, terminal_id: usize) {
+        self.terminals.remove(&terminal_id);
+        self.wakeup_gates.remove(&terminal_id);
+        self.rect_cache.borrow_mut().leaves.remove(&terminal_id);
+        if self.zoomed_pane == Some(terminal_id) {
+            self.zoomed_pane = None;
+        }
+    }
+
+    /// Zoom the focused pane to fill the window, or unzoom if it already is.
+    /// Zooming a tab that only has one pane is meaningless, so it's ignored.
+    fn toggle_zoom(&mut self) {
+        let active = self.tabs.active_index();
+        let focused = self.tab_panes[active].focused_terminal;
+        self.zoomed_pane = match self.zoomed_pane {
+            Some(id) if id == focused => None,
+            _ if self.tab_panes[active].root.leaf_count() > 1 => Some(focused),
+            _ => None,
+        };
     }
 
     fn on_key_down(&mut self, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
         self.cursor_blink_on = true;
         self.cursor_last_blink = std::time::Instant::now();
+
+        // TEMPORARY (M2 Task 3 dogfood only): the leader-key dispatch that
+        // owns `Leader %`/`"`/`x`/`z` for real is Task 4's, and it doesn't
+        // exist yet -- without some trigger there is no way to exercise
+        // splits, zoom or separator drag at all. Delete this whole block
+        // once Task 4's real bindings land; nothing else depends on it.
+        // These are unbound Cmd-combos, so they'd otherwise fall through to
+        // the terminal as nothing at all (gpui doesn't populate `key_char`
+        // while cmd is held).
+        if event.keystroke.modifiers.platform {
+            let shift = event.keystroke.modifiers.shift;
+            match event.keystroke.key.to_ascii_lowercase().as_str() {
+                "d" => {
+                    self.split_focused(if shift {
+                        SplitDir::Vertical
+                    } else {
+                        SplitDir::Horizontal
+                    });
+                    cx.notify();
+                    return;
+                }
+                "w" if shift => {
+                    self.close_focused_pane();
+                    cx.notify();
+                    return;
+                }
+                "z" if shift => {
+                    self.toggle_zoom();
+                    cx.notify();
+                    return;
+                }
+                _ => {}
+            }
+        }
+
         let active_tid = self.tab_panes[self.tabs.active_index()].focused_terminal;
         let Some(terminal) = self.terminals.get(&active_tid) else {
             return;
@@ -316,33 +485,93 @@ impl Render for GpuiShellRoot {
         window.focus(&self.focus_handle);
 
         let active_index = self.tabs.active_index();
-        let active_tid = self.tab_panes[active_index].focused_terminal;
-        let terminal = self
-            .terminals
-            .get(&active_tid)
-            .expect("focused terminal id has a live Terminal")
-            .clone();
         let (cell_width, cell_height) = font_state::measured_cell_size();
-        // No click-to-focus target yet -- there's only ever one pane on
-        // screen this task (Task 3 wires real multi-pane focus routing).
-        let on_focus: OnFocusCallback = Rc::new(|_window, _cx| {});
 
-        // Placeholder tab-bar row: just the labels, no click handling yet
-        // (Task 3, once the real render-tree structure exists to attach it
-        // to).
-        let tab_bar =
-            div()
-                .flex()
-                .flex_row()
-                .w_full()
-                .children(self.tabs.tabs().iter().enumerate().map(|(idx, tab)| {
-                    div().px_2().py_1().child(tabs::tab_display_label(
-                        &tab.title,
-                        idx,
-                        idx == active_index,
-                        None,
-                    ))
-                }));
+        // A zoomed pane that no longer belongs to the active tab (tab switch,
+        // pane closed) has to be dropped before it's used, mirroring the wgpu
+        // app's own "zoomed pane no longer in active tab -- clear zoom" guard
+        // in src/app/frame.rs.
+        if let Some(id) = self.zoomed_pane {
+            if !self.tab_panes[active_index].root.leaf_ids().contains(&id) {
+                self.zoomed_pane = None;
+            }
+        }
+
+        // Drop last frame's geometry before this frame's prepaint pass
+        // repopulates it: a pane that just closed, or one belonging to a tab
+        // that's no longer active, must not keep answering focus_dir's
+        // nearest-neighbour search with a rect it no longer occupies.
+        {
+            let mut rects = self.rect_cache.borrow_mut();
+            rects.leaves.clear();
+            rects.separators.clear();
+        }
+
+        // Both callbacks below outlive `render()` (they're owned by the
+        // element tree and run during event dispatch), so they hold a WEAK
+        // handle -- exactly what `Context::listener` does internally, and for
+        // the same reason: a strong `Entity<Self>` parked in a per-frame
+        // closure would keep this view alive past window close.
+        let view = cx.entity().downgrade();
+        let focus_view = view.clone();
+        let on_focus: pane_view::PaneFocusCallback = Rc::new(move |terminal_id, _window, cx| {
+            focus_view
+                .update(cx, |root, cx| {
+                    let active = root.tabs.active_index();
+                    if root.tab_panes[active].focused_terminal != terminal_id {
+                        root.tab_panes[active].focused_terminal = terminal_id;
+                        cx.notify();
+                    }
+                })
+                .ok();
+        });
+        let drag_view = view;
+        let on_drag: pane_view::SeparatorDragCallback =
+            Rc::new(move |node_id, position, _window, cx| {
+                drag_view
+                    .update(cx, |root, cx| {
+                        // Clone the Rc first: `drag_separator` needs `&mut
+                        // self.tab_panes[..]` and `&self.rect_cache`'s
+                        // contents at once, which a single `root.` borrow of
+                        // both fields can't express.
+                        let rects = root.rect_cache.clone();
+                        let rects = rects.borrow();
+                        let active = root.tabs.active_index();
+                        root.tab_panes[active].drag_separator(
+                            node_id,
+                            f32::from(position.x),
+                            f32::from(position.y),
+                            &rects,
+                        );
+                        cx.notify();
+                    })
+                    .ok();
+            });
+
+        let pane_ctx = pane_view::PaneRenderCx {
+            terminals: &self.terminals,
+            focused: self.tab_panes[active_index].focused_terminal,
+            colors: &self.config.colors,
+            cell_width,
+            cell_height,
+            cursor_blink_on: self.cursor_blink_on,
+            scrollback: self.config.scrollback_lines as usize,
+            rects: self.rect_cache.clone(),
+            on_focus,
+            on_drag,
+        };
+        let panes = match self.zoomed_pane {
+            Some(terminal_id) => pane_view::render_leaf(terminal_id, &pane_ctx),
+            None => pane_view::render_pane_tree(&self.tab_panes[active_index].root, &pane_ctx),
+        };
+
+        let on_select_tab: tabs::TabSelectCallback =
+            Rc::new(cx.listener(|this, idx: &usize, _window, cx| {
+                if this.tabs.switch_to_index(*idx) {
+                    cx.notify();
+                }
+            }));
+        let tab_bar = tabs::render_tab_bar(&self.tabs, &self.config.colors, on_select_tab);
 
         div()
             .track_focus(&self.focus_handle)
@@ -350,15 +579,12 @@ impl Render for GpuiShellRoot {
             .flex()
             .flex_col()
             .size_full()
+            .bg(to_rgba(self.config.colors.background))
             .child(tab_bar)
-            .child(div().flex().flex_1().child(TerminalGridElement {
-                terminal,
-                cell_width,
-                cell_height,
-                colors: self.config.colors.clone(),
-                is_active: true,
-                cursor_blink_on: self.cursor_blink_on,
-                on_focus,
-            }))
+            // `min_h_0`: a flex item's automatic minimum size is its content
+            // size, so without this the pane row refuses to shrink below the
+            // terminal grid it contains and pushes the tab bar off-screen on
+            // a small window.
+            .child(div().flex().flex_1().min_h_0().child(panes))
     }
 }

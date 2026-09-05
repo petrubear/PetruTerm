@@ -1,10 +1,21 @@
-// gpui chrome migration (M2): tab list. Ported from src/ui/tabs.rs
-// verbatim -- pure data + one pure string-formatting function, zero I/O,
-// zero rendering coupling. See tab_display_label's own doc comment for why
-// it's the single source of truth both the tab-bar Render impl (this
-// module, added below) and any future hit-testing must use.
+// gpui chrome migration (M2): tab list + the tab bar that renders it. The
+// data half (Tab/TabManager/tab_display_label) is ported from src/ui/tabs.rs
+// verbatim -- pure data + one pure string-formatting function, zero I/O.
+// `render_tab_bar` (M2 Task 3) is the "tab-bar Render impl" the port's
+// original header anticipated; it's here rather than in mod.rs so the labels
+// it paints and any future hit-testing both sit next to `tab_display_label`,
+// their single source of truth (they diverged once in the wgpu app, which is
+// what TD-P9-02 was).
 
 #![allow(dead_code)]
+
+use std::rc::Rc;
+
+use gpui::{div, prelude::*, App, Div, MouseButton, MouseDownEvent, Window};
+
+use crate::config::schema::ColorScheme;
+
+use super::pane_view::to_rgba;
 
 /// Max glyph width of a tab pill label.
 pub const TAB_LABEL_MAX_CHARS: usize = 18;
@@ -155,6 +166,54 @@ impl Default for TabManager {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Called with the clicked tab's index. A callback rather than a direct
+/// `TabManager` mutation because the click also has to reach `GpuiShellRoot`
+/// (switching tabs changes which pane tree renders, so the view has to be
+/// notified) -- built from `Context::listener` at the call site.
+pub type TabSelectCallback = Rc<dyn Fn(&usize, &mut Window, &mut App)>;
+
+/// The tab bar row: one flat, clickable cell per tab. The active tab gets a
+/// filled background plus an accent underline and full-strength text; the
+/// rest are dimmed -- matching the wgpu app's own flat-rect-plus-underline
+/// treatment. Inactive tabs carry the same 2px bottom border in the bar's own
+/// color so switching tabs never shifts the row's height.
+pub fn render_tab_bar(
+    tabs: &TabManager,
+    colors: &ColorScheme,
+    on_select: TabSelectCallback,
+) -> Div {
+    let active_index = tabs.active_index();
+    let accent = to_rgba(tabs.active_accent(colors.ui_accent));
+    let surface = to_rgba(colors.ui_surface);
+    div()
+        .flex()
+        .flex_row()
+        .w_full()
+        .flex_shrink_0()
+        .bg(surface)
+        .children(tabs.tabs().iter().enumerate().map(|(idx, tab)| {
+            let is_active = idx == active_index;
+            let on_select = on_select.clone();
+            let cell = div()
+                .px_2()
+                .py_1()
+                .border_b_2()
+                .cursor_pointer()
+                .on_mouse_down(MouseButton::Left, move |_: &MouseDownEvent, window, cx| {
+                    on_select(&idx, window, cx)
+                })
+                .child(tab_display_label(&tab.title, idx, is_active, None));
+            if is_active {
+                cell.bg(to_rgba(colors.ui_surface_active))
+                    .border_color(accent)
+                    .text_color(to_rgba(colors.foreground))
+            } else {
+                cell.border_color(surface)
+                    .text_color(to_rgba(colors.ui_muted))
+            }
+        }))
 }
 
 #[cfg(test)]

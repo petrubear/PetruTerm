@@ -408,6 +408,15 @@ pub fn register_mouse_handlers(
         if event.pressed_button != Some(MouseButton::Left) {
             return;
         }
+        if super::pane_view::is_dragging_separator() {
+            // A separator drag sweeps the pointer across whichever panes it
+            // passes over, with the left button held. Without this, each of
+            // those panes would run the selection path below -- `bounds`-
+            // gated, so it can't start a NEW selection (no mouse-down landed
+            // in the pane), but `update_selection` would still silently
+            // extend an OLD one the pane was already showing.
+            return;
+        }
         if is_dragging_scrollbar(terminal_key) {
             let (offset, history_size) = move_terminal.scrollback_info();
             if history_size > 0 {

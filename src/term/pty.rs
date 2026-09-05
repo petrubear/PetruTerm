@@ -298,6 +298,36 @@ impl Pty {
         self.close_master();
     }
 
+    /// Send SIGHUP to the child process without joining the reader/child
+    /// threads or closing the master fd -- the `&self`-compatible half of
+    /// `shutdown()`'s first step, for a caller that only has shared access
+    /// (e.g. through an `Rc<Terminal>`, which can't produce the `&mut Pty`
+    /// `shutdown()` needs).
+    ///
+    /// Calling this before a `Terminal`/`Pty` is dropped matters: `Drop for
+    /// Pty` only closes the master fd (see its own doc comment) -- it does
+    /// NOT send SIGHUP or wait for the reader thread first. Dropping a
+    /// `Pty` whose child is still alive therefore hits exactly the
+    /// deadlock `shutdown()`'s own comment describes (`close()` blocking
+    /// on macOS/BSD until the reader's in-flight `read()` completes, which
+    /// only happens once the slave side closes -- which needs a SIGHUP
+    /// nobody sent). Calling `request_exit()` first gives the shell a
+    /// head start on exiting and the reader thread a head start on
+    /// noticing EOF, so by the time `Drop` actually runs `close_master()`,
+    /// the blocking `read()` has very likely already returned.
+    ///
+    /// Only `gpui_shell` calls this today (`petruterm`'s own `cmd_close_pane`
+    /// gets `&mut Terminal` through `Mux`'s `Vec<Option<Terminal>>` and can
+    /// call the full `shutdown()` instead) -- `#[allow(dead_code)]` because
+    /// cargo's dead-code lint is evaluated per binary target, and the
+    /// `petruterm` (wgpu) binary's own call graph never reaches this method.
+    #[allow(dead_code)]
+    pub fn request_exit(&self) {
+        unsafe {
+            libc::kill(self.child_pid_libc, libc::SIGHUP);
+        }
+    }
+
     fn close_master(&mut self) {
         if self.master_fd >= 0 {
             unsafe { libc::close(self.master_fd) };

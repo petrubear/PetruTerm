@@ -11,8 +11,9 @@
 
 use std::rc::Rc;
 
+use alacritty_terminal::vte::ansi::CursorShape;
 use gpui::{
-    fill, point, px, size, App, Bounds, Corners, Element, ElementId, GlobalElementId,
+    fill, point, px, relative, size, App, Bounds, Corners, Element, ElementId, GlobalElementId,
     InspectorElementId, IntoElement, LayoutId, Pixels, Style, Window,
 };
 
@@ -57,11 +58,20 @@ impl Element for TerminalGridElement {
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
-        let cols = self.terminal.cols.get() as f32;
-        let rows = self.terminal.rows.get() as f32;
+        // Fill whatever the parent gives us, rather than asking for
+        // `cols x rows` cells' worth of pixels. M2's pane tree makes the
+        // *layout* the authority on a pane's size and resizes the terminal to
+        // match (`pane_view::fit_terminal`, driven from the wrapping div's
+        // `on_children_prepainted`) -- the reverse of the M0/M1 arrangement,
+        // where the grid's fixed 80x24 decided the element's size and neither
+        // a window resize nor a split could change it. Requesting a relative
+        // size also means the bounds recorded in `RectCache` for this leaf
+        // are the pane's full rect, not a smaller grid rect floating inside
+        // it, so hit-testing and `focus_dir`'s geometry agree with what the
+        // user sees.
         let mut style = Style::default();
-        style.size.width = (self.cell_width * cols).into();
-        style.size.height = (self.cell_height * rows).into();
+        style.size.width = relative(1.0).into();
+        style.size.height = relative(1.0).into();
         (window.request_layout(style, [], cx), ())
     }
 
@@ -110,22 +120,52 @@ impl Element for TerminalGridElement {
             &self.colors,
             window,
         ) {
-            let _ = window.paint_image(bounds, Corners::default(), render_image, 0, false);
+            // `bounds` is now the pane's FULL layout rect (M2's flex tree
+            // sizes this element via `relative(1.0)`, not a fixed
+            // `cell_width * cols`), but `rasterize_grid`'s bitmap is still
+            // sized to exactly `cell_width * cols` x `cell_height * rows`
+            // (`pane_view::fit_terminal` floors the pane's rect to a whole
+            // cell count before resizing the PTY, so the pane's actual
+            // pixel size is only ever >= the grid's own size, by less than
+            // one cell in each axis). Painting the bitmap into the FULL
+            // `bounds` would have gpui stretch it to fill that leftover
+            // fractional-cell strip -- exactly the destination-rect
+            // mismatch M1b's Task 2 spent multiple rounds eliminating
+            // (blurred/smeared glyph edges, worse the narrower or shorter
+            // a pane is, which multi-pane splitting routinely produces).
+            // Clamp the destination rect to the bitmap's own native size
+            // instead; the leftover strip (at most one cell wide/tall)
+            // stays the plain background already painted above.
+            let cols = f32::from(self.terminal.cols.get());
+            let rows = f32::from(self.terminal.rows.get());
+            let image_bounds = Bounds {
+                origin: bounds.origin,
+                size: size(
+                    (self.cell_width * cols).min(bounds.size.width),
+                    (self.cell_height * rows).min(bounds.size.height),
+                ),
+            };
+            let _ = window.paint_image(image_bounds, Corners::default(), render_image, 0, false);
         }
 
         // Cursor. Shape from Terminal::cursor_info() (DECSCUSR / default),
         // geometry ported from src/app/renderer/terminal.rs's
-        // build_cursor_overlay. HollowBlock swaps in for Block when this
-        // pane isn't the split-focus target -- matches the wgpu renderer's
-        // convention for showing which pane has keyboard focus.
+        // build_cursor_overlay. Only the focused pane draws a cursor at
+        // all, matching the wgpu renderer exactly: `RenderContext::
+        // build_cursor_instance` (src/app/renderer/terminal.rs) has
+        // exactly one call site, for "the focused terminal pane" (its own
+        // doc comment) -- unfocused panes get none. M1b/M1c's earlier
+        // HollowBlock-for-unfocused-Block design predates M2's real
+        // multi-pane rendering (it was only ever dogfooded through the
+        // single-pair SplitDemo proof of concept) and doesn't generalize:
+        // it only ever changes Block's presentation, so any other DECSCUSR
+        // shape (Beam, Underline -- both common shell/editor prompt
+        // choices) looked visually IDENTICAL in every pane regardless of
+        // focus, which is what the wgpu app's simpler "no cursor at all
+        // when unfocused" rule avoids by construction.
         let cursor = self.terminal.cursor_info();
-        if cursor.visible && self.cursor_blink_on {
-            use alacritty_terminal::vte::ansi::CursorShape;
-            let shape = if !self.is_active && cursor.shape == CursorShape::Block {
-                CursorShape::HollowBlock
-            } else {
-                cursor.shape
-            };
+        if self.is_active && cursor.visible && self.cursor_blink_on {
+            let shape = cursor.shape;
             let cell_w = self.cell_width;
             let cell_h = self.cell_height;
             let cursor_origin = point(

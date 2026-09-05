@@ -174,22 +174,27 @@ pub fn rasterize_grid(
 
         let cell_w_px = f32::from(cell_width) * scale;
         let cell_h_px = f32::from(cell_height) * scale;
-        // Must exactly match how gpui's own `Window::paint_image` computes
-        // the destination rectangle it stretches this bitmap into:
-        // `TerminalGridElement::request_layout` sets this element's logical
-        // bounds to `cell_width * cols` x `cell_height * rows`, and
-        // `paint_image` scales THAT by `scale_factor` and rounds with
-        // `.ceil()` (`bounds.scale(scale_factor).map_size(|s| s.ceil())` --
-        // verified against gpui 0.2.2's `window.rs`/`geometry.rs`). This
-        // file previously multiplied cell size by scale first and rounded
-        // with `.round()` -- mathematically close, but a `.round()` vs
-        // `.ceil()` disagreement of even one device pixel forces the GPU to
-        // stretch the uploaded texture to fit a differently-sized target
-        // rect, which blurs/smears hardest exactly at sharp color edges
-        // (glyph boundaries, cell/pill transitions) while staying invisible
-        // in large solid-color regions -- matching the artifact reported
-        // against this exact code path. Computing both dimensions the same
-        // way gpui does eliminates any texture/target-rect size mismatch.
+        // Must exactly match the destination rect `terminal_element.rs`'s
+        // `paint()` passes to `Window::paint_image` for this bitmap. Since
+        // M2 (`TerminalGridElement::request_layout` now requests
+        // `relative(1.0)` -- a pane's element fills whatever size the flex
+        // tree gives it, not a fixed `cell_width * cols` -- that call site
+        // no longer uses its own full `bounds` as the image's destination
+        // rect; it explicitly clamps to `cell_width * cols` x
+        // `cell_height * rows` (the same values this function computes) so
+        // the two always agree regardless of leftover fractional-cell space
+        // in the pane's actual layout rect. `paint_image` then scales
+        // WHATEVER destination rect it's given by `scale_factor` and rounds
+        // with `.ceil()` (`bounds.scale(scale_factor).map_size(|s| s.ceil())`
+        // -- verified against gpui 0.2.2's `window.rs`/`geometry.rs`); this
+        // file mirrors that exact rounding order (multiply-by-scale, THEN
+        // `.ceil()`, not the reverse) so the two computations can never
+        // disagree by even one device pixel -- a real disagreement here
+        // (found and fixed once already, in M1b) forces the GPU to stretch
+        // the uploaded texture to fit a differently-sized target rect,
+        // which blurs/smears hardest exactly at sharp color edges (glyph
+        // boundaries, cell/pill transitions) while staying invisible in
+        // large solid-color regions.
         let bitmap_width = ((f32::from(cell_width) * cols as f32 * scale).ceil() as u32).max(1);
         let bitmap_height = ((f32::from(cell_height) * rows as f32 * scale).ceil() as u32).max(1);
         let font_size_px = crate::gpui_shell::font_state::font_size() * scale;

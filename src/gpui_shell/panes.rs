@@ -189,9 +189,16 @@ impl PaneForest {
 pub struct RectCache {
     /// terminal_id -> last-painted bounds.
     pub leaves: std::collections::HashMap<usize, gpui::Bounds<gpui::Pixels>>,
-    /// Split node_id -> last-painted bounds of ITS SEPARATOR (not the whole
-    /// split's bounds -- just the thin divider div's own rect, since that's
-    /// what drag_separator's mouse-position math needs).
+    /// Split node_id -> last-painted bounds of THE WHOLE SPLIT CONTAINER
+    /// (both children plus the divider between them), not the thin divider's
+    /// own rect.
+    ///
+    /// `drag_split_ratio` divides by this rect's extent in the resize axis to
+    /// turn a pointer position into a 0..1 ratio; the divider's own ~6px
+    /// width in that denominator would make every pointer more than a few
+    /// pixels away clamp straight to 0.1 or 0.9. Task 3's flex walk
+    /// (`pane_view::render_split`) populates this from the union of the
+    /// container's three children, which tile it exactly.
     pub separators: std::collections::HashMap<u32, gpui::Bounds<gpui::Pixels>>,
 }
 
@@ -255,9 +262,10 @@ impl PaneForest {
     }
 
     /// Drag the separator owned by the Split with `node_id` to the current
-    /// mouse position, using that separator's own last-painted bounds from
-    /// `rects` (the RectCache-based replacement for src/ui/panes.rs's
-    /// `rect` field on the Split node itself).
+    /// mouse position, using that SPLIT's own last-painted bounds from
+    /// `rects` (the RectCache-based replacement for src/ui/panes.rs's `rect`
+    /// field on the Split node itself, which held exactly the same thing --
+    /// see `RectCache::separators`' doc comment).
     pub fn drag_separator(&mut self, node_id: u32, mouse_x: f32, mouse_y: f32, rects: &RectCache) {
         let Some(bounds) = rects.separators.get(&node_id) else {
             return;
@@ -317,9 +325,11 @@ fn adjust_parent_split(
     }
 }
 
-/// Ported from src/ui/panes.rs's drag_split_ratio, with the separator's
+/// Ported from src/ui/panes.rs's drag_split_ratio, with the split's own
 /// rect passed in explicitly (x, y, w, h) instead of read from a `rect`
-/// field on the node itself.
+/// field on the node itself. (`sep_*` here is the SPLIT's rect -- the one
+/// the separator divides -- not the divider strip's own; see
+/// `RectCache::separators`.)
 #[allow(clippy::too_many_arguments)]
 fn drag_split_ratio(
     node: &mut PaneTree,
@@ -398,6 +408,77 @@ mod tests {
         let mut ids = forest.root.leaf_ids();
         ids.sort();
         assert_eq!(ids, vec![1, 3]);
+    }
+
+    fn root_node_id(forest: &PaneForest) -> u32 {
+        match &forest.root {
+            PaneTree::Split { node_id, .. } => *node_id,
+            PaneTree::Leaf { .. } => panic!("root is not a split"),
+        }
+    }
+
+    fn root_ratio(forest: &PaneForest) -> f32 {
+        match &forest.root {
+            PaneTree::Split { ratio, .. } => *ratio,
+            PaneTree::Leaf { .. } => panic!("root is not a split"),
+        }
+    }
+
+    /// A 900x565 split container at (0, 36) -- the real geometry a 900x600
+    /// window produces below the tab bar.
+    fn split_bounds() -> gpui::Bounds<gpui::Pixels> {
+        gpui::Bounds {
+            origin: gpui::point(gpui::px(0.0), gpui::px(36.0)),
+            size: gpui::size(gpui::px(900.0), gpui::px(565.0)),
+        }
+    }
+
+    #[test]
+    fn drag_separator_tracks_the_pointer_across_the_whole_split() {
+        // Pins what `RectCache::separators` must hold: the SPLIT CONTAINER's
+        // bounds. Populated with the 6px divider's own rect instead, every
+        // position below would divide by ~6 and clamp to 0.9 -- the exact
+        // cross-task ambiguity Task 1 deferred to Task 3.
+        let mut forest = PaneForest::new(1);
+        forest.split(SplitDir::Horizontal, 2);
+        let node_id = root_node_id(&forest);
+        let mut rects = RectCache::default();
+        rects.separators.insert(node_id, split_bounds());
+
+        forest.drag_separator(node_id, 225.0, 300.0, &rects);
+        assert!((root_ratio(&forest) - 0.25).abs() < 0.01);
+        forest.drag_separator(node_id, 675.0, 300.0, &rects);
+        assert!((root_ratio(&forest) - 0.75).abs() < 0.01);
+        // Past the ends, the ratio clamps rather than inverting the panes.
+        forest.drag_separator(node_id, -50.0, 300.0, &rects);
+        assert!((root_ratio(&forest) - 0.1).abs() < f32::EPSILON);
+        forest.drag_separator(node_id, 5000.0, 300.0, &rects);
+        assert!((root_ratio(&forest) - 0.9).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn vertical_drag_uses_the_y_axis_and_the_container_origin() {
+        let mut forest = PaneForest::new(1);
+        forest.split(SplitDir::Vertical, 2);
+        let node_id = root_node_id(&forest);
+        let mut rects = RectCache::default();
+        rects.separators.insert(node_id, split_bounds());
+
+        // y = 36 + 565/4 -> a quarter of the way down the container, NOT of
+        // the window (the container starts below the tab bar).
+        forest.drag_separator(node_id, 400.0, 36.0 + 141.25, &rects);
+        assert!((root_ratio(&forest) - 0.25).abs() < 0.01);
+    }
+
+    #[test]
+    fn drag_separator_without_a_cached_rect_is_a_no_op() {
+        // First frame: nothing has been painted yet, so there is no geometry
+        // to compute a ratio from.
+        let mut forest = PaneForest::new(1);
+        forest.split(SplitDir::Horizontal, 2);
+        let node_id = root_node_id(&forest);
+        forest.drag_separator(node_id, 225.0, 300.0, &RectCache::default());
+        assert!((root_ratio(&forest) - 0.5).abs() < f32::EPSILON);
     }
 
     #[test]
