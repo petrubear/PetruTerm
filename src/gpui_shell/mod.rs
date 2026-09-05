@@ -399,18 +399,21 @@ impl GpuiShellRoot {
     /// Auto-close a pane whose shell process has already exited on its own
     /// (typing `exit`, `Ctrl+D`, the shell crashing) -- detected via
     /// `PtyEvent::Exit` on `Pty::rx`, drained by the poll loop in `new()`.
-    /// Mirrors the wgpu app's own exit half of `Mux::close_terminal`
-    /// (src/app/mux/mod.rs), minus its "last pane in tab -> close the whole
-    /// tab, quit if no tabs remain" branch: opening/closing tabs is Task 4's
-    /// job (not built yet -- there is exactly one tab today), so a shell
-    /// exiting as the last pane in its tab is left on screen rather than
-    /// torn down here.
+    /// Mirrors the wgpu app's own `Mux::close_terminal` (src/app/mux/mod.rs)
+    /// in full now that Task 4 gives us tab-closing machinery: multi-pane
+    /// tabs just lose the one pane; a tab whose exited pane was its last
+    /// one is closed entirely via `close_tab_at` (which itself still
+    /// refuses to close the app's very last tab -- gpui_shell has no
+    /// "quit when no tabs remain" path yet, the same gap `LeaderAction::
+    /// CloseTab` already carries).
     ///
-    /// No `Pty::request_exit()` call here unlike `close_focused_pane`: the
-    /// child is already gone by the time this runs (that's how we heard
-    /// about it), so the reader thread's blocking `read()` has already
-    /// returned (EOF) rather than being outstanding -- none of the deadlock
-    /// risk `request_exit`'s doc comment describes applies.
+    /// No `Pty::request_exit()` call for either branch, unlike
+    /// `close_focused_pane`/`LeaderAction::CloseTab`: the child is already
+    /// gone by the time this runs (that's how we heard about it), so the
+    /// reader thread's blocking `read()` has already returned (EOF) rather
+    /// than being outstanding -- none of the deadlock risk `request_exit`'s
+    /// doc comment describes applies, and SIGHUP'ing an already-reaped pid
+    /// risks hitting a since-reused pid for no benefit.
     fn on_terminal_exited(&mut self, terminal_id: usize) {
         let Some(tab_idx) = self
             .tab_panes
@@ -419,10 +422,53 @@ impl GpuiShellRoot {
         else {
             return;
         };
-        if !self.tab_panes[tab_idx].close_specific(terminal_id) {
+        if self.tab_panes[tab_idx].close_specific(terminal_id) {
+            self.reap_pane(terminal_id);
             return;
         }
-        self.reap_pane(terminal_id);
+        // close_specific only refuses when this was the tab's last pane --
+        // close_tab_at's own leaf loop will then find exactly one leaf
+        // (terminal_id itself), so signal_shells: false is always correct
+        // here, never a guess.
+        self.close_tab_at(tab_idx, false);
+    }
+
+    /// Close the tab at `tab_idx` (not necessarily the active one -- a
+    /// background tab's last pane can exit while a different tab is
+    /// focused) and reap every leaf terminal it owned. Refuses to close
+    /// the app's last remaining tab: gpui_shell's `render()` indexes
+    /// `self.tab_panes[active_index]` unconditionally and has no
+    /// "quit when no tabs remain" path to catch the resulting empty state
+    /// (matching the wgpu app's own `Mux::cmd_close_tab`/`close_terminal`,
+    /// neither of which has one either -- gpui_shell just can't fall back
+    /// on a caller like `App::process_event`'s CloseRequested to paper
+    /// over it the way winit's event loop does there).
+    ///
+    /// `signal_shells`: `true` sends every leaf's shell a SIGHUP first (the
+    /// user explicitly closing a tab whose shells may still be alive,
+    /// `LeaderAction::CloseTab`'s own prior behavior); `false` skips it
+    /// (`on_terminal_exited`, whose sole leaf is already known dead).
+    /// Returns whether a tab was actually closed.
+    fn close_tab_at(&mut self, tab_idx: usize, signal_shells: bool) -> bool {
+        if self.tabs.tab_count() <= 1 {
+            return false;
+        }
+        let Some(tab_id) = self.tabs.tabs().get(tab_idx).map(|t| t.id) else {
+            return false;
+        };
+        self.tabs.close_tab(tab_id);
+        if tab_idx < self.tab_panes.len() {
+            let forest = self.tab_panes.remove(tab_idx);
+            for id in forest.root.leaf_ids() {
+                if signal_shells {
+                    if let Some(terminal) = self.terminals.get(&id) {
+                        terminal.pty.request_exit();
+                    }
+                }
+                self.reap_pane(id);
+            }
+        }
+        true
     }
 
     /// Shared teardown for a terminal id that a `PaneForest` has just
@@ -475,34 +521,14 @@ impl GpuiShellRoot {
                 self.zoomed_pane = None;
             }
             LeaderAction::CloseTab => {
-                // Mirrors `Mux::cmd_close_tab` (src/app/mux/mod.rs:792-807):
-                // drop the active tab from `TabManager`, then reap every
-                // leaf terminal of its `PaneForest` via the same
-                // `reap_pane` helper `close_focused_pane`/
-                // `on_terminal_exited` use, so all three close paths stay in
-                // sync. Guards against closing the last tab -- neither
-                // `cmd_close_tab` nor its caller does, but gpui_shell's
-                // `render()` indexes `self.tab_panes[active_index]`
-                // unconditionally and has no "quit when no tabs remain"
-                // path to catch a resulting empty state.
-                if self.tabs.tab_count() <= 1 {
-                    return;
-                }
-                let active = self.tabs.active_index();
-                if let Some(tab) = self.tabs.active_tab() {
-                    self.tabs.close_tab(tab.id);
-                }
-                if active < self.tab_panes.len() {
-                    let forest = self.tab_panes.remove(active);
-                    for id in forest.root.leaf_ids() {
-                        // SIGHUP before dropping, same deadlock rationale as
-                        // `close_focused_pane`'s own doc comment.
-                        if let Some(terminal) = self.terminals.get(&id) {
-                            terminal.pty.request_exit();
-                        }
-                        self.reap_pane(id);
-                    }
-                }
+                // Mirrors `Mux::cmd_close_tab` (src/app/mux/mod.rs:792-807),
+                // via the shared `close_tab_at` helper (also used by
+                // `on_terminal_exited` for the "shell exited as a tab's
+                // last pane" case) so the two close paths can't drift
+                // apart. `signal_shells: true` since this tab's shells may
+                // still be alive (the user is closing it explicitly, not
+                // reacting to an exit already observed).
+                self.close_tab_at(self.tabs.active_index(), true);
             }
             LeaderAction::NextTab => self.tabs.next_tab(),
             LeaderAction::PrevTab => self.tabs.prev_tab(),

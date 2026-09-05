@@ -83,16 +83,30 @@ impl TabManager {
     }
 
     /// Close the tab with the given ID. Returns true if a tab was removed.
+    ///
+    /// `close_tab` can be asked to remove any tab, not just the active one
+    /// (`gpui_shell`'s `close_tab_at` reaches this for a background tab
+    /// whose last pane exited on its own while a different tab was in
+    /// view). Removing an element before `active` shifts every later
+    /// element's index down by one, so `active` must shift down with it to
+    /// keep pointing at the same logical tab -- clamping alone (the
+    /// previous implementation) only protects against `active` overflowing
+    /// the new length; it does nothing when `pos < active` and `active`
+    /// isn't already at the last index, which silently switches the
+    /// visible tab to whatever now occupies the old `active` position.
     pub fn close_tab(&mut self, id: usize) -> bool {
-        if let Some(pos) = self.tabs.iter().position(|t| t.id == id) {
-            self.tabs.remove(pos);
-            // Adjust active index.
-            if !self.tabs.is_empty() {
-                self.active = self.active.min(self.tabs.len() - 1);
-            }
-            return true;
+        let Some(pos) = self.tabs.iter().position(|t| t.id == id) else {
+            return false;
+        };
+        self.tabs.remove(pos);
+        if self.tabs.is_empty() {
+            self.active = 0;
+        } else if pos < self.active {
+            self.active -= 1;
+        } else {
+            self.active = self.active.min(self.tabs.len() - 1);
         }
-        false
+        true
     }
 
     /// Switch to the tab at the given index (0-based). Returns true if successful.
@@ -235,5 +249,70 @@ mod tab_label_tests {
         // Truncated to the pill max width.
         let long = tab_display_label("a-very-long-tab-title-indeed", 0, false, None);
         assert_eq!(long.chars().count(), TAB_LABEL_MAX_CHARS);
+    }
+}
+
+#[cfg(test)]
+mod tab_manager_tests {
+    use super::TabManager;
+
+    #[test]
+    fn closing_a_background_tab_before_active_keeps_the_same_tab_active() {
+        let mut mgr = TabManager::new();
+        let a = mgr.new_tab("a");
+        let _b = mgr.new_tab("b");
+        let _c = mgr.new_tab("c");
+        let _d = mgr.new_tab("d");
+        // 4 tabs: a b c d, active on d after each new_tab() (its own
+        // behavior). Move active to b (index 1) before closing a (index 0),
+        // reproducing the exact shape that silently mis-clamped before this
+        // fix: `pos (0) < active (1)`, and active was nowhere near the last
+        // index, so the old `.min(len-1)` clamp was a no-op and left
+        // `active` unchanged while every tab past `pos` shifted down.
+        mgr.switch_to_index(1);
+        assert_eq!(mgr.tabs()[mgr.active_index()].title, "b");
+
+        assert!(mgr.close_tab(a));
+
+        // b (was index 1) is now at index 0; active must have followed it
+        // down rather than staying at 1 (which would now be c).
+        assert_eq!(mgr.active_index(), 0);
+        assert_eq!(mgr.tabs()[mgr.active_index()].title, "b");
+        assert_eq!(
+            mgr.tabs()
+                .iter()
+                .map(|t| t.title.as_str())
+                .collect::<Vec<_>>(),
+            vec!["b", "c", "d"]
+        );
+    }
+
+    #[test]
+    fn closing_a_background_tab_after_active_leaves_active_index_unchanged() {
+        let mut mgr = TabManager::new();
+        let _a = mgr.new_tab("a");
+        let _b = mgr.new_tab("b");
+        let c = mgr.new_tab("c");
+        mgr.switch_to_index(0);
+        assert_eq!(mgr.tabs()[mgr.active_index()].title, "a");
+
+        assert!(mgr.close_tab(c));
+
+        assert_eq!(mgr.active_index(), 0);
+        assert_eq!(mgr.tabs()[mgr.active_index()].title, "a");
+    }
+
+    #[test]
+    fn closing_the_active_tab_still_clamps_to_the_new_last_index() {
+        let mut mgr = TabManager::new();
+        let _a = mgr.new_tab("a");
+        let b = mgr.new_tab("b");
+        // new_tab() leaves `b` (the last one created) active.
+        assert_eq!(mgr.active_index(), 1);
+
+        assert!(mgr.close_tab(b));
+
+        assert_eq!(mgr.active_index(), 0);
+        assert_eq!(mgr.tabs()[mgr.active_index()].title, "a");
     }
 }
