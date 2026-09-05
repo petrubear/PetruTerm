@@ -1,5 +1,19 @@
-use gpui::{prelude::*, px, size, App, Application, Bounds, WindowBounds, WindowOptions};
+use gpui::{
+    actions, prelude::*, px, size, App, Application, Bounds, Menu, MenuItem, WindowBounds,
+    WindowOptions,
+};
 use petruterm::gpui_shell::{font_state, spawn_config_watcher, GpuiShellRoot};
+
+// gpui has no default app menu/Cmd+Q binding of its own (confirmed against
+// gpui 0.2.2's own `examples/set_menus.rs`, the canonical pattern this
+// mirrors) -- without an explicit menu bar carrying a "Quit" item, macOS has
+// nothing to route Cmd+Q to, so it silently does nothing. Reported in
+// dogfood as "cmd+q is not closing the application".
+actions!(gpui_petruterm, [Quit]);
+
+fn quit(_: &Quit, cx: &mut App) {
+    cx.quit();
+}
 
 fn main() {
     // Unlike src/main.rs (the wgpu binary), nothing here ever initialized a
@@ -23,6 +37,12 @@ fn main() {
     spawn_config_watcher();
 
     Application::new().run(move |cx: &mut App| {
+        cx.on_action(quit);
+        cx.set_menus(vec![Menu {
+            name: "petruterm".into(),
+            items: vec![MenuItem::action("Quit", Quit)],
+        }]);
+
         let bounds = Bounds::centered(None, size(px(900.0), px(600.0)), cx);
         let config = config.clone();
         cx.open_window(
