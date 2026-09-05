@@ -551,6 +551,15 @@ pub fn render_status_bar(bar: &StatusBar, colors: &StatusBarColors) -> Div {
         .w_full()
         .flex_shrink_0()
         .bg(bar_bg_color)
+        // Without this, this row's text falls back to gpui's own default UI
+        // font -- a different (and differently metriced) typeface from the
+        // terminal grid's own cosmic-text-rasterized glyphs sitting right
+        // above it, which is exactly what a dogfood report flagged ("the
+        // statusbar seems to be a completely different font"). `.font_family`
+        // on a div cascades to its text children via gpui's TextStyle stack,
+        // the same mechanism `.text_color` above already relies on.
+        .font_family(super::font_state::font_family())
+        .text_size(gpui::px(super::font_state::font_size()))
         .child(left_row)
         .child(div().flex_1())
         .child(right_row)

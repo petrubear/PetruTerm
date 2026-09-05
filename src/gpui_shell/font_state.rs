@@ -240,6 +240,18 @@ pub fn font_size() -> f32 {
     FONT_SYSTEM.with_borrow(|state| state.size)
 }
 
+/// The resolved internal family name the terminal grid actually renders
+/// with (from fontdb, per `build_font_system`'s doc comment -- may differ
+/// from the config string). Chrome text drawn via gpui's own `div()`/text
+/// layout (tab bar, status bar) doesn't automatically pick this up: gpui
+/// has no ambient "use the terminal's font" default, so without explicitly
+/// applying this, that text silently renders in gpui's own default UI font
+/// instead -- visually a different typeface from the terminal grid right
+/// next to it.
+pub fn font_family() -> String {
+    FONT_SYSTEM.with_borrow(|state| state.family.clone())
+}
+
 /// Run `f` with mutable access to the current `FontSystem`, an immutable
 /// borrow of the resolved font family name, and the PUA-correction context.
 /// Used by `rasterize` (cosmic-text's `Buffer` needs `&mut FontSystem` to

@@ -207,6 +207,11 @@ pub fn render_tab_bar(
         .w_full()
         .flex_shrink_0()
         .bg(surface)
+        // Same fix as `status_bar::render_status_bar`: without an explicit
+        // font, tab labels render in gpui's own default UI font instead of
+        // the terminal grid's configured monospace face.
+        .font_family(super::font_state::font_family())
+        .text_size(gpui::px(super::font_state::font_size()))
         .children(tabs.tabs().iter().enumerate().map(|(idx, tab)| {
             let is_active = idx == active_index;
             let on_select = on_select.clone();
