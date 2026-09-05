@@ -700,8 +700,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/mod.rs": {
-    "mtime": 1788568976.7931414,
-    "ast_hash": "4de47ecbf0b50148c9d273178ab30454",
+    "mtime": 1788569727.8235095,
+    "ast_hash": "cdb4bb604d68e479b628de90c8c14aa9",
     "semantic_hash": ""
   },
   "src/gpui_shell/rasterize.rs": {

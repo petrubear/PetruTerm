@@ -635,8 +635,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "benches_shaping",
-      "community": 104,
-      "community_name": ".resumed",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "shaping.rs"
     },
     {
@@ -646,8 +646,8 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "benches_shaping_make_shaper",
-      "community": 104,
-      "community_name": ".resumed",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "make_shaper()"
     },
     {
@@ -657,8 +657,8 @@
       "source_location": "L69",
       "_origin": "ast",
       "id": "benches_shaping_make_colors",
-      "community": 104,
-      "community_name": ".resumed",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "make_colors()"
     },
     {
@@ -668,8 +668,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "benches_shaping_rs_vec",
-      "community": 104,
-      "community_name": ".resumed",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "vec"
     },
     {
@@ -679,8 +679,8 @@
       "source_location": "L75",
       "_origin": "ast",
       "id": "benches_shaping_bench_shape_line_ascii",
-      "community": 104,
-      "community_name": ".resumed",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "bench_shape_line_ascii()"
     },
     {
@@ -690,8 +690,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "benches_shaping_rs_criterion",
-      "community": 104,
-      "community_name": ".resumed",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "criterion"
     },
     {
@@ -701,8 +701,8 @@
       "source_location": "L87",
       "_origin": "ast",
       "id": "benches_shaping_bench_shape_line_ligatures",
-      "community": 104,
-      "community_name": ".resumed",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "bench_shape_line_ligatures()"
     },
     {
@@ -712,8 +712,8 @@
       "source_location": "L99",
       "_origin": "ast",
       "id": "benches_shaping_bench_shape_line_unicode",
-      "community": 104,
-      "community_name": ".resumed",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "bench_shape_line_unicode()"
     },
     {
@@ -723,8 +723,8 @@
       "source_location": "L112",
       "_origin": "ast",
       "id": "benches_shaping_bench_shape_line_ascii_cached",
-      "community": 104,
-      "community_name": ".resumed",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "bench_shape_line_ascii_cached()"
     },
     {
@@ -734,8 +734,8 @@
       "source_location": "L129",
       "_origin": "ast",
       "id": "benches_shaping_bench_shape_line_ligatures_cached",
-      "community": 104,
-      "community_name": ".resumed",
+      "community": 5,
+      "community_name": "Src Font",
       "norm_label": "bench_shape_line_ligatures_cached()"
     },
     {
@@ -1901,8 +1901,8 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "src_app_input_mod_separatordragstate",
-      "community": 44,
-      "community_name": "Src Llm",
+      "community": 23,
+      "community_name": "Src App",
       "norm_label": "separatordragstate"
     },
     {
@@ -2451,8 +2451,8 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "src_app_menu_appmenu",
-      "community": 106,
-      "community_name": ".build_instances",
+      "community": 68,
+      "community_name": "shaper.rs",
       "norm_label": "appmenu"
     },
     {
@@ -2462,8 +2462,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "menu",
-      "community": 106,
-      "community_name": ".build_instances",
+      "community": 68,
+      "community_name": "shaper.rs",
       "norm_label": "menu"
     },
     {
@@ -2473,8 +2473,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "submenu",
-      "community": 106,
-      "community_name": ".build_instances",
+      "community": 68,
+      "community_name": "shaper.rs",
       "norm_label": "submenu"
     },
     {
@@ -2484,8 +2484,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_menu_rs_vec",
-      "community": 106,
-      "community_name": ".build_instances",
+      "community": 68,
+      "community_name": "shaper.rs",
       "norm_label": "vec"
     },
     {
@@ -2495,8 +2495,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "menuid",
-      "community": 106,
-      "community_name": ".build_instances",
+      "community": 68,
+      "community_name": "shaper.rs",
       "norm_label": "menuid"
     },
     {
@@ -2506,8 +2506,8 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "src_app_menu_appmenu_build",
-      "community": 106,
-      "community_name": ".build_instances",
+      "community": 68,
+      "community_name": "shaper.rs",
       "norm_label": ".build()"
     },
     {
@@ -2517,8 +2517,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_menu_rs_self",
-      "community": 106,
-      "community_name": ".build_instances",
+      "community": 68,
+      "community_name": "shaper.rs",
       "norm_label": "self"
     },
     {
@@ -2528,8 +2528,8 @@
       "source_location": "L183",
       "_origin": "ast",
       "id": "src_app_menu_appmenu_action_for",
-      "community": 106,
-      "community_name": ".build_instances",
+      "community": 68,
+      "community_name": "shaper.rs",
       "norm_label": ".action_for()"
     },
     {
@@ -2539,8 +2539,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "menuevent",
-      "community": 106,
-      "community_name": ".build_instances",
+      "community": 68,
+      "community_name": "shaper.rs",
       "norm_label": "menuevent"
     },
     {
@@ -2550,8 +2550,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_menu_rs_option",
-      "community": 106,
-      "community_name": ".build_instances",
+      "community": 68,
+      "community_name": "shaper.rs",
       "norm_label": "option"
     },
     {
@@ -2847,8 +2847,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mod_rs_activeeventloop",
-      "community": 66,
-      "community_name": ".handle_mouse_button",
+      "community": 18,
+      "community_name": "Src App",
       "norm_label": "activeeventloop"
     },
     {
@@ -2979,8 +2979,8 @@
       "source_location": "L1617",
       "_origin": "ast",
       "id": "src_app_mod_app_poll_low_freq_tasks",
-      "community": 66,
-      "community_name": ".handle_mouse_button",
+      "community": 18,
+      "community_name": "Src App",
       "norm_label": ".poll_low_freq_tasks()"
     },
     {
@@ -3001,8 +3001,8 @@
       "source_location": "L1698",
       "_origin": "ast",
       "id": "src_app_mod_app_user_event",
-      "community": 66,
-      "community_name": ".handle_mouse_button",
+      "community": 18,
+      "community_name": "Src App",
       "norm_label": ".user_event()"
     },
     {
@@ -3056,8 +3056,8 @@
       "source_location": "L1914",
       "_origin": "ast",
       "id": "src_app_mod_app_about_to_wait",
-      "community": 66,
-      "community_name": ".handle_mouse_button",
+      "community": 18,
+      "community_name": "Src App",
       "norm_label": ".about_to_wait()"
     },
     {
@@ -5575,8 +5575,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_renderer_mod_rs_hashmap",
-      "community": 57,
-      "community_name": "Src App",
+      "community": 109,
+      "community_name": "gpu.rs",
       "norm_label": "hashmap"
     },
     {
@@ -6246,8 +6246,8 @@
       "source_location": "L108",
       "_origin": "ast",
       "id": "src_app_renderer_terminal_rendercontext_build_instances",
-      "community": 110,
-      "community_name": "resolve_color",
+      "community": 109,
+      "community_name": "gpu.rs",
       "norm_label": ".build_instances()"
     },
     {
@@ -6257,8 +6257,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_renderer_terminal_rs_string",
-      "community": 110,
-      "community_name": "resolve_color",
+      "community": 109,
+      "community_name": "gpu.rs",
       "norm_label": "string"
     },
     {
@@ -6268,8 +6268,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_renderer_terminal_rs_vec",
-      "community": 110,
-      "community_name": "resolve_color",
+      "community": 109,
+      "community_name": "gpu.rs",
       "norm_label": "vec"
     },
     {
@@ -6279,8 +6279,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_renderer_terminal_rs_ansicolor",
-      "community": 110,
-      "community_name": "resolve_color",
+      "community": 109,
+      "community_name": "gpu.rs",
       "norm_label": "ansicolor"
     },
     {
@@ -6290,8 +6290,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_renderer_terminal_rs_result",
-      "community": 110,
-      "community_name": "resolve_color",
+      "community": 117,
+      "community_name": "CellVertex",
       "norm_label": "result"
     },
     {
@@ -6301,8 +6301,8 @@
       "source_location": "L361",
       "_origin": "ast",
       "id": "src_app_renderer_terminal_rendercontext_write_row_to_layout",
-      "community": 110,
-      "community_name": "resolve_color",
+      "community": 117,
+      "community_name": "CellVertex",
       "norm_label": ".write_row_to_layout()"
     },
     {
@@ -6554,8 +6554,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_app_ui_mod",
-      "community": 107,
-      "community_name": "app/ui/mod.rs",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "app/ui/mod.rs"
     },
     {
@@ -6565,8 +6565,8 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "src_app_ui_mod_spawn_acp_connect",
-      "community": 107,
-      "community_name": "app/ui/mod.rs",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "spawn_acp_connect()"
     },
     {
@@ -6576,8 +6576,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "runtime",
-      "community": 107,
-      "community_name": "app/ui/mod.rs",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "runtime"
     },
     {
@@ -6609,8 +6609,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_ui_mod_rs_receiver",
-      "community": 107,
-      "community_name": "app/ui/mod.rs",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "receiver"
     },
     {
@@ -6620,8 +6620,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_ui_mod_rs_result",
-      "community": 107,
-      "community_name": "app/ui/mod.rs",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "result"
     },
     {
@@ -6631,8 +6631,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_ui_mod_rs_string",
-      "community": 112,
-      "community_name": "RenamePrompt",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "string"
     },
     {
@@ -6642,8 +6642,8 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "src_app_ui_mod_classify_llm_error",
-      "community": 107,
-      "community_name": "app/ui/mod.rs",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "classify_llm_error()"
     },
     {
@@ -6653,8 +6653,8 @@
       "source_location": "L87",
       "_origin": "ast",
       "id": "src_app_ui_mod_renameprompt",
-      "community": 112,
-      "community_name": "RenamePrompt",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "renameprompt"
     },
     {
@@ -6664,8 +6664,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_ui_mod_rs_option",
-      "community": 112,
-      "community_name": "RenamePrompt",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "option"
     },
     {
@@ -6686,8 +6686,8 @@
       "source_location": "L96",
       "_origin": "ast",
       "id": "src_app_ui_mod_renameprompt_is_active",
-      "community": 112,
-      "community_name": "RenamePrompt",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": ".is_active()"
     },
     {
@@ -6697,8 +6697,8 @@
       "source_location": "L100",
       "_origin": "ast",
       "id": "src_app_ui_mod_renameprompt_as_deref",
-      "community": 112,
-      "community_name": "RenamePrompt",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": ".as_deref()"
     },
     {
@@ -6708,8 +6708,8 @@
       "source_location": "L105",
       "_origin": "ast",
       "id": "src_app_ui_mod_renameprompt_handle_key",
-      "community": 112,
-      "community_name": "RenamePrompt",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": ".handle_key()"
     },
     {
@@ -6719,8 +6719,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_ui_mod_rs_key",
-      "community": 112,
-      "community_name": "RenamePrompt",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "key"
     },
     {
@@ -6763,8 +6763,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_ui_mod_rs_arc",
-      "community": 107,
-      "community_name": "app/ui/mod.rs",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "arc"
     },
     {
@@ -6774,8 +6774,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_ui_mod_rs_vecdeque",
-      "community": 107,
-      "community_name": "app/ui/mod.rs",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "vecdeque"
     },
     {
@@ -6818,8 +6818,8 @@
       "source_location": "L263",
       "_origin": "ast",
       "id": "src_app_ui_mod_aipollresult",
-      "community": 107,
-      "community_name": "app/ui/mod.rs",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "aipollresult"
     },
     {
@@ -6829,8 +6829,8 @@
       "source_location": "L272",
       "_origin": "ast",
       "id": "src_app_ui_mod_uimanager_new",
-      "community": 107,
-      "community_name": "app/ui/mod.rs",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": ".new()"
     },
     {
@@ -6840,8 +6840,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_ui_mod_rs_self",
-      "community": 107,
-      "community_name": "app/ui/mod.rs",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "self"
     },
     {
@@ -6939,8 +6939,8 @@
       "source_location": "L494",
       "_origin": "ast",
       "id": "src_app_ui_mod_uimanager_poll_ai_events",
-      "community": 107,
-      "community_name": "app/ui/mod.rs",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": ".poll_ai_events()"
     },
     {
@@ -6950,8 +6950,8 @@
       "source_location": "L557",
       "_origin": "ast",
       "id": "src_app_ui_mod_uimanager_poll_ai_block_events",
-      "community": 107,
-      "community_name": "app/ui/mod.rs",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": ".poll_ai_block_events()"
     },
     {
@@ -7049,8 +7049,8 @@
       "source_location": "L688",
       "_origin": "ast",
       "id": "src_app_ui_mod_uimanager_request_paste_async",
-      "community": 107,
-      "community_name": "app/ui/mod.rs",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": ".request_paste_async()"
     },
     {
@@ -7060,8 +7060,8 @@
       "source_location": "L702",
       "_origin": "ast",
       "id": "src_app_ui_mod_uimanager_poll_pending_paste",
-      "community": 112,
-      "community_name": "RenamePrompt",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": ".poll_pending_paste()"
     },
     {
@@ -7093,8 +7093,8 @@
       "source_location": "L723",
       "_origin": "ast",
       "id": "src_app_ui_mod_uimanager_is_renaming_tab",
-      "community": 112,
-      "community_name": "RenamePrompt",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": ".is_renaming_tab()"
     },
     {
@@ -7104,8 +7104,8 @@
       "source_location": "L727",
       "_origin": "ast",
       "id": "src_app_ui_mod_uimanager_tab_rename_text",
-      "community": 112,
-      "community_name": "RenamePrompt",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": ".tab_rename_text()"
     },
     {
@@ -7115,8 +7115,8 @@
       "source_location": "L733",
       "_origin": "ast",
       "id": "src_app_ui_mod_uimanager_handle_rename_key",
-      "community": 112,
-      "community_name": "RenamePrompt",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": ".handle_rename_key()"
     },
     {
@@ -7170,8 +7170,8 @@
       "source_location": "L784",
       "_origin": "ast",
       "id": "src_app_ui_mod_uimanager_copy_chat_panel_transcript",
-      "community": 107,
-      "community_name": "app/ui/mod.rs",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": ".copy_chat_panel_transcript()"
     },
     {
@@ -7258,8 +7258,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_ui_mod_rs_rendercontext",
-      "community": 107,
-      "community_name": "app/ui/mod.rs",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "rendercontext"
     },
     {
@@ -7269,8 +7269,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_ui_mod_rs_window",
-      "community": 107,
-      "community_name": "app/ui/mod.rs",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "window"
     },
     {
@@ -7280,8 +7280,8 @@
       "source_location": "L1680",
       "_origin": "ast",
       "id": "src_app_ui_mod_test_git_branch_in_flight_prevents_duplicate_spawn",
-      "community": 107,
-      "community_name": "app/ui/mod.rs",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "test_git_branch_in_flight_prevents_duplicate_spawn()"
     },
     {
@@ -7291,8 +7291,8 @@
       "source_location": "L1755",
       "_origin": "ast",
       "id": "src_app_ui_mod_test_git_branch_timeout_recovery",
-      "community": 107,
-      "community_name": "app/ui/mod.rs",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "test_git_branch_timeout_recovery()"
     },
     {
@@ -8204,8 +8204,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_config_schema_rs_vec",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 0,
+      "community_name": "Src Config",
       "norm_label": "vec"
     },
     {
@@ -8237,8 +8237,8 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "src_config_schema_statusbarconfig",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 28,
+      "community_name": "Src Ui",
       "norm_label": "statusbarconfig"
     },
     {
@@ -8259,8 +8259,8 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "src_config_schema_statusbarconfig_default",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 28,
+      "community_name": "Src Ui",
       "norm_label": ".default()"
     },
     {
@@ -8270,8 +8270,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_config_schema_rs_self",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 97,
+      "community_name": ".rasterize_lcd_to_atlas",
       "norm_label": "self"
     },
     {
@@ -8281,8 +8281,8 @@
       "source_location": "L71",
       "_origin": "ast",
       "id": "src_config_schema_statusbarposition",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 28,
+      "community_name": "Src Ui",
       "norm_label": "statusbarposition"
     },
     {
@@ -8292,8 +8292,8 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "src_config_schema_statusbarstyle",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 28,
+      "community_name": "Src Ui",
       "norm_label": "statusbarstyle"
     },
     {
@@ -8303,8 +8303,8 @@
       "source_location": "L87",
       "_origin": "ast",
       "id": "src_config_schema_config_default",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 97,
+      "community_name": ".rasterize_lcd_to_atlas",
       "norm_label": ".default()"
     },
     {
@@ -8380,8 +8380,8 @@
       "source_location": "L169",
       "_origin": "ast",
       "id": "src_config_schema_workspacesconfig_default",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 97,
+      "community_name": ".rasterize_lcd_to_atlas",
       "norm_label": ".default()"
     },
     {
@@ -8424,8 +8424,8 @@
       "source_location": "L196",
       "_origin": "ast",
       "id": "src_config_schema_fontconfig_default",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 97,
+      "community_name": ".rasterize_lcd_to_atlas",
       "norm_label": ".default()"
     },
     {
@@ -8512,8 +8512,8 @@
       "source_location": "L366",
       "_origin": "ast",
       "id": "src_config_schema_colorscheme_dracula_pro",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 97,
+      "community_name": ".rasterize_lcd_to_atlas",
       "norm_label": ".dracula_pro()"
     },
     {
@@ -8611,8 +8611,8 @@
       "source_location": "L530",
       "_origin": "ast",
       "id": "src_config_schema_leaderconfig_default",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 97,
+      "community_name": ".rasterize_lcd_to_atlas",
       "norm_label": ".default()"
     },
     {
@@ -8655,8 +8655,8 @@
       "source_location": "L573",
       "_origin": "ast",
       "id": "src_config_schema_acpagentconfig",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 0,
+      "community_name": "Src Config",
       "norm_label": "acpagentconfig"
     },
     {
@@ -8688,8 +8688,8 @@
       "source_location": "L604",
       "_origin": "ast",
       "id": "src_config_schema_llmconfig_default",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 97,
+      "community_name": ".rasterize_lcd_to_atlas",
       "norm_label": ".default()"
     },
     {
@@ -8732,8 +8732,8 @@
       "source_location": "L640",
       "_origin": "ast",
       "id": "src_config_schema_llmfeatures_default",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 97,
+      "community_name": ".rasterize_lcd_to_atlas",
       "norm_label": ".default()"
     },
     {
@@ -8743,8 +8743,8 @@
       "source_location": "L655",
       "_origin": "ast",
       "id": "src_config_schema_blur_translucency_only_when_translucent",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 97,
+      "community_name": ".rasterize_lcd_to_atlas",
       "norm_label": "blur_translucency_only_when_translucent()"
     },
     {
@@ -10995,7 +10995,7 @@
       "label": ".on_terminal_exited()",
       "file_type": "code",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L417",
+      "source_location": "L418",
       "_origin": "ast",
       "id": "src_gpui_shell_mod_gpuishellroot_on_terminal_exited",
       "community": 47,
@@ -11006,7 +11006,7 @@
       "label": ".close_tab_at()",
       "file_type": "code",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L452",
+      "source_location": "L455",
       "_origin": "ast",
       "id": "src_gpui_shell_mod_gpuishellroot_close_tab_at",
       "community": 47,
@@ -11017,7 +11017,7 @@
       "label": ".reap_pane()",
       "file_type": "code",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L477",
+      "source_location": "L486",
       "_origin": "ast",
       "id": "src_gpui_shell_mod_gpuishellroot_reap_pane",
       "community": 47,
@@ -11028,7 +11028,7 @@
       "label": ".toggle_zoom()",
       "file_type": "code",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L488",
+      "source_location": "L497",
       "_origin": "ast",
       "id": "src_gpui_shell_mod_gpuishellroot_toggle_zoom",
       "community": 47,
@@ -11039,7 +11039,7 @@
       "label": ".dispatch_leader_action()",
       "file_type": "code",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L501",
+      "source_location": "L510",
       "_origin": "ast",
       "id": "src_gpui_shell_mod_gpuishellroot_dispatch_leader_action",
       "community": 47,
@@ -11050,7 +11050,7 @@
       "label": ".on_key_down()",
       "file_type": "code",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L565",
+      "source_location": "L574",
       "_origin": "ast",
       "id": "src_gpui_shell_mod_gpuishellroot_on_key_down",
       "community": 47,
@@ -11094,7 +11094,7 @@
       "label": ".focus_handle()",
       "file_type": "code",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L708",
+      "source_location": "L717",
       "_origin": "ast",
       "id": "src_gpui_shell_mod_gpuishellroot_focus_handle",
       "community": 47,
@@ -11127,7 +11127,7 @@
       "label": ".render()",
       "file_type": "code",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L714",
+      "source_location": "L723",
       "_origin": "ast",
       "id": "src_gpui_shell_mod_gpuishellroot_render",
       "community": 47,
@@ -13319,8 +13319,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_gpui_shell_terminal_element",
-      "community": 17,
-      "community_name": "Src Term",
+      "community": 50,
+      "community_name": "Benches Rasterize.rs",
       "norm_label": "terminal_element.rs"
     },
     {
@@ -13341,8 +13341,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_gpui_shell_terminal_element_rs_rc",
-      "community": 17,
-      "community_name": "Src Term",
+      "community": 50,
+      "community_name": "Benches Rasterize.rs",
       "norm_label": "rc"
     },
     {
@@ -18225,8 +18225,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_llm_steering",
-      "community": 97,
-      "community_name": ".rasterize_lcd_to_atlas",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "steering.rs"
     },
     {
@@ -18236,8 +18236,8 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "src_llm_steering_steeringmanager",
-      "community": 97,
-      "community_name": ".rasterize_lcd_to_atlas",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "steeringmanager"
     },
     {
@@ -18247,8 +18247,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_llm_steering_rs_vec",
-      "community": 97,
-      "community_name": ".rasterize_lcd_to_atlas",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "vec"
     },
     {
@@ -18258,8 +18258,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_llm_steering_rs_string",
-      "community": 97,
-      "community_name": ".rasterize_lcd_to_atlas",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "string"
     },
     {
@@ -18269,8 +18269,8 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "src_llm_steering_steeringmanager_new",
-      "community": 97,
-      "community_name": ".rasterize_lcd_to_atlas",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": ".new()"
     },
     {
@@ -18280,8 +18280,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_llm_steering_rs_self",
-      "community": 97,
-      "community_name": ".rasterize_lcd_to_atlas",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "self"
     },
     {
@@ -18291,8 +18291,8 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "src_llm_steering_steeringmanager_load",
-      "community": 97,
-      "community_name": ".rasterize_lcd_to_atlas",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": ".load()"
     },
     {
@@ -18302,8 +18302,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_llm_steering_rs_path",
-      "community": 97,
-      "community_name": ".rasterize_lcd_to_atlas",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "path"
     },
     {
@@ -18313,8 +18313,8 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "src_llm_steering_steeringmanager_count",
-      "community": 97,
-      "community_name": ".rasterize_lcd_to_atlas",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": ".count()"
     },
     {
@@ -18324,8 +18324,8 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "src_llm_steering_steeringmanager_files",
-      "community": 97,
-      "community_name": ".rasterize_lcd_to_atlas",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": ".files()"
     },
     {
@@ -18335,8 +18335,8 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "src_llm_steering_steeringmanager_context_block",
-      "community": 97,
-      "community_name": ".rasterize_lcd_to_atlas",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": ".context_block()"
     },
     {
@@ -18346,8 +18346,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_llm_steering_rs_option",
-      "community": 97,
-      "community_name": ".rasterize_lcd_to_atlas",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "option"
     },
     {
@@ -18357,8 +18357,8 @@
       "source_location": "L56",
       "_origin": "ast",
       "id": "src_llm_steering_steeringmanager_scan_dir",
-      "community": 97,
-      "community_name": ".rasterize_lcd_to_atlas",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": ".scan_dir()"
     },
     {
@@ -18368,8 +18368,8 @@
       "source_location": "L63",
       "_origin": "ast",
       "id": "src_llm_steering_steeringmanager_scan_dir_overlay",
-      "community": 97,
-      "community_name": ".rasterize_lcd_to_atlas",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": ".scan_dir_overlay()"
     },
     {
@@ -18379,8 +18379,8 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "src_llm_steering_read_md_files",
-      "community": 97,
-      "community_name": ".rasterize_lcd_to_atlas",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "read_md_files()"
     },
     {
@@ -18390,8 +18390,8 @@
       "source_location": "L110",
       "_origin": "ast",
       "id": "src_llm_steering_context_block_empty",
-      "community": 97,
-      "community_name": ".rasterize_lcd_to_atlas",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "context_block_empty()"
     },
     {
@@ -18401,8 +18401,8 @@
       "source_location": "L116",
       "_origin": "ast",
       "id": "src_llm_steering_context_block_with_files",
-      "community": 97,
-      "community_name": ".rasterize_lcd_to_atlas",
+      "community": 1,
+      "community_name": "Src App",
       "norm_label": "context_block_with_files()"
     },
     {
@@ -19347,8 +19347,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_renderer_cell",
-      "community": 113,
-      "community_name": "UploadRange",
+      "community": 70,
+      "community_name": "Src Term",
       "norm_label": "cell.rs"
     },
     {
@@ -19358,8 +19358,8 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "src_renderer_cell_cellvertex",
-      "community": 113,
-      "community_name": "UploadRange",
+      "community": 70,
+      "community_name": "Src Term",
       "norm_label": "cellvertex"
     },
     {
@@ -19369,8 +19369,8 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "src_renderer_cell_cellvertex_vertex_buffer_layout",
-      "community": 113,
-      "community_name": "UploadRange",
+      "community": 70,
+      "community_name": "Src Term",
       "norm_label": ".vertex_buffer_layout()"
     },
     {
@@ -19380,8 +19380,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "vertexbufferlayout",
-      "community": 113,
-      "community_name": "UploadRange",
+      "community": 70,
+      "community_name": "Src Term",
       "norm_label": "vertexbufferlayout"
     },
     {
@@ -19391,8 +19391,8 @@
       "source_location": "L90",
       "_origin": "ast",
       "id": "src_renderer_cell_celluniforms",
-      "community": 113,
-      "community_name": "UploadRange",
+      "community": 70,
+      "community_name": "Src Term",
       "norm_label": "celluniforms"
     },
     {
@@ -19402,8 +19402,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_renderer_gpu",
-      "community": 103,
-      "community_name": "keybind_view.rs",
+      "community": 13,
+      "community_name": "Src Renderer",
       "norm_label": "gpu.rs"
     },
     {
@@ -19435,8 +19435,8 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "src_renderer_gpu_renderoutcome",
-      "community": 103,
-      "community_name": "keybind_view.rs",
+      "community": 13,
+      "community_name": "Src Renderer",
       "norm_label": "renderoutcome"
     },
     {
@@ -19446,8 +19446,8 @@
       "source_location": "L51",
       "_origin": "ast",
       "id": "src_renderer_gpu_render_outcome_requires_rebuild",
-      "community": 103,
-      "community_name": "keybind_view.rs",
+      "community": 13,
+      "community_name": "Src Renderer",
       "norm_label": "render_outcome_requires_rebuild()"
     },
     {
@@ -19468,8 +19468,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_renderer_gpu_rs_arc",
-      "community": 103,
-      "community_name": "keybind_view.rs",
+      "community": 13,
+      "community_name": "Src Renderer",
       "norm_label": "arc"
     },
     {
@@ -19479,8 +19479,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_renderer_gpu_rs_window",
-      "community": 103,
-      "community_name": "keybind_view.rs",
+      "community": 13,
+      "community_name": "Src Renderer",
       "norm_label": "window"
     },
     {
@@ -19578,8 +19578,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_renderer_gpu_rs_bindgroup",
-      "community": 103,
-      "community_name": "keybind_view.rs",
+      "community": 13,
+      "community_name": "Src Renderer",
       "norm_label": "bindgroup"
     },
     {
@@ -19622,8 +19622,8 @@
       "source_location": "L104",
       "_origin": "ast",
       "id": "src_renderer_gpu_surface_recovery_outcome_requires_full_rebuild",
-      "community": 103,
-      "community_name": "keybind_view.rs",
+      "community": 13,
+      "community_name": "Src Renderer",
       "norm_label": "surface_recovery_outcome_requires_full_rebuild()"
     },
     {
@@ -19633,8 +19633,8 @@
       "source_location": "L113",
       "_origin": "ast",
       "id": "src_renderer_gpu_gpurenderer_new",
-      "community": 103,
-      "community_name": "keybind_view.rs",
+      "community": 13,
+      "community_name": "Src Renderer",
       "norm_label": ".new()"
     },
     {
@@ -19644,8 +19644,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_renderer_gpu_rs_self",
-      "community": 103,
-      "community_name": "keybind_view.rs",
+      "community": 13,
+      "community_name": "Src Renderer",
       "norm_label": "self"
     },
     {
@@ -19743,8 +19743,8 @@
       "source_location": "L543",
       "_origin": "ast",
       "id": "src_renderer_gpu_gpurenderer_upload_overlay_instances",
-      "community": 113,
-      "community_name": "UploadRange",
+      "community": 70,
+      "community_name": "Src Term",
       "norm_label": ".upload_overlay_instances()"
     },
     {
@@ -19754,8 +19754,8 @@
       "source_location": "L561",
       "_origin": "ast",
       "id": "src_renderer_gpu_gpurenderer_upload_overlay_instance",
-      "community": 113,
-      "community_name": "UploadRange",
+      "community": 70,
+      "community_name": "Src Term",
       "norm_label": ".upload_overlay_instance()"
     },
     {
@@ -19787,8 +19787,8 @@
       "source_location": "L596",
       "_origin": "ast",
       "id": "src_renderer_gpu_gpurenderer_render",
-      "community": 103,
-      "community_name": "keybind_view.rs",
+      "community": 13,
+      "community_name": "Src Renderer",
       "norm_label": ".render()"
     },
     {
@@ -19831,8 +19831,8 @@
       "source_location": "L734",
       "_origin": "ast",
       "id": "src_renderer_gpu_gpurenderer_upload_rect_instances",
-      "community": 59,
-      "community_name": "Src Renderer",
+      "community": 109,
+      "community_name": "gpu.rs",
       "norm_label": ".upload_rect_instances()"
     },
     {
@@ -19919,8 +19919,8 @@
       "source_location": "L919",
       "_origin": "ast",
       "id": "src_renderer_gpu_gpurenderer_rebuild_atlas_bind_groups",
-      "community": 103,
-      "community_name": "keybind_view.rs",
+      "community": 13,
+      "community_name": "Src Renderer",
       "norm_label": ".rebuild_atlas_bind_groups()"
     },
     {
@@ -19930,8 +19930,8 @@
       "source_location": "L964",
       "_origin": "ast",
       "id": "src_renderer_gpu_make_main_atlas_bind_group",
-      "community": 103,
-      "community_name": "keybind_view.rs",
+      "community": 13,
+      "community_name": "Src Renderer",
       "norm_label": "make_main_atlas_bind_group()"
     },
     {
@@ -20326,8 +20326,8 @@
       "source_location": "L85",
       "_origin": "ast",
       "id": "src_renderer_rounded_rect_roundedrectinstance",
-      "community": 59,
-      "community_name": "Src Renderer",
+      "community": 109,
+      "community_name": "gpu.rs",
       "norm_label": "roundedrectinstance"
     },
     {
@@ -22152,8 +22152,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_term_pty_rs_mutex",
-      "community": 12,
-      "community_name": "Src Term",
+      "community": 87,
+      "community_name": "Src App",
       "norm_label": "mutex"
     },
     {
@@ -22229,8 +22229,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_term_pty_rs_option",
-      "community": 12,
-      "community_name": "Src Term",
+      "community": 103,
+      "community_name": "keybind_view.rs",
       "norm_label": "option"
     },
     {
@@ -22251,8 +22251,8 @@
       "source_location": "L138",
       "_origin": "ast",
       "id": "src_term_pty_pty_spawn",
-      "community": 12,
-      "community_name": "Src Term",
+      "community": 103,
+      "community_name": "keybind_view.rs",
       "norm_label": ".spawn()"
     },
     {
@@ -22262,8 +22262,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_term_pty_rs_pathbuf",
-      "community": 12,
-      "community_name": "Src Term",
+      "community": 103,
+      "community_name": "keybind_view.rs",
       "norm_label": "pathbuf"
     },
     {
@@ -22273,8 +22273,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_term_pty_rs_result",
-      "community": 12,
-      "community_name": "Src Term",
+      "community": 103,
+      "community_name": "keybind_view.rs",
       "norm_label": "result"
     },
     {
@@ -22284,8 +22284,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_term_pty_rs_self",
-      "community": 12,
-      "community_name": "Src Term",
+      "community": 103,
+      "community_name": "keybind_view.rs",
       "norm_label": "self"
     },
     {
@@ -22405,8 +22405,8 @@
       "source_location": "L378",
       "_origin": "ast",
       "id": "src_term_pty_open_pty",
-      "community": 12,
-      "community_name": "Src Term",
+      "community": 103,
+      "community_name": "keybind_view.rs",
       "norm_label": "open_pty()"
     },
     {
@@ -22416,8 +22416,8 @@
       "source_location": "L408",
       "_origin": "ast",
       "id": "src_term_pty_spawn_shell",
-      "community": 12,
-      "community_name": "Src Term",
+      "community": 103,
+      "community_name": "keybind_view.rs",
       "norm_label": "spawn_shell()"
     },
     {
@@ -22427,8 +22427,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "child",
-      "community": 12,
-      "community_name": "Src Term",
+      "community": 103,
+      "community_name": "keybind_view.rs",
       "norm_label": "child"
     },
     {
@@ -23604,8 +23604,8 @@
       "source_location": "L120",
       "_origin": "ast",
       "id": "src_ui_palette_mod_commandpalette_rebuild_snippets",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 68,
+      "community_name": "shaper.rs",
       "norm_label": ".rebuild_snippets()"
     },
     {
@@ -53590,7 +53590,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L501",
+      "source_location": "L510",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -53791,7 +53791,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L504",
+      "source_location": "L513",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_mod_gpuishellroot_dispatch_leader_action",
@@ -53910,7 +53910,7 @@
       "relation": "implements",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L707",
+      "source_location": "L716",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_mod_gpuishellroot",
@@ -53933,7 +53933,7 @@
       "relation": "implements",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L713",
+      "source_location": "L722",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_mod_gpuishellroot",
@@ -53955,7 +53955,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L452",
+      "source_location": "L455",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_mod_gpuishellroot",
@@ -53966,7 +53966,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L501",
+      "source_location": "L510",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_mod_gpuishellroot",
@@ -53977,7 +53977,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L708",
+      "source_location": "L717",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_mod_gpuishellroot",
@@ -53999,7 +53999,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L565",
+      "source_location": "L574",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_mod_gpuishellroot",
@@ -54010,7 +54010,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L417",
+      "source_location": "L418",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_mod_gpuishellroot",
@@ -54021,7 +54021,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L477",
+      "source_location": "L486",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_mod_gpuishellroot",
@@ -54032,7 +54032,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L714",
+      "source_location": "L723",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_mod_gpuishellroot",
@@ -54054,7 +54054,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L488",
+      "source_location": "L497",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_mod_gpuishellroot",
@@ -54185,7 +54185,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L708",
+      "source_location": "L717",
       "weight": 1.0,
       "context": "return_type",
       "_origin": "ast",
@@ -54222,7 +54222,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L579",
+      "source_location": "L588",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_mod_gpuishellroot_on_key_down",
@@ -54234,7 +54234,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L516",
+      "source_location": "L525",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_mod_gpuishellroot_dispatch_leader_action",
@@ -54294,7 +54294,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L747",
+      "source_location": "L756",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_mod_gpuishellroot_render",
@@ -54305,7 +54305,19 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L501",
+      "source_location": "L455",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "_origin": "ast",
+      "source": "src_gpui_shell_mod_gpuishellroot_close_tab_at",
+      "target": "context",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "src/gpui_shell/mod.rs",
+      "source_location": "L510",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -54317,7 +54329,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L565",
+      "source_location": "L574",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -54329,7 +54341,19 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L714",
+      "source_location": "L418",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "_origin": "ast",
+      "source": "src_gpui_shell_mod_gpuishellroot_on_terminal_exited",
+      "target": "context",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "src/gpui_shell/mod.rs",
+      "source_location": "L723",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -54341,7 +54365,19 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L501",
+      "source_location": "L455",
+      "weight": 1.0,
+      "context": "generic_arg",
+      "_origin": "ast",
+      "source": "src_gpui_shell_mod_gpuishellroot_close_tab_at",
+      "target": "src_gpui_shell_mod_rs_self",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "src/gpui_shell/mod.rs",
+      "source_location": "L510",
       "weight": 1.0,
       "context": "generic_arg",
       "_origin": "ast",
@@ -54353,7 +54389,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L565",
+      "source_location": "L574",
       "weight": 1.0,
       "context": "generic_arg",
       "_origin": "ast",
@@ -54365,7 +54401,19 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L714",
+      "source_location": "L418",
+      "weight": 1.0,
+      "context": "generic_arg",
+      "_origin": "ast",
+      "source": "src_gpui_shell_mod_gpuishellroot_on_terminal_exited",
+      "target": "src_gpui_shell_mod_rs_self",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "src/gpui_shell/mod.rs",
+      "source_location": "L723",
       "weight": 1.0,
       "context": "generic_arg",
       "_origin": "ast",
@@ -54378,7 +54426,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L547",
+      "source_location": "L556",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_mod_gpuishellroot_dispatch_leader_action",
@@ -54414,7 +54462,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L549",
+      "source_location": "L558",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_mod_gpuishellroot_dispatch_leader_action",
@@ -54426,7 +54474,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L433",
+      "source_location": "L434",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_mod_gpuishellroot_on_terminal_exited",
@@ -54438,7 +54486,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L426",
+      "source_location": "L427",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_mod_gpuishellroot_on_terminal_exited",
@@ -54450,7 +54498,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L468",
+      "source_location": "L477",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_mod_gpuishellroot_close_tab_at",
@@ -54462,7 +54510,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L531",
+      "source_location": "L540",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_mod_gpuishellroot_dispatch_leader_action",
@@ -54474,7 +54522,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L550",
+      "source_location": "L559",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_mod_gpuishellroot_dispatch_leader_action",
@@ -54486,7 +54534,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L638",
+      "source_location": "L647",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_mod_gpuishellroot_on_key_down",
@@ -54497,7 +54545,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L565",
+      "source_location": "L574",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -54509,7 +54557,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L565",
+      "source_location": "L574",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -54522,7 +54570,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L806",
+      "source_location": "L815",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_mod_gpuishellroot_render",
@@ -54533,7 +54581,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L714",
+      "source_location": "L723",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -54545,7 +54593,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L708",
+      "source_location": "L717",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -54557,7 +54605,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L714",
+      "source_location": "L723",
       "weight": 1.0,
       "context": "return_type",
       "_origin": "ast",
@@ -54571,7 +54619,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/gpui_shell/mod.rs",
-      "source_location": "L812",
+      "source_location": "L821",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_gpui_shell_mod_gpuishellroot_render",
@@ -84329,5 +84377,5 @@
       "source_file": ".github/workflows/release.yml"
     }
   ],
-  "built_at_commit": "f9ea9f1c6855e487d89bc154482f71ff8f69504a"
+  "built_at_commit": "aa2139695feb60cf0c9cdd0fd9bc64a2f02624a7"
 }
