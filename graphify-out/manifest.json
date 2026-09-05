@@ -685,8 +685,8 @@
     "semantic_hash": ""
   },
   "src/bin/gpui_petruterm.rs": {
-    "mtime": 1788574604.4221642,
-    "ast_hash": "cb2480c072487c1a8a7961f4928a128a",
+    "mtime": 1788576177.8054185,
+    "ast_hash": "ff3b36b45a93692a54ddb4d5018deb89",
     "semantic_hash": ""
   },
   "src/gpui_shell/font_state.rs": {

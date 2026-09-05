@@ -127,5 +127,7 @@
   "125": "FreeTypeCmapLookup",
   "126": ".spawn",
   "127": "build_font_system",
-  "128": ".rasterize"
+  "128": ".rasterize",
+  "129": "String",
+  "130": "UiStyle"
 }

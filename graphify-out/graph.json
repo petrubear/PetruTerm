@@ -338,8 +338,8 @@
       "source_location": "L602",
       "_origin": "ast",
       "id": "benches_build_instances_bench_upload_bytes_comparison",
-      "community": 123,
-      "community_name": "Config",
+      "community": 113,
+      "community_name": "UploadRange",
       "norm_label": "bench_upload_bytes_comparison()"
     },
     {
@@ -2154,8 +2154,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_app_layout",
-      "community": 24,
-      "community_name": "Src App",
+      "community": 0,
+      "community_name": "Src Config",
       "norm_label": "app/layout.rs"
     },
     {
@@ -2286,8 +2286,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_layout_rs_result",
-      "community": 24,
-      "community_name": "Src App",
+      "community": 0,
+      "community_name": "Src Config",
       "norm_label": "result"
     },
     {
@@ -2528,8 +2528,8 @@
       "source_location": "L183",
       "_origin": "ast",
       "id": "src_app_menu_appmenu_action_for",
-      "community": 68,
-      "community_name": "shaper.rs",
+      "community": 120,
+      "community_name": "AppMenu",
       "norm_label": ".action_for()"
     },
     {
@@ -2539,8 +2539,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "menuevent",
-      "community": 68,
-      "community_name": "shaper.rs",
+      "community": 120,
+      "community_name": "AppMenu",
       "norm_label": "menuevent"
     },
     {
@@ -2550,8 +2550,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_menu_rs_option",
-      "community": 68,
-      "community_name": "shaper.rs",
+      "community": 120,
+      "community_name": "AppMenu",
       "norm_label": "option"
     },
     {
@@ -2847,8 +2847,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mod_rs_activeeventloop",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 66,
+      "community_name": ".handle_mouse_button",
       "norm_label": "activeeventloop"
     },
     {
@@ -2979,8 +2979,8 @@
       "source_location": "L1617",
       "_origin": "ast",
       "id": "src_app_mod_app_poll_low_freq_tasks",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 66,
+      "community_name": ".handle_mouse_button",
       "norm_label": ".poll_low_freq_tasks()"
     },
     {
@@ -3001,8 +3001,8 @@
       "source_location": "L1698",
       "_origin": "ast",
       "id": "src_app_mod_app_user_event",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 66,
+      "community_name": ".handle_mouse_button",
       "norm_label": ".user_event()"
     },
     {
@@ -3056,8 +3056,8 @@
       "source_location": "L1914",
       "_origin": "ast",
       "id": "src_app_mod_app_about_to_wait",
-      "community": 18,
-      "community_name": "Src App",
+      "community": 66,
+      "community_name": ".handle_mouse_button",
       "norm_label": ".about_to_wait()"
     },
     {
@@ -3089,8 +3089,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_app_mux_mod",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 29,
+      "community_name": "Src Llm",
       "norm_label": "mux/mod.rs"
     },
     {
@@ -3111,8 +3111,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mux_mod_rs_string",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 87,
+      "community_name": "Src App",
       "norm_label": "string"
     },
     {
@@ -3122,8 +3122,8 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "src_app_mux_mod_ptyeventbatch",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 29,
+      "community_name": "Src Llm",
       "norm_label": "ptyeventbatch"
     },
     {
@@ -3133,8 +3133,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mux_mod_rs_vec",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 29,
+      "community_name": "Src Llm",
       "norm_label": "vec"
     },
     {
@@ -3144,8 +3144,8 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "src_app_mux_mod_drain_pty_events",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 29,
+      "community_name": "Src Llm",
       "norm_label": "drain_pty_events()"
     },
     {
@@ -3155,8 +3155,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mux_mod_rs_receiver",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 29,
+      "community_name": "Src Llm",
       "norm_label": "receiver"
     },
     {
@@ -3166,8 +3166,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "fnmut",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 29,
+      "community_name": "Src Llm",
       "norm_label": "fnmut"
     },
     {
@@ -3177,8 +3177,8 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "src_app_mux_mod_ptyeventbatch_merge",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 123,
+      "community_name": "Config",
       "norm_label": ".merge()"
     },
     {
@@ -3188,8 +3188,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mux_mod_rs_self",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 123,
+      "community_name": "Config",
       "norm_label": "self"
     },
     {
@@ -3221,8 +3221,8 @@
       "source_location": "L96",
       "_origin": "ast",
       "id": "src_app_mux_mod_eventloop_wakeup",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 123,
+      "community_name": "Config",
       "norm_label": "eventloop_wakeup()"
     },
     {
@@ -3232,8 +3232,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mux_mod_rs_eventloopproxy",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 123,
+      "community_name": "Config",
       "norm_label": "eventloopproxy"
     },
     {
@@ -3243,8 +3243,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mux_mod_rs_wakeup",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 123,
+      "community_name": "Config",
       "norm_label": "wakeup"
     },
     {
@@ -3254,8 +3254,8 @@
       "source_location": "L103",
       "_origin": "ast",
       "id": "src_app_mux_mod_syntaxoverlay",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 29,
+      "community_name": "Src Llm",
       "norm_label": "syntaxoverlay"
     },
     {
@@ -3265,8 +3265,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mux_mod_rs_option",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 29,
+      "community_name": "Src Llm",
       "norm_label": "option"
     },
     {
@@ -3276,8 +3276,8 @@
       "source_location": "L114",
       "_origin": "ast",
       "id": "src_app_mux_mod_ghostoverlay",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 29,
+      "community_name": "Src Llm",
       "norm_label": "ghostoverlay"
     },
     {
@@ -3287,8 +3287,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mux_mod_rs_ansicolor",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 29,
+      "community_name": "Src Llm",
       "norm_label": "ansicolor"
     },
     {
@@ -3298,8 +3298,8 @@
       "source_location": "L126",
       "_origin": "ast",
       "id": "src_app_mux_mod_flaghintoverlay",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 29,
+      "community_name": "Src Llm",
       "norm_label": "flaghintoverlay"
     },
     {
@@ -3309,8 +3309,8 @@
       "source_location": "L155",
       "_origin": "ast",
       "id": "src_app_mux_mod_push_search_match",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 87,
+      "community_name": "Src App",
       "norm_label": "push_search_match()"
     },
     {
@@ -3320,8 +3320,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "searchmatch",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 87,
+      "community_name": "Src App",
       "norm_label": "searchmatch"
     },
     {
@@ -3331,8 +3331,8 @@
       "source_location": "L175",
       "_origin": "ast",
       "id": "src_app_mux_mod_shell_quote",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 123,
+      "community_name": "Config",
       "norm_label": "shell_quote()"
     },
     {
@@ -3386,8 +3386,8 @@
       "source_location": "L233",
       "_origin": "ast",
       "id": "src_app_mux_mod_mux_new",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 123,
+      "community_name": "Config",
       "norm_label": ".new()"
     },
     {
@@ -3441,8 +3441,8 @@
       "source_location": "L289",
       "_origin": "ast",
       "id": "src_app_mux_mod_mux_active_terminal",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 87,
+      "community_name": "Src App",
       "norm_label": ".active_terminal()"
     },
     {
@@ -3474,8 +3474,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mux_mod_rs_pathbuf",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 123,
+      "community_name": "Config",
       "norm_label": "pathbuf"
     },
     {
@@ -3496,8 +3496,8 @@
       "source_location": "L315",
       "_origin": "ast",
       "id": "src_app_mux_mod_mux_open_terminal",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 123,
+      "community_name": "Config",
       "norm_label": ".open_terminal()"
     },
     {
@@ -3507,8 +3507,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mux_mod_rs_result",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 123,
+      "community_name": "Config",
       "norm_label": "result"
     },
     {
@@ -3518,8 +3518,8 @@
       "source_location": "L346",
       "_origin": "ast",
       "id": "src_app_mux_mod_mux_open_initial_tab",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 123,
+      "community_name": "Config",
       "norm_label": ".open_initial_tab()"
     },
     {
@@ -3562,8 +3562,8 @@
       "source_location": "L537",
       "_origin": "ast",
       "id": "src_app_mux_mod_mux_collect_grid_cells",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 87,
+      "community_name": "Src App",
       "norm_label": ".collect_grid_cells()"
     },
     {
@@ -3573,8 +3573,8 @@
       "source_location": "L577",
       "_origin": "ast",
       "id": "src_app_mux_mod_mux_viewport_row_text",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 87,
+      "community_name": "Src App",
       "norm_label": ".viewport_row_text()"
     },
     {
@@ -3584,8 +3584,8 @@
       "source_location": "L602",
       "_origin": "ast",
       "id": "src_app_mux_mod_mux_block_output_text",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 87,
+      "community_name": "Src App",
       "norm_label": ".block_output_text()"
     },
     {
@@ -3595,8 +3595,8 @@
       "source_location": "L630",
       "_origin": "ast",
       "id": "src_app_mux_mod_mux_last_terminal_lines",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 87,
+      "community_name": "Src App",
       "norm_label": ".last_terminal_lines()"
     },
     {
@@ -3606,8 +3606,8 @@
       "source_location": "L656",
       "_origin": "ast",
       "id": "src_app_mux_mod_mux_terminal_output_text",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 87,
+      "community_name": "Src App",
       "norm_label": ".terminal_output_text()"
     },
     {
@@ -3639,8 +3639,8 @@
       "source_location": "L708",
       "_origin": "ast",
       "id": "src_app_mux_mod_mux_open_terminal_for_acp",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 123,
+      "community_name": "Config",
       "norm_label": ".open_terminal_for_acp()"
     },
     {
@@ -3650,8 +3650,8 @@
       "source_location": "L762",
       "_origin": "ast",
       "id": "src_app_mux_mod_mux_cmd_new_tab",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 123,
+      "community_name": "Config",
       "norm_label": ".cmd_new_tab()"
     },
     {
@@ -3672,8 +3672,8 @@
       "source_location": "L811",
       "_origin": "ast",
       "id": "src_app_mux_mod_mux_cmd_split",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 123,
+      "community_name": "Config",
       "norm_label": ".cmd_split()"
     },
     {
@@ -3683,8 +3683,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_mux_mod_rs_splitdir",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 123,
+      "community_name": "Config",
       "norm_label": "splitdir"
     },
     {
@@ -3804,8 +3804,8 @@
       "source_location": "L975",
       "_origin": "ast",
       "id": "src_app_mux_mod_mux_collect_grid_cells_for",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 29,
+      "community_name": "Src Llm",
       "norm_label": ".collect_grid_cells_for()"
     },
     {
@@ -3815,8 +3815,8 @@
       "source_location": "L1137",
       "_origin": "ast",
       "id": "src_app_mux_mod_mux_filter_matches",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 87,
+      "community_name": "Src App",
       "norm_label": ".filter_matches()"
     },
     {
@@ -3826,8 +3826,8 @@
       "source_location": "L1187",
       "_origin": "ast",
       "id": "src_app_mux_mod_mux_search_active_terminal",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 87,
+      "community_name": "Src App",
       "norm_label": ".search_active_terminal()"
     },
     {
@@ -3848,8 +3848,8 @@
       "source_location": "L1292",
       "_origin": "ast",
       "id": "src_app_mux_mod_push_search_match_truncates_only_after_limit_is_exceeded",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 123,
+      "community_name": "Config",
       "norm_label": "push_search_match_truncates_only_after_limit_is_exceeded()"
     },
     {
@@ -3859,8 +3859,8 @@
       "source_location": "L1303",
       "_origin": "ast",
       "id": "src_app_mux_mod_production_pty_drain_preserves_payload_and_special_events_across_budget",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 29,
+      "community_name": "Src Llm",
       "norm_label": "production_pty_drain_preserves_payload_and_special_events_across_budget()"
     },
     {
@@ -3870,8 +3870,8 @@
       "source_location": "L1348",
       "_origin": "ast",
       "id": "src_app_mux_mod_cell_in_selection",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 29,
+      "community_name": "Src Llm",
       "norm_label": "cell_in_selection()"
     },
     {
@@ -3881,8 +3881,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "line",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 87,
+      "community_name": "Src App",
       "norm_label": "line"
     },
     {
@@ -3892,8 +3892,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "column",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 87,
+      "community_name": "Src App",
       "norm_label": "column"
     },
     {
@@ -3903,8 +3903,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "selectionrange",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 29,
+      "community_name": "Src Llm",
       "norm_label": "selectionrange"
     },
     {
@@ -3914,8 +3914,8 @@
       "source_location": "L1363",
       "_origin": "ast",
       "id": "src_app_mux_mod_search_highlight_at",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 29,
+      "community_name": "Src Llm",
       "norm_label": "search_highlight_at()"
     },
     {
@@ -3925,8 +3925,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "fxhashmap",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 29,
+      "community_name": "Src Llm",
       "norm_label": "fxhashmap"
     },
     {
@@ -3936,8 +3936,8 @@
       "source_location": "L1384",
       "_origin": "ast",
       "id": "src_app_mux_mod_syntax_highlight_at",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 29,
+      "community_name": "Src Llm",
       "norm_label": "syntax_highlight_at()"
     },
     {
@@ -4552,8 +4552,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_app_pty_schedule",
-      "community": 29,
-      "community_name": "Src Llm",
+      "community": 12,
+      "community_name": "Src Term",
       "norm_label": "pty_schedule.rs"
     },
     {
@@ -4563,8 +4563,8 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "src_app_pty_schedule_wakeupgate",
-      "community": 29,
-      "community_name": "Src Llm",
+      "community": 12,
+      "community_name": "Src Term",
       "norm_label": "wakeupgate"
     },
     {
@@ -4574,8 +4574,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_pty_schedule_rs_arc",
-      "community": 29,
-      "community_name": "Src Llm",
+      "community": 12,
+      "community_name": "Src Term",
       "norm_label": "arc"
     },
     {
@@ -4585,8 +4585,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "atomicbool",
-      "community": 29,
-      "community_name": "Src Llm",
+      "community": 12,
+      "community_name": "Src Term",
       "norm_label": "atomicbool"
     },
     {
@@ -4596,8 +4596,8 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "src_app_pty_schedule_wakeupgate_new",
-      "community": 29,
-      "community_name": "Src Llm",
+      "community": 12,
+      "community_name": "Src Term",
       "norm_label": ".new()"
     },
     {
@@ -4607,8 +4607,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_pty_schedule_rs_self",
-      "community": 29,
-      "community_name": "Src Llm",
+      "community": 12,
+      "community_name": "Src Term",
       "norm_label": "self"
     },
     {
@@ -4618,8 +4618,8 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "src_app_pty_schedule_wakeupgate_signal",
-      "community": 29,
-      "community_name": "Src Llm",
+      "community": 12,
+      "community_name": "Src Term",
       "norm_label": ".signal()"
     },
     {
@@ -4629,8 +4629,8 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "src_app_pty_schedule_wakeupgate_begin_drain",
-      "community": 29,
-      "community_name": "Src Llm",
+      "community": 12,
+      "community_name": "Src Term",
       "norm_label": ".begin_drain()"
     },
     {
@@ -4640,8 +4640,8 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "src_app_pty_schedule_wakeupgate_take_pending",
-      "community": 29,
-      "community_name": "Src Llm",
+      "community": 12,
+      "community_name": "Src Term",
       "norm_label": ".take_pending()"
     },
     {
@@ -4651,8 +4651,8 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "src_app_pty_schedule_gate_sends_once_until_drain",
-      "community": 29,
-      "community_name": "Src Llm",
+      "community": 12,
+      "community_name": "Src Term",
       "norm_label": "gate_sends_once_until_drain()"
     },
     {
@@ -4662,8 +4662,8 @@
       "source_location": "L51",
       "_origin": "ast",
       "id": "src_app_pty_schedule_signal_during_drain_is_not_lost",
-      "community": 29,
-      "community_name": "Src Llm",
+      "community": 12,
+      "community_name": "Src Term",
       "norm_label": "signal_during_drain_is_not_lost()"
     },
     {
@@ -4673,8 +4673,8 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "src_app_pty_schedule_take_pending_clears_and_reports",
-      "community": 29,
-      "community_name": "Src Llm",
+      "community": 12,
+      "community_name": "Src Term",
       "norm_label": "take_pending_clears_and_reports()"
     },
     {
@@ -5575,8 +5575,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_renderer_mod_rs_hashmap",
-      "community": 34,
-      "community_name": "Src Renderer",
+      "community": 109,
+      "community_name": "gpu.rs",
       "norm_label": "hashmap"
     },
     {
@@ -5663,8 +5663,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_renderer_mod_rs_arc",
-      "community": 34,
-      "community_name": "Src Renderer",
+      "community": 109,
+      "community_name": "gpu.rs",
       "norm_label": "arc"
     },
     {
@@ -5674,8 +5674,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_renderer_mod_rs_window",
-      "community": 34,
-      "community_name": "Src Renderer",
+      "community": 109,
+      "community_name": "gpu.rs",
       "norm_label": "window"
     },
     {
@@ -5707,8 +5707,8 @@
       "source_location": "L346",
       "_origin": "ast",
       "id": "src_app_renderer_mod_rendercontext_scaled_font_config",
-      "community": 34,
-      "community_name": "Src Renderer",
+      "community": 35,
+      "community_name": "Src App",
       "norm_label": ".scaled_font_config()"
     },
     {
@@ -5806,7 +5806,7 @@
       "source_location": "L619",
       "_origin": "ast",
       "id": "src_app_renderer_mod_rendercontext_grow_terminal_row_capacity",
-      "community": 34,
+      "community": 31,
       "community_name": "Src Renderer",
       "norm_label": ".grow_terminal_row_capacity()"
     },
@@ -5828,8 +5828,8 @@
       "source_location": "L732",
       "_origin": "ast",
       "id": "src_app_renderer_mod_rendercontext_push_shaped_row",
-      "community": 34,
-      "community_name": "Src Renderer",
+      "community": 35,
+      "community_name": "Src App",
       "norm_label": ".push_shaped_row()"
     },
     {
@@ -5839,8 +5839,8 @@
       "source_location": "L847",
       "_origin": "ast",
       "id": "src_app_renderer_mod_rendercontext_push_md_line",
-      "community": 34,
-      "community_name": "Src Renderer",
+      "community": 35,
+      "community_name": "Src App",
       "norm_label": ".push_md_line()"
     },
     {
@@ -6257,8 +6257,8 @@
       "source_location": "L108",
       "_origin": "ast",
       "id": "src_app_renderer_terminal_rendercontext_build_instances",
-      "community": 110,
-      "community_name": "resolve_color",
+      "community": 109,
+      "community_name": "gpu.rs",
       "norm_label": ".build_instances()"
     },
     {
@@ -6268,8 +6268,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_renderer_terminal_rs_string",
-      "community": 110,
-      "community_name": "resolve_color",
+      "community": 109,
+      "community_name": "gpu.rs",
       "norm_label": "string"
     },
     {
@@ -6279,8 +6279,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_renderer_terminal_rs_vec",
-      "community": 110,
-      "community_name": "resolve_color",
+      "community": 109,
+      "community_name": "gpu.rs",
       "norm_label": "vec"
     },
     {
@@ -6290,8 +6290,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_renderer_terminal_rs_ansicolor",
-      "community": 110,
-      "community_name": "resolve_color",
+      "community": 109,
+      "community_name": "gpu.rs",
       "norm_label": "ansicolor"
     },
     {
@@ -6301,8 +6301,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_app_renderer_terminal_rs_result",
-      "community": 110,
-      "community_name": "resolve_color",
+      "community": 117,
+      "community_name": "CellVertex",
       "norm_label": "result"
     },
     {
@@ -6312,8 +6312,8 @@
       "source_location": "L361",
       "_origin": "ast",
       "id": "src_app_renderer_terminal_rendercontext_write_row_to_layout",
-      "community": 110,
-      "community_name": "resolve_color",
+      "community": 117,
+      "community_name": "CellVertex",
       "norm_label": ".write_row_to_layout()"
     },
     {
@@ -7428,10 +7428,32 @@
       "norm_label": "gpui_petruterm.rs"
     },
     {
+      "label": "quit()",
+      "file_type": "code",
+      "source_file": "src/bin/gpui_petruterm.rs",
+      "source_location": "L14",
+      "_origin": "ast",
+      "id": "src_bin_gpui_petruterm_quit",
+      "community": 47,
+      "community_name": "Src App",
+      "norm_label": "quit()"
+    },
+    {
+      "label": "App",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "_origin": "ast",
+      "id": "src_bin_gpui_petruterm_rs_app",
+      "community": 47,
+      "community_name": "Src App",
+      "norm_label": "app"
+    },
+    {
       "label": "main()",
       "file_type": "code",
       "source_file": "src/bin/gpui_petruterm.rs",
-      "source_location": "L4",
+      "source_location": "L18",
       "_origin": "ast",
       "id": "src_bin_gpui_petruterm_main",
       "community": 47,
@@ -8204,8 +8226,8 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "src_config_schema_config",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 126,
+      "community_name": ".spawn",
       "norm_label": "config"
     },
     {
@@ -8215,8 +8237,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_config_schema_rs_vec",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 65,
+      "community_name": "AcpAgentConfig",
       "norm_label": "vec"
     },
     {
@@ -8226,8 +8248,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_config_schema_rs_string",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 126,
+      "community_name": ".spawn",
       "norm_label": "string"
     },
     {
@@ -8237,8 +8259,8 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "src_config_schema_keyboardconfig",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 126,
+      "community_name": ".spawn",
       "norm_label": "keyboardconfig"
     },
     {
@@ -8325,8 +8347,8 @@
       "source_location": "L115",
       "_origin": "ast",
       "id": "src_config_schema_batterysavermode",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 126,
+      "community_name": ".spawn",
       "norm_label": "batterysavermode"
     },
     {
@@ -8336,8 +8358,8 @@
       "source_location": "L127",
       "_origin": "ast",
       "id": "src_config_schema_gpupreference",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 126,
+      "community_name": ".spawn",
       "norm_label": "gpupreference"
     },
     {
@@ -8413,8 +8435,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_config_schema_rs_option",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 126,
+      "community_name": ".spawn",
       "norm_label": "option"
     },
     {
@@ -8611,8 +8633,8 @@
       "source_location": "L523",
       "_origin": "ast",
       "id": "src_config_schema_leaderconfig",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 126,
+      "community_name": ".spawn",
       "norm_label": "leaderconfig"
     },
     {
@@ -8622,8 +8644,8 @@
       "source_location": "L530",
       "_origin": "ast",
       "id": "src_config_schema_leaderconfig_default",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 126,
+      "community_name": ".spawn",
       "norm_label": ".default()"
     },
     {
@@ -8633,8 +8655,8 @@
       "source_location": "L541",
       "_origin": "ast",
       "id": "src_config_schema_snippetconfig",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 126,
+      "community_name": ".spawn",
       "norm_label": "snippetconfig"
     },
     {
@@ -8666,8 +8688,8 @@
       "source_location": "L573",
       "_origin": "ast",
       "id": "src_config_schema_acpagentconfig",
-      "community": 14,
-      "community_name": "Src Llm",
+      "community": 65,
+      "community_name": "AcpAgentConfig",
       "norm_label": "acpagentconfig"
     },
     {
@@ -15046,8 +15068,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_llm_chat_panel_mod_rs_string",
-      "community": 15,
-      "community_name": "Src Llm",
+      "community": 129,
+      "community_name": "String",
       "norm_label": "string"
     },
     {
@@ -15178,8 +15200,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_llm_chat_panel_mod_rs_option",
-      "community": 39,
-      "community_name": "Src Llm",
+      "community": 129,
+      "community_name": "String",
       "norm_label": "option"
     },
     {
@@ -15233,7 +15255,7 @@
       "source_location": "L300",
       "_origin": "ast",
       "id": "src_llm_chat_panel_mod_chatpanel_ensure_wrap_cache",
-      "community": 3,
+      "community": 15,
       "community_name": "Src Llm",
       "norm_label": ".ensure_wrap_cache()"
     },
@@ -15244,7 +15266,7 @@
       "source_location": "L319",
       "_origin": "ast",
       "id": "src_llm_chat_panel_mod_chatpanel_wrapped_message",
-      "community": 3,
+      "community": 15,
       "community_name": "Src Llm",
       "norm_label": ".wrapped_message()"
     },
@@ -15321,8 +15343,8 @@
       "source_location": "L377",
       "_origin": "ast",
       "id": "src_llm_chat_panel_mod_chatpanel_set_input",
-      "community": 15,
-      "community_name": "Src Llm",
+      "community": 129,
+      "community_name": "String",
       "norm_label": ".set_input()"
     },
     {
@@ -15475,8 +15497,8 @@
       "source_location": "L575",
       "_origin": "ast",
       "id": "src_llm_chat_panel_mod_chatpanel_submit_input",
-      "community": 15,
-      "community_name": "Src Llm",
+      "community": 129,
+      "community_name": "String",
       "norm_label": ".submit_input()"
     },
     {
@@ -15541,8 +15563,8 @@
       "source_location": "L667",
       "_origin": "ast",
       "id": "src_llm_chat_panel_mod_chatpanel_mark_error",
-      "community": 15,
-      "community_name": "Src Llm",
+      "community": 129,
+      "community_name": "String",
       "norm_label": ".mark_error()"
     },
     {
@@ -15618,8 +15640,8 @@
       "source_location": "L729",
       "_origin": "ast",
       "id": "src_llm_chat_panel_mod_chatpanel_last_assistant_command",
-      "community": 15,
-      "community_name": "Src Llm",
+      "community": 129,
+      "community_name": "String",
       "norm_label": ".last_assistant_command()"
     },
     {
@@ -21041,8 +21063,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_renderer_ui_style",
-      "community": 34,
-      "community_name": "Src Renderer",
+      "community": 130,
+      "community_name": "UiStyle",
       "norm_label": "ui_style.rs"
     },
     {
@@ -21052,8 +21074,8 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "src_renderer_ui_style_uistyle",
-      "community": 34,
-      "community_name": "Src Renderer",
+      "community": 130,
+      "community_name": "UiStyle",
       "norm_label": "uistyle"
     },
     {
@@ -21063,8 +21085,8 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "src_renderer_ui_style_uistyle_new",
-      "community": 34,
-      "community_name": "Src Renderer",
+      "community": 130,
+      "community_name": "UiStyle",
       "norm_label": ".new()"
     },
     {
@@ -21074,8 +21096,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_renderer_ui_style_rs_self",
-      "community": 34,
-      "community_name": "Src Renderer",
+      "community": 130,
+      "community_name": "UiStyle",
       "norm_label": "self"
     },
     {
@@ -21085,8 +21107,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_renderer_upload",
-      "community": 123,
-      "community_name": "Config",
+      "community": 113,
+      "community_name": "UploadRange",
       "norm_label": "upload.rs"
     },
     {
@@ -21118,8 +21140,8 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "src_renderer_upload_terminaluploadaccounting",
-      "community": 123,
-      "community_name": "Config",
+      "community": 113,
+      "community_name": "UploadRange",
       "norm_label": "terminaluploadaccounting"
     },
     {
@@ -21129,8 +21151,8 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "src_renderer_upload_account_terminal_uploads",
-      "community": 123,
-      "community_name": "Config",
+      "community": 113,
+      "community_name": "UploadRange",
       "norm_label": "account_terminal_uploads()"
     },
     {
@@ -21140,8 +21162,8 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "src_renderer_upload_merge_upload_ranges",
-      "community": 123,
-      "community_name": "Config",
+      "community": 113,
+      "community_name": "UploadRange",
       "norm_label": "merge_upload_ranges()"
     },
     {
@@ -21151,8 +21173,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_renderer_upload_rs_vec",
-      "community": 123,
-      "community_name": "Config",
+      "community": 113,
+      "community_name": "UploadRange",
       "norm_label": "vec"
     },
     {
@@ -21162,8 +21184,8 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "src_renderer_upload_merge_upload_ranges_coalesces_adjacent_and_overlapping_ranges",
-      "community": 123,
-      "community_name": "Config",
+      "community": 113,
+      "community_name": "UploadRange",
       "norm_label": "merge_upload_ranges_coalesces_adjacent_and_overlapping_ranges()"
     },
     {
@@ -21173,8 +21195,8 @@
       "source_location": "L93",
       "_origin": "ast",
       "id": "src_renderer_upload_merge_upload_ranges_discards_empty_ranges",
-      "community": 123,
-      "community_name": "Config",
+      "community": 113,
+      "community_name": "UploadRange",
       "norm_label": "merge_upload_ranges_discards_empty_ranges()"
     },
     {
@@ -21184,8 +21206,8 @@
       "source_location": "L103",
       "_origin": "ast",
       "id": "src_renderer_upload_merge_upload_ranges_keeps_scattered_ranges_separate",
-      "community": 123,
-      "community_name": "Config",
+      "community": 113,
+      "community_name": "UploadRange",
       "norm_label": "merge_upload_ranges_keeps_scattered_ranges_separate()"
     },
     {
@@ -21195,8 +21217,8 @@
       "source_location": "L121",
       "_origin": "ast",
       "id": "src_renderer_upload_upload_ranges_bytes_accounts_for_merged_ranges",
-      "community": 123,
-      "community_name": "Config",
+      "community": 113,
+      "community_name": "UploadRange",
       "norm_label": "upload_ranges_bytes_accounts_for_merged_ranges()"
     },
     {
@@ -21206,8 +21228,8 @@
       "source_location": "L131",
       "_origin": "ast",
       "id": "src_renderer_upload_terminal_upload_accounting_respects_lcd_configuration",
-      "community": 123,
-      "community_name": "Config",
+      "community": 113,
+      "community_name": "UploadRange",
       "norm_label": "terminal_upload_accounting_respects_lcd_configuration()"
     },
     {
@@ -22064,8 +22086,8 @@
       "source_location": "L87",
       "_origin": "ast",
       "id": "src_term_mod_terminal_new",
-      "community": 126,
-      "community_name": ".spawn",
+      "community": 17,
+      "community_name": "Src Term",
       "norm_label": ".new()"
     },
     {
@@ -22075,8 +22097,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_term_mod_rs_wakeup",
-      "community": 126,
-      "community_name": ".spawn",
+      "community": 17,
+      "community_name": "Src Term",
       "norm_label": "wakeup"
     },
     {
@@ -22086,8 +22108,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_term_mod_rs_option",
-      "community": 126,
-      "community_name": ".spawn",
+      "community": 17,
+      "community_name": "Src Term",
       "norm_label": "option"
     },
     {
@@ -22097,8 +22119,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_term_mod_rs_pathbuf",
-      "community": 126,
-      "community_name": ".spawn",
+      "community": 17,
+      "community_name": "Src Term",
       "norm_label": "pathbuf"
     },
     {
@@ -22108,8 +22130,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_term_mod_rs_result",
-      "community": 126,
-      "community_name": ".spawn",
+      "community": 17,
+      "community_name": "Src Term",
       "norm_label": "result"
     },
     {
@@ -22119,8 +22141,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_term_mod_rs_self",
-      "community": 126,
-      "community_name": ".spawn",
+      "community": 17,
+      "community_name": "Src Term",
       "norm_label": "self"
     },
     {
@@ -22152,8 +22174,8 @@
       "source_location": "L168",
       "_origin": "ast",
       "id": "src_term_mod_terminal_clear_screen_and_scrollback",
-      "community": 126,
-      "community_name": ".spawn",
+      "community": 17,
+      "community_name": "Src Term",
       "norm_label": ".clear_screen_and_scrollback()"
     },
     {
@@ -22163,8 +22185,8 @@
       "source_location": "L177",
       "_origin": "ast",
       "id": "src_term_mod_terminal_start_selection",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 87,
+      "community_name": "Src App",
       "norm_label": ".start_selection()"
     },
     {
@@ -22174,8 +22196,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_term_mod_rs_selectiontype",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 87,
+      "community_name": "Src App",
       "norm_label": "selectiontype"
     },
     {
@@ -22185,8 +22207,8 @@
       "source_location": "L186",
       "_origin": "ast",
       "id": "src_term_mod_terminal_update_selection",
-      "community": 108,
-      "community_name": "Mux",
+      "community": 87,
+      "community_name": "Src App",
       "norm_label": ".update_selection()"
     },
     {
@@ -22196,8 +22218,8 @@
       "source_location": "L196",
       "_origin": "ast",
       "id": "src_term_mod_terminal_selection_text",
-      "community": 126,
-      "community_name": ".spawn",
+      "community": 17,
+      "community_name": "Src Term",
       "norm_label": ".selection_text()"
     },
     {
@@ -22207,8 +22229,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_term_mod_rs_string",
-      "community": 126,
-      "community_name": ".spawn",
+      "community": 17,
+      "community_name": "Src Term",
       "norm_label": "string"
     },
     {
@@ -22339,8 +22361,8 @@
       "source_location": "L277",
       "_origin": "ast",
       "id": "src_term_mod_process_cwd",
-      "community": 126,
-      "community_name": ".spawn",
+      "community": 17,
+      "community_name": "Src Term",
       "norm_label": "process_cwd()"
     },
     {
@@ -22779,8 +22801,8 @@
       "source_location": "L111",
       "_origin": "ast",
       "id": "src_term_pty_pty",
-      "community": 87,
-      "community_name": "Src App",
+      "community": 12,
+      "community_name": "Src Term",
       "norm_label": "pty"
     },
     {
@@ -22790,8 +22812,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_term_pty_rs_receiver",
-      "community": 87,
-      "community_name": "Src App",
+      "community": 12,
+      "community_name": "Src Term",
       "norm_label": "receiver"
     },
     {
@@ -22801,8 +22823,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "pid_t",
-      "community": 87,
-      "community_name": "Src App",
+      "community": 12,
+      "community_name": "Src Term",
       "norm_label": "pid_t"
     },
     {
@@ -22823,8 +22845,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_term_pty_rs_joinhandle",
-      "community": 87,
-      "community_name": "Src App",
+      "community": 12,
+      "community_name": "Src Term",
       "norm_label": "joinhandle"
     },
     {
@@ -22900,8 +22922,8 @@
       "source_location": "L254",
       "_origin": "ast",
       "id": "src_term_pty_pty_write",
-      "community": 87,
-      "community_name": "Src App",
+      "community": 12,
+      "community_name": "Src Term",
       "norm_label": ".write()"
     },
     {
@@ -22911,8 +22933,8 @@
       "source_location": "L262",
       "_origin": "ast",
       "id": "src_term_pty_pty_resize",
-      "community": 87,
-      "community_name": "Src App",
+      "community": 12,
+      "community_name": "Src Term",
       "norm_label": ".resize()"
     },
     {
@@ -22922,8 +22944,8 @@
       "source_location": "L278",
       "_origin": "ast",
       "id": "src_term_pty_pty_shutdown",
-      "community": 87,
-      "community_name": "Src App",
+      "community": 12,
+      "community_name": "Src Term",
       "norm_label": ".shutdown()"
     },
     {
@@ -22933,8 +22955,8 @@
       "source_location": "L325",
       "_origin": "ast",
       "id": "src_term_pty_pty_request_exit",
-      "community": 87,
-      "community_name": "Src App",
+      "community": 12,
+      "community_name": "Src Term",
       "norm_label": ".request_exit()"
     },
     {
@@ -22944,8 +22966,8 @@
       "source_location": "L331",
       "_origin": "ast",
       "id": "src_term_pty_pty_close_master",
-      "community": 87,
-      "community_name": "Src App",
+      "community": 12,
+      "community_name": "Src Term",
       "norm_label": ".close_master()"
     },
     {
@@ -22955,8 +22977,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_term_pty_rs_drop",
-      "community": 87,
-      "community_name": "Src App",
+      "community": 12,
+      "community_name": "Src Term",
       "norm_label": "drop"
     },
     {
@@ -22966,8 +22988,8 @@
       "source_location": "L340",
       "_origin": "ast",
       "id": "src_term_pty_pty_drop",
-      "community": 87,
-      "community_name": "Src App",
+      "community": 12,
+      "community_name": "Src Term",
       "norm_label": ".drop()"
     },
     {
@@ -23978,8 +24000,8 @@
       "source_location": "L117",
       "_origin": "ast",
       "id": "src_ui_palette_actions_built_in_actions",
-      "community": 68,
-      "community_name": "shaper.rs",
+      "community": 126,
+      "community_name": ".spawn",
       "norm_label": "built_in_actions()"
     },
     {
@@ -23989,8 +24011,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_ui_palette_actions_rs_vec",
-      "community": 68,
-      "community_name": "shaper.rs",
+      "community": 126,
+      "community_name": ".spawn",
       "norm_label": "vec"
     },
     {
@@ -24066,8 +24088,8 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "src_ui_palette_mod_commandpalette_new",
-      "community": 68,
-      "community_name": "shaper.rs",
+      "community": 126,
+      "community_name": ".spawn",
       "norm_label": ".new()"
     },
     {
@@ -24077,8 +24099,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_ui_palette_mod_rs_self",
-      "community": 68,
-      "community_name": "shaper.rs",
+      "community": 126,
+      "community_name": ".spawn",
       "norm_label": "self"
     },
     {
@@ -24088,8 +24110,8 @@
       "source_location": "L48",
       "_origin": "ast",
       "id": "src_ui_palette_mod_commandpalette_rebuild_keybinds",
-      "community": 68,
-      "community_name": "shaper.rs",
+      "community": 126,
+      "community_name": ".spawn",
       "norm_label": ".rebuild_keybinds()"
     },
     {
@@ -24187,8 +24209,8 @@
       "source_location": "L120",
       "_origin": "ast",
       "id": "src_ui_palette_mod_commandpalette_rebuild_snippets",
-      "community": 0,
-      "community_name": "Src Config",
+      "community": 126,
+      "community_name": ".spawn",
       "norm_label": ".rebuild_snippets()"
     },
     {
@@ -45994,11 +46016,34 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/bin/gpui_petruterm.rs",
-      "source_location": "L4",
+      "source_location": "L18",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_bin_gpui_petruterm",
       "target": "src_bin_gpui_petruterm_main",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/bin/gpui_petruterm.rs",
+      "source_location": "L14",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "src_bin_gpui_petruterm",
+      "target": "src_bin_gpui_petruterm_quit",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "src/bin/gpui_petruterm.rs",
+      "source_location": "L14",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "_origin": "ast",
+      "source": "src_bin_gpui_petruterm_quit",
+      "target": "src_bin_gpui_petruterm_rs_app",
       "confidence_score": 1.0
     },
     {
@@ -46007,7 +46052,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/bin/gpui_petruterm.rs",
-      "source_location": "L23",
+      "source_location": "L37",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_bin_gpui_petruterm_main",
@@ -46019,7 +46064,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "src/bin/gpui_petruterm.rs",
-      "source_location": "L26",
+      "source_location": "L46",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_bin_gpui_petruterm_main",
@@ -86267,5 +86312,5 @@
       "source_file": ".github/workflows/release.yml"
     }
   ],
-  "built_at_commit": "c2b7a1235e81f18d24a30a05d9e5a7b7c09020ba"
+  "built_at_commit": "f8acd5981f79bd84bac3bd248e5fb9d69e31902c"
 }
