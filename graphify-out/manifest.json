@@ -700,8 +700,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/mod.rs": {
-    "mtime": 1788569727.8235095,
-    "ast_hash": "cdb4bb604d68e479b628de90c8c14aa9",
+    "mtime": 1788571096.2388365,
+    "ast_hash": "57274c704f6141c0f7f3973419131222",
     "semantic_hash": ""
   },
   "src/gpui_shell/rasterize.rs": {
@@ -762,6 +762,11 @@
   "src/gpui_shell/pane_view.rs": {
     "mtime": 1788561791.223491,
     "ast_hash": "0e573be95a8cbef677f8c0d499d51e35",
+    "semantic_hash": ""
+  },
+  "src/gpui_shell/status_bar.rs": {
+    "mtime": 1788571131.5785244,
+    "ast_hash": "e576b442c7c6661bfb59de5358bfdaa6",
     "semantic_hash": ""
   }
 }
