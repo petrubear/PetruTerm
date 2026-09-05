@@ -82,7 +82,18 @@ impl FontLocator {
                 let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
                     continue;
                 };
-                if ext != "ttf" && ext != "otf" {
+                // .ttc (TrueType Collection) matters here: several macOS
+                // system fonts (Menlo, Monaco, Courier, ...) ship only as
+                // .ttc, and font-kit's CoreText backend hands those back as
+                // a `Handle::Memory` rather than `Handle::Path` (confirmed:
+                // `select_best_match("Menlo")` returns Memory bytes, not a
+                // path) -- `locate_via_font_kit` discards Memory handles, so
+                // this disk scan is the ONLY path that can ever resolve a
+                // .ttc-only family. Excluding it here silently drops every
+                // such family, sending `petruterm.font("A, B, Menlo")`
+                // straight to the "scanning for monospace fallback" branch
+                // even when "Menlo" is genuinely installed.
+                if ext != "ttf" && ext != "otf" && ext != "ttc" {
                     continue;
                 }
                 let stem = path
