@@ -224,6 +224,17 @@ fn compute_cell_size(
     let cell_width = (run_width / 16.0).max(1.0);
     let cell_height = metrics.line_height.max(1.0);
 
+    // Parity with `font::shaper::TextShaper::measure_cell`'s own
+    // `log::info!("Cell size: ...")` line -- gpui_shell had no equivalent,
+    // making it impossible to compare the two binaries' computed cell
+    // geometry for the same font/config without attaching a debugger. Added
+    // while investigating a dogfood report of wide inter-character spacing
+    // present only in gpui-petruterm, not the original wgpu petruterm, for
+    // the identical font.
+    log::info!(
+        "gpui-shell: cell size {cell_width:.2}x{cell_height:.2}px (font: '{family}' {size}pt, line_height={line_height})"
+    );
+
     (px(cell_width), px(cell_height))
 }
 
