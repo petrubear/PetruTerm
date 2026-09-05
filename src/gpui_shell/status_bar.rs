@@ -414,12 +414,35 @@ impl ExitCodeState {
     /// `cache` changed (caller should redraw). Skips the disk read entirely
     /// when the file's mtime hasn't moved since the last call for this pid.
     pub fn poll(&mut self, pid: u32) -> bool {
+        let path = crate::llm::shell_context::ShellContext::context_file_path_for_pid(pid);
+        self.poll_impl(pid, &path)
+    }
+
+    /// Pid-aware core: resets bookkeeping (and, critically, the cached
+    /// value itself) whenever `pid` differs from the last call, then defers
+    /// to `poll_path` for the mtime-gated read. Split out from `poll` so a
+    /// test can drive it against tempfiles for two different pids without
+    /// touching the real per-pid cache path.
+    ///
+    /// The `self.cache = None` reset (not just `self.mtime = None`) matters:
+    /// without it, a pid switch whose new shell-context file hasn't been
+    /// written yet (`std::fs::metadata` fails, `poll_path` returns early
+    /// without touching `cache`) would keep showing the *previous* pane's
+    /// exit code, since nothing else distinguishes "same pid, file
+    /// unchanged" from "different pid, file not there yet". This mirrors
+    /// `src/app/app_state.rs`'s `terminal_shell_ctxs: HashMap<terminal_id,
+    /// (ShellContext, mtime)>`, which keys the cache per terminal so
+    /// switching panes always reads that pane's own (possibly-empty) entry
+    /// and never carries over another pane's value.
+    fn poll_impl(&mut self, pid: u32, path: &std::path::Path) -> bool {
+        let old_cache = self.cache;
         if self.pid != Some(pid) {
             self.pid = Some(pid);
             self.mtime = None; // force a reread for the newly-focused pane
+            self.cache = None; // never leak the previous pane's exit code
         }
-        let path = crate::llm::shell_context::ShellContext::context_file_path_for_pid(pid);
-        Self::poll_path(&path, &mut self.mtime, &mut self.cache)
+        Self::poll_path(path, &mut self.mtime, &mut self.cache);
+        self.cache != old_cache
     }
 
     /// Path-parametrized core so the mtime-gating + "only cache non-zero"
@@ -733,5 +756,64 @@ mod exit_code_state_tests {
         let missing = std::path::Path::new("/nonexistent/petruterm-status-bar-test.json");
         assert!(!ExitCodeState::poll_path(missing, &mut mtime, &mut cache));
         assert_eq!(cache, None);
+    }
+
+    // ── Regression: switching pid must never leak the previous pane's cache ──
+
+    #[test]
+    fn switching_pid_clears_stale_cache_before_the_new_pane_has_its_own_file() {
+        let dir_a = tempdir("pidswitch-a");
+        let path_a = dir_a.join("ctx.json");
+        std::fs::write(
+            &path_a,
+            r#"{"cwd":"/x","last_command":"false","last_exit_code":1}"#,
+        )
+        .unwrap();
+        // Pane B's shell-context file doesn't exist yet -- e.g. a freshly
+        // split/switched-to pane whose shell integration (.zshrc/nvm/p10k)
+        // hasn't written it out yet.
+        let missing_path_b =
+            std::path::Path::new("/nonexistent/petruterm-status-bar-test-pid-b.json");
+
+        let mut state = ExitCodeState::default();
+
+        assert!(state.poll_impl(100, &path_a));
+        assert_eq!(state.cache, Some(1));
+
+        // Switching focus to a different pid whose file isn't there yet must
+        // clear the stale value immediately, not keep showing pid 100's
+        // exit code until pid 200 eventually writes its own file.
+        assert!(state.poll_impl(200, missing_path_b));
+        assert_eq!(state.cache, None);
+
+        let _ = std::fs::remove_dir_all(&dir_a);
+    }
+
+    #[test]
+    fn switching_pid_immediately_reflects_the_new_pids_own_value() {
+        let dir_a = tempdir("pidswitch-c-a");
+        let path_a = dir_a.join("ctx.json");
+        std::fs::write(
+            &path_a,
+            r#"{"cwd":"/x","last_command":"false","last_exit_code":1}"#,
+        )
+        .unwrap();
+        let dir_b = tempdir("pidswitch-c-b");
+        let path_b = dir_b.join("ctx.json");
+        std::fs::write(
+            &path_b,
+            r#"{"cwd":"/y","last_command":"false","last_exit_code":42}"#,
+        )
+        .unwrap();
+
+        let mut state = ExitCodeState::default();
+        assert!(state.poll_impl(100, &path_a));
+        assert_eq!(state.cache, Some(1));
+
+        assert!(state.poll_impl(200, &path_b));
+        assert_eq!(state.cache, Some(42));
+
+        let _ = std::fs::remove_dir_all(&dir_a);
+        let _ = std::fs::remove_dir_all(&dir_b);
     }
 }
