@@ -13,6 +13,7 @@ mod mouse;
 mod pane_view;
 mod panes;
 mod rasterize;
+pub mod status_bar;
 pub mod tabs;
 pub mod terminal_element;
 
@@ -179,6 +180,21 @@ pub struct GpuiShellRoot {
     /// `LEADER`-scoped bindings (`leader::build_leader_map`). Rebuilt
     /// wholesale on every config reload alongside the rest of `self.config`.
     leader_map: HashMap<String, LeaderAction>,
+    /// Owned outright by `GpuiShellRoot` -- mirrors the wgpu app's own
+    /// `tokio_rt` field placement on its `App`/`Mux` struct exactly (see
+    /// this task's design ledger) rather than inventing a new pattern.
+    /// `status_bar::poll_git_branch` spawns onto this each poll tick.
+    tokio_rt: tokio::runtime::Runtime,
+    /// Cached CWD of the active tab's focused terminal (status bar's CWD
+    /// segment). Refreshed once per poll tick rather than every `render()`
+    /// call -- see `new()`'s `cx.spawn` block for why a tick-based refresh
+    /// was chosen over instrumenting every focus-changing call site.
+    cached_cwd: Option<std::path::PathBuf>,
+    /// Git-branch fetch/cache state for the status bar's GitBranch segment.
+    git_branch: status_bar::GitBranchState,
+    /// Exit-code cache for the status bar's ExitCode segment, mtime-gated
+    /// against the active pane's shell-context file.
+    exit_code: status_bar::ExitCodeState,
 }
 
 /// Maps a gpui named-key string to the resize direction it drives under
@@ -305,6 +321,46 @@ impl GpuiShellRoot {
                                 }
                             }
                         }
+                        // Status bar: CWD, exit code, git branch -- all keyed
+                        // off the active tab's focused terminal, all
+                        // refreshed on this same 33ms tick rather than every
+                        // `render()` call. CWD is a cheap syscall
+                        // (proc_pidinfo), so unlike the wgpu app's own
+                        // call-site-instrumented `refresh_status_cache`
+                        // (called from every focus-changing path plus PTY
+                        // data arrival) this just re-checks it every tick --
+                        // simpler than chasing gpui_shell's many
+                        // focus-changing call sites (tab switch, pane click,
+                        // vim-style pane focus, a closed pane promoting a
+                        // sibling...) and it's also the only way to notice a
+                        // `cd` typed into the still-focused pane, which has
+                        // no dedicated event either.
+                        let active = this.tabs.active_index();
+                        let active_tid = this.tab_panes[active].focused_terminal;
+                        if let Some(terminal) = this.terminals.get(&active_tid) {
+                            let pid = terminal.child_pid;
+
+                            let cwd = crate::term::process_cwd(pid);
+                            if cwd != this.cached_cwd {
+                                this.cached_cwd = cwd;
+                                should_notify = true;
+                            }
+
+                            if this.exit_code.poll(pid) {
+                                should_notify = true;
+                            }
+
+                            let git_dirty = this.config.status_bar.git_dirty_check;
+                            if status_bar::poll_git_branch(
+                                &mut this.git_branch,
+                                this.cached_cwd.as_deref(),
+                                git_dirty,
+                                std::time::Duration::from_secs(15),
+                                &this.tokio_rt,
+                            ) {
+                                should_notify = true;
+                            }
+                        }
                         if should_notify {
                             cx.notify();
                         }
@@ -319,6 +375,11 @@ impl GpuiShellRoot {
 
         let mut tabs = tabs::TabManager::new();
         tabs.new_tab("zsh");
+
+        // Snapshot the initial pane's CWD before `terminal` moves into the
+        // map below, so the status bar's CWD segment isn't empty until the
+        // first 33ms poll tick runs.
+        let initial_cwd = crate::term::process_cwd(terminal.child_pid);
 
         let mut terminals = HashMap::new();
         terminals.insert(terminal_id, terminal);
@@ -345,6 +406,12 @@ impl GpuiShellRoot {
             leader_deadline: None,
             resize_mode: false,
             leader_map,
+            // Same construction pattern as the wgpu app's own `tokio_rt`
+            // field on its `App`/`Mux` struct (`src/app/ui/mod.rs`).
+            tokio_rt: tokio::runtime::Runtime::new().expect("Failed to build tokio runtime"),
+            cached_cwd: initial_cwd,
+            git_branch: status_bar::GitBranchState::default(),
+            exit_code: status_bar::ExitCodeState::default(),
         }
     }
 
@@ -812,6 +879,32 @@ impl Render for GpuiShellRoot {
             }));
         let tab_bar = tabs::render_tab_bar(&self.tabs, &self.config.colors, on_select_tab);
 
+        // Status bar row -- built from the poll-loop-refreshed cwd/git-branch/
+        // exit-code state above plus this frame's leader/zoom state, same
+        // inputs `StatusBar::build` takes in the wgpu app's own render path
+        // (`src/app/frame.rs`). `leader_resize_mode` here is `resize_mode`
+        // (set by a completed `Leader Option+Arrow`) OR a live separator
+        // drag, since gpui_shell has no `ModifiersChanged`-equivalent hook
+        // to ask "is Option currently held" outside of a keystroke (see
+        // `on_key_down`'s own doc comment on that gap).
+        let status_bar_row = self.config.status_bar.enabled.then(|| {
+            let leader_resize_mode = self.resize_mode || pane_view::is_dragging_separator();
+            let sb_colors = self.config.colors.status_bar_colors();
+            let bar = status_bar::StatusBar::build(
+                self.leader_active,
+                leader_resize_mode,
+                &self.config.leader.key,
+                self.cached_cwd.as_deref(),
+                self.git_branch.cache.as_deref(),
+                self.exit_code.cache,
+                self.zoomed_pane.is_some(),
+                self.config.status_bar.style.clone(),
+                None, // battery -- not tracked in gpui_shell yet, out of this task's scope
+                &sb_colors,
+            );
+            status_bar::render_status_bar(&bar, &sb_colors)
+        });
+
         div()
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::on_key_down))
@@ -825,5 +918,6 @@ impl Render for GpuiShellRoot {
             // terminal grid it contains and pushes the tab bar off-screen on
             // a small window.
             .child(div().flex().flex_1().min_h_0().child(panes))
+            .when_some(status_bar_row, |el, bar| el.child(bar))
     }
 }
