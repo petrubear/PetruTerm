@@ -1,0 +1,234 @@
+// gpui chrome migration (M2 Task 5b): pane/tab lifecycle actions --
+// splitting, closing, zooming, and leader-action dispatch. Split out of
+// `mod.rs` for the 400-line convention.
+
+use gpui::Context;
+
+use super::leader::LeaderAction;
+use super::panes::{PaneForest, SplitDir};
+use super::{spawn_terminal, GpuiShellRoot};
+
+impl GpuiShellRoot {
+    /// Spawn a terminal for a new pane and split the focused one around it.
+    /// The new pane's real size is whatever taffy gives it on the next frame
+    /// (`pane_view::fit_terminal` resizes the PTY to match), so the spawn
+    /// dimensions here are only a placeholder.
+    pub(super) fn split_focused(&mut self, dir: SplitDir) {
+        let (terminal, gate) = match spawn_terminal(80, 24, &self.config) {
+            Ok(pair) => pair,
+            Err(e) => {
+                log::error!("gpui-shell: failed to spawn terminal for split: {e:#}");
+                return;
+            }
+        };
+        let terminal_id = self.next_terminal_id;
+        self.next_terminal_id += 1;
+        self.terminals.insert(terminal_id, terminal);
+        self.wakeup_gates.insert(terminal_id, gate);
+        let active = self.tabs.active_index();
+        self.tab_panes[active].split(dir, terminal_id);
+        // Splitting while zoomed would otherwise create a pane the user
+        // can't see (the zoomed one still fills the window) and move focus
+        // to it -- their next keystroke would go somewhere invisible.
+        self.zoomed_pane = None;
+    }
+
+    /// Close the focused pane and reap its terminal. A no-op when it's the
+    /// tab's last pane (`PaneForest::close_focused` refuses that case --
+    /// closing the last pane is closing the tab, which is Task 4's job).
+    pub(super) fn close_focused_pane(&mut self) {
+        let active = self.tabs.active_index();
+        let Some(closed) = self.tab_panes[active].close_focused() else {
+            return;
+        };
+        // SIGHUP the shell before dropping our Rc<Terminal> (below): `Drop
+        // for Pty` only closes the master fd (see its own doc comment) --
+        // it does NOT signal the child or wait for the reader thread
+        // first, unlike the full `Pty::shutdown()` sequence, which we
+        // can't call here since `&Rc<Terminal>` never gives `&mut Pty`.
+        // Without this, closing a pane whose shell is still alive and idle
+        // hangs the whole app: closing the master fd while the reader
+        // thread's blocking `read()` on that same fd is still outstanding
+        // deadlocks on macOS/BSD (`Pty::request_exit`'s own doc comment),
+        // and nothing was ever going to make that shell exit on its own.
+        if let Some(terminal) = self.terminals.get(&closed) {
+            terminal.pty.request_exit();
+        }
+        self.reap_pane(closed);
+    }
+
+    /// Auto-close a pane whose shell process has already exited on its own
+    /// (typing `exit`, `Ctrl+D`, the shell crashing) -- detected via
+    /// `PtyEvent::Exit` on `Pty::rx`, drained by the poll loop in `new()`.
+    /// Mirrors the wgpu app's own `Mux::close_terminal` (src/app/mux/mod.rs)
+    /// in full now that Task 4 gives us tab-closing machinery: multi-pane
+    /// tabs just lose the one pane; a tab whose exited pane was its last
+    /// one is closed entirely via `close_tab_at`, which quits the app
+    /// outright if that was also the app's last tab (see its own doc
+    /// comment) -- exactly `frame.rs`'s `if self.close_exited_terminals(..)
+    /// { event_loop.exit(); }` behavior, just reached from gpui's
+    /// `cx.quit()` instead of winit's `event_loop.exit()`.
+    ///
+    /// No `Pty::request_exit()` call for either branch, unlike
+    /// `close_focused_pane`/`LeaderAction::CloseTab`: the child is already
+    /// gone by the time this runs (that's how we heard about it), so the
+    /// reader thread's blocking `read()` has already returned (EOF) rather
+    /// than being outstanding -- none of the deadlock risk `request_exit`'s
+    /// doc comment describes applies, and SIGHUP'ing an already-reaped pid
+    /// risks hitting a since-reused pid for no benefit.
+    pub(super) fn on_terminal_exited(&mut self, terminal_id: usize, cx: &mut Context<Self>) {
+        let Some(tab_idx) = self
+            .tab_panes
+            .iter()
+            .position(|p| p.root.leaf_ids().contains(&terminal_id))
+        else {
+            return;
+        };
+        if self.tab_panes[tab_idx].close_specific(terminal_id) {
+            self.reap_pane(terminal_id);
+            return;
+        }
+        // close_specific only refuses when this was the tab's last pane --
+        // close_tab_at's own leaf loop will then find exactly one leaf
+        // (terminal_id itself), so signal_shells: false is always correct
+        // here, never a guess.
+        self.close_tab_at(tab_idx, false, cx);
+    }
+
+    /// Close the tab at `tab_idx` (not necessarily the active one -- a
+    /// background tab's last pane can exit while a different tab is
+    /// focused) and reap every leaf terminal it owned. Quits the whole app
+    /// via `cx.quit()` instead when `tab_idx` is the app's only remaining
+    /// tab: gpui_shell's `render()` indexes `self.tab_panes[active_index]`
+    /// unconditionally, so leaving zero tabs open is not a state this app
+    /// can render at all -- matching the wgpu app's own behavior for the
+    /// equivalent situation (`frame.rs`'s `if self.close_exited_terminals(
+    /// exited) { event_loop.exit(); }`, reached when `Mux::close_terminal`
+    /// closes a tab and none remain), and matching ordinary terminal
+    /// emulators generally (closing your only tab closes the window).
+    ///
+    /// `signal_shells`: `true` sends every leaf's shell a SIGHUP first (the
+    /// user explicitly closing a tab whose shells may still be alive,
+    /// `LeaderAction::CloseTab`'s own prior behavior); `false` skips it
+    /// (`on_terminal_exited`, whose sole leaf is already known dead).
+    /// Returns whether a tab was actually closed (false only if `tab_idx`
+    /// didn't name a real tab -- quitting the app counts as "closed").
+    pub(super) fn close_tab_at(
+        &mut self,
+        tab_idx: usize,
+        signal_shells: bool,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if self.tabs.tab_count() <= 1 {
+            cx.quit();
+            return true;
+        }
+        let Some(tab_id) = self.tabs.tabs().get(tab_idx).map(|t| t.id) else {
+            return false;
+        };
+        self.tabs.close_tab(tab_id);
+        if tab_idx < self.tab_panes.len() {
+            let forest = self.tab_panes.remove(tab_idx);
+            for id in forest.root.leaf_ids() {
+                if signal_shells {
+                    if let Some(terminal) = self.terminals.get(&id) {
+                        terminal.pty.request_exit();
+                    }
+                }
+                self.reap_pane(id);
+            }
+        }
+        true
+    }
+
+    /// Shared teardown for a terminal id that a `PaneForest` has just
+    /// dropped from its tree (either call site above) -- keeps the two from
+    /// drifting out of sync on which bookkeeping needs updating.
+    pub(super) fn reap_pane(&mut self, terminal_id: usize) {
+        self.terminals.remove(&terminal_id);
+        self.wakeup_gates.remove(&terminal_id);
+        self.rect_cache.borrow_mut().leaves.remove(&terminal_id);
+        if self.zoomed_pane == Some(terminal_id) {
+            self.zoomed_pane = None;
+        }
+    }
+
+    /// Zoom the focused pane to fill the window, or unzoom if it already is.
+    /// Zooming a tab that only has one pane is meaningless, so it's ignored.
+    pub(super) fn toggle_zoom(&mut self) {
+        let active = self.tabs.active_index();
+        let focused = self.tab_panes[active].focused_terminal;
+        self.zoomed_pane = match self.zoomed_pane {
+            Some(id) if id == focused => None,
+            _ if self.tab_panes[active].root.leaf_count() > 1 => Some(focused),
+            _ => None,
+        };
+    }
+
+    /// Execute one resolved leader-key action (`on_key_down`'s leader
+    /// dispatch branch). See `leader::LeaderAction`'s doc comment for why
+    /// the set stops at these ten variants.
+    pub(super) fn dispatch_leader_action(&mut self, action: LeaderAction, cx: &mut Context<Self>) {
+        match action {
+            LeaderAction::NewTab => {
+                let (terminal, gate) = match spawn_terminal(80, 24, &self.config) {
+                    Ok(pair) => pair,
+                    Err(e) => {
+                        log::error!("gpui-shell: failed to spawn terminal for new tab: {e:#}");
+                        return;
+                    }
+                };
+                let terminal_id = self.next_terminal_id;
+                self.next_terminal_id += 1;
+                self.terminals.insert(terminal_id, terminal);
+                self.wakeup_gates.insert(terminal_id, gate);
+                self.tabs.new_tab("zsh");
+                self.tab_panes.push(PaneForest::new(terminal_id));
+                // Same reasoning as `split_focused`: a zoomed pane from the
+                // tab being left would otherwise linger, filling the window
+                // even after the new tab (which has nothing zoomed) becomes
+                // active.
+                self.zoomed_pane = None;
+            }
+            LeaderAction::CloseTab => {
+                // Mirrors `Mux::cmd_close_tab` (src/app/mux/mod.rs:792-807),
+                // via the shared `close_tab_at` helper (also used by
+                // `on_terminal_exited` for the "shell exited as a tab's
+                // last pane" case) so the two close paths can't drift
+                // apart. `signal_shells: true` since this tab's shells may
+                // still be alive (the user is closing it explicitly, not
+                // reacting to an exit already observed).
+                self.close_tab_at(self.tabs.active_index(), true, cx);
+            }
+            LeaderAction::NextTab => self.tabs.next_tab(),
+            LeaderAction::PrevTab => self.tabs.prev_tab(),
+            // Documented no-op for this milestone (M2 Task 4 ruling): a real
+            // rename needs a modal/inline text-input flow that doesn't exist
+            // in gpui_shell yet -- that infra belongs to M4 (command-palette
+            // era). `LeaderAction::RenameTab` and `Leader ,` stay wired up
+            // for parity with the wgpu app's full action set; this is a
+            // deliberate scope cut, not an oversight.
+            LeaderAction::RenameTab => {
+                log::info!(
+                    "gpui-shell: tab rename not yet implemented (needs M4 modal-input infra)"
+                );
+                return;
+            }
+            LeaderAction::SplitHorizontal => self.split_focused(SplitDir::Horizontal),
+            LeaderAction::SplitVertical => self.split_focused(SplitDir::Vertical),
+            LeaderAction::ClosePane => self.close_focused_pane(),
+            LeaderAction::ZoomPane => self.toggle_zoom(),
+            LeaderAction::FocusPane(dir) => {
+                let active = self.tabs.active_index();
+                // Clone the Rc first, same reason as `on_drag` in render():
+                // `focus_dir` needs `&mut self.tab_panes[..]` and
+                // `&self.rect_cache`'s contents at once, which a single
+                // `self.` borrow of both fields can't express.
+                let rects = self.rect_cache.clone();
+                let rects = rects.borrow();
+                self.tab_panes[active].focus_dir(dir, &rects);
+            }
+        }
+        cx.notify();
+    }
+}
