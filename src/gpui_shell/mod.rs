@@ -275,7 +275,7 @@ impl GpuiShellRoot {
                             }
                         }
                         for id in exited_terminals {
-                            this.on_terminal_exited(id);
+                            this.on_terminal_exited(id, cx);
                             should_notify = true;
                         }
                         // Blink at the same 530ms cadence the wgpu app uses
@@ -402,10 +402,11 @@ impl GpuiShellRoot {
     /// Mirrors the wgpu app's own `Mux::close_terminal` (src/app/mux/mod.rs)
     /// in full now that Task 4 gives us tab-closing machinery: multi-pane
     /// tabs just lose the one pane; a tab whose exited pane was its last
-    /// one is closed entirely via `close_tab_at` (which itself still
-    /// refuses to close the app's very last tab -- gpui_shell has no
-    /// "quit when no tabs remain" path yet, the same gap `LeaderAction::
-    /// CloseTab` already carries).
+    /// one is closed entirely via `close_tab_at`, which quits the app
+    /// outright if that was also the app's last tab (see its own doc
+    /// comment) -- exactly `frame.rs`'s `if self.close_exited_terminals(..)
+    /// { event_loop.exit(); }` behavior, just reached from gpui's
+    /// `cx.quit()` instead of winit's `event_loop.exit()`.
     ///
     /// No `Pty::request_exit()` call for either branch, unlike
     /// `close_focused_pane`/`LeaderAction::CloseTab`: the child is already
@@ -414,7 +415,7 @@ impl GpuiShellRoot {
     /// than being outstanding -- none of the deadlock risk `request_exit`'s
     /// doc comment describes applies, and SIGHUP'ing an already-reaped pid
     /// risks hitting a since-reused pid for no benefit.
-    fn on_terminal_exited(&mut self, terminal_id: usize) {
+    fn on_terminal_exited(&mut self, terminal_id: usize, cx: &mut Context<Self>) {
         let Some(tab_idx) = self
             .tab_panes
             .iter()
@@ -430,28 +431,36 @@ impl GpuiShellRoot {
         // close_tab_at's own leaf loop will then find exactly one leaf
         // (terminal_id itself), so signal_shells: false is always correct
         // here, never a guess.
-        self.close_tab_at(tab_idx, false);
+        self.close_tab_at(tab_idx, false, cx);
     }
 
     /// Close the tab at `tab_idx` (not necessarily the active one -- a
     /// background tab's last pane can exit while a different tab is
-    /// focused) and reap every leaf terminal it owned. Refuses to close
-    /// the app's last remaining tab: gpui_shell's `render()` indexes
-    /// `self.tab_panes[active_index]` unconditionally and has no
-    /// "quit when no tabs remain" path to catch the resulting empty state
-    /// (matching the wgpu app's own `Mux::cmd_close_tab`/`close_terminal`,
-    /// neither of which has one either -- gpui_shell just can't fall back
-    /// on a caller like `App::process_event`'s CloseRequested to paper
-    /// over it the way winit's event loop does there).
+    /// focused) and reap every leaf terminal it owned. Quits the whole app
+    /// via `cx.quit()` instead when `tab_idx` is the app's only remaining
+    /// tab: gpui_shell's `render()` indexes `self.tab_panes[active_index]`
+    /// unconditionally, so leaving zero tabs open is not a state this app
+    /// can render at all -- matching the wgpu app's own behavior for the
+    /// equivalent situation (`frame.rs`'s `if self.close_exited_terminals(
+    /// exited) { event_loop.exit(); }`, reached when `Mux::close_terminal`
+    /// closes a tab and none remain), and matching ordinary terminal
+    /// emulators generally (closing your only tab closes the window).
     ///
     /// `signal_shells`: `true` sends every leaf's shell a SIGHUP first (the
     /// user explicitly closing a tab whose shells may still be alive,
     /// `LeaderAction::CloseTab`'s own prior behavior); `false` skips it
     /// (`on_terminal_exited`, whose sole leaf is already known dead).
-    /// Returns whether a tab was actually closed.
-    fn close_tab_at(&mut self, tab_idx: usize, signal_shells: bool) -> bool {
+    /// Returns whether a tab was actually closed (false only if `tab_idx`
+    /// didn't name a real tab -- quitting the app counts as "closed").
+    fn close_tab_at(
+        &mut self,
+        tab_idx: usize,
+        signal_shells: bool,
+        cx: &mut Context<Self>,
+    ) -> bool {
         if self.tabs.tab_count() <= 1 {
-            return false;
+            cx.quit();
+            return true;
         }
         let Some(tab_id) = self.tabs.tabs().get(tab_idx).map(|t| t.id) else {
             return false;
@@ -528,7 +537,7 @@ impl GpuiShellRoot {
                 // apart. `signal_shells: true` since this tab's shells may
                 // still be alive (the user is closing it explicitly, not
                 // reacting to an exit already observed).
-                self.close_tab_at(self.tabs.active_index(), true);
+                self.close_tab_at(self.tabs.active_index(), true, cx);
             }
             LeaderAction::NextTab => self.tabs.next_tab(),
             LeaderAction::PrevTab => self.tabs.prev_tab(),
