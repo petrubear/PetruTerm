@@ -304,17 +304,16 @@ impl Pty {
     /// (e.g. through an `Rc<Terminal>`, which can't produce the `&mut Pty`
     /// `shutdown()` needs).
     ///
-    /// Calling this before a `Terminal`/`Pty` is dropped matters: `Drop for
-    /// Pty` only closes the master fd (see its own doc comment) -- it does
-    /// NOT send SIGHUP or wait for the reader thread first. Dropping a
-    /// `Pty` whose child is still alive therefore hits exactly the
-    /// deadlock `shutdown()`'s own comment describes (`close()` blocking
-    /// on macOS/BSD until the reader's in-flight `read()` completes, which
-    /// only happens once the slave side closes -- which needs a SIGHUP
-    /// nobody sent). Calling `request_exit()` first gives the shell a
-    /// head start on exiting and the reader thread a head start on
-    /// noticing EOF, so by the time `Drop` actually runs `close_master()`,
-    /// the blocking `read()` has very likely already returned.
+    /// Calling this before a `Terminal`/`Pty` is dropped is no longer
+    /// load-bearing against the `close()`-vs-`read()` deadlock: `Drop for
+    /// Pty` runs the full `shutdown()` sequence itself now (see its own doc
+    /// comment), so it sends SIGHUP and joins the reader before closing the
+    /// master. It is still worth calling, because it signals the shell
+    /// *before* the drop rather than during it -- giving the shell a head
+    /// start on exiting and the reader a head start on noticing EOF, which
+    /// keeps `Drop`'s own `reader_thread.join()` short. That join runs on
+    /// whatever thread drops the `Pty` -- the UI thread, for both binaries
+    /// -- so every millisecond it blocks is a frozen window.
     ///
     /// Only `gpui_shell` calls this today (`petruterm`'s own `cmd_close_pane`
     /// gets `&mut Terminal` through `Mux`'s `Vec<Option<Terminal>>` and can
