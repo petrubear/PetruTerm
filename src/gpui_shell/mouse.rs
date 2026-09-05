@@ -86,6 +86,18 @@ thread_local! {
     static CLICK_STATE: RefCell<HashMap<usize, ClickState>> = RefCell::new(HashMap::new());
 }
 
+/// Forget one terminal's click/drag state, for a pane that is going away.
+///
+/// Unlike `rasterize`'s `LAST_IMAGE` this holds no GPU resource, so a
+/// stranded entry is only a small leak. It matters because the key is an
+/// `Rc<Terminal>` heap address: an entry outliving its terminal can be
+/// inherited by a later pane allocated at the same address, handing it a
+/// stale click count, scroll remainder, or `dragging_scrollbar` flag.
+/// Same call-before-you-drop requirement as `rasterize::evict_terminal`.
+pub(super) fn forget_terminal(terminal_key: usize) {
+    CLICK_STATE.with_borrow_mut(|states| states.remove(&terminal_key));
+}
+
 /// Update click count for multi-click detection at `cell`, keyed by
 /// `terminal_key` (an `Rc<Terminal>` heap address, matching `rasterize`'s
 /// `LAST_IMAGE` key). Returns 1 / 2 / 3 based on timing and position --

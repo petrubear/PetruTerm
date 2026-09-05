@@ -354,6 +354,19 @@ impl Drop for Pty {
         //
         // `master_fd < 0` means `shutdown()` already ran; skip, rather than
         // re-`kill` a pid the OS may since have recycled.
+        //
+        // NOT a complete fix, and deliberately so: this narrows the hang
+        // rather than eliminating it. `shutdown()` SIGHUPs the direct child
+        // only -- not the session or process group -- and then joins the
+        // reader unboundedly, but `read(master_fd)` returns EIO only once
+        // EVERY slave-side fd is closed. So a process still holding the tty
+        // that does not die with the shell (`sleep 300 & disown`, a
+        // `nohup`ed dev server) still wedges the join, now inside `Drop`
+        // where no caller can guard against it. Closing that residual path
+        // needs either a `killpg` on the session or a bounded join with an
+        // fd-close fallback; both are behavior changes to shared code that
+        // the wgpu binary also runs, so they belong with the M5 pty pass the
+        // SDD ledger already parks, not here.
         if self.master_fd >= 0 {
             self.shutdown();
         }

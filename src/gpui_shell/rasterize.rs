@@ -99,6 +99,28 @@ pub fn evict_all(cx: &mut App) {
     }
 }
 
+/// Drop ONE terminal's cached frame and its GPU sprite-atlas entry, for a
+/// pane that is going away.
+///
+/// `evict_all` (font reload) and the same-key replacement inside
+/// `rasterize_grid` were the only two things that ever pruned `LAST_IMAGE`,
+/// and neither fires when a pane closes — so every closed pane used to
+/// strand one full-grid texture in gpui's insert-only Metal atlas for the
+/// rest of the session. That is the M0 leak this cache exists to prevent
+/// (see `LAST_IMAGE`'s doc comment), just at pane granularity instead of
+/// per-paint: unreachable until M2 made panes and tabs closable at all.
+///
+/// `terminal_key` is the `Rc<Terminal>` heap address, so the caller MUST
+/// call this while it still holds that `Rc` — once the last handle drops,
+/// the address is gone and can be recycled by a later pane, which would
+/// leave this entry stranded and hand the new pane a dead one.
+pub fn evict_terminal(terminal_key: usize, cx: &mut App) {
+    let evicted = LAST_IMAGE.with_borrow_mut(|cache| cache.remove(&terminal_key));
+    if let Some(frame) = evicted {
+        cx.drop_image(frame.image, None);
+    }
+}
+
 /// Rasterize `terminal`'s current grid into an RGBA bitmap and upload it as
 /// a gpui `RenderImage`, or return the cached one from the last paint if
 /// nothing that affects the bitmap has changed. `colors` is the resolved

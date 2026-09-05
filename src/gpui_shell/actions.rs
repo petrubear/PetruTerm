@@ -2,11 +2,13 @@
 // splitting, closing, zooming, and leader-action dispatch. Split out of
 // `mod.rs` for the 400-line convention.
 
-use gpui::Context;
+use std::rc::Rc;
+
+use gpui::{App, Context};
 
 use super::leader::LeaderAction;
 use super::panes::{PaneForest, SplitDir};
-use super::{spawn_terminal, GpuiShellRoot};
+use super::{mouse, rasterize, spawn_terminal, GpuiShellRoot};
 
 impl GpuiShellRoot {
     /// Spawn a terminal for a new pane and split the focused one around it.
@@ -36,25 +38,23 @@ impl GpuiShellRoot {
     /// Close the focused pane and reap its terminal. A no-op when it's the
     /// tab's last pane (`PaneForest::close_focused` refuses that case --
     /// closing the last pane is closing the tab, which is Task 4's job).
-    pub(super) fn close_focused_pane(&mut self) {
+    pub(super) fn close_focused_pane(&mut self, cx: &mut App) {
         let active = self.tabs.active_index();
         let Some(closed) = self.tab_panes[active].close_focused() else {
             return;
         };
-        // SIGHUP the shell before dropping our Rc<Terminal> (below): `Drop
-        // for Pty` only closes the master fd (see its own doc comment) --
-        // it does NOT signal the child or wait for the reader thread
-        // first, unlike the full `Pty::shutdown()` sequence, which we
-        // can't call here since `&Rc<Terminal>` never gives `&mut Pty`.
-        // Without this, closing a pane whose shell is still alive and idle
-        // hangs the whole app: closing the master fd while the reader
-        // thread's blocking `read()` on that same fd is still outstanding
-        // deadlocks on macOS/BSD (`Pty::request_exit`'s own doc comment),
-        // and nothing was ever going to make that shell exit on its own.
+        // SIGHUP the shell before dropping our Rc<Terminal> (below).
+        // `Drop for Pty` now runs the full `shutdown()` sequence itself, so
+        // this is no longer load-bearing against the close()-vs-read()
+        // deadlock it was originally added for. It is kept because it
+        // signals the shell *before* the drop rather than during it, which
+        // gives the shell a head start on exiting and keeps the drop's own
+        // `reader_thread.join()` short -- that join runs on the main thread,
+        // so any time it spends blocked is a frozen UI.
         if let Some(terminal) = self.terminals.get(&closed) {
             terminal.pty.request_exit();
         }
-        self.reap_pane(closed);
+        self.reap_pane(closed, cx);
     }
 
     /// Auto-close a pane whose shell process has already exited on its own
@@ -85,7 +85,7 @@ impl GpuiShellRoot {
             return;
         };
         if self.tab_panes[tab_idx].close_specific(terminal_id) {
-            self.reap_pane(terminal_id);
+            self.reap_pane(terminal_id, cx);
             return;
         }
         // close_specific only refuses when this was the tab's last pane --
@@ -135,7 +135,7 @@ impl GpuiShellRoot {
                         terminal.pty.request_exit();
                     }
                 }
-                self.reap_pane(id);
+                self.reap_pane(id, cx);
             }
         }
         true
@@ -144,7 +144,19 @@ impl GpuiShellRoot {
     /// Shared teardown for a terminal id that a `PaneForest` has just
     /// dropped from its tree (either call site above) -- keeps the two from
     /// drifting out of sync on which bookkeeping needs updating.
-    pub(super) fn reap_pane(&mut self, terminal_id: usize) {
+    pub(super) fn reap_pane(&mut self, terminal_id: usize, cx: &mut App) {
+        // Both of these are keyed on the `Rc<Terminal>`'s heap address, not
+        // on `terminal_id`, so they must be evicted while we still hold the
+        // `Rc` -- `self.terminals.remove` below drops the last handle, after
+        // which the address is gone (and reusable by a later pane).
+        //
+        // Missing these was an unbounded leak of one full-grid GPU texture
+        // per closed pane: see `rasterize::evict_terminal`'s doc comment.
+        if let Some(terminal) = self.terminals.get(&terminal_id) {
+            let terminal_key = Rc::as_ptr(terminal) as usize;
+            rasterize::evict_terminal(terminal_key, cx);
+            mouse::forget_terminal(terminal_key);
+        }
         self.terminals.remove(&terminal_id);
         self.wakeup_gates.remove(&terminal_id);
         self.rect_cache.borrow_mut().leaves.remove(&terminal_id);
@@ -216,7 +228,7 @@ impl GpuiShellRoot {
             }
             LeaderAction::SplitHorizontal => self.split_focused(SplitDir::Horizontal),
             LeaderAction::SplitVertical => self.split_focused(SplitDir::Vertical),
-            LeaderAction::ClosePane => self.close_focused_pane(),
+            LeaderAction::ClosePane => self.close_focused_pane(cx),
             LeaderAction::ZoomPane => self.toggle_zoom(),
             LeaderAction::FocusPane(dir) => {
                 let active = self.tabs.active_index();
