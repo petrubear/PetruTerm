@@ -121,5 +121,10 @@
   "119": "run_session",
   "120": "AppMenu",
   "121": "TermSize",
-  "122": "spawn_acp_connect"
+  "122": "spawn_acp_connect",
+  "123": "Config",
+  "124": "shaper.rs",
+  "125": "FreeTypeCmapLookup",
+  "126": ".spawn",
+  "127": "build_font_system"
 }
