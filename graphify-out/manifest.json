@@ -225,9 +225,9 @@
     "semantic_hash": "63271032f5826f3f8f2c94fad378c76c"
   },
   "src/font/locator.rs": {
-    "mtime": 1788127088.032241,
-    "ast_hash": "60e84d87661e2c91c24dba9b13e31d7d",
-    "semantic_hash": "60e84d87661e2c91c24dba9b13e31d7d"
+    "mtime": 1788573290.5467618,
+    "ast_hash": "b8109007c98d9ef433bc62cb4cbaab28",
+    "semantic_hash": ""
   },
   "src/font/mod.rs": {
     "mtime": 1788127088.0322998,
@@ -690,8 +690,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/font_state.rs": {
-    "mtime": 1788457429.299246,
-    "ast_hash": "e88829353e9a4035baa266377b846862",
+    "mtime": 1788573315.4257836,
+    "ast_hash": "bb329f8b38271657a16b0f7ca555961b",
     "semantic_hash": ""
   },
   "src/gpui_shell/key_map.rs": {
@@ -705,7 +705,7 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/rasterize.rs": {
-    "mtime": 1788564898.4042132,
+    "mtime": 1788573279.6316652,
     "ast_hash": "f17be87b9f830bd7a7e38281478e7ab7",
     "semantic_hash": ""
   },
@@ -750,8 +750,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/tabs.rs": {
-    "mtime": 1788569124.9609144,
-    "ast_hash": "bcabc6bf7bc4439a9d79e461eb5b05bf",
+    "mtime": 1788573356.9963126,
+    "ast_hash": "8afdad045cb4f1326d93b7859836fe5e",
     "semantic_hash": ""
   },
   "src/gpui_shell/leader.rs": {
@@ -765,8 +765,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/status_bar.rs": {
-    "mtime": 1788571836.3520355,
-    "ast_hash": "e86d28570c17139f6b244fa078412c71",
+    "mtime": 1788573341.6953273,
+    "ast_hash": "bcae5738a50978d6054bfe032902e35f",
     "semantic_hash": ""
   }
 }

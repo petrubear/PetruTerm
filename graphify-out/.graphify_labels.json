@@ -126,5 +126,6 @@
   "124": "shaper.rs",
   "125": "FreeTypeCmapLookup",
   "126": ".spawn",
-  "127": "build_font_system"
+  "127": "build_font_system",
+  "128": ".rasterize"
 }
