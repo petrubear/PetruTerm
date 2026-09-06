@@ -151,6 +151,11 @@ pub struct GpuiShellRoot {
     /// Exit-code cache for the status bar's ExitCode segment, mtime-gated
     /// against the active pane's shell-context file.
     exit_code: status_bar::ExitCodeState,
+    /// The in-progress tab rename, `Some` only while `Leader ,` is being
+    /// answered. Owning it here (rather than inside `TabManager`) keeps the
+    /// tab data model free of gpui types, the same separation `StatusBar` and
+    /// `PaneForest` already keep.
+    tab_rename: Option<gpui::Entity<text_input::TextInput>>,
 }
 
 impl GpuiShellRoot {
@@ -202,6 +207,7 @@ impl GpuiShellRoot {
             cached_cwd: initial_cwd,
             git_branch: status_bar::GitBranchState::default(),
             exit_code: status_bar::ExitCodeState::default(),
+            tab_rename: None,
         }
     }
 }

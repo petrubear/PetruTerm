@@ -4,11 +4,11 @@
 
 use std::rc::Rc;
 
-use gpui::{App, Context};
+use gpui::{App, AppContext, Context, Focusable, Window};
 
 use super::leader::LeaderAction;
 use super::panes::{PaneForest, SplitDir};
-use super::{mouse, rasterize, spawn_terminal, GpuiShellRoot};
+use super::{mouse, rasterize, spawn_terminal, text_input, GpuiShellRoot};
 
 impl GpuiShellRoot {
     /// Spawn a terminal for a new pane and split the focused one around it.
@@ -180,7 +180,12 @@ impl GpuiShellRoot {
     /// Execute one resolved leader-key action (`on_key_down`'s leader
     /// dispatch branch). See `leader::LeaderAction`'s doc comment for why
     /// the set stops at these ten variants.
-    pub(super) fn dispatch_leader_action(&mut self, action: LeaderAction, cx: &mut Context<Self>) {
+    pub(super) fn dispatch_leader_action(
+        &mut self,
+        action: LeaderAction,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         match action {
             LeaderAction::NewTab => {
                 let (terminal, gate) = match spawn_terminal(80, 24, &self.config) {
@@ -214,18 +219,7 @@ impl GpuiShellRoot {
             }
             LeaderAction::NextTab => self.tabs.next_tab(),
             LeaderAction::PrevTab => self.tabs.prev_tab(),
-            // Documented no-op for this milestone (M2 Task 4 ruling): a real
-            // rename needs a modal/inline text-input flow that doesn't exist
-            // in gpui_shell yet -- that infra belongs to M4 (command-palette
-            // era). `LeaderAction::RenameTab` and `Leader ,` stay wired up
-            // for parity with the wgpu app's full action set; this is a
-            // deliberate scope cut, not an oversight.
-            LeaderAction::RenameTab => {
-                log::info!(
-                    "gpui-shell: tab rename not yet implemented (needs M4 modal-input infra)"
-                );
-                return;
-            }
+            LeaderAction::RenameTab => self.begin_tab_rename(window, cx),
             LeaderAction::SplitHorizontal => self.split_focused(SplitDir::Horizontal),
             LeaderAction::SplitVertical => self.split_focused(SplitDir::Vertical),
             LeaderAction::ClosePane => self.close_focused_pane(cx),
@@ -241,6 +235,50 @@ impl GpuiShellRoot {
                 self.tab_panes[active].focus_dir(dir, &rects);
             }
         }
+        cx.notify();
+    }
+
+    /// Open an editable field over the active tab's label, seeded with its
+    /// current title and focused so the next keystroke goes to it.
+    pub(super) fn begin_tab_rename(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(title) = self.tabs.active_tab().map(|t| t.title.clone()) else {
+            return;
+        };
+        let colors = self.config.colors.clone();
+        let input = cx.new(|cx| text_input::TextInput::new(cx, &colors, title, "tab name"));
+
+        // Subscribe before storing: the parent owns the outcome, so Enter and
+        // Escape resolve here rather than inside the primitive, which has no
+        // idea what is being renamed.
+        cx.subscribe(&input, |this, input, event, cx| {
+            match event {
+                text_input::TextInputEvent::Submit => {
+                    let name = input.read(cx).content().trim().to_string();
+                    // An all-whitespace name would render as a blank pill with
+                    // no way to tell which tab it is; treat it as a cancel.
+                    if !name.is_empty() {
+                        this.tabs.rename_active(name);
+                    }
+                }
+                text_input::TextInputEvent::Cancel => {}
+            }
+            this.end_tab_rename(cx);
+        })
+        .detach();
+
+        input.focus_handle(cx).focus(window);
+        self.tab_rename = Some(input);
+        cx.notify();
+    }
+
+    /// Close the rename editor. Deliberately does NOT focus anything: it is
+    /// reached from a `cx.subscribe` closure, which is handed no `Window`,
+    /// and `FocusHandle::focus` needs one. Clearing the field is enough --
+    /// the next render hits Step 3's `if self.tab_rename.is_none()` guard and
+    /// returns focus to the terminal on its own, which also keeps exactly one
+    /// place deciding who owns focus.
+    pub(super) fn end_tab_rename(&mut self, cx: &mut Context<Self>) {
+        self.tab_rename = None;
         cx.notify();
     }
 }

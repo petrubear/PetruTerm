@@ -47,6 +47,7 @@ fn main() {
         // shipped. gpui's own `examples/image_gallery.rs` pairs the two calls
         // for this reason.
         cx.bind_keys([KeyBinding::new("cmd-q", Quit, None)]);
+        petruterm::gpui_shell::text_input::register_key_bindings(cx);
         cx.set_menus(vec![Menu {
             name: "petruterm".into(),
             items: vec![MenuItem::action("Quit", Quit)],

@@ -10,7 +10,13 @@ use super::{pane_view, status_bar, tabs, GpuiShellRoot};
 
 impl Render for GpuiShellRoot {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        window.focus(&self.focus_handle);
+        // Skipped while a child owns focus. This runs every frame, and the
+        // poll loop repaints at ~30Hz, so focusing unconditionally would tear
+        // focus away from the rename editor ~30 times a second and make it
+        // look like typing does nothing.
+        if self.tab_rename.is_none() {
+            window.focus(&self.focus_handle);
+        }
 
         let active_index = self.tabs.active_index();
         let (cell_width, cell_height) = super::font_state::measured_cell_size();
@@ -99,7 +105,16 @@ impl Render for GpuiShellRoot {
                     cx.notify();
                 }
             }));
-        let tab_bar = tabs::render_tab_bar(&self.tabs, &self.config.colors, on_select_tab);
+        let rename_editor = self
+            .tab_rename
+            .as_ref()
+            .map(|input| input.clone().into_any_element());
+        let tab_bar = tabs::render_tab_bar(
+            &self.tabs,
+            &self.config.colors,
+            on_select_tab,
+            rename_editor,
+        );
 
         // Status bar row -- built from the poll-loop-refreshed cwd/git-branch/
         // exit-code state above plus this frame's leader/zoom state, same

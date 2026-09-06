@@ -25,7 +25,7 @@ impl GpuiShellRoot {
     pub(super) fn on_key_down(
         &mut self,
         event: &KeyDownEvent,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.cursor_blink_on = true;
@@ -100,7 +100,7 @@ impl GpuiShellRoot {
             // Data-driven dispatch for this milestone's ten actions
             // (c/&/n/b/,/%/"/x/z/h/j/k/l, per config/default/keybinds.lua).
             if let Some(action) = self.leader_map.get(event.keystroke.key.as_str()).copied() {
-                self.dispatch_leader_action(action, cx);
+                self.dispatch_leader_action(action, window, cx);
             }
             return;
         }

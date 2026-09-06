@@ -197,10 +197,45 @@ pub fn render_tab_bar(
     tabs: &TabManager,
     colors: &ColorScheme,
     on_select: TabSelectCallback,
+    rename_editor: Option<gpui::AnyElement>,
 ) -> Div {
     let active_index = tabs.active_index();
     let accent = to_rgba(tabs.active_accent(colors.ui_accent));
     let surface = to_rgba(colors.ui_surface);
+    // `rename_editor` can't be cloned into every loop iteration (`AnyElement`
+    // isn't `Clone`), and `.children()`'s closure must be `FnMut` -- so it's
+    // built out here and `take()`n exactly once, on the active tab's cell.
+    let mut rename_editor = rename_editor;
+    let cells: Vec<_> = tabs
+        .tabs()
+        .iter()
+        .enumerate()
+        .map(|(idx, tab)| {
+            let is_active = idx == active_index;
+            let on_select = on_select.clone();
+            let cell = div()
+                .px_2()
+                .py_1()
+                .border_b_2()
+                .cursor_pointer()
+                .on_mouse_down(MouseButton::Left, move |_: &MouseDownEvent, window, cx| {
+                    on_select(&idx, window, cx)
+                });
+            let cell = if is_active && rename_editor.is_some() {
+                cell.child(rename_editor.take().expect("checked is_some"))
+            } else {
+                cell.child(tab_display_label(&tab.title, idx, is_active, None))
+            };
+            if is_active {
+                cell.bg(to_rgba(colors.ui_surface_active))
+                    .border_color(accent)
+                    .text_color(to_rgba(colors.foreground))
+            } else {
+                cell.border_color(surface)
+                    .text_color(to_rgba(colors.ui_muted))
+            }
+        })
+        .collect();
     div()
         .flex()
         .flex_row()
@@ -212,27 +247,7 @@ pub fn render_tab_bar(
         // the terminal grid's configured monospace face.
         .font_family(super::font_state::font_family())
         .text_size(gpui::px(super::font_state::font_size()))
-        .children(tabs.tabs().iter().enumerate().map(|(idx, tab)| {
-            let is_active = idx == active_index;
-            let on_select = on_select.clone();
-            let cell = div()
-                .px_2()
-                .py_1()
-                .border_b_2()
-                .cursor_pointer()
-                .on_mouse_down(MouseButton::Left, move |_: &MouseDownEvent, window, cx| {
-                    on_select(&idx, window, cx)
-                })
-                .child(tab_display_label(&tab.title, idx, is_active, None));
-            if is_active {
-                cell.bg(to_rgba(colors.ui_surface_active))
-                    .border_color(accent)
-                    .text_color(to_rgba(colors.foreground))
-            } else {
-                cell.border_color(surface)
-                    .text_color(to_rgba(colors.ui_muted))
-            }
-        }))
+        .children(cells)
 }
 
 #[cfg(test)]
