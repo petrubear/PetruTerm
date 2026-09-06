@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-09-06
-**Open Items:** 7
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 3 | **gpui M5:** 4 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 4
+**Open Items:** 9
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 3 | **gpui M5:** 4 | **gpui M3:** 2 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 4
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -291,6 +291,20 @@ actúa sobre `PtyEvent::Exit`; el resto de variantes (`TitleChanged`, `Bell`,
 evitar que el canal (bounded, 1024) crezca sin límite. Son funciones que el binario wgpu sí
 implementa: título de tab dinámico, campana, clipboard OSC 52, marcadores OSC 133 (que
 alimentan el exit code de la status bar). Paridad pendiente; decidir en M3/M4 cuáles entran.
+
+**TD-GPUI-05** — ABIERTO (2026-09-06). `TextInput` (`src/gpui_shell/text_input/mod.rs`) captura sus colores
+(`text_color`/`placeholder_color`/`cursor_color`/`selection_color`) **al construirse**, desde el
+`ColorScheme` que le pasa el llamador. Un hot-reload de config mientras el campo está abierto recolorea todo
+lo que lo rodea pero no el campo, que se queda con la paleta vieja hasta reabrirlo. Inocuo en M3a (el rename
+de tab vive segundos), pero **M3b sí lo nota**: el composer del chat vive minutos y quedaría visiblemente
+descolocado respecto a su panel tras un reload. Fix: releer colores en `render` en vez de snapshotearlos, o
+que el host los reinyecte en el tick del poll loop que ya aplica el reload.
+
+**TD-GPUI-06** — ABIERTO (2026-09-06). `TabManager::rename_active` (`src/gpui_shell/tabs.rs`) quedó sin uso
+dentro de `gpui_shell` — su único llamador pasó a `rename_tab(id, ..)` cuando M3a fijó el rename a un id de
+tab en vez de "la activa". No genera warning porque el módulo tiene `#![allow(dead_code)]` global (que ya
+existía, no se añadió para taparlo) y no es alcanzable desde el binario wgpu (`src/ui/tabs.rs` es una copia
+aparte). Barrer en M3c, que reestructura este archivo de todos modos para la capa de workspaces.
 
 ---
 
