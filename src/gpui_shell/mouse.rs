@@ -335,15 +335,25 @@ pub fn scrollbar_thumb_geometry(
 ///
 /// None of this module's `write_input` call sites (mouse-report passthrough,
 /// below) are gated on `GpuiShellRoot::tab_rename`, and that's deliberate,
-/// not an oversight the tab-rename work forgot: with the rename guard in
-/// `input.rs` keyed on the `TextInput`'s actual focus (not merely on whether
-/// a rename happens to be open), a click landing here has already moved
-/// focus to the terminal by the time any of these handlers run -- the
-/// keyboard guard and this module now agree on the same thing gpui itself
-/// already decided (who has focus), rather than this module needing its own
-/// second opinion. A mouse report going out while a rename editor is open
-/// elsewhere in the window is exactly as legitimate as any other terminal
-/// input once the terminal is what the user clicked.
+/// not an oversight the tab-rename work forgot -- but not because gpui
+/// focus has already moved by the time these handlers run. It hasn't:
+/// `Interactivity::paint` registers a div's own listeners before recursing
+/// into children (`elements/div.rs:1855` calls `paint_mouse_listeners`,
+/// then `div.rs:1865` paints children), and the bubble phase walks
+/// registered listeners in reverse order (`window.rs:3705`'s `.rev()`), so
+/// the root div's auto-focus listener -- outermost, registered first --
+/// fires LAST, strictly after every handler in this module. Nothing here
+/// may assume gpui focus has already changed.
+///
+/// These handlers simply never consult gpui focus at all: a mouse event is
+/// routed to whichever handler's hitbox contains it (`bounds.contains`,
+/// checked in every handler below), independent of window focus state, and
+/// `on_focus` updates `focused_terminal` -- the app-level state this
+/// codebase actually keys "which pane is active" on -- directly, not by
+/// reading it back from gpui. So a terminal click is unambiguous terminal
+/// input by construction, whatever `tab_rename` or gpui's own focus happen
+/// to say; the keyboard guard in `input.rs` polices the PTY's other input
+/// path (typed keys), and has no bearing on this one.
 pub fn register_mouse_handlers(
     terminal: Rc<Terminal>,
     bounds: Bounds<Pixels>,
