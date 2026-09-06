@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-07-25
-**Open Items:** 3
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 3 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 4
+**Last Updated:** 2026-09-06
+**Open Items:** 7
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 3 | **gpui M5:** 4 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 4
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -249,6 +249,50 @@ back-compute de la tab bar en modo no-Custom no mostró problemas. `src/app/fram
 usuario ("funciona"): el alpha `0.85` de `ui_surface`/`ui_surface_hover`
 (`ColorScheme::apply_blur_translucency`, `schema.rs`) se ve bien; sin apilado
 parcheado reportado. Si en uso prolongado se ve desigual, reevaluar el factor.
+
+## Migración gpui — diferido a M5 (abierto, 2026-09-06)
+
+> Encontrados durante M2 (core chrome) en la branch `worktree-gpui-migration`, en revisión
+> de tarea o en la revisión whole-branch. Ninguno bloquea M2; todos tocan código que el
+> binario wgpu en producción **también** ejecuta, o archivos fuera del criterio de salida
+> de M2, así que se agrupan para el pase de limpieza de M5. Registrados aquí y no solo en
+> el ledger SDD (`.superpowers/sdd/...`) porque ese directorio es git-ignored y se pierde.
+
+**TD-GPUI-01** — ABIERTO (2026-09-06). `Drop for Pty` (`src/term/pty.rs`) **acota pero no
+elimina** el deadlock `close()`-vs-`read()`. `shutdown()` manda SIGHUP solo al hijo directo
+(no al process group ni a la sesión) y luego hace `reader_thread.join()` sin límite, pero
+`read(master_fd)` devuelve EIO únicamente cuando se cierra **todo** fd del lado slave. Un
+proceso que sobreviva a la shell y siga sosteniendo el tty (`sleep 300 & disown`, un dev
+server con `nohup`) cuelga el join — ahora **dentro de `Drop`**, donde ningún caller puede
+protegerse. Síntoma: ventana congelada al cerrar panel/tab/app, proceso inmune a SIGTERM
+(requiere `kill -9`). Afecta a los dos binarios: en el wgpu llega vía `Mux::cmd_close_pane`
+/`cmd_close_tab`/`close_terminal` (`*slot = None`), en el hilo principal de winit. Fix:
+`killpg` sobre la sesión, o join acotado con fallback a cerrar el fd. Es cambio de
+comportamiento en código compartido, por eso no se hizo al cierre de M2.
+
+**TD-GPUI-02** — ABIERTO (2026-09-06). `Mux::cmd_close_tab` (`src/app/mux/mod.rs:792-807`)
+no tiene guard de última tab ni salida a `event_loop.exit()`, a diferencia de su hermano
+`close_terminal` (`:505-529`), que sí devuelve `true` sin tabs y cuyo caller en
+`frame.rs:379-382` sí cierra la app. `Action::CloseTab` (`src/app/ui/mod.rs:1410`) tampoco
+propaga retorno. Resultado probable: en el binario wgpu, `Leader &` sobre la única tab deja
+la app en estado inconsistente en vez de cerrarla — el hueco que en gpui_shell se cerró con
+`cx.quit()` (commit `aa21396`). Encontrado leyendo el wgpu como referencia; **no verificado
+en vivo**, confirmarlo antes de arreglar.
+
+**TD-GPUI-03** — ABIERTO (2026-09-06). `src/gpui_shell/mouse.rs` (852) y
+`src/gpui_shell/rasterize.rs` (814) exceden la convención de 400 líneas de `AGENTS.md`. Son
+archivos de M1b, no nombrados en el criterio de salida de M2 (que sí cubría `panes.rs` y
+`status_bar.rs`, ya divididos en Task 6a), por eso quedaron fuera de ese pase. El resto de
+`src/gpui_shell/` está bajo 400.
+
+**TD-GPUI-04** — ABIERTO (2026-09-06). El poll loop de `gpui_shell` drena `Pty::rx` y solo
+actúa sobre `PtyEvent::Exit`; el resto de variantes (`TitleChanged`, `Bell`,
+`ClipboardStore`, `ClipboardLoad`, `PtyWrite`, `Osc133`, `ScreenCleared`) se descartan para
+evitar que el canal (bounded, 1024) crezca sin límite. Son funciones que el binario wgpu sí
+implementa: título de tab dinámico, campana, clipboard OSC 52, marcadores OSC 133 (que
+alimentan el exit code de la status bar). Paridad pendiente; decidir en M3/M4 cuáles entran.
+
+---
 
 ## Deferred — Requieren hardware/profiling específico
 
