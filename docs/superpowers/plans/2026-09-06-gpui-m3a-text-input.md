@@ -475,15 +475,27 @@ Initialize it in `GpuiShellRoot::new`, alongside the other field initializers:
 In `src/gpui_shell/actions.rs`, replace the whole `LeaderAction::RenameTab` arm (currently lines 223-228, the `log::info!` no-op, together with the three-line comment above it at 219-222 that calls the deferral deliberate) with:
 
 ```rust
-            LeaderAction::RenameTab => self.begin_tab_rename(cx),
+            LeaderAction::RenameTab => self.begin_tab_rename(window, cx),
 ```
+
+**Thread a `Window` down to it first.** `FocusHandle::focus` takes `&mut Window`, not a context
+(`gpui-0.2.2/src/window.rs:340`), and `dispatch_leader_action` currently has no window. Three
+mechanical edits, all in files this task already touches:
+
+1. `src/gpui_shell/input.rs:28` — `on_key_down` already receives `_window: &mut Window` and ignores
+   it. Rename it to `window`.
+2. `src/gpui_shell/input.rs:103` — pass it on: `self.dispatch_leader_action(action, window, cx);`
+3. `src/gpui_shell/actions.rs:183` — widen the signature:
+   `pub(super) fn dispatch_leader_action(&mut self, action: LeaderAction, window: &mut Window, cx: &mut Context<Self>)`.
+   Add `use gpui::Window;` to `actions.rs` if it is not already imported. `dispatch_leader_action`
+   has exactly one caller, so no other call site changes.
 
 Then add these two methods to the same `impl GpuiShellRoot` block:
 
 ```rust
     /// Open an editable field over the active tab's label, seeded with its
     /// current title and focused so the next keystroke goes to it.
-    pub(super) fn begin_tab_rename(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn begin_tab_rename(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(title) = self.tabs.active_tab().map(|t| t.title.clone()) else {
             return;
         };
@@ -509,20 +521,24 @@ Then add these two methods to the same `impl GpuiShellRoot` block:
         })
         .detach();
 
-        input.focus_handle(cx).focus(cx);
+        input.focus_handle(cx).focus(window);
         self.tab_rename = Some(input);
         cx.notify();
     }
 
-    /// Close the rename editor and hand focus back to the terminal.
+    /// Close the rename editor. Deliberately does NOT focus anything: it is
+    /// reached from a `cx.subscribe` closure, which is handed no `Window`,
+    /// and `FocusHandle::focus` needs one. Clearing the field is enough --
+    /// the next render hits Step 3's `if self.tab_rename.is_none()` guard and
+    /// returns focus to the terminal on its own, which also keeps exactly one
+    /// place deciding who owns focus.
     pub(super) fn end_tab_rename(&mut self, cx: &mut Context<Self>) {
         self.tab_rename = None;
-        self.focus_handle.focus(cx);
         cx.notify();
     }
 ```
 
-`cx.subscribe`'s closure receives `(&mut GpuiShellRoot, Entity<TextInput>, &TextInputEvent, &mut Context<GpuiShellRoot>)`. Add `use gpui::Focusable;` to `actions.rs` if `focus_handle(cx)` does not already resolve there.
+`cx.subscribe`'s closure receives `(&mut GpuiShellRoot, Entity<TextInput>, &TextInputEvent, &mut Context<GpuiShellRoot>)` — note it carries no `Window`, which is why `end_tab_rename` cannot focus and does not try. Add `use gpui::Focusable;` to `actions.rs` if `focus_handle(cx)` does not already resolve there.
 
 - [ ] **Step 3: Fix the focus steal**
 
