@@ -155,7 +155,15 @@ impl TextInput {
         cx.emit(TextInputEvent::Submit);
     }
 
-    fn cancel(&mut self, _: &Cancel, _: &mut Window, cx: &mut Context<Self>) {
+    fn cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
+        // Give up focus unconditionally before telling the host about it --
+        // "Escape gives up focus" is true of every consumer (tab rename,
+        // chat composer), so it belongs here rather than being re-derived by
+        // each. Tab rename already reaches the same end state one frame
+        // later via its own re-focus-root guard; this just gets there
+        // immediately, with no half-frame of dangling focus. Harmless if
+        // focus was already elsewhere.
+        window.blur();
         cx.emit(TextInputEvent::Cancel);
     }
 }

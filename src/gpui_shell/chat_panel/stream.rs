@@ -24,7 +24,7 @@
 
 use gpui::{Context, Entity};
 
-use crate::llm::chat_panel::AiEvent;
+use crate::llm::chat_panel::{AiEvent, PanelState};
 use crate::llm::ChatMessage;
 
 use super::super::text_input::{TextInput, TextInputEvent};
@@ -138,12 +138,22 @@ impl GpuiShellRoot {
     ) {
         match event {
             TextInputEvent::Submit => self.handle_chat_composer_submit(cx),
-            // Escape-returns-focus-to-terminal-without-closing (the wgpu
-            // build's own behavior, `src/app/input/mod.rs`) is not wired by
-            // this task -- outside Task 2's named scope (composer submit +
-            // slash commands). Left a no-op, same as it was before this
-            // subscription existed at all.
-            TextInputEvent::Cancel => {}
+            // Mirrors the wgpu build's own Escape handler exactly
+            // (`src/app/input/mod.rs:591-595`): dismiss a stuck error so the
+            // panel can accept input again, otherwise just give up focus
+            // (`TextInput::cancel` already called `window.blur()` before
+            // this ran). Without the dismiss half, an errored request left
+            // `ChatPanel::state` in `PanelState::Error` forever --
+            // `is_idle()` never true again -- and `handle_chat_composer_
+            // submit`'s own top-of-function gate then silently swallowed
+            // every future Enter, /q included, with no way back in except
+            // clicking the terminal and reopening the panel from scratch.
+            TextInputEvent::Cancel => {
+                if matches!(self.chat.panel.state, PanelState::Error(_)) {
+                    self.chat.panel.dismiss_error();
+                    cx.notify();
+                }
+            }
         }
     }
 
