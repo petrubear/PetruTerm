@@ -9,7 +9,7 @@ use gpui::{
 };
 
 use super::pane_view::to_rgba;
-use super::{chat_panel, pane_view, status_bar, tabs, GpuiShellRoot};
+use super::{ai_block, chat_panel, pane_view, status_bar, tabs, GpuiShellRoot};
 
 /// Duration of the drawer's opening grow animation (Step 3). Closing is
 /// instant -- see this file's own `render()` doc comment on the animated
@@ -53,8 +53,18 @@ impl Render for GpuiShellRoot {
         // legitimately hold focus, so it can't fight a real in-progress
         // "typing in the open composer" case the way a guard checking
         // "hide the composer whenever the panel is visible" would.
+        //
+        // M3b Task 3 adds the identical `!self.ai_block.is_visible() || ...`
+        // half for the inline AI block's own composer -- same reasoning,
+        // same shape, and it needs the visibility half too: the block's
+        // Enter-after-`Done` path (running the resolved command) closes it
+        // from inside a `cx.subscribe` callback with no `Window` (see
+        // `ai_block.rs`'s doc comment), leaving `composer_focused` reporting
+        // stale "true" until this guard's `!is_visible()` half reclaims
+        // focus on the very next frame.
         if self.tab_rename.is_none()
             && (!self.chat.is_visible() || !self.chat.composer_focused(window, cx))
+            && (!self.ai_block.is_visible() || !self.ai_block.composer_focused(window, cx))
         {
             window.focus(&self.focus_handle);
         }
@@ -246,6 +256,27 @@ impl Render for GpuiShellRoot {
             self.chat.sync_markdown_cache();
         }
 
+        // The pane area is `.relative()` so the inline AI block (M3b Task 3)
+        // can anchor an `.absolute().bottom_0()` overlay to it -- a `div()`
+        // overlay over the focused pane's own area, not the wgpu build's
+        // bottom-`AI_BLOCK_ROWS`-of-the-grid pixel math (`chat.rs:1430-
+        // 1567`), which has no equivalent once cells aren't hand-shaped
+        // quads. `ai_block.rs`'s doc comment covers the guard/streaming/
+        // error-recovery side of this surface; this is only the layout half.
+        let pane_area = div()
+            .relative()
+            .flex()
+            .flex_1()
+            .min_h_0()
+            .min_w_0()
+            .child(panes)
+            .when(self.ai_block.is_visible(), |el| {
+                el.child(ai_block::render_ai_block(
+                    &self.ai_block,
+                    &self.config.colors,
+                ))
+            });
+
         let middle_row = div()
             .flex()
             .flex_1()
@@ -254,7 +285,7 @@ impl Render for GpuiShellRoot {
             // size, so without this the pane row refuses to shrink below the
             // terminal grid it contains and pushes the tab bar off-screen on
             // a small window.
-            .child(div().flex().flex_1().min_h_0().min_w_0().child(panes))
+            .child(pane_area)
             .when(self.chat.is_visible(), |el| {
                 let panel = chat_panel::render_chat_panel(
                     &self.chat,

@@ -57,6 +57,11 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                             // already uses, rather than only at startup and
                             // via `/model`.
                             this.chat.rewire_provider(&this.config.llm);
+                            // M3b Task 3: the inline AI block has its own
+                            // provider instance (own channel/state -- see
+                            // `ai_block.rs`'s doc comment), so it needs the
+                            // same rewire the chat panel just got above.
+                            this.ai_block.rewire_provider(&this.config.llm);
                             cx.notify();
                         })
                         .is_ok();
@@ -140,6 +145,13 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                     // this tick -- PTY reads, cursor blink, and the status
                     // bar refresh right below it.
                     if this.chat.drain_events() {
+                        should_notify = true;
+                    }
+                    // Same drain, independent channel (M3b Task 3) -- see
+                    // `ai_block.rs`'s doc comment on why the block owns its
+                    // own `AiEvent` pair rather than sharing the chat
+                    // panel's.
+                    if this.ai_block.drain_events() {
                         should_notify = true;
                     }
 

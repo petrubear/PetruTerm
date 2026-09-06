@@ -7,6 +7,7 @@
 // full key-event mapping.
 
 mod actions;
+mod ai_block;
 mod chat_panel;
 mod config_watch;
 pub mod font_state;
@@ -176,6 +177,11 @@ pub struct GpuiShellRoot {
     /// `chat_panel/mod.rs`'s doc comment on why the wgpu build's
     /// `panel_id`/`set_active_terminal` plumbing has no equivalent here).
     chat: chat_panel::ChatPanelView,
+    /// The inline `Ctrl+Space` AI block -- a genuinely separate surface from
+    /// `chat`, with its own state machine, composer, and streaming channel
+    /// (see `ai_block.rs`'s doc comment on why the two must never share a
+    /// channel).
+    ai_block: ai_block::AiBlockView,
 }
 
 impl GpuiShellRoot {
@@ -205,6 +211,7 @@ impl GpuiShellRoot {
             &crate::config::keybind_view::leader_bindings_view(&config).bindings,
         );
         let chat = chat_panel::ChatPanelView::new(cx, &config);
+        let ai_block = ai_block::AiBlockView::new(cx, &config);
 
         Self {
             tabs,
@@ -231,6 +238,7 @@ impl GpuiShellRoot {
             exit_code: status_bar::ExitCodeState::default(),
             tab_rename: None,
             chat,
+            ai_block,
         }
     }
 }

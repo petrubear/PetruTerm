@@ -76,6 +76,17 @@ impl GpuiShellRoot {
             return;
         }
 
+        // Same guard, same reasoning, for the inline AI block's composer
+        // (M3b Task 3) -- keyed on `composer_focused` (== `is_focused
+        // (window)`), never on `self.ai_block.is_visible()`, per `ai_block.
+        // rs`'s own doc comment (point 1). Checked as its own arm rather
+        // than folded into the chat-composer check above: the two composers
+        // are independent entities, and only one can hold focus at a time,
+        // but either one holding it must short-circuit here the same way.
+        if self.ai_block.composer_focused(window, cx) {
+            return;
+        }
+
         self.cursor_blink_on = true;
         self.cursor_last_blink = std::time::Instant::now();
 
@@ -182,6 +193,39 @@ impl GpuiShellRoot {
             if let Some(action) = self.leader_map.get(event.keystroke.key.as_str()).copied() {
                 self.dispatch_leader_action(action, window, cx);
             }
+            return;
+        }
+
+        // ── Ctrl+Space — toggle the inline AI block ──────────────────────
+        // Independent of leader state, like the wgpu build's own check
+        // (`src/app/input/mod.rs:449-458`): a standalone combo, not a leader
+        // chord, so it's checked here rather than folded into the leader
+        // dispatch above -- reached only once neither `leader_active` branch
+        // above already returned. Only reachable at all when neither
+        // composer holds focus (both guards at the top of this function
+        // already returned otherwise), so this can't be swallowed by a
+        // focused text field's own key bindings, and pressing it while
+        // typing in either composer instead falls through to that
+        // composer's own Escape/Enter handling -- there's no case where a
+        // real keystroke silently does nothing.
+        if event.keystroke.modifiers.control
+            && !event.keystroke.modifiers.shift
+            && !event.keystroke.modifiers.platform
+            && !event.keystroke.modifiers.alt
+            && event.keystroke.key == "space"
+        {
+            self.ai_block.toggle(window, cx);
+            // `toggle` only ever moves focus TO the composer (opening);
+            // closing deliberately returns none, mirroring `LeaderAction::
+            // ToggleAiPanel`'s own division of labor (`actions.rs`). This is
+            // the other half: send focus back to the terminal right here
+            // rather than waiting on `render()`'s guard, which can't tell
+            // "the block just closed" from "the composer still holds a
+            // stale focus handle".
+            if !self.ai_block.is_visible() {
+                window.focus(&self.focus_handle);
+            }
+            cx.notify();
             return;
         }
 
