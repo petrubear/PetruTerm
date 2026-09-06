@@ -104,10 +104,22 @@ impl Render for GpuiShellRoot {
                 // Clicking a tab dismisses an in-progress rename rather than
                 // leaving it open on a tab the user has navigated away from.
                 // Without this the app reaches a dead end: `on_key_down`'s
-                // rename guard blocks every keyboard route back, and the
-                // renamed tab's own cell hosts the editor, so clicking it
-                // goes to the text field instead of switching tabs -- Escape
-                // becomes the only way out, which nothing signals.
+                // rename guard blocks every keyboard route back, and this
+                // listener is the only way to get from a background tab to
+                // the one being renamed.
+                //
+                // This listener never actually fires for an in-editor click
+                // on the renaming tab's OWN cell (e.g. to move the cursor
+                // mid-word) -- not because the click is "consumed" by the
+                // text field, but because `TextInput::on_mouse_down`
+                // (`text_input/edit.rs`) explicitly calls
+                // `cx.stop_propagation()`. Without that call gpui's bubble
+                // phase runs innermost-first and propagates by default, so
+                // the click would reach the input for cursor placement AND
+                // then bubble out to this handler, ending the rename out
+                // from under a click that was only repositioning the
+                // cursor. Do not remove that `stop_propagation()` without
+                // rechecking this comment.
                 //
                 // Dismiss discards the edit rather than committing it: an
                 // explicit click elsewhere is not a confirmation, and a

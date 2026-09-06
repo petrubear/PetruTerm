@@ -3,14 +3,19 @@
 // (marked-range) support.
 //
 // Ports gpui 0.2.2's own `examples/input.rs` `TextInput` almost verbatim --
-// see that file for the canonical reference this was built from. Four
+// see that file for the canonical reference this was built from. Five
 // deliberate adaptations from the example: colors resolve from
 // `ColorScheme` instead of hardcoded literals; every key binding is scoped
 // to a `"TextInput"` key context (the example uses global bindings, which
 // would capture backspace/arrows/clipboard chords application-wide and stop
 // them reaching the PTY); `Submit`/`Cancel` events let a parent observe the
-// edit finishing; and the UTF-16 and grapheme-boundary helpers are free
-// functions over `&str` so they unit-test without a gpui context.
+// edit finishing; the UTF-16 and grapheme-boundary helpers are free
+// functions over `&str` so they unit-test without a gpui context; and
+// `on_mouse_down` (`edit.rs`) calls `cx.stop_propagation()`, because unlike
+// the example's standalone demo, every real consumer here nests this input
+// inside clickable chrome (the tab bar's cell, and M3b's chat input/
+// file-picker query) whose own click handlers must not fire on an in-editor
+// click.
 //
 // Split under the 400-line convention: this file keeps the `TextInput`
 // struct, its constructor/accessors, the actions/key-binding registration,

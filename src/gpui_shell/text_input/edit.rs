@@ -1,8 +1,9 @@
 // gpui chrome migration (M3a Task 1): `TextInput`'s editing and mouse
 // methods, split out of `mod.rs` for the 400-line convention.
 //
-// Ported unchanged in behavior from gpui 0.2.2's own examples/input.rs --
-// see `mod.rs`'s header for the full port note and the four adaptations.
+// Ported from gpui 0.2.2's own examples/input.rs, plus one behavioral
+// change -- `on_mouse_down` stops propagation -- see `mod.rs`'s header for
+// the full port note and all five adaptations.
 
 use gpui::{
     ClipboardItem, Context, EntityInputHandler, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
@@ -80,6 +81,24 @@ impl TextInput {
         } else {
             self.move_to(self.index_for_mouse_position(event.position), cx)
         }
+
+        // Fifth deliberate adaptation from gpui's own `examples/input.rs`
+        // (see `mod.rs`'s header for the other four): that example's input
+        // has no clickable ancestor, so it never needed to stop this click
+        // going anywhere else. Every real consumer here does -- the tab bar
+        // hosts this editor inside a cell whose own `on_mouse_down` switches
+        // tabs (`render.rs`'s `on_select_tab`), and the M3b chat input and
+        // file-picker query will sit inside clickable chrome too. gpui's
+        // bubble phase runs innermost-first and propagates by default
+        // (`App::stop_propagation`'s own doc), so without this, a click made
+        // to place the cursor mid-edit reaches this handler AND then bubbles
+        // out to whatever clickable ancestor wraps the input -- for the tab
+        // bar specifically, that ends the rename out from under the click
+        // that was only trying to move the cursor. `render.rs`'s
+        // `on_select_tab` names this call as the reason it can rely on
+        // in-editor clicks never reaching it; do not remove this without
+        // checking there first.
+        cx.stop_propagation();
     }
 
     pub(super) fn on_mouse_up(
