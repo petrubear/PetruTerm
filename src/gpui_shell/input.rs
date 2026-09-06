@@ -146,6 +146,17 @@ impl GpuiShellRoot {
                 if prefix == 'a' && event.keystroke.key == "a" {
                     self.dispatch_leader_action(LeaderAction::ToggleAiPanel, window, cx);
                 }
+                if prefix == 'W' {
+                    let action = match event.keystroke.key.as_str() {
+                        "&" => Some(LeaderAction::CloseWorkspace),
+                        "j" => Some(LeaderAction::NextWorkspace),
+                        "k" => Some(LeaderAction::PrevWorkspace),
+                        _ => None,
+                    };
+                    if let Some(action) = action {
+                        self.dispatch_leader_action(action, window, cx);
+                    }
+                }
                 // Every other `a`-prefix subkey (c/e/f/z in the wgpu build)
                 // is out of scope for this milestone -- see leader.rs's doc
                 // comment and the M3b plan's Scope section. An unrecognized
@@ -180,6 +191,25 @@ impl GpuiShellRoot {
             if event.keystroke.key == "a" {
                 self.leader_active = true;
                 self.leader_prefix = Some('a');
+                self.leader_deadline = Some(
+                    std::time::Instant::now()
+                        + std::time::Duration::from_millis(self.config.leader.timeout_ms),
+                );
+                cx.notify();
+                return;
+            }
+
+            // Leader + Shift+W → enter the workspace sub-prefix. gpui
+            // reports a shift-held ASCII-lowercase-producing key with its
+            // UNSHIFTED key string and `modifiers.shift = true` (verified
+            // against gpui 0.2.2's `parse_keystroke`,
+            // `platform/mac/events.rs`) -- so this is "w" + shift, not "W".
+            // Checked here, before the plain `leader_map` lookup below
+            // (which matches "w" too, for `Leader w` with no shift), so the
+            // two never collide.
+            if event.keystroke.key == "w" && event.keystroke.modifiers.shift {
+                self.leader_active = true;
+                self.leader_prefix = Some('W');
                 self.leader_deadline = Some(
                     std::time::Instant::now()
                         + std::time::Duration::from_millis(self.config.leader.timeout_ms),

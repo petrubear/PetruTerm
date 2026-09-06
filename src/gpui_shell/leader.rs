@@ -41,6 +41,10 @@ pub enum LeaderAction {
     ZoomPane,
     FocusPane(FocusDir),
     ToggleAiPanel,
+    NewWorkspace,
+    CloseWorkspace,
+    NextWorkspace,
+    PrevWorkspace,
 }
 
 impl TryFrom<&str> for LeaderAction {
@@ -62,6 +66,10 @@ impl TryFrom<&str> for LeaderAction {
             "FocusPaneUp" => Ok(LeaderAction::FocusPane(FocusDir::Up)),
             "FocusPaneDown" => Ok(LeaderAction::FocusPane(FocusDir::Down)),
             "ToggleAiPanel" => Ok(LeaderAction::ToggleAiPanel),
+            "NewWorkspace" => Ok(LeaderAction::NewWorkspace),
+            "CloseWorkspace" => Ok(LeaderAction::CloseWorkspace),
+            "NextWorkspace" => Ok(LeaderAction::NextWorkspace),
+            "PrevWorkspace" => Ok(LeaderAction::PrevWorkspace),
             _ => Err(()),
         }
     }
@@ -86,6 +94,8 @@ pub fn build_leader_map(bindings: &[KeyBind]) -> HashMap<String, LeaderAction> {
         }
     }
     map.entry("z".to_string()).or_insert(LeaderAction::ZoomPane);
+    map.entry("w".to_string())
+        .or_insert(LeaderAction::NewWorkspace);
     map
 }
 
@@ -102,7 +112,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_all_eleven_action_strings() {
+    fn parses_all_action_strings() {
         assert_eq!(LeaderAction::try_from("NewTab"), Ok(LeaderAction::NewTab));
         assert_eq!(
             LeaderAction::try_from("CloseTab"),
@@ -150,6 +160,22 @@ mod tests {
             LeaderAction::try_from("ToggleAiPanel"),
             Ok(LeaderAction::ToggleAiPanel)
         );
+        assert_eq!(
+            LeaderAction::try_from("NewWorkspace"),
+            Ok(LeaderAction::NewWorkspace)
+        );
+        assert_eq!(
+            LeaderAction::try_from("CloseWorkspace"),
+            Ok(LeaderAction::CloseWorkspace)
+        );
+        assert_eq!(
+            LeaderAction::try_from("NextWorkspace"),
+            Ok(LeaderAction::NextWorkspace)
+        );
+        assert_eq!(
+            LeaderAction::try_from("PrevWorkspace"),
+            Ok(LeaderAction::PrevWorkspace)
+        );
         assert_eq!(LeaderAction::try_from("NotAnAction"), Err(()));
     }
 
@@ -188,6 +214,8 @@ mod tests {
         );
         // Seeded even though it's absent from the input bindings.
         assert_eq!(map.get("z"), Some(&LeaderAction::ZoomPane));
+        // Seeded even though it's absent from the input bindings, same as "z".
+        assert_eq!(map.get("w"), Some(&LeaderAction::NewWorkspace));
     }
 
     #[test]
@@ -195,6 +223,6 @@ mod tests {
         let bindings = vec![kb("o", "CommandPalette")];
         let map = build_leader_map(&bindings);
         assert_eq!(map.get("o"), None);
-        assert_eq!(map.len(), 1); // just the seeded "z"
+        assert_eq!(map.len(), 2); // just the seeded "z" and "w"
     }
 }

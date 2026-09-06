@@ -352,6 +352,35 @@ impl GpuiShellRoot {
                     window.focus(&self.focus_handle);
                 }
             }
+            LeaderAction::NewWorkspace => {
+                let name = format!("ws{}", self.workspaces.len() + 1);
+                let (terminal, gate) = match spawn_terminal(80, 24, &self.config) {
+                    Ok(pair) => pair,
+                    Err(e) => {
+                        log::error!(
+                            "gpui-shell: failed to spawn terminal for new workspace: {e:#}"
+                        );
+                        return;
+                    }
+                };
+                let terminal_id = self.next_terminal_id;
+                self.next_terminal_id += 1;
+                self.terminals.insert(terminal_id, terminal);
+                self.wakeup_gates.insert(terminal_id, gate);
+                self.workspaces.new_workspace(name);
+                self.workspaces.active_mut().tabs.new_tab("zsh");
+                self.workspaces
+                    .active_mut()
+                    .tab_panes
+                    .push(PaneForest::new(terminal_id));
+                self.tab_rename = None;
+            }
+            LeaderAction::CloseWorkspace => {
+                let ws_idx = self.workspaces.active_index();
+                self.close_workspace_at(ws_idx, true, cx);
+            }
+            LeaderAction::NextWorkspace => self.next_workspace(),
+            LeaderAction::PrevWorkspace => self.prev_workspace(),
         }
         cx.notify();
     }
@@ -410,5 +439,34 @@ impl GpuiShellRoot {
     pub(super) fn end_tab_rename(&mut self, cx: &mut Context<Self>) {
         self.tab_rename = None;
         cx.notify();
+    }
+
+    /// Switch to the workspace at `idx`. The only path any workspace switch
+    /// (keyboard here, a sidebar row click in Task 4) should go through --
+    /// centralizes clearing `tab_rename`, which every switch must do: a tab
+    /// id is only unique WITHIN its own workspace's `TabManager` (each has
+    /// its own counter starting at 0), so a rename left open across a
+    /// workspace switch could commit onto an unrelated tab that happens to
+    /// share the same numeric id in the newly active workspace.
+    #[allow(dead_code)]
+    pub(super) fn switch_workspace_to_index(&mut self, idx: usize) -> bool {
+        let switched = self.workspaces.switch_to_index(idx);
+        if switched {
+            self.tab_rename = None;
+        }
+        switched
+    }
+
+    /// See `switch_workspace_to_index`'s doc comment for why `tab_rename`
+    /// is cleared here too.
+    pub(super) fn next_workspace(&mut self) {
+        self.workspaces.next_workspace();
+        self.tab_rename = None;
+    }
+
+    /// See `switch_workspace_to_index`'s doc comment.
+    pub(super) fn prev_workspace(&mut self) {
+        self.workspaces.prev_workspace();
+        self.tab_rename = None;
     }
 }
