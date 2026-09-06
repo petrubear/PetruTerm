@@ -101,6 +101,22 @@ impl Render for GpuiShellRoot {
 
         let on_select_tab: tabs::TabSelectCallback =
             Rc::new(cx.listener(|this, idx: &usize, _window, cx| {
+                // Clicking a tab dismisses an in-progress rename rather than
+                // leaving it open on a tab the user has navigated away from.
+                // Without this the app reaches a dead end: `on_key_down`'s
+                // rename guard blocks every keyboard route back, and the
+                // renamed tab's own cell hosts the editor, so clicking it
+                // goes to the text field instead of switching tabs -- Escape
+                // becomes the only way out, which nothing signals.
+                //
+                // Dismiss discards the edit rather than committing it: an
+                // explicit click elsewhere is not a confirmation, and a
+                // silent rename to a half-typed string is the same class of
+                // surprise as the wrong-tab commit this pinning already
+                // fixed. Re-renaming is cheap; an unwanted rename is not.
+                if this.tab_rename.is_some() {
+                    this.end_tab_rename(cx);
+                }
                 if this.tabs.switch_to_index(*idx) {
                     cx.notify();
                 }
