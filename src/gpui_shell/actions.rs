@@ -191,7 +191,7 @@ impl GpuiShellRoot {
 
     /// Execute one resolved leader-key action (`on_key_down`'s leader
     /// dispatch branch). See `leader::LeaderAction`'s doc comment for why
-    /// the set stops at these ten variants.
+    /// the set stops at these eleven variants.
     pub(super) fn dispatch_leader_action(
         &mut self,
         action: LeaderAction,
@@ -245,6 +245,20 @@ impl GpuiShellRoot {
                 let rects = self.rect_cache.clone();
                 let rects = rects.borrow();
                 self.tab_panes[active].focus_dir(dir, &rects);
+            }
+            LeaderAction::ToggleAiPanel => {
+                self.chat.toggle(window, cx);
+                // `toggle` only ever moves focus TO the composer (opening);
+                // closing deliberately returns none, mirroring
+                // `end_tab_rename`'s division of labor. This is the other
+                // half: send focus back to the terminal right here rather
+                // than waiting on render()'s guard, which can't tell "the
+                // panel just closed" from "the composer still holds a stale
+                // focus handle" -- gpui doesn't clear a `FocusHandle`'s
+                // focused status just because its element left the tree.
+                if !self.chat.is_visible() {
+                    window.focus(&self.focus_handle);
+                }
             }
         }
         cx.notify();

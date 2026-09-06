@@ -1,16 +1,26 @@
 // gpui chrome migration (M2 Task 4): leader-key chorded dispatch.
 //
 // `LeaderAction` is a deliberately narrower type than the wgpu app's own
-// `Action` enum (`src/ui/palette/actions.rs`) -- it covers exactly the ten
-// leader-key actions this milestone ports (tabs, splits, pane focus/zoom/
-// close). AI/workspace/sidebar leader sub-prefixes ('a', 'e', 'W') and the
-// command palette itself are out of scope until later milestones.
+// `Action` enum (`src/ui/palette/actions.rs`) -- it covers exactly the
+// eleven leader-key actions ported so far (tabs, splits, pane focus/zoom/
+// close, plus M3b's `ToggleAiPanel`). The 'e' (explorer) and 'W' (workspace)
+// leader sub-prefixes and the command palette itself are still out of scope.
 //
 // `leader_map` (built once in `GpuiShellRoot::new` via `build_leader_map`)
 // is the data-driven half: it turns `config.keys`'s `LEADER`-scoped
 // `KeyBind`s (via `config::keybind_view::leader_bindings_view`) into this
 // enum, the same string-matching shape as `Action::from_str`
 // (`src/ui/palette/actions.rs:71-113`).
+//
+// M3b adds `ToggleAiPanel`, the milestone this doc comment used to say would
+// add AI/workspace/sidebar sub-prefixes. It is NOT seeded into
+// `leader_map` the way `ZoomPane`'s "z" is: `Leader a a` is a two-key
+// sub-prefix chord (`a` then `a`), and this map is keyed by a single string.
+// `input.rs`'s leader dispatch handles the `a`-prefix continuation directly,
+// constructing `LeaderAction::ToggleAiPanel` itself rather than looking it up
+// here. `TryFrom<&str>` still parses the string for consistency with every
+// other variant (and in case a future config surface ever needs to name it),
+// but nothing in this milestone calls it that way.
 
 use super::panes::FocusDir;
 use crate::config::schema::KeyBind;
@@ -30,6 +40,7 @@ pub enum LeaderAction {
     ClosePane,
     ZoomPane,
     FocusPane(FocusDir),
+    ToggleAiPanel,
 }
 
 impl TryFrom<&str> for LeaderAction {
@@ -50,6 +61,7 @@ impl TryFrom<&str> for LeaderAction {
             "FocusPaneRight" => Ok(LeaderAction::FocusPane(FocusDir::Right)),
             "FocusPaneUp" => Ok(LeaderAction::FocusPane(FocusDir::Up)),
             "FocusPaneDown" => Ok(LeaderAction::FocusPane(FocusDir::Down)),
+            "ToggleAiPanel" => Ok(LeaderAction::ToggleAiPanel),
             _ => Err(()),
         }
     }
@@ -90,7 +102,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_all_ten_action_strings() {
+    fn parses_all_eleven_action_strings() {
         assert_eq!(LeaderAction::try_from("NewTab"), Ok(LeaderAction::NewTab));
         assert_eq!(
             LeaderAction::try_from("CloseTab"),
@@ -133,6 +145,10 @@ mod tests {
         assert_eq!(
             LeaderAction::try_from("FocusPaneDown"),
             Ok(LeaderAction::FocusPane(FocusDir::Down))
+        );
+        assert_eq!(
+            LeaderAction::try_from("ToggleAiPanel"),
+            Ok(LeaderAction::ToggleAiPanel)
         );
         assert_eq!(LeaderAction::try_from("NotAnAction"), Err(()));
     }

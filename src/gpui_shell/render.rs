@@ -2,11 +2,20 @@
 // Split out of `mod.rs` for the 400-line convention.
 
 use std::rc::Rc;
+use std::time::Duration;
 
-use gpui::{div, prelude::*, Context, Render, Window};
+use gpui::{
+    div, ease_out_quint, prelude::*, px, Animation, AnimationExt as _, Context, Render, Window,
+};
 
 use super::pane_view::to_rgba;
-use super::{pane_view, status_bar, tabs, GpuiShellRoot};
+use super::{chat_panel, pane_view, status_bar, tabs, GpuiShellRoot};
+
+/// Duration of the drawer's opening grow animation (Step 3). Closing is
+/// instant -- see this file's own `render()` doc comment on the animated
+/// child for why gpui 0.2.2's `Animation`/`with_animation` only gets this
+/// one direction for free.
+const CHAT_PANEL_OPEN_ANIM: Duration = Duration::from_millis(180);
 
 impl Render for GpuiShellRoot {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -14,7 +23,17 @@ impl Render for GpuiShellRoot {
         // poll loop repaints at ~30Hz, so focusing unconditionally would tear
         // focus away from the rename editor ~30 times a second and make it
         // look like typing does nothing.
-        if self.tab_rename.is_none() {
+        //
+        // The chat composer's half of this guard (M3b) is keyed on
+        // `composer_focused` -- i.e. `is_focused(window)` -- NOT on
+        // `self.chat.is_visible()`. This is the same fix M3a shipped for
+        // `tab_rename` in `input.rs`'s key guard: the panel can be open
+        // while the terminal holds focus (the user clicked back into it),
+        // and a visibility-keyed guard here would then rip focus away from
+        // the terminal ~30 times a second right back to the composer,
+        // making it impossible to type into the terminal while the panel is
+        // open at all.
+        if self.tab_rename.is_none() && !self.chat.composer_focused(window, cx) {
             window.focus(&self.focus_handle);
         }
 
@@ -172,6 +191,45 @@ impl Render for GpuiShellRoot {
             status_bar::render_status_bar(&bar, &sb_colors)
         });
 
+        // Middle row: the pane tree plus, when open, the chat panel drawer --
+        // flex siblings in a row (this div's default flex direction), NOT a
+        // manually computed viewport split (§3.3: no `resize_terminals_
+        // for_panel` port). `pane_view.rs`'s `fit_terminal`/
+        // `on_children_prepainted` already resize each PTY to whatever box
+        // taffy hands it, so the terminal reflowing when the drawer opens or
+        // closes is just a consequence of this layout, not code this task
+        // has to write.
+        //
+        // The drawer only gets an ANIMATED width on open: gpui 0.2.2's
+        // `AnimationElement` (`with_animation`) restarts its clock from
+        // `Instant::now()` the first time a given element id is laid out
+        // after not appearing in the previous frame (`Window::
+        // with_element_state` drops per-id state for ids not touched last
+        // frame), which is exactly "the drawer just (re)appeared" -- so
+        // wrapping it here gives a real grow-in every time it opens. There
+        // is no equivalent for closing: this element is removed from the
+        // tree the instant `visible` flips false (`when` below), so there is
+        // no frame in which a shrinking width could be painted. Ship it
+        // unanimated on close rather than hand-rolling a tween in the poll
+        // loop to keep a "closing" copy of this div alive across frames.
+        let middle_row = div()
+            .flex()
+            .flex_1()
+            .min_h_0()
+            // `min_h_0`: a flex item's automatic minimum size is its content
+            // size, so without this the pane row refuses to shrink below the
+            // terminal grid it contains and pushes the tab bar off-screen on
+            // a small window.
+            .child(div().flex().flex_1().min_h_0().min_w_0().child(panes))
+            .when(self.chat.is_visible(), |el| {
+                let panel = chat_panel::render_chat_panel(&self.chat, &self.config.colors);
+                el.child(panel.with_animation(
+                    "chat-panel-drawer",
+                    Animation::new(CHAT_PANEL_OPEN_ANIM).with_easing(ease_out_quint()),
+                    |panel, delta| panel.w(px(chat_panel::PANEL_WIDTH_PX * delta)),
+                ))
+            });
+
         div()
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::on_key_down))
@@ -180,11 +238,7 @@ impl Render for GpuiShellRoot {
             .size_full()
             .bg(to_rgba(self.config.colors.background))
             .child(tab_bar)
-            // `min_h_0`: a flex item's automatic minimum size is its content
-            // size, so without this the pane row refuses to shrink below the
-            // terminal grid it contains and pushes the tab bar off-screen on
-            // a small window.
-            .child(div().flex().flex_1().min_h_0().child(panes))
+            .child(middle_row)
             .when_some(status_bar_row, |el, bar| el.child(bar))
     }
 }

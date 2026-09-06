@@ -4,6 +4,7 @@
 
 use gpui::{Context, Focusable, KeyDownEvent, Window};
 
+use super::leader::LeaderAction;
 use super::{panes, GpuiShellRoot};
 
 /// Maps a gpui named-key string to the resize direction it drives under
@@ -60,6 +61,21 @@ impl GpuiShellRoot {
             }
         }
 
+        // Same guard, same reasoning, for the chat composer (M3b): while it
+        // holds focus every key is either one of `TextInput`'s own bound
+        // actions (dispatched before this bubble listener runs) or a
+        // printable character routed through IME -- neither should also
+        // fall through to the PTY write at the end of this function. Keyed
+        // on `composer_focused` (== `is_focused(window)`), NOT on
+        // `self.chat.is_visible()`: the panel can be open while the
+        // terminal holds focus (the user clicked back into it), and a
+        // visibility-keyed guard would swallow every terminal keystroke in
+        // that state -- exactly M3a's shipped Critical, reproduced here if
+        // this guard checked the wrong thing.
+        if self.chat.composer_focused(window, cx) {
+            return;
+        }
+
         self.cursor_blink_on = true;
         self.cursor_last_blink = std::time::Instant::now();
 
@@ -109,6 +125,24 @@ impl GpuiShellRoot {
             self.leader_active = false;
             self.leader_deadline = None;
 
+            // 'a'-prefix continuation: a prior keypress (below) set
+            // `leader_prefix` to `Some('a')` and re-armed the leader
+            // timeout; this keypress is the second key of that two-key
+            // chord. Checked before every other leader-dispatch arm, the
+            // same position the wgpu build's own `leader_prefix` check
+            // occupies (`src/app/input/mod.rs:314`).
+            if let Some(prefix) = self.leader_prefix.take() {
+                if prefix == 'a' && event.keystroke.key == "a" {
+                    self.dispatch_leader_action(LeaderAction::ToggleAiPanel, window, cx);
+                }
+                // Every other `a`-prefix subkey (c/e/f/z in the wgpu build)
+                // is out of scope for this milestone -- see leader.rs's doc
+                // comment and the M3b plan's Scope section. An unrecognized
+                // subkey is simply dropped, matching the wgpu build's own
+                // `_ => {}` fallthrough.
+                return;
+            }
+
             // Leader + Option + Arrow → resize (TD-042 parity).
             if event.keystroke.modifiers.alt {
                 if let Some(dir) = arrow_key_to_focus_dir(&event.keystroke.key) {
@@ -127,6 +161,20 @@ impl GpuiShellRoot {
                     cx.notify();
                     return;
                 }
+            }
+
+            // Leader + a → enter the AI sub-prefix: re-arm the leader
+            // timeout and wait for the second key. Only "a" (below) is
+            // wired to anything this milestone.
+            if event.keystroke.key == "a" {
+                self.leader_active = true;
+                self.leader_prefix = Some('a');
+                self.leader_deadline = Some(
+                    std::time::Instant::now()
+                        + std::time::Duration::from_millis(self.config.leader.timeout_ms),
+                );
+                cx.notify();
+                return;
             }
 
             // Data-driven dispatch for this milestone's ten actions

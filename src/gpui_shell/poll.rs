@@ -109,6 +109,7 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                             if std::time::Instant::now() >= deadline {
                                 this.leader_active = false;
                                 this.leader_deadline = None;
+                                this.leader_prefix = None;
                                 should_notify = true; // status bar's leader indicator needs to clear
                             }
                         }

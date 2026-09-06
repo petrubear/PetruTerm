@@ -7,6 +7,7 @@
 // full key-event mapping.
 
 mod actions;
+mod chat_panel;
 mod config_watch;
 pub mod font_state;
 mod input;
@@ -132,6 +133,13 @@ pub struct GpuiShellRoot {
     /// arrow presses keep resizing without re-pressing the leader each time,
     /// matching `src/app/input/mod.rs`'s own `resize_mode` field.
     resize_mode: bool,
+    /// Set when a two-key leader sub-prefix (currently only `a`, for AI
+    /// actions) has been entered -- the wgpu build's own
+    /// `src/app/input/mod.rs` shape (`leader_prefix: Option<char>`), mirrored
+    /// here since `Leader a a` (M3b) is gpui_shell's first chord longer than
+    /// one key. `leader_active`/`leader_deadline` stay re-armed while this is
+    /// `Some` so the second key gets the same timeout as the first.
+    leader_prefix: Option<char>,
     /// Single-key leader dispatch table, built once from `config.keys`'s
     /// `LEADER`-scoped bindings (`leader::build_leader_map`). Rebuilt
     /// wholesale on every config reload alongside the rest of `self.config`.
@@ -164,6 +172,10 @@ pub struct GpuiShellRoot {
     /// editor on the cell whose `tab.id` matches it -- both independent of
     /// whichever tab happens to be active by the time either runs.
     tab_rename: Option<(usize, gpui::Entity<text_input::TextInput>)>,
+    /// The AI chat panel -- one global drawer, not one per pane (see
+    /// `chat_panel/mod.rs`'s doc comment on why the wgpu build's
+    /// `panel_id`/`set_active_terminal` plumbing has no equivalent here).
+    chat: chat_panel::ChatPanelView,
 }
 
 impl GpuiShellRoot {
@@ -192,6 +204,7 @@ impl GpuiShellRoot {
         let leader_map = leader::build_leader_map(
             &crate::config::keybind_view::leader_bindings_view(&config).bindings,
         );
+        let chat = chat_panel::ChatPanelView::new(cx, &config.colors);
 
         Self {
             tabs,
@@ -208,6 +221,7 @@ impl GpuiShellRoot {
             leader_active: false,
             leader_deadline: None,
             resize_mode: false,
+            leader_prefix: None,
             leader_map,
             // Same construction pattern as the wgpu app's own `tokio_rt`
             // field on its `App`/`Mux` struct (`src/app/ui/mod.rs`).
@@ -216,6 +230,7 @@ impl GpuiShellRoot {
             git_branch: status_bar::GitBranchState::default(),
             exit_code: status_bar::ExitCodeState::default(),
             tab_rename: None,
+            chat,
         }
     }
 }
