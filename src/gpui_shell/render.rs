@@ -24,7 +24,7 @@ impl Render for GpuiShellRoot {
         // focus away from the rename editor ~30 times a second and make it
         // look like typing does nothing.
         //
-        // The chat composer's half of this guard (M3b) is keyed on
+        // The chat composer's half of this guard (M3b Task 1) is keyed on
         // `composer_focused` -- i.e. `is_focused(window)` -- NOT on
         // `self.chat.is_visible()`. This is the same fix M3a shipped for
         // `tab_rename` in `input.rs`'s key guard: the panel can be open
@@ -33,7 +33,29 @@ impl Render for GpuiShellRoot {
         // the terminal ~30 times a second right back to the composer,
         // making it impossible to type into the terminal while the panel is
         // open at all.
-        if self.tab_rename.is_none() && !self.chat.composer_focused(window, cx) {
+        //
+        // Task 2 adds the `!self.chat.is_visible() ||` half: `/q` (typed
+        // into the composer, handled entirely inside a `cx.subscribe`
+        // callback with no `Window` available -- see
+        // `chat_panel::ChatPanelView::close`'s doc comment) can close the
+        // panel without ever calling `window.focus`, leaving
+        // `composer_focused` reporting stale "true" forever (gpui's
+        // `is_focused` is just an id comparison against `window.focus`;
+        // nothing clears it just because the composer's div stopped being
+        // rendered). Without this half, that guard's `!composer_focused`
+        // check would never fire again after a `/q` close, and every
+        // keystroke would keep landing on a composer that isn't even in the
+        // tree instead of the terminal -- a variant of M3a's own Critical,
+        // reached through a path (no `Window`) that `Leader a a`'s close
+        // (which fixes focus inline in `actions.rs`, `Window` in hand) never
+        // goes through. Safe to OR in: it only forces a refocus while the
+        // panel is already hidden, a state in which the composer can never
+        // legitimately hold focus, so it can't fight a real in-progress
+        // "typing in the open composer" case the way a guard checking
+        // "hide the composer whenever the panel is visible" would.
+        if self.tab_rename.is_none()
+            && (!self.chat.is_visible() || !self.chat.composer_focused(window, cx))
+        {
             window.focus(&self.focus_handle);
         }
 
@@ -212,6 +234,18 @@ impl Render for GpuiShellRoot {
         // no frame in which a shrinking width could be painted. Ship it
         // unanimated on close rather than hand-rolling a tween in the poll
         // loop to keep a "closing" copy of this div alive across frames.
+        //
+        // Populate the markdown wrapped-line cache for settled messages
+        // BEFORE the read-only `render_chat_panel` call below reads it
+        // (`ChatPanelView::sync_markdown_cache`'s own doc comment has the
+        // full reasoning) -- hoisted out of the `.when(...)` closure below
+        // so it runs against a plain `&mut self.chat`, not a value the
+        // closure would otherwise have to capture mutably alongside
+        // `&self.config` immutably.
+        if self.chat.is_visible() {
+            self.chat.sync_markdown_cache();
+        }
+
         let middle_row = div()
             .flex()
             .flex_1()
@@ -222,7 +256,11 @@ impl Render for GpuiShellRoot {
             // a small window.
             .child(div().flex().flex_1().min_h_0().min_w_0().child(panes))
             .when(self.chat.is_visible(), |el| {
-                let panel = chat_panel::render_chat_panel(&self.chat, &self.config.colors);
+                let panel = chat_panel::render_chat_panel(
+                    &self.chat,
+                    &self.config.llm,
+                    &self.config.colors,
+                );
                 el.child(panel.with_animation(
                     "chat-panel-drawer",
                     Animation::new(CHAT_PANEL_OPEN_ANIM).with_easing(ease_out_quint()),

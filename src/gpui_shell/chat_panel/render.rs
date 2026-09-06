@@ -8,13 +8,11 @@
 // `status_bar::render_status_bar` and `tabs::render_tab_bar` already went
 // through.
 //
-// Provider/model name (`build_panel_header`'s left label) is deliberately
-// NOT shown here: that data lives in `Config`, which this function's fixed
-// interface (`render_chat_panel(view, colors)`, consumed as-is by Tasks 2
-// and 3) does not receive. The header shows the panel's own state instead
-// (idle/loading/streaming/error) -- real content `ChatPanel` already tracks
-// without a `Config` reference. A model-name segment can be layered on once
-// Task 2 wires submission through `Config`'s LLM view, if wanted.
+// Provider/model name (`build_panel_header`'s left label) IS shown here as
+// of Task 2: `render_chat_panel` takes an extra `&LlmConfig` (the caller
+// already has `&self.config.llm` on hand in `gpui_shell::render`) purely for
+// that label -- `ChatPanelView` itself doesn't need `LlmConfig` for anything
+// else, so this stays a render-time parameter rather than a field.
 //
 // The header's close affordance is a text hint, not a clickable icon: wiring
 // a real click handler needs a `cx.listener` built where `cx` is in scope
@@ -26,30 +24,28 @@
 
 use gpui::{div, prelude::*, px, Div, FontWeight};
 
-use crate::config::schema::ColorScheme;
+use crate::config::schema::{ColorScheme, LlmConfig};
 use crate::llm::chat_panel::{ChatPanel, PanelState};
-use crate::llm::markdown::{parse_markdown, ParseState};
+use crate::llm::markdown::{parse_markdown, AnnotatedLine, ParseState};
 use crate::llm::{ChatMessage, ChatRole};
 
 use super::super::font_state;
 use super::super::pane_view::to_rgba;
 use super::markdown::render_line;
-use super::ChatPanelView;
+use super::{ChatPanelView, MARKDOWN_WRAP_WIDTH};
 
 /// Fixed drawer width (§3.3). Not yet user-resizable -- a future task's
 /// concern if the dogfood asks for it.
 pub const PANEL_WIDTH_PX: f32 = 480.0;
 
-/// Wide enough that `parse_markdown`'s own char-count wrapping never fires --
-/// gpui wraps instead (see `markdown.rs`'s doc comment).
-const MARKDOWN_WRAP_WIDTH: usize = 100_000;
-
 /// Build the chat panel's `div()` tree. Callers own visibility (only called
-/// `when view.is_visible()`) and width/animation (`render.rs`'s root layout
+/// `when view.is_visible()`), width/animation (`render.rs`'s root layout
 /// places this as a flex sibling of the pane tree and, on open, animates its
 /// width in -- see that module's own doc comment on gpui 0.2.2's animation
-/// API).
-pub fn render_chat_panel(view: &ChatPanelView, colors: &ColorScheme) -> Div {
+/// API), and the markdown cache (`view.sync_markdown_cache()` must run,
+/// against the same `&mut ChatPanelView` `gpui_shell::render` already holds,
+/// before this read-only call -- see `mod.rs`'s doc comment on that split).
+pub fn render_chat_panel(view: &ChatPanelView, llm: &LlmConfig, colors: &ColorScheme) -> Div {
     div()
         .flex()
         .flex_col()
@@ -59,13 +55,14 @@ pub fn render_chat_panel(view: &ChatPanelView, colors: &ColorScheme) -> Div {
         .bg(to_rgba(colors.ui_surface))
         .border_l_1()
         .border_color(to_rgba(colors.ui_border))
-        .child(render_header(&view.panel, colors))
+        .child(render_header(&view.panel, llm, colors))
         .child(render_message_list(&view.panel, colors))
         .child(render_composer(view, colors))
 }
 
-fn render_header(panel: &ChatPanel, colors: &ColorScheme) -> impl IntoElement {
+fn render_header(panel: &ChatPanel, llm: &LlmConfig, colors: &ColorScheme) -> impl IntoElement {
     let status = header_status(panel);
+    let short_model = short_model_name(&llm.model);
     div()
         .flex()
         .flex_row()
@@ -84,7 +81,16 @@ fn render_header(panel: &ChatPanel, colors: &ColorScheme) -> impl IntoElement {
                 .flex_row()
                 .items_center()
                 .gap_2()
-                .child(div().text_color(to_rgba(colors.ui_accent)).child("AI"))
+                .child(
+                    div()
+                        .text_color(to_rgba(colors.ui_accent))
+                        .child(format!("\u{2726} {short_model}")),
+                )
+                .child(
+                    div()
+                        .text_color(to_rgba(colors.ui_muted))
+                        .child(format!("\u{2502} {}:{}", llm.provider, llm.model)),
+                )
                 .when(!status.is_empty(), |el| {
                     el.child(div().text_color(to_rgba(colors.ui_muted)).child(status))
                 }),
@@ -94,6 +100,22 @@ fn render_header(panel: &ChatPanel, colors: &ColorScheme) -> impl IntoElement {
                 .text_color(to_rgba(colors.ui_muted))
                 .child("Leader a a to close"),
         )
+}
+
+/// Strip a `provider/model:tag` name down to its bare model name -- mirrors
+/// the wgpu build's own `short_chat_header_model_name`
+/// (`src/app/renderer/mod.rs`), minus its char-count truncation: that exists
+/// to fit a fixed terminal-cell header width, which doesn't apply to gpui's
+/// proportional text layout, so the full (short) name is shown here instead
+/// of an 8-character-truncated one.
+fn short_model_name(model: &str) -> &str {
+    model
+        .rsplit('/')
+        .next()
+        .unwrap_or(model)
+        .rsplit(':')
+        .next()
+        .unwrap_or(model)
 }
 
 fn header_status(panel: &ChatPanel) -> String {
@@ -129,18 +151,40 @@ fn render_message_list(panel: &ChatPanel, colors: &ColorScheme) -> impl IntoElem
         );
     }
 
-    for msg in &panel.messages {
-        list = list.child(render_message(msg, colors));
+    // Settled messages read from `panel`'s own wrapped-line cache
+    // (`ChatPanel::wrapped_message`, populated by `ensure_wrap_cache` --
+    // `ChatPanelView::sync_markdown_cache` calls it once per frame, from
+    // `gpui_shell::render`, BEFORE this read-only function runs). Task 1
+    // called `parse_markdown` fresh here for every message on every frame;
+    // once Task 2 makes the panel repaint at ~30Hz while streaming, that
+    // became an O(whole conversation) reparse per frame for content that,
+    // for every message except the very last one added, never changes again
+    // -- this cache turns "reparse everything" into "reparse only messages
+    // appended since the last frame that had a new one" (a no-op on every
+    // frame in between). The streaming buffer below is NOT cached: it
+    // mutates on every single token, so there is no repeated work to save,
+    // only the unavoidable cost of parsing the one in-flight message.
+    for (idx, msg) in panel.messages.iter().enumerate() {
+        list = list.child(render_message(msg, panel.wrapped_message(idx), colors));
     }
 
     if !panel.streaming_buf.is_empty() {
-        list = list.child(render_message_body(&panel.streaming_buf, colors));
+        let lines = parse_markdown(
+            &panel.streaming_buf,
+            MARKDOWN_WRAP_WIDTH,
+            &mut ParseState::default(),
+        );
+        list = list.child(render_message_body_lines(&lines, colors));
     }
 
     list
 }
 
-fn render_message(msg: &ChatMessage, colors: &ColorScheme) -> impl IntoElement {
+fn render_message(
+    msg: &ChatMessage,
+    lines: &[AnnotatedLine],
+    colors: &ColorScheme,
+) -> impl IntoElement {
     let label = match msg.role {
         ChatRole::User => "You",
         ChatRole::Assistant => "AI",
@@ -157,21 +201,12 @@ fn render_message(msg: &ChatMessage, colors: &ColorScheme) -> impl IntoElement {
                 .font_weight(FontWeight::BOLD)
                 .child(label),
         )
-        .child(render_message_body(&msg.content, colors))
+        .child(render_message_body_lines(lines, colors))
 }
 
-/// Parse `content` fresh on every render rather than reusing `ChatPanel`'s
-/// own `wrapped_cache` (`ensure_wrap_cache`/`wrapped_message`): that cache is
-/// keyed to a `width` in terminal columns and requires `&mut ChatPanel` to
-/// populate, which this module's read-only `render_chat_panel(&ChatPanelView,
-/// ..)` signature doesn't have. Per Step 5, `parse_markdown` is called
-/// directly with a large width purely for its styling annotations -- the
-/// cache exists for the wgpu renderer's own re-shaping-avoidance concern,
-/// which doesn't apply to gpui's element diffing.
-fn render_message_body(content: &str, colors: &ColorScheme) -> Div {
-    let lines = parse_markdown(content, MARKDOWN_WRAP_WIDTH, &mut ParseState::default());
+fn render_message_body_lines(lines: &[AnnotatedLine], colors: &ColorScheme) -> Div {
     let mut block = div().flex().flex_col();
-    for line in &lines {
+    for line in lines {
         block = block.child(render_line(line, colors));
     }
     block

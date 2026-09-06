@@ -51,6 +51,12 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                                     .bindings,
                             );
                             this.config = new_config;
+                            // M3b Task 2: pick up an edited `llm.*` block
+                            // (provider, model, api key, base url) on the
+                            // same hot-reload path every other config field
+                            // already uses, rather than only at startup and
+                            // via `/model`.
+                            this.chat.rewire_provider(&this.config.llm);
                             cx.notify();
                         })
                         .is_ok();
@@ -128,6 +134,15 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                     // sibling...) and it's also the only way to notice a
                     // `cd` typed into the still-focused pane, which has
                     // no dedicated event either.
+                    // AI streaming drain (M3b Task 2): bounded per tick
+                    // (`ChatPanelView::drain_events`'s own `AI_POLL_CAP`) so
+                    // a fast stream can't starve everything else sharing
+                    // this tick -- PTY reads, cursor blink, and the status
+                    // bar refresh right below it.
+                    if this.chat.drain_events() {
+                        should_notify = true;
+                    }
+
                     let active = this.tabs.active_index();
                     let active_tid = this.tab_panes[active].focused_terminal;
                     if let Some(terminal) = this.terminals.get(&active_tid) {

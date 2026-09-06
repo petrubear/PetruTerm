@@ -1,0 +1,239 @@
+// gpui chrome migration (M3b Task 2): streaming the direct-provider LLM
+// response into the chat panel, plus composer submit and slash-command
+// dispatch.
+//
+// Deliberately NOT here (see the M3b plan's Scope): the ACP agent backend,
+// tool-calling, and every confirm-prompt surface that exists only to gate a
+// tool call (`AiEvent::ToolStatus`/`ConfirmWrite`/`ConfirmRun`/`UndoState`,
+// and `ChatPanel::resolve_action_yes`/`resolve_action_no` for inline
+// actions) -- with no tools and no `agent_action::system_prompt_instructions`
+// appended to the system prompt below, there is nothing for those surfaces
+// to confirm. `SkillManager`/`McpManager`/`SteeringManager`/`ShellContext`
+// are likewise not wired: `/skills` and `/mcp` report their real (always
+// empty) state below rather than pretending to a manager that doesn't
+// exist, and the system message sent with every query is just
+// `crate::config::load_system_prompt()` -- no steering-file block, no
+// skill-match injection, no shell-context paragraph, no attached-file
+// content, all of which need one of those managers to produce.
+//
+// The wgpu build's `submit_ai_query` (`src/app/ui/mod.rs:794`) takes a
+// `cwd: PathBuf` purely to sandbox tool execution (`execute_tool`'s
+// `canon.starts_with(cwd)` check). `submit` below has no tools to sandbox,
+// so it takes no `cwd` -- a deliberate narrowing of the plan's sketched
+// `submit(&mut self, cwd, tokio_rt, cx)` signature, not an oversight.
+
+use gpui::{Context, Entity};
+
+use crate::llm::chat_panel::AiEvent;
+use crate::llm::ChatMessage;
+
+use super::super::text_input::{TextInput, TextInputEvent};
+use super::super::GpuiShellRoot;
+use super::ChatPanelView;
+
+/// Cap on `AiEvent`s drained per poll tick -- mirrors the wgpu build's own
+/// `AI_POLL_CAP` (`src/app/ui/mod.rs`), so a fast stream can't starve the
+/// rest of the 33ms tick's work (PTY reads, cursor blink, status bar refresh
+/// -- see `poll.rs`'s own doc comment on everything else sharing that tick).
+const AI_POLL_CAP: usize = 64;
+
+impl ChatPanelView {
+    /// Submit the current panel input to the configured provider.
+    /// Direct-provider path only (`LlmProvider::stream`) -- see this
+    /// module's doc comment for what that deliberately excludes.
+    pub fn submit(&mut self, tokio_rt: &tokio::runtime::Runtime, cx: &mut Context<GpuiShellRoot>) {
+        let Some(_user_content) = self.panel.submit_input() else {
+            return;
+        };
+        let Some(provider) = self.llm_provider.clone() else {
+            let msg = self
+                .llm_init_error
+                .clone()
+                .unwrap_or_else(|| "LLM is disabled in config.".into());
+            self.panel.mark_error(msg);
+            cx.notify();
+            return;
+        };
+        self.panel.context_window = provider.context_window();
+
+        let mut messages = vec![ChatMessage::system(crate::config::load_system_prompt())];
+        messages.extend(self.panel.messages.iter().cloned());
+
+        // TD-MEM-12 parity: cancel any previous in-flight stream before
+        // starting a new one.
+        if let Some(handle) = self.in_flight.take() {
+            handle.abort();
+        }
+        let tx = self.ai_tx.clone();
+        self.in_flight = Some(tokio_rt.spawn(async move {
+            use futures_util::StreamExt;
+            match provider.stream(messages).await {
+                Err(e) => {
+                    let _ = tx.send(AiEvent::Error(e.to_string()));
+                }
+                Ok(mut stream) => {
+                    while let Some(result) = stream.next().await {
+                        match result {
+                            Ok(tok) => {
+                                let _ = tx.send(AiEvent::Token(tok));
+                            }
+                            Err(e) => {
+                                let _ = tx.send(AiEvent::Error(e.to_string()));
+                                break;
+                            }
+                        }
+                    }
+                    let _ = tx.send(AiEvent::Done);
+                }
+            }
+        }));
+        // `submit_input()` above already flipped `panel.state` to `Loading`
+        // synchronously -- notify now so the header shows it immediately
+        // rather than waiting for the next 33ms poll tick.
+        cx.notify();
+    }
+
+    /// Drain up to `AI_POLL_CAP` pending events, feeding each to `panel`'s
+    /// existing handlers. Returns whether anything changed, which is
+    /// `poll.rs`'s cue to `cx.notify()`.
+    pub fn drain_events(&mut self) -> bool {
+        let mut changed = false;
+        for _ in 0..AI_POLL_CAP {
+            let Ok(event) = self.ai_rx.try_recv() else {
+                break;
+            };
+            changed = true;
+            match event {
+                AiEvent::Token(tok) => self.panel.append_token(&tok),
+                AiEvent::Done => self.panel.mark_done(),
+                AiEvent::Error(msg) => self.panel.mark_error(msg),
+                // `LlmProvider::stream` never produces a `Usage` event (only
+                // `agent_step`, the tool-calling path, returns usage stats)
+                // -- matched so this stays exhaustive against `AiEvent`,
+                // harmless no-op if one is ever sent down this channel.
+                AiEvent::Usage { .. } => {}
+                // Tool-calling confirm/status surfaces -- out of scope (see
+                // this module's doc comment). Never produced by the
+                // direct-provider path `submit` spawns; matched only for
+                // exhaustiveness.
+                AiEvent::ToolStatus { .. }
+                | AiEvent::ConfirmWrite { .. }
+                | AiEvent::ConfirmRun { .. }
+                | AiEvent::UndoState { .. } => {}
+            }
+        }
+        changed
+    }
+}
+
+impl GpuiShellRoot {
+    /// Wired once, from `ChatPanelView::new`, onto the composer's
+    /// `TextInputEvent` stream -- the same `cx.subscribe` shape
+    /// `begin_tab_rename` uses for the tab-rename editor (`actions.rs`).
+    pub(super) fn on_composer_event(
+        &mut self,
+        _composer: Entity<TextInput>,
+        event: &TextInputEvent,
+        cx: &mut Context<Self>,
+    ) {
+        match event {
+            TextInputEvent::Submit => self.handle_chat_composer_submit(cx),
+            // Escape-returns-focus-to-terminal-without-closing (the wgpu
+            // build's own behavior, `src/app/input/mod.rs`) is not wired by
+            // this task -- outside Task 2's named scope (composer submit +
+            // slash commands). Left a no-op, same as it was before this
+            // subscription existed at all.
+            TextInputEvent::Cancel => {}
+        }
+    }
+
+    /// `Enter` in the composer: submit as a query, or dispatch a `/`
+    /// command. Only acts while the panel is idle -- mirrors the wgpu
+    /// build's own gate around both branches (`src/app/input/mod.rs`'s
+    /// `ui.panel().is_idle()` check), so a stray Enter during an in-flight
+    /// request or an unresolved error can't discard the user's draft (the
+    /// composer is left untouched below when this returns early) or race
+    /// the active stream.
+    fn handle_chat_composer_submit(&mut self, cx: &mut Context<Self>) {
+        if !self.chat.panel.is_idle() {
+            return;
+        }
+        let text = self.chat.composer.read(cx).content().trim().to_string();
+        if text.is_empty() {
+            return;
+        }
+        self.chat
+            .composer
+            .update(cx, |input, cx| input.set_content("", cx));
+        if text.starts_with('/') {
+            self.handle_slash_command(&text, cx);
+        } else {
+            self.chat.panel.set_input(text);
+            self.chat.submit(&self.tokio_rt, cx);
+        }
+    }
+
+    /// Slash-command dispatch. Ported from `src/app/ui/providers.rs`'s
+    /// `handle_slash_command` (straight string dispatch plus
+    /// `messages.push`) minus: the ACP reconnect its `/agent` branch does
+    /// (no ACP session here to reconnect); `SkillManager`/`McpManager`
+    /// (neither is wired -- `/skills`/`/mcp` report their real, always-empty
+    /// state rather than pretending to a manager this shell doesn't have);
+    /// and the `wakeup_proxy` parameter (the winit wake has no gpui
+    /// equivalent and none is needed here either).
+    fn handle_slash_command(&mut self, input: &str, cx: &mut Context<Self>) {
+        let trimmed = input.trim_start_matches('/');
+        let (cmd, args) = trimmed
+            .split_once(' ')
+            .map_or((trimmed, ""), |(c, a)| (c, a.trim()));
+
+        match cmd {
+            "q" | "quit" => {
+                self.chat.close(cx);
+                return;
+            }
+            "clear" | "reset" => {
+                self.chat.panel.clear_messages();
+            }
+            "skills" => self.push_chat_message(
+                "No skills loaded. Skill injection is not wired in this build \
+                 (see the M3b plan's Scope -- deferred alongside the ACP/tool-calling \
+                 surfaces)."
+                    .to_string(),
+            ),
+            "mcp" => self.push_chat_message(
+                "No MCP servers connected. MCP is not wired in this build \
+                 (see the M3b plan's Scope -- deferred alongside the ACP/tool-calling \
+                 surfaces)."
+                    .to_string(),
+            ),
+            "model" => {
+                let msg = if args.is_empty() {
+                    format!(
+                        "Active: {}:{}",
+                        self.config.llm.provider, self.config.llm.model
+                    )
+                } else {
+                    self.config.llm.model = args.to_string();
+                    self.chat.rewire_provider(&self.config.llm);
+                    format!("Model set to '{args}'.")
+                };
+                self.push_chat_message(msg);
+            }
+            "agent" => self.push_chat_message(
+                "Agent backend is not available in this build (ACP is deferred -- see \
+                 the M3b plan's Scope). Use /model to change the direct-provider model."
+                    .to_string(),
+            ),
+            _ => self.push_chat_message(format!(
+                "Unknown command: /{cmd}. Try /clear, /skills, /mcp, /model, /agent or /quit."
+            )),
+        }
+        cx.notify();
+    }
+
+    fn push_chat_message(&mut self, text: String) {
+        self.chat.panel.messages.push(ChatMessage::assistant(text));
+        self.chat.panel.dirty = true;
+    }
+}

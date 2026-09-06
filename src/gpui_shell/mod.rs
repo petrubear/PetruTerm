@@ -204,7 +204,7 @@ impl GpuiShellRoot {
         let leader_map = leader::build_leader_map(
             &crate::config::keybind_view::leader_bindings_view(&config).bindings,
         );
-        let chat = chat_panel::ChatPanelView::new(cx, &config.colors);
+        let chat = chat_panel::ChatPanelView::new(cx, &config);
 
         Self {
             tabs,
