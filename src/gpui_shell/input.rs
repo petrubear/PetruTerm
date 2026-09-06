@@ -28,6 +28,24 @@ impl GpuiShellRoot {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // While a tab rename is in progress, every key belongs to the
+        // `TextInput` editor, full stop -- checked before anything else,
+        // including the leader-key arm below (renaming while chording the
+        // leader key makes no sense, and letting the leader arm run first
+        // would swallow keys the input never gets a chance to see). gpui
+        // dispatches bound actions (the input's own key bindings, scoped to
+        // its `"TextInput"` context) along the focus→root path BEFORE bubble
+        // listeners like this one run, so those still reach the input
+        // normally. What this guard stops is the *fall-through* case: plain
+        // printable characters have no action binding (they route through
+        // IME instead), so they always reach the tail of this function,
+        // which unconditionally writes to the focused terminal's PTY. Without
+        // this early return, every typed character during a rename would
+        // land in the input AND get written to the live shell behind it.
+        if self.tab_rename.is_some() {
+            return;
+        }
+
         self.cursor_blink_on = true;
         self.cursor_last_blink = std::time::Instant::now();
 

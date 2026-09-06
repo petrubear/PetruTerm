@@ -127,6 +127,18 @@ impl GpuiShellRoot {
             return false;
         };
         self.tabs.close_tab(tab_id);
+        // A rename pinned to the tab being closed would otherwise survive as
+        // a live `TextInput` entity with no cell left to render it into --
+        // `render_tab_bar` would silently stop drawing it -- and its next
+        // Enter would call `rename_tab` on an id that no longer exists (a
+        // harmless no-op, but the editor should have gone away with the tab).
+        if self
+            .tab_rename
+            .as_ref()
+            .is_some_and(|(id, _)| *id == tab_id)
+        {
+            self.tab_rename = None;
+        }
         if tab_idx < self.tab_panes.len() {
             let forest = self.tab_panes.remove(tab_idx);
             for id in forest.root.leaf_ids() {
@@ -240,8 +252,14 @@ impl GpuiShellRoot {
 
     /// Open an editable field over the active tab's label, seeded with its
     /// current title and focused so the next keystroke goes to it.
+    ///
+    /// Pinned to the active tab's **id** at the moment the rename starts, not
+    /// to "whichever tab is active" -- the active tab can change while the
+    /// editor is still open (`Cmd+2`, `Leader n`, a tab click), and the
+    /// commit below must land on the tab the user actually opened the editor
+    /// for, not whatever happens to be active when Enter is pressed.
     pub(super) fn begin_tab_rename(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(title) = self.tabs.active_tab().map(|t| t.title.clone()) else {
+        let Some((tab_id, title)) = self.tabs.active_tab().map(|t| (t.id, t.title.clone())) else {
             return;
         };
         let colors = self.config.colors.clone();
@@ -250,14 +268,14 @@ impl GpuiShellRoot {
         // Subscribe before storing: the parent owns the outcome, so Enter and
         // Escape resolve here rather than inside the primitive, which has no
         // idea what is being renamed.
-        cx.subscribe(&input, |this, input, event, cx| {
+        cx.subscribe(&input, move |this, input, event, cx| {
             match event {
                 text_input::TextInputEvent::Submit => {
                     let name = input.read(cx).content().trim().to_string();
                     // An all-whitespace name would render as a blank pill with
                     // no way to tell which tab it is; treat it as a cancel.
                     if !name.is_empty() {
-                        this.tabs.rename_active(name);
+                        this.tabs.rename_tab(tab_id, name);
                     }
                 }
                 text_input::TextInputEvent::Cancel => {}
@@ -267,7 +285,7 @@ impl GpuiShellRoot {
         .detach();
 
         input.focus_handle(cx).focus(window);
-        self.tab_rename = Some(input);
+        self.tab_rename = Some((tab_id, input));
         cx.notify();
     }
 

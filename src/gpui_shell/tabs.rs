@@ -155,6 +155,19 @@ impl TabManager {
         }
     }
 
+    /// Rename the tab with the given id, wherever it currently sits and
+    /// regardless of which tab is active. Returns whether a tab with that id
+    /// was found. Used by `gpui_shell`'s rename flow, which pins its edit to
+    /// a tab id rather than "the active tab" precisely so a tab switch mid-
+    /// rename can't redirect the commit to the wrong tab.
+    pub fn rename_tab(&mut self, id: usize, title: impl Into<String>) -> bool {
+        let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) else {
+            return false;
+        };
+        tab.title = title.into();
+        true
+    }
+
     pub fn active_tab(&self) -> Option<&Tab> {
         self.tabs.get(self.active)
     }
@@ -197,21 +210,25 @@ pub fn render_tab_bar(
     tabs: &TabManager,
     colors: &ColorScheme,
     on_select: TabSelectCallback,
-    rename_editor: Option<gpui::AnyElement>,
+    rename: Option<(usize, gpui::AnyElement)>,
 ) -> Div {
     let active_index = tabs.active_index();
     let accent = to_rgba(tabs.active_accent(colors.ui_accent));
     let surface = to_rgba(colors.ui_surface);
-    // `rename_editor` can't be cloned into every loop iteration (`AnyElement`
-    // isn't `Clone`), and `.children()`'s closure must be `FnMut` -- so it's
-    // built out here and `take()`n exactly once, on the active tab's cell.
-    let mut rename_editor = rename_editor;
+    // `rename`'s element can't be cloned into every loop iteration
+    // (`AnyElement` isn't `Clone`), and `.children()`'s closure must be
+    // `FnMut` -- so it's built out here and `take()`n exactly once, on the
+    // cell whose tab id matches (NOT on `is_active`: the rename is pinned to
+    // a tab id precisely so it keeps rendering on the right cell even after
+    // a tab switch moves `is_active` elsewhere).
+    let mut rename = rename;
     let cells: Vec<_> = tabs
         .tabs()
         .iter()
         .enumerate()
         .map(|(idx, tab)| {
             let is_active = idx == active_index;
+            let is_renaming = rename.as_ref().is_some_and(|(id, _)| *id == tab.id);
             let on_select = on_select.clone();
             let cell = div()
                 .px_2()
@@ -221,8 +238,8 @@ pub fn render_tab_bar(
                 .on_mouse_down(MouseButton::Left, move |_: &MouseDownEvent, window, cx| {
                     on_select(&idx, window, cx)
                 });
-            let cell = if is_active && rename_editor.is_some() {
-                cell.child(rename_editor.take().expect("checked is_some"))
+            let cell = if is_renaming {
+                cell.child(rename.take().expect("checked is_some").1)
             } else {
                 cell.child(tab_display_label(&tab.title, idx, is_active, None))
             };
@@ -334,5 +351,35 @@ mod tab_manager_tests {
 
         assert_eq!(mgr.active_index(), 0);
         assert_eq!(mgr.tabs()[mgr.active_index()].title, "a");
+    }
+
+    #[test]
+    fn rename_tab_by_id_renames_a_non_active_tab_and_leaves_active_alone() {
+        let mut mgr = TabManager::new();
+        let a = mgr.new_tab("a");
+        let _b = mgr.new_tab("b");
+        // new_tab() leaves "b" active; renaming by "a"'s id must not touch
+        // whichever tab is active -- this is the exact regression a
+        // rename-by-"active tab" implementation would get wrong if the
+        // active tab changed after the rename editor was opened for `a`.
+        assert_eq!(mgr.tabs()[mgr.active_index()].title, "b");
+
+        assert!(mgr.rename_tab(a, "notes"));
+
+        assert_eq!(mgr.tabs()[0].title, "notes");
+        assert_eq!(mgr.tabs()[mgr.active_index()].title, "b");
+    }
+
+    #[test]
+    fn rename_tab_with_unknown_id_returns_false_and_mutates_nothing() {
+        let mut mgr = TabManager::new();
+        let _a = mgr.new_tab("a");
+        let _b = mgr.new_tab("b");
+        let titles_before: Vec<_> = mgr.tabs().iter().map(|t| t.title.clone()).collect();
+
+        assert!(!mgr.rename_tab(999, "notes"));
+
+        let titles_after: Vec<_> = mgr.tabs().iter().map(|t| t.title.clone()).collect();
+        assert_eq!(titles_before, titles_after);
     }
 }

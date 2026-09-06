@@ -105,16 +105,11 @@ impl Render for GpuiShellRoot {
                     cx.notify();
                 }
             }));
-        let rename_editor = self
+        let rename = self
             .tab_rename
             .as_ref()
-            .map(|input| input.clone().into_any_element());
-        let tab_bar = tabs::render_tab_bar(
-            &self.tabs,
-            &self.config.colors,
-            on_select_tab,
-            rename_editor,
-        );
+            .map(|(id, input)| (*id, input.clone().into_any_element()));
+        let tab_bar = tabs::render_tab_bar(&self.tabs, &self.config.colors, on_select_tab, rename);
 
         // Status bar row -- built from the poll-loop-refreshed cwd/git-branch/
         // exit-code state above plus this frame's leader/zoom state, same

@@ -155,7 +155,15 @@ pub struct GpuiShellRoot {
     /// answered. Owning it here (rather than inside `TabManager`) keeps the
     /// tab data model free of gpui types, the same separation `StatusBar` and
     /// `PaneForest` already keep.
-    tab_rename: Option<gpui::Entity<text_input::TextInput>>,
+    ///
+    /// Pinned to the target tab's **id** (`Tab.id`), not its index or "the
+    /// active tab" -- the active tab can change out from under a rename
+    /// (`Cmd+2`, `Leader n`, a tab click) while the editor is still open, and
+    /// ids (unlike indices) stay stable across that. Commit resolves against
+    /// this id via `TabManager::rename_tab`, and `render_tab_bar` places the
+    /// editor on the cell whose `tab.id` matches it -- both independent of
+    /// whichever tab happens to be active by the time either runs.
+    tab_rename: Option<(usize, gpui::Entity<text_input::TextInput>)>,
 }
 
 impl GpuiShellRoot {
