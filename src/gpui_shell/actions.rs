@@ -1,14 +1,16 @@
-// gpui chrome migration (M2 Task 5b): pane/tab lifecycle actions --
-// splitting, closing, zooming, and leader-action dispatch. Split out of
-// `mod.rs` for the 400-line convention.
+// gpui chrome migration (M2 Task 5b): pane/tab/workspace lifecycle actions --
+// splitting, closing, reaping, zooming, and workspace switching.
+// `dispatch_leader_action` (`leader_dispatch.rs`) and the tab/workspace
+// rename flows (`rename.rs`) were split out of this file post-M3c-Task-4 for
+// the 400-line convention; this file itself was originally split out of
+// `mod.rs` for the same reason.
 
 use std::rc::Rc;
 
-use gpui::{App, AppContext, Context, Focusable, Window};
+use gpui::{App, Context};
 
-use super::leader::LeaderAction;
-use super::panes::{PaneForest, SplitDir};
-use super::{mouse, rasterize, spawn_terminal, text_input, GpuiShellRoot};
+use super::panes::SplitDir;
+use super::{mouse, rasterize, spawn_terminal, GpuiShellRoot};
 
 impl GpuiShellRoot {
     /// Spawn a terminal for a new pane and split the focused one around it.
@@ -277,172 +279,6 @@ impl GpuiShellRoot {
         };
     }
 
-    /// Execute one resolved leader-key action (`on_key_down`'s leader
-    /// dispatch branch). See `leader::LeaderAction`'s doc comment for why
-    /// the set stops at these eleven variants.
-    pub(super) fn dispatch_leader_action(
-        &mut self,
-        action: LeaderAction,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        match action {
-            LeaderAction::NewTab => {
-                let (terminal, gate) = match spawn_terminal(80, 24, &self.config) {
-                    Ok(pair) => pair,
-                    Err(e) => {
-                        log::error!("gpui-shell: failed to spawn terminal for new tab: {e:#}");
-                        return;
-                    }
-                };
-                let terminal_id = self.next_terminal_id;
-                self.next_terminal_id += 1;
-                self.terminals.insert(terminal_id, terminal);
-                self.wakeup_gates.insert(terminal_id, gate);
-                let ws = self.workspaces.active_mut();
-                ws.tabs.new_tab("zsh");
-                ws.tab_panes.push(PaneForest::new(terminal_id));
-                // Same reasoning as `split_focused`: a zoomed pane from the
-                // tab being left would otherwise linger, filling the window
-                // even after the new tab (which has nothing zoomed) becomes
-                // active.
-                ws.zoomed_pane = None;
-            }
-            LeaderAction::CloseTab => {
-                // Mirrors `Mux::cmd_close_tab` (src/app/mux/mod.rs:792-807),
-                // via the shared `close_tab_at` helper (also used by
-                // `on_terminal_exited` for the "shell exited as a tab's
-                // last pane" case) so the two close paths can't drift
-                // apart. `signal_shells: true` since this tab's shells may
-                // still be alive (the user is closing it explicitly, not
-                // reacting to an exit already observed).
-                let ws_idx = self.workspaces.active_index();
-                let tab_idx = self.workspaces.active().tabs.active_index();
-                self.close_tab_at(ws_idx, tab_idx, true, cx);
-            }
-            LeaderAction::NextTab => self.workspaces.active_mut().tabs.next_tab(),
-            LeaderAction::PrevTab => self.workspaces.active_mut().tabs.prev_tab(),
-            LeaderAction::RenameTab => self.begin_tab_rename(window, cx),
-            LeaderAction::SplitHorizontal => self.split_focused(SplitDir::Horizontal),
-            LeaderAction::SplitVertical => self.split_focused(SplitDir::Vertical),
-            LeaderAction::ClosePane => self.close_focused_pane(cx),
-            LeaderAction::ZoomPane => self.toggle_zoom(),
-            LeaderAction::FocusPane(dir) => {
-                let active = self.workspaces.active().tabs.active_index();
-                // Clone the Rc first, same reason as `on_drag` in render():
-                // `focus_dir` needs `&mut self.workspaces.active_mut().
-                // tab_panes[..]` and `&self.rect_cache`'s contents at once,
-                // which a single `self.` borrow of both fields can't
-                // express.
-                let rects = self.rect_cache.clone();
-                let rects = rects.borrow();
-                self.workspaces.active_mut().tab_panes[active].focus_dir(dir, &rects);
-            }
-            LeaderAction::ToggleAiPanel => {
-                self.chat.toggle(window, cx);
-                // `toggle` only ever moves focus TO the composer (opening);
-                // closing deliberately returns none, mirroring
-                // `end_tab_rename`'s division of labor. This is the other
-                // half: send focus back to the terminal right here rather
-                // than waiting on render()'s guard, which can't tell "the
-                // panel just closed" from "the composer still holds a stale
-                // focus handle" -- gpui doesn't clear a `FocusHandle`'s
-                // focused status just because its element left the tree.
-                if !self.chat.is_visible() {
-                    window.focus(&self.focus_handle);
-                }
-            }
-            LeaderAction::NewWorkspace => {
-                let name = format!("ws{}", self.workspaces.len() + 1);
-                let (terminal, gate) = match spawn_terminal(80, 24, &self.config) {
-                    Ok(pair) => pair,
-                    Err(e) => {
-                        log::error!(
-                            "gpui-shell: failed to spawn terminal for new workspace: {e:#}"
-                        );
-                        return;
-                    }
-                };
-                let terminal_id = self.next_terminal_id;
-                self.next_terminal_id += 1;
-                self.terminals.insert(terminal_id, terminal);
-                self.wakeup_gates.insert(terminal_id, gate);
-                self.workspaces.new_workspace(name);
-                self.workspaces.active_mut().tabs.new_tab("zsh");
-                self.workspaces
-                    .active_mut()
-                    .tab_panes
-                    .push(PaneForest::new(terminal_id));
-                self.tab_rename = None;
-            }
-            LeaderAction::CloseWorkspace => {
-                let ws_idx = self.workspaces.active_index();
-                self.close_workspace_at(ws_idx, true, cx);
-            }
-            LeaderAction::NextWorkspace => self.next_workspace(),
-            LeaderAction::PrevWorkspace => self.prev_workspace(),
-            LeaderAction::RenameWorkspace => self.begin_workspace_rename(window, cx),
-            LeaderAction::ToggleWorkspaceSidebar => self.sidebar.toggle(),
-        }
-        cx.notify();
-    }
-
-    /// Open an editable field over the active tab's label, seeded with its
-    /// current title and focused so the next keystroke goes to it.
-    ///
-    /// Pinned to the active tab's **id** at the moment the rename starts, not
-    /// to "whichever tab is active" -- the active tab can change while the
-    /// editor is still open (`Cmd+2`, `Leader n`, a tab click), and the
-    /// commit below must land on the tab the user actually opened the editor
-    /// for, not whatever happens to be active when Enter is pressed.
-    pub(super) fn begin_tab_rename(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some((tab_id, title)) = self
-            .workspaces
-            .active()
-            .tabs
-            .active_tab()
-            .map(|t| (t.id, t.title.clone()))
-        else {
-            return;
-        };
-        let colors = self.config.colors.clone();
-        let input = cx.new(|cx| text_input::TextInput::new(cx, &colors, title, "tab name"));
-
-        // Subscribe before storing: the parent owns the outcome, so Enter and
-        // Escape resolve here rather than inside the primitive, which has no
-        // idea what is being renamed.
-        cx.subscribe(&input, move |this, input, event, cx| {
-            match event {
-                text_input::TextInputEvent::Submit => {
-                    let name = input.read(cx).content().trim().to_string();
-                    // An all-whitespace name would render as a blank pill with
-                    // no way to tell which tab it is; treat it as a cancel.
-                    if !name.is_empty() {
-                        this.workspaces.active_mut().tabs.rename_tab(tab_id, name);
-                    }
-                }
-                text_input::TextInputEvent::Cancel => {}
-            }
-            this.end_tab_rename(cx);
-        })
-        .detach();
-
-        input.focus_handle(cx).focus(window);
-        self.tab_rename = Some((tab_id, input));
-        cx.notify();
-    }
-
-    /// Close the rename editor. Deliberately does NOT focus anything: it is
-    /// reached from a `cx.subscribe` closure, which is handed no `Window`,
-    /// and `FocusHandle::focus` needs one. Clearing the field is enough --
-    /// the next render hits Step 3's `if self.tab_rename.is_none()` guard and
-    /// returns focus to the terminal on its own, which also keeps exactly one
-    /// place deciding who owns focus.
-    pub(super) fn end_tab_rename(&mut self, cx: &mut Context<Self>) {
-        self.tab_rename = None;
-        cx.notify();
-    }
-
     /// Switch to the workspace at `idx`. The only path any workspace switch
     /// (keyboard here, a sidebar row click in Task 4) should go through --
     /// centralizes clearing `tab_rename`, which every switch must do: a tab
@@ -469,45 +305,5 @@ impl GpuiShellRoot {
     pub(super) fn prev_workspace(&mut self) {
         self.workspaces.prev_workspace();
         self.tab_rename = None;
-    }
-
-    /// Open an editable field over the active workspace's sidebar row,
-    /// seeded with its current name and focused so the next keystroke goes
-    /// to it. Forces the sidebar open first (`sidebar.show()`) so the
-    /// editor -- rendered inline in that row, same as a tab rename renders
-    /// inline in the tab bar -- is never focused while invisible.
-    pub(super) fn begin_workspace_rename(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.sidebar.show();
-        let ws_id = self.workspaces.active_id();
-        let name = self.workspaces.active().name.clone();
-        let colors = self.config.colors.clone();
-        let input = cx.new(|cx| text_input::TextInput::new(cx, &colors, name, "workspace name"));
-
-        cx.subscribe(&input, move |this, input, event, cx| {
-            match event {
-                text_input::TextInputEvent::Submit => {
-                    let name = input.read(cx).content().trim().to_string();
-                    if !name.is_empty() {
-                        this.workspaces.rename_workspace(ws_id, name);
-                    }
-                }
-                text_input::TextInputEvent::Cancel => {}
-            }
-            this.end_workspace_rename(cx);
-        })
-        .detach();
-
-        input.focus_handle(cx).focus(window);
-        self.workspace_rename = Some((ws_id, input));
-        cx.notify();
-    }
-
-    /// Close the rename editor. Deliberately does NOT focus anything, same
-    /// reasoning as `end_tab_rename`: reached from a `cx.subscribe` closure
-    /// with no `Window`, and `render()`'s own guard (Step 10) reclaims
-    /// focus for the terminal on the very next frame.
-    pub(super) fn end_workspace_rename(&mut self, cx: &mut Context<Self>) {
-        self.workspace_rename = None;
-        cx.notify();
     }
 }
