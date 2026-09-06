@@ -303,8 +303,8 @@ impl GpuiShellRoot {
         if let Some(cmd) = self.ai_block.block.command_to_run() {
             let mut data = cmd.into_bytes();
             data.push(b'\r');
-            let active = self.tabs.active_index();
-            let active_tid = self.tab_panes[active].focused_terminal;
+            let active_ws = self.workspaces.active();
+            let active_tid = active_ws.tab_panes[active_ws.tabs.active_index()].focused_terminal;
             if let Some(terminal) = self.terminals.get(&active_tid) {
                 terminal.write_input(&data);
             }

@@ -155,8 +155,8 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                         should_notify = true;
                     }
 
-                    let active = this.tabs.active_index();
-                    let active_tid = this.tab_panes[active].focused_terminal;
+                    let active = this.workspaces.active().tabs.active_index();
+                    let active_tid = this.workspaces.active().tab_panes[active].focused_terminal;
                     if let Some(terminal) = this.terminals.get(&active_tid) {
                         let pid = terminal.child_pid;
 

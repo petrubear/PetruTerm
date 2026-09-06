@@ -101,8 +101,8 @@ impl GpuiShellRoot {
         if self.resize_mode {
             if event.keystroke.modifiers.alt {
                 if let Some(dir) = arrow_key_to_focus_dir(&event.keystroke.key) {
-                    let active = self.tabs.active_index();
-                    self.tab_panes[active].adjust_ratio(dir, 0.05);
+                    let active = self.workspaces.active().tabs.active_index();
+                    self.workspaces.active_mut().tab_panes[active].adjust_ratio(dir, 0.05);
                     cx.notify();
                     return;
                 }
@@ -157,8 +157,8 @@ impl GpuiShellRoot {
             // Leader + Option + Arrow → resize (TD-042 parity).
             if event.keystroke.modifiers.alt {
                 if let Some(dir) = arrow_key_to_focus_dir(&event.keystroke.key) {
-                    let active = self.tabs.active_index();
-                    self.tab_panes[active].adjust_ratio(dir, 0.05);
+                    let active = self.workspaces.active().tabs.active_index();
+                    self.workspaces.active_mut().tab_panes[active].adjust_ratio(dir, 0.05);
                     self.resize_mode = true; // stay in resize mode for subsequent arrows
                     cx.notify();
                     return;
@@ -168,7 +168,7 @@ impl GpuiShellRoot {
             // Leader + 1-9 → select tab by index (hardcoded, like Cmd+1-9).
             if let Ok(n) = event.keystroke.key.parse::<usize>() {
                 if (1..=9).contains(&n) {
-                    self.tabs.switch_to_index(n - 1);
+                    self.workspaces.active_mut().tabs.switch_to_index(n - 1);
                     cx.notify();
                     return;
                 }
@@ -233,14 +233,15 @@ impl GpuiShellRoot {
         if event.keystroke.modifiers.platform {
             if let Ok(n) = event.keystroke.key.parse::<usize>() {
                 if (1..=9).contains(&n) {
-                    self.tabs.switch_to_index(n - 1);
+                    self.workspaces.active_mut().tabs.switch_to_index(n - 1);
                     cx.notify();
                     return;
                 }
             }
         }
 
-        let active_tid = self.tab_panes[self.tabs.active_index()].focused_terminal;
+        let active_ws = self.workspaces.active();
+        let active_tid = active_ws.tab_panes[active_ws.tabs.active_index()].focused_terminal;
         let Some(terminal) = self.terminals.get(&active_tid) else {
             return;
         };

@@ -27,20 +27,21 @@ impl GpuiShellRoot {
         self.next_terminal_id += 1;
         self.terminals.insert(terminal_id, terminal);
         self.wakeup_gates.insert(terminal_id, gate);
-        let active = self.tabs.active_index();
-        self.tab_panes[active].split(dir, terminal_id);
+        let ws = self.workspaces.active_mut();
+        let active = ws.tabs.active_index();
+        ws.tab_panes[active].split(dir, terminal_id);
         // Splitting while zoomed would otherwise create a pane the user
         // can't see (the zoomed one still fills the window) and move focus
         // to it -- their next keystroke would go somewhere invisible.
-        self.zoomed_pane = None;
+        ws.zoomed_pane = None;
     }
 
     /// Close the focused pane and reap its terminal. A no-op when it's the
     /// tab's last pane (`PaneForest::close_focused` refuses that case --
     /// closing the last pane is closing the tab, which is Task 4's job).
     pub(super) fn close_focused_pane(&mut self, cx: &mut App) {
-        let active = self.tabs.active_index();
-        let Some(closed) = self.tab_panes[active].close_focused() else {
+        let active = self.workspaces.active().tabs.active_index();
+        let Some(closed) = self.workspaces.active_mut().tab_panes[active].close_focused() else {
             return;
         };
         // SIGHUP the shell before dropping our Rc<Terminal> (below).
@@ -77,14 +78,25 @@ impl GpuiShellRoot {
     /// doc comment describes applies, and SIGHUP'ing an already-reaped pid
     /// risks hitting a since-reused pid for no benefit.
     pub(super) fn on_terminal_exited(&mut self, terminal_id: usize, cx: &mut Context<Self>) {
-        let Some(tab_idx) = self
-            .tab_panes
-            .iter()
-            .position(|p| p.root.leaf_ids().contains(&terminal_id))
-        else {
+        let mut found = None;
+        for (ws_idx, ws) in self.workspaces.workspaces().iter().enumerate() {
+            if let Some(tab_idx) = ws
+                .tab_panes
+                .iter()
+                .position(|p| p.root.leaf_ids().contains(&terminal_id))
+            {
+                found = Some((ws_idx, tab_idx));
+                break;
+            }
+        }
+        let Some((ws_idx, tab_idx)) = found else {
             return;
         };
-        if self.tab_panes[tab_idx].close_specific(terminal_id) {
+        let closed_here = self
+            .workspaces
+            .workspace_mut(ws_idx)
+            .is_some_and(|w| w.tab_panes[tab_idx].close_specific(terminal_id));
+        if closed_here {
             self.reap_pane(terminal_id, cx);
             return;
         }
@@ -92,7 +104,7 @@ impl GpuiShellRoot {
         // close_tab_at's own leaf loop will then find exactly one leaf
         // (terminal_id itself), so signal_shells: false is always correct
         // here, never a guess.
-        self.close_tab_at(tab_idx, false, cx);
+        self.close_tab_at(ws_idx, tab_idx, false, cx);
     }
 
     /// Close the tab at `tab_idx` (not necessarily the active one -- a
@@ -113,25 +125,49 @@ impl GpuiShellRoot {
     /// (`on_terminal_exited`, whose sole leaf is already known dead).
     /// Returns whether a tab was actually closed (false only if `tab_idx`
     /// didn't name a real tab -- quitting the app counts as "closed").
+    /// `ws_idx` names which workspace's tab list `tab_idx` indexes into,
+    /// since callers now span workspaces via `on_terminal_exited`.
     pub(super) fn close_tab_at(
         &mut self,
+        ws_idx: usize,
         tab_idx: usize,
         signal_shells: bool,
         cx: &mut Context<Self>,
     ) -> bool {
-        if self.tabs.tab_count() <= 1 {
-            cx.quit();
-            return true;
-        }
-        let Some(tab_id) = self.tabs.tabs().get(tab_idx).map(|t| t.id) else {
+        let Some(tab_count) = self
+            .workspaces
+            .workspace_mut(ws_idx)
+            .map(|w| w.tabs.tab_count())
+        else {
             return false;
         };
-        self.tabs.close_tab(tab_id);
+        if tab_count <= 1 {
+            // A workspace can't render with zero tabs (`render()` indexes
+            // its active tab's pane tree unconditionally) -- so closing a
+            // workspace's last tab closes the WORKSPACE, unless it's also
+            // the app's last workspace, in which case there is nowhere left
+            // to fall back to and the whole app quits (unchanged from this
+            // function's pre-M3c behavior for the single-workspace case).
+            if self.workspaces.len() <= 1 {
+                cx.quit();
+                return true;
+            }
+            return self.close_workspace_at(ws_idx, signal_shells, cx);
+        }
+        let Some(tab_id) = self
+            .workspaces
+            .workspace_mut(ws_idx)
+            .and_then(|w| w.tabs.tabs().get(tab_idx).map(|t| t.id))
+        else {
+            return false;
+        };
+        self.workspaces
+            .workspace_mut(ws_idx)
+            .expect("checked above")
+            .tabs
+            .close_tab(tab_id);
         // A rename pinned to the tab being closed would otherwise survive as
-        // a live `TextInput` entity with no cell left to render it into --
-        // `render_tab_bar` would silently stop drawing it -- and its next
-        // Enter would call `rename_tab` on an id that no longer exists (a
-        // harmless no-op, but the editor should have gone away with the tab).
+        // a live `TextInput` entity with no cell left to render it into.
         if self
             .tab_rename
             .as_ref()
@@ -139,8 +175,14 @@ impl GpuiShellRoot {
         {
             self.tab_rename = None;
         }
-        if tab_idx < self.tab_panes.len() {
-            let forest = self.tab_panes.remove(tab_idx);
+        let removed_forest = self.workspaces.workspace_mut(ws_idx).and_then(|w| {
+            if tab_idx < w.tab_panes.len() {
+                Some(w.tab_panes.remove(tab_idx))
+            } else {
+                None
+            }
+        });
+        if let Some(forest) = removed_forest {
             for id in forest.root.leaf_ids() {
                 if signal_shells {
                     if let Some(terminal) = self.terminals.get(&id) {
@@ -148,6 +190,45 @@ impl GpuiShellRoot {
                     }
                 }
                 self.reap_pane(id, cx);
+            }
+        }
+        true
+    }
+
+    /// Close the workspace at `ws_idx` entirely (every tab, every pane).
+    /// Refuses (returns `false`) if it's the app's only workspace or
+    /// `ws_idx` doesn't name a real one -- `close_tab_at` above is the only
+    /// caller until Task 3 adds `LeaderAction::CloseWorkspace` and Task 4
+    /// adds the sidebar's "x" button, both of which call this directly.
+    pub(super) fn close_workspace_at(
+        &mut self,
+        ws_idx: usize,
+        signal_shells: bool,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let Some(id) = self.workspaces.workspaces().get(ws_idx).map(|w| w.id) else {
+            return false;
+        };
+        let Some(removed) = self.workspaces.close_workspace(id) else {
+            return false;
+        };
+        // The active workspace may have changed as a side effect of the
+        // removal (`WorkspaceManager::close_workspace` shifts `active`) --
+        // any tab rename in flight was pinned to a tab id scoped to the
+        // WORKSPACE being left, and each workspace's `TabManager` has its
+        // own independent id counter starting at 0, so that id could
+        // collide with an unrelated tab in whatever workspace is now
+        // active. Unconditionally dropping it here (rather than trying to
+        // match it against the removed workspace) is the only safe option.
+        self.tab_rename = None;
+        for forest in &removed.tab_panes {
+            for leaf_id in forest.root.leaf_ids() {
+                if signal_shells {
+                    if let Some(terminal) = self.terminals.get(&leaf_id) {
+                        terminal.pty.request_exit();
+                    }
+                }
+                self.reap_pane(leaf_id, cx);
             }
         }
         true
@@ -172,19 +253,26 @@ impl GpuiShellRoot {
         self.terminals.remove(&terminal_id);
         self.wakeup_gates.remove(&terminal_id);
         self.rect_cache.borrow_mut().leaves.remove(&terminal_id);
-        if self.zoomed_pane == Some(terminal_id) {
-            self.zoomed_pane = None;
+        // terminal_id is globally unique, so at most one workspace can have
+        // it zoomed -- checking all of them (cheap; there are at most a
+        // handful) is simpler than threading a workspace index through
+        // every caller of `reap_pane` just for this.
+        for ws in self.workspaces.workspaces_mut() {
+            if ws.zoomed_pane == Some(terminal_id) {
+                ws.zoomed_pane = None;
+            }
         }
     }
 
     /// Zoom the focused pane to fill the window, or unzoom if it already is.
     /// Zooming a tab that only has one pane is meaningless, so it's ignored.
     pub(super) fn toggle_zoom(&mut self) {
-        let active = self.tabs.active_index();
-        let focused = self.tab_panes[active].focused_terminal;
-        self.zoomed_pane = match self.zoomed_pane {
+        let ws = self.workspaces.active_mut();
+        let active = ws.tabs.active_index();
+        let focused = ws.tab_panes[active].focused_terminal;
+        ws.zoomed_pane = match ws.zoomed_pane {
             Some(id) if id == focused => None,
-            _ if self.tab_panes[active].root.leaf_count() > 1 => Some(focused),
+            _ if ws.tab_panes[active].root.leaf_count() > 1 => Some(focused),
             _ => None,
         };
     }
@@ -211,13 +299,14 @@ impl GpuiShellRoot {
                 self.next_terminal_id += 1;
                 self.terminals.insert(terminal_id, terminal);
                 self.wakeup_gates.insert(terminal_id, gate);
-                self.tabs.new_tab("zsh");
-                self.tab_panes.push(PaneForest::new(terminal_id));
+                let ws = self.workspaces.active_mut();
+                ws.tabs.new_tab("zsh");
+                ws.tab_panes.push(PaneForest::new(terminal_id));
                 // Same reasoning as `split_focused`: a zoomed pane from the
                 // tab being left would otherwise linger, filling the window
                 // even after the new tab (which has nothing zoomed) becomes
                 // active.
-                self.zoomed_pane = None;
+                ws.zoomed_pane = None;
             }
             LeaderAction::CloseTab => {
                 // Mirrors `Mux::cmd_close_tab` (src/app/mux/mod.rs:792-807),
@@ -227,24 +316,27 @@ impl GpuiShellRoot {
                 // apart. `signal_shells: true` since this tab's shells may
                 // still be alive (the user is closing it explicitly, not
                 // reacting to an exit already observed).
-                self.close_tab_at(self.tabs.active_index(), true, cx);
+                let ws_idx = self.workspaces.active_index();
+                let tab_idx = self.workspaces.active().tabs.active_index();
+                self.close_tab_at(ws_idx, tab_idx, true, cx);
             }
-            LeaderAction::NextTab => self.tabs.next_tab(),
-            LeaderAction::PrevTab => self.tabs.prev_tab(),
+            LeaderAction::NextTab => self.workspaces.active_mut().tabs.next_tab(),
+            LeaderAction::PrevTab => self.workspaces.active_mut().tabs.prev_tab(),
             LeaderAction::RenameTab => self.begin_tab_rename(window, cx),
             LeaderAction::SplitHorizontal => self.split_focused(SplitDir::Horizontal),
             LeaderAction::SplitVertical => self.split_focused(SplitDir::Vertical),
             LeaderAction::ClosePane => self.close_focused_pane(cx),
             LeaderAction::ZoomPane => self.toggle_zoom(),
             LeaderAction::FocusPane(dir) => {
-                let active = self.tabs.active_index();
+                let active = self.workspaces.active().tabs.active_index();
                 // Clone the Rc first, same reason as `on_drag` in render():
-                // `focus_dir` needs `&mut self.tab_panes[..]` and
-                // `&self.rect_cache`'s contents at once, which a single
-                // `self.` borrow of both fields can't express.
+                // `focus_dir` needs `&mut self.workspaces.active_mut().
+                // tab_panes[..]` and `&self.rect_cache`'s contents at once,
+                // which a single `self.` borrow of both fields can't
+                // express.
                 let rects = self.rect_cache.clone();
                 let rects = rects.borrow();
-                self.tab_panes[active].focus_dir(dir, &rects);
+                self.workspaces.active_mut().tab_panes[active].focus_dir(dir, &rects);
             }
             LeaderAction::ToggleAiPanel => {
                 self.chat.toggle(window, cx);
@@ -273,7 +365,13 @@ impl GpuiShellRoot {
     /// commit below must land on the tab the user actually opened the editor
     /// for, not whatever happens to be active when Enter is pressed.
     pub(super) fn begin_tab_rename(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some((tab_id, title)) = self.tabs.active_tab().map(|t| (t.id, t.title.clone())) else {
+        let Some((tab_id, title)) = self
+            .workspaces
+            .active()
+            .tabs
+            .active_tab()
+            .map(|t| (t.id, t.title.clone()))
+        else {
             return;
         };
         let colors = self.config.colors.clone();
@@ -289,7 +387,7 @@ impl GpuiShellRoot {
                     // An all-whitespace name would render as a blank pill with
                     // no way to tell which tab it is; treat it as a cancel.
                     if !name.is_empty() {
-                        this.tabs.rename_tab(tab_id, name);
+                        this.workspaces.active_mut().tabs.rename_tab(tab_id, name);
                     }
                 }
                 text_input::TextInputEvent::Cancel => {}

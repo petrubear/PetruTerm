@@ -88,10 +88,13 @@ pub(crate) fn spawn_terminal(
 
 /// The `Render` root view for the gpui-petruterm spike window.
 pub struct GpuiShellRoot {
-    pub tabs: tabs::TabManager,
-    /// Index-aligned with `tabs`'s tab list -- one PaneForest per tab,
-    /// mirroring Mux.panes: Vec<PaneManager> in the wgpu app exactly.
-    tab_panes: Vec<PaneForest>,
+    /// One workspace per named group of tabs+panes+zoom-state (M3c) --
+    /// mirrors `Mux`'s workspace layer (`src/app/mux/mod.rs`) conceptually;
+    /// see `workspace.rs`'s own doc comment for why the on-disk shape
+    /// differs. `terminals`/`wakeup_gates` below stay flat, keyed by
+    /// terminal id, since ids are already globally unique across every
+    /// workspace and the poll loop wants one map to walk (design doc §3.6).
+    workspaces: workspace::WorkspaceManager,
     /// terminal_id -> live Terminal handle. A tab's PaneForest only stores
     /// usize ids (matching src/ui/panes.rs's own design); this map is
     /// where the actual Rc<Terminal> lives, looked up by id wherever a
@@ -112,13 +115,6 @@ pub struct GpuiShellRoot {
     /// they have to write into the cache from inside a frame that `render()`
     /// has already returned from.
     rect_cache: Rc<RefCell<panes::RectCache>>,
-    /// Render-time zoom filter: when `Some(terminal_id)`, that pane is drawn
-    /// alone, filling the whole content area, and the tab's pane tree is not
-    /// walked at all. Deliberately never written into `PaneTree`/
-    /// `PaneForest` itself -- same design as the wgpu app's own zoom
-    /// (`src/app/frame.rs`, which swaps in a single full-viewport `PaneInfo`
-    /// instead of mutating the tree), so unzooming is just dropping this.
-    zoomed_pane: Option<usize>,
     /// Leader-key ("Ctrl+F" by default) chorded-input state -- ported from
     /// `src/app/input/mod.rs`'s `leader_active`/`leader_deadline`. `true`
     /// between the leader keypress and the very next keystroke (which is
@@ -195,8 +191,9 @@ impl GpuiShellRoot {
         // to keep this file under the 400-line convention.
         poll::spawn_poll_loop(cx);
 
-        let mut tabs = tabs::TabManager::new();
-        tabs.new_tab("zsh");
+        let mut workspaces = workspace::WorkspaceManager::new();
+        workspaces.new_workspace("ws1");
+        workspaces.active_mut().tabs.new_tab("zsh");
 
         // Snapshot the initial pane's CWD before `terminal` moves into the
         // map below, so the status bar's CWD segment isn't empty until the
@@ -214,9 +211,13 @@ impl GpuiShellRoot {
         let chat = chat_panel::ChatPanelView::new(cx, &config);
         let ai_block = ai_block::AiBlockView::new(cx, &config);
 
+        workspaces
+            .active_mut()
+            .tab_panes
+            .push(PaneForest::new(terminal_id));
+
         Self {
-            tabs,
-            tab_panes: vec![PaneForest::new(terminal_id)],
+            workspaces,
             terminals,
             next_terminal_id: terminal_id + 1,
             focus_handle: cx.focus_handle(),
@@ -225,7 +226,6 @@ impl GpuiShellRoot {
             cursor_blink_on: true,
             cursor_last_blink: std::time::Instant::now(),
             rect_cache: Rc::new(RefCell::new(panes::RectCache::default())),
-            zoomed_pane: None,
             leader_active: false,
             leader_deadline: None,
             resize_mode: false,

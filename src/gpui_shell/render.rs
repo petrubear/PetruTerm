@@ -69,16 +69,20 @@ impl Render for GpuiShellRoot {
             window.focus(&self.focus_handle);
         }
 
-        let active_index = self.tabs.active_index();
+        let active_index = self.workspaces.active().tabs.active_index();
         let (cell_width, cell_height) = super::font_state::measured_cell_size();
 
         // A zoomed pane that no longer belongs to the active tab (tab switch,
         // pane closed) has to be dropped before it's used, mirroring the wgpu
         // app's own "zoomed pane no longer in active tab -- clear zoom" guard
         // in src/app/frame.rs.
-        if let Some(id) = self.zoomed_pane {
-            if !self.tab_panes[active_index].root.leaf_ids().contains(&id) {
-                self.zoomed_pane = None;
+        if let Some(id) = self.workspaces.active().zoomed_pane {
+            if !self.workspaces.active().tab_panes[active_index]
+                .root
+                .leaf_ids()
+                .contains(&id)
+            {
+                self.workspaces.active_mut().zoomed_pane = None;
             }
         }
 
@@ -102,9 +106,10 @@ impl Render for GpuiShellRoot {
         let on_focus: pane_view::PaneFocusCallback = Rc::new(move |terminal_id, _window, cx| {
             focus_view
                 .update(cx, |root, cx| {
-                    let active = root.tabs.active_index();
-                    if root.tab_panes[active].focused_terminal != terminal_id {
-                        root.tab_panes[active].focused_terminal = terminal_id;
+                    let ws = root.workspaces.active_mut();
+                    let active = ws.tabs.active_index();
+                    if ws.tab_panes[active].focused_terminal != terminal_id {
+                        ws.tab_panes[active].focused_terminal = terminal_id;
                         cx.notify();
                     }
                 })
@@ -121,8 +126,8 @@ impl Render for GpuiShellRoot {
                         // both fields can't express.
                         let rects = root.rect_cache.clone();
                         let rects = rects.borrow();
-                        let active = root.tabs.active_index();
-                        root.tab_panes[active].drag_separator(
+                        let active = root.workspaces.active().tabs.active_index();
+                        root.workspaces.active_mut().tab_panes[active].drag_separator(
                             node_id,
                             f32::from(position.x),
                             f32::from(position.y),
@@ -135,7 +140,7 @@ impl Render for GpuiShellRoot {
 
         let pane_ctx = pane_view::PaneRenderCx {
             terminals: &self.terminals,
-            focused: self.tab_panes[active_index].focused_terminal,
+            focused: self.workspaces.active().tab_panes[active_index].focused_terminal,
             colors: &self.config.colors,
             cell_width,
             cell_height,
@@ -145,9 +150,12 @@ impl Render for GpuiShellRoot {
             on_focus,
             on_drag,
         };
-        let panes = match self.zoomed_pane {
+        let panes = match self.workspaces.active().zoomed_pane {
             Some(terminal_id) => pane_view::render_leaf(terminal_id, &pane_ctx),
-            None => pane_view::render_pane_tree(&self.tab_panes[active_index].root, &pane_ctx),
+            None => pane_view::render_pane_tree(
+                &self.workspaces.active().tab_panes[active_index].root,
+                &pane_ctx,
+            ),
         };
 
         let on_select_tab: tabs::TabSelectCallback =
@@ -183,11 +191,11 @@ impl Render for GpuiShellRoot {
                 // surprise as the wrong-tab commit this pinning already
                 // fixed. Re-renaming is cheap; an unwanted rename is not.
                 let rename_id = this.tab_rename.as_ref().map(|(id, _)| *id);
-                let clicked_id = this.tabs.tabs().get(*idx).map(|t| t.id);
+                let clicked_id = this.workspaces.active().tabs.tabs().get(*idx).map(|t| t.id);
                 if rename_id.is_some() && rename_id != clicked_id {
                     this.end_tab_rename(cx);
                 }
-                if this.tabs.switch_to_index(*idx) {
+                if this.workspaces.active_mut().tabs.switch_to_index(*idx) {
                     cx.notify();
                 }
             }));
@@ -195,7 +203,12 @@ impl Render for GpuiShellRoot {
             .tab_rename
             .as_ref()
             .map(|(id, input)| (*id, input.clone().into_any_element()));
-        let tab_bar = tabs::render_tab_bar(&self.tabs, &self.config.colors, on_select_tab, rename);
+        let tab_bar = tabs::render_tab_bar(
+            &self.workspaces.active().tabs,
+            &self.config.colors,
+            on_select_tab,
+            rename,
+        );
 
         // Status bar row -- built from the poll-loop-refreshed cwd/git-branch/
         // exit-code state above plus this frame's leader/zoom state, same
@@ -215,7 +228,7 @@ impl Render for GpuiShellRoot {
                 self.cached_cwd.as_deref(),
                 self.git_branch.cache.as_deref(),
                 self.exit_code.cache,
-                self.zoomed_pane.is_some(),
+                self.workspaces.active().zoomed_pane.is_some(),
                 self.config.status_bar.style.clone(),
                 None, // battery -- not tracked in gpui_shell yet, out of this task's scope
                 &sb_colors,
