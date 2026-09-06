@@ -61,6 +61,13 @@ impl GpuiShellRoot {
             }
         }
 
+        // Same guard, same reasoning, for the workspace-rename editor.
+        if let Some((_, input)) = &self.workspace_rename {
+            if input.focus_handle(cx).is_focused(window) {
+                return;
+            }
+        }
+
         // Same guard, same reasoning, for the chat composer (M3b): while it
         // holds focus every key is either one of `TextInput`'s own bound
         // actions (dispatched before this bubble listener runs) or a
@@ -146,9 +153,13 @@ impl GpuiShellRoot {
                 if prefix == 'a' && event.keystroke.key == "a" {
                     self.dispatch_leader_action(LeaderAction::ToggleAiPanel, window, cx);
                 }
+                if prefix == 'e' && event.keystroke.key == "e" {
+                    self.dispatch_leader_action(LeaderAction::ToggleWorkspaceSidebar, window, cx);
+                }
                 if prefix == 'W' {
                     let action = match event.keystroke.key.as_str() {
                         "&" => Some(LeaderAction::CloseWorkspace),
+                        "," => Some(LeaderAction::RenameWorkspace),
                         "j" => Some(LeaderAction::NextWorkspace),
                         "k" => Some(LeaderAction::PrevWorkspace),
                         _ => None,
@@ -210,6 +221,20 @@ impl GpuiShellRoot {
             if event.keystroke.key == "w" && event.keystroke.modifiers.shift {
                 self.leader_active = true;
                 self.leader_prefix = Some('W');
+                self.leader_deadline = Some(
+                    std::time::Instant::now()
+                        + std::time::Duration::from_millis(self.config.leader.timeout_ms),
+                );
+                cx.notify();
+                return;
+            }
+
+            // Leader + e → enter the explorer/sidebar sub-prefix (only "e"
+            // is wired to anything: `Leader e e` toggles the sidebar,
+            // matching the wgpu build's own alias for `Leader s`).
+            if event.keystroke.key == "e" {
+                self.leader_active = true;
+                self.leader_prefix = Some('e');
                 self.leader_deadline = Some(
                     std::time::Instant::now()
                         + std::time::Duration::from_millis(self.config.leader.timeout_ms),

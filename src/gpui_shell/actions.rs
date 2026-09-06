@@ -381,6 +381,8 @@ impl GpuiShellRoot {
             }
             LeaderAction::NextWorkspace => self.next_workspace(),
             LeaderAction::PrevWorkspace => self.prev_workspace(),
+            LeaderAction::RenameWorkspace => self.begin_workspace_rename(window, cx),
+            LeaderAction::ToggleWorkspaceSidebar => self.sidebar.toggle(),
         }
         cx.notify();
     }
@@ -448,7 +450,6 @@ impl GpuiShellRoot {
     /// its own counter starting at 0), so a rename left open across a
     /// workspace switch could commit onto an unrelated tab that happens to
     /// share the same numeric id in the newly active workspace.
-    #[allow(dead_code)]
     pub(super) fn switch_workspace_to_index(&mut self, idx: usize) -> bool {
         let switched = self.workspaces.switch_to_index(idx);
         if switched {
@@ -468,5 +469,45 @@ impl GpuiShellRoot {
     pub(super) fn prev_workspace(&mut self) {
         self.workspaces.prev_workspace();
         self.tab_rename = None;
+    }
+
+    /// Open an editable field over the active workspace's sidebar row,
+    /// seeded with its current name and focused so the next keystroke goes
+    /// to it. Forces the sidebar open first (`sidebar.show()`) so the
+    /// editor -- rendered inline in that row, same as a tab rename renders
+    /// inline in the tab bar -- is never focused while invisible.
+    pub(super) fn begin_workspace_rename(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.sidebar.show();
+        let ws_id = self.workspaces.active_id();
+        let name = self.workspaces.active().name.clone();
+        let colors = self.config.colors.clone();
+        let input = cx.new(|cx| text_input::TextInput::new(cx, &colors, name, "workspace name"));
+
+        cx.subscribe(&input, move |this, input, event, cx| {
+            match event {
+                text_input::TextInputEvent::Submit => {
+                    let name = input.read(cx).content().trim().to_string();
+                    if !name.is_empty() {
+                        this.workspaces.rename_workspace(ws_id, name);
+                    }
+                }
+                text_input::TextInputEvent::Cancel => {}
+            }
+            this.end_workspace_rename(cx);
+        })
+        .detach();
+
+        input.focus_handle(cx).focus(window);
+        self.workspace_rename = Some((ws_id, input));
+        cx.notify();
+    }
+
+    /// Close the rename editor. Deliberately does NOT focus anything, same
+    /// reasoning as `end_tab_rename`: reached from a `cx.subscribe` closure
+    /// with no `Window`, and `render()`'s own guard (Step 10) reclaims
+    /// focus for the terminal on the very next frame.
+    pub(super) fn end_workspace_rename(&mut self, cx: &mut Context<Self>) {
+        self.workspace_rename = None;
+        cx.notify();
     }
 }

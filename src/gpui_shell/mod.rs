@@ -20,6 +20,7 @@ mod panes;
 mod poll;
 mod rasterize;
 mod render;
+pub mod sidebar;
 pub mod status_bar;
 pub mod tabs;
 pub mod terminal_element;
@@ -170,6 +171,16 @@ pub struct GpuiShellRoot {
     /// editor on the cell whose `tab.id` matches it -- both independent of
     /// whichever tab happens to be active by the time either runs.
     tab_rename: Option<(usize, gpui::Entity<text_input::TextInput>)>,
+    /// The in-progress workspace rename, `Some` only while `Leader W ,` is
+    /// being answered. Unlike `tab_rename`, a workspace id is globally
+    /// unique (one shared counter on `WorkspaceManager`, not one per
+    /// workspace) so no cross-workspace collision risk exists here -- see
+    /// `switch_workspace_to_index`'s doc comment (`actions.rs`) for why
+    /// `tab_rename` doesn't get the same guarantee.
+    workspace_rename: Option<(usize, gpui::Entity<text_input::TextInput>)>,
+    /// The workspace sidebar drawer -- one global drawer on the LEFT,
+    /// mirroring `chat`'s drawer on the right (`render.rs`'s `middle_row`).
+    sidebar: sidebar::WorkspaceSidebar,
     /// The AI chat panel -- one global drawer, not one per pane (see
     /// `chat_panel/mod.rs`'s doc comment on why the wgpu build's
     /// `panel_id`/`set_active_terminal` plumbing has no equivalent here).
@@ -238,6 +249,8 @@ impl GpuiShellRoot {
             git_branch: status_bar::GitBranchState::default(),
             exit_code: status_bar::ExitCodeState::default(),
             tab_rename: None,
+            workspace_rename: None,
+            sidebar: sidebar::WorkspaceSidebar::default(),
             chat,
             ai_block,
         }

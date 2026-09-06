@@ -45,6 +45,8 @@ pub enum LeaderAction {
     CloseWorkspace,
     NextWorkspace,
     PrevWorkspace,
+    RenameWorkspace,
+    ToggleWorkspaceSidebar,
 }
 
 impl TryFrom<&str> for LeaderAction {
@@ -70,6 +72,8 @@ impl TryFrom<&str> for LeaderAction {
             "CloseWorkspace" => Ok(LeaderAction::CloseWorkspace),
             "NextWorkspace" => Ok(LeaderAction::NextWorkspace),
             "PrevWorkspace" => Ok(LeaderAction::PrevWorkspace),
+            "RenameWorkspace" => Ok(LeaderAction::RenameWorkspace),
+            "ToggleWorkspaceSidebar" => Ok(LeaderAction::ToggleWorkspaceSidebar),
             _ => Err(()),
         }
     }
@@ -96,6 +100,8 @@ pub fn build_leader_map(bindings: &[KeyBind]) -> HashMap<String, LeaderAction> {
     map.entry("z".to_string()).or_insert(LeaderAction::ZoomPane);
     map.entry("w".to_string())
         .or_insert(LeaderAction::NewWorkspace);
+    map.entry("s".to_string())
+        .or_insert(LeaderAction::ToggleWorkspaceSidebar);
     map
 }
 
@@ -176,6 +182,14 @@ mod tests {
             LeaderAction::try_from("PrevWorkspace"),
             Ok(LeaderAction::PrevWorkspace)
         );
+        assert_eq!(
+            LeaderAction::try_from("RenameWorkspace"),
+            Ok(LeaderAction::RenameWorkspace)
+        );
+        assert_eq!(
+            LeaderAction::try_from("ToggleWorkspaceSidebar"),
+            Ok(LeaderAction::ToggleWorkspaceSidebar)
+        );
         assert_eq!(LeaderAction::try_from("NotAnAction"), Err(()));
     }
 
@@ -216,6 +230,7 @@ mod tests {
         assert_eq!(map.get("z"), Some(&LeaderAction::ZoomPane));
         // Seeded even though it's absent from the input bindings, same as "z".
         assert_eq!(map.get("w"), Some(&LeaderAction::NewWorkspace));
+        assert_eq!(map.get("s"), Some(&LeaderAction::ToggleWorkspaceSidebar));
     }
 
     #[test]
@@ -223,6 +238,6 @@ mod tests {
         let bindings = vec![kb("o", "CommandPalette")];
         let map = build_leader_map(&bindings);
         assert_eq!(map.get("o"), None);
-        assert_eq!(map.len(), 2); // just the seeded "z" and "w"
+        assert_eq!(map.len(), 3); // just the seeded "z", "w", and "s"
     }
 }
