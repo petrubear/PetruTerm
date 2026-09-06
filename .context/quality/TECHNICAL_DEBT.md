@@ -285,6 +285,18 @@ archivos de M1b, no nombrados en el criterio de salida de M2 (que sí cubría `p
 `status_bar.rs`, ya divididos en Task 6a), por eso quedaron fuera de ese pase. El resto de
 `src/gpui_shell/` está bajo 400.
 
+**TD-GPUI-ACP** — PENDIENTE, pedido explícito del usuario (2026-09-06). `gpui-petruterm` no
+tiene backend ACP (Agent Client Protocol) — M3b lo excluyó a propósito de su alcance junto con
+tool-calling y las superficies de confirmación que dependen de él (ver el header de
+`src/gpui_shell/chat_panel/stream.rs`). El binario wgpu (`petruterm`) sí lo tiene, completo y
+en producción desde Phase 8 (`src/llm/acp/{mod,session,fs,terminal}.rs`, 540 líneas,
+engine-agnostic — mismo perfil de "puerto directo" que `ChatPanel`). El usuario pidió
+explícitamente portarlo a `gpui_shell` como trabajo futuro, no ahora: necesita su propio
+diseño (sesión del agente, enrutamiento de tool-calls, tarjetas de confirmación write/run,
+undo) en vez de sumarse como una tarea más de M3b. Candidato a milestone propio (M3e o
+principio de M4) una vez M3b esté dogfooded. Mientras tanto, ACP solo funciona en el binario
+`petruterm` original.
+
 **TD-GPUI-04** — ABIERTO (2026-09-06). El poll loop de `gpui_shell` drena `Pty::rx` y solo
 actúa sobre `PtyEvent::Exit`; el resto de variantes (`TitleChanged`, `Bell`,
 `ClipboardStore`, `ClipboardLoad`, `PtyWrite`, `Osc133`, `ScreenCleared`) se descartan para
