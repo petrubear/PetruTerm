@@ -332,6 +332,18 @@ pub fn scrollbar_thumb_geometry(
 /// scroll wheel; mouse-report passthrough (Task 5) and scrollbar-drag
 /// (this task) are checked before selection so neither also starts a
 /// selection or forwards to the remote program.
+///
+/// None of this module's `write_input` call sites (mouse-report passthrough,
+/// below) are gated on `GpuiShellRoot::tab_rename`, and that's deliberate,
+/// not an oversight the tab-rename work forgot: with the rename guard in
+/// `input.rs` keyed on the `TextInput`'s actual focus (not merely on whether
+/// a rename happens to be open), a click landing here has already moved
+/// focus to the terminal by the time any of these handlers run -- the
+/// keyboard guard and this module now agree on the same thing gpui itself
+/// already decided (who has focus), rather than this module needing its own
+/// second opinion. A mouse report going out while a rename editor is open
+/// elsewhere in the window is exactly as legitimate as any other terminal
+/// input once the terminal is what the user clicked.
 pub fn register_mouse_handlers(
     terminal: Rc<Terminal>,
     bounds: Bounds<Pixels>,

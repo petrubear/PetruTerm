@@ -101,32 +101,39 @@ impl Render for GpuiShellRoot {
 
         let on_select_tab: tabs::TabSelectCallback =
             Rc::new(cx.listener(|this, idx: &usize, _window, cx| {
-                // Clicking a tab dismisses an in-progress rename rather than
-                // leaving it open on a tab the user has navigated away from.
-                // Without this the app reaches a dead end: `on_key_down`'s
-                // rename guard blocks every keyboard route back, and this
-                // listener is the only way to get from a background tab to
-                // the one being renamed.
+                // Clicking a DIFFERENT tab dismisses an in-progress rename
+                // rather than leaving it open on a tab the user has
+                // navigated away from. Without this the app reaches a dead
+                // end: `on_key_down`'s rename guard blocks every keyboard
+                // route back, and this listener is the only way to get from
+                // a background tab to the one being renamed.
                 //
-                // This listener never actually fires for an in-editor click
-                // on the renaming tab's OWN cell (e.g. to move the cursor
-                // mid-word) -- not because the click is "consumed" by the
-                // text field, but because `TextInput::on_mouse_down`
-                // (`text_input/edit.rs`) explicitly calls
-                // `cx.stop_propagation()`. Without that call gpui's bubble
-                // phase runs innermost-first and propagates by default, so
-                // the click would reach the input for cursor placement AND
-                // then bubble out to this handler, ending the rename out
-                // from under a click that was only repositioning the
-                // cursor. Do not remove that `stop_propagation()` without
-                // rechecking this comment.
+                // Guarded on the clicked tab's id, not merely
+                // `tab_rename.is_some()`: the renaming tab's cell is padded
+                // (`tabs.rs`'s `.px_2().py_1()`) around a `size_full()`
+                // `TextInput`, so its hitbox is bigger than the field's --
+                // clicking that padding (a natural "put the cursor at the
+                // start" miss) still lands on THIS listener for the SAME
+                // tab, and clicking a tab must never dismiss a rename open
+                // on itself. Copy the id out before touching `this.tabs`
+                // (the borrows can't overlap otherwise).
+                //
+                // This makes the outcome correct by construction, independent
+                // of `TextInput::on_mouse_down`'s `cx.stop_propagation()`
+                // (`text_input/edit.rs`) -- that call still matters (it's
+                // what lets a click inside the field reach the field at all
+                // instead of also being treated as a tab click), but it is
+                // now defense in depth here, not the only thing standing
+                // between an in-editor click and a discarded rename.
                 //
                 // Dismiss discards the edit rather than committing it: an
                 // explicit click elsewhere is not a confirmation, and a
                 // silent rename to a half-typed string is the same class of
                 // surprise as the wrong-tab commit this pinning already
                 // fixed. Re-renaming is cheap; an unwanted rename is not.
-                if this.tab_rename.is_some() {
+                let rename_id = this.tab_rename.as_ref().map(|(id, _)| *id);
+                let clicked_id = this.tabs.tabs().get(*idx).map(|t| t.id);
+                if rename_id.is_some() && rename_id != clicked_id {
                     this.end_tab_rename(cx);
                 }
                 if this.tabs.switch_to_index(*idx) {

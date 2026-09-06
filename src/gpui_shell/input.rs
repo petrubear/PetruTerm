@@ -2,7 +2,7 @@
 // `arrow_key_to_focus_dir` and `GpuiShellRoot::on_key_down`. Split out of
 // `mod.rs` for the 400-line convention.
 
-use gpui::{Context, KeyDownEvent, Window};
+use gpui::{Context, Focusable, KeyDownEvent, Window};
 
 use super::{panes, GpuiShellRoot};
 
@@ -28,8 +28,8 @@ impl GpuiShellRoot {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        // While a tab rename is in progress, every key belongs to the
-        // `TextInput` editor, full stop -- checked before anything else,
+        // While the rename `TextInput` genuinely holds focus, every key
+        // belongs to it, full stop -- checked before anything else,
         // including the leader-key arm below (renaming while chording the
         // leader key makes no sense, and letting the leader arm run first
         // would swallow keys the input never gets a chance to see). gpui
@@ -42,8 +42,22 @@ impl GpuiShellRoot {
         // which unconditionally writes to the focused terminal's PTY. Without
         // this early return, every typed character during a rename would
         // land in the input AND get written to the live shell behind it.
-        if self.tab_rename.is_some() {
-            return;
+        //
+        // Keyed on `is_focused`, not merely `tab_rename.is_some()`: a rename
+        // being open and the input actually owning focus are different
+        // things -- clicking the terminal, the status bar, or blank tab-bar
+        // space moves focus to `GpuiShellRoot`'s own root div (every
+        // `track_focus`'d element auto-focuses itself on a mouse-down inside
+        // its hitbox), and `tab_rename` stays `Some` the whole time (only
+        // Enter/Escape/a different tab's click clear it). Guarding on
+        // `is_some()` alone would freeze every key in the whole app the
+        // moment that happened, with no route back except `Cmd+Q` -- this
+        // guard exists to stop keystrokes reaching the PTY while the field
+        // owns them, not to hold the app hostage once focus has moved on.
+        if let Some((_, input)) = &self.tab_rename {
+            if input.focus_handle(cx).is_focused(window) {
+                return;
+            }
         }
 
         self.cursor_blink_on = true;

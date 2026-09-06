@@ -3,19 +3,33 @@
 // (marked-range) support.
 //
 // Ports gpui 0.2.2's own `examples/input.rs` `TextInput` almost verbatim --
-// see that file for the canonical reference this was built from. Five
+// see that file for the canonical reference this was built from. Six
 // deliberate adaptations from the example: colors resolve from
 // `ColorScheme` instead of hardcoded literals; every key binding is scoped
 // to a `"TextInput"` key context (the example uses global bindings, which
 // would capture backspace/arrows/clipboard chords application-wide and stop
 // them reaching the PTY); `Submit`/`Cancel` events let a parent observe the
 // edit finishing; the UTF-16 and grapheme-boundary helpers are free
-// functions over `&str` so they unit-test without a gpui context; and
+// functions over `&str` so they unit-test without a gpui context;
 // `on_mouse_down` (`edit.rs`) calls `cx.stop_propagation()`, because unlike
 // the example's standalone demo, every real consumer here nests this input
 // inside clickable chrome (the tab bar's cell, and M3b's chat input/
 // file-picker query) whose own click handlers must not fire on an in-editor
-// click.
+// click; and, as a direct consequence, `on_mouse_down` ALSO focuses the
+// field explicitly (`window.focus(&self.focus_handle)`) rather than relying
+// on gpui's own click-to-focus behavior -- `stop_propagation` breaks gpui's
+// bubble-phase walk before the auto-focus listener gpui registers on every
+// `track_focus`'d element ever runs (it's registered first on the same
+// element, so it runs *later* in the reverse-order bubble walk), so this
+// primitive would otherwise never focus itself on click at all. A host
+// embedding this primitive must not assume the ordinary gpui click-to-focus
+// path works for it -- it doesn't, on purpose, and this explicit call is
+// what stands in for it. Without it, clicking away from the field and back
+// leaves it visibly present but permanently unfocused: no caret, no IME,
+// keystrokes falling through to whatever now holds focus instead -- for a
+// field that lives for one keystroke sequence (a tab rename) that's a
+// dead-end bug; for one that lives for minutes (M3b's chat composer) it
+// would be a daily annoyance.
 //
 // Split under the 400-line convention: this file keeps the `TextInput`
 // struct, its constructor/accessors, the actions/key-binding registration,

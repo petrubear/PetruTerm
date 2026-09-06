@@ -1,9 +1,10 @@
 // gpui chrome migration (M3a Task 1): `TextInput`'s editing and mouse
 // methods, split out of `mod.rs` for the 400-line convention.
 //
-// Ported from gpui 0.2.2's own examples/input.rs, plus one behavioral
-// change -- `on_mouse_down` stops propagation -- see `mod.rs`'s header for
-// the full port note and all five adaptations.
+// Ported from gpui 0.2.2's own examples/input.rs, plus two behavioral
+// changes to `on_mouse_down` -- it stops propagation and explicitly focuses
+// the field -- see `mod.rs`'s header for the full port note and all six
+// adaptations.
 
 use gpui::{
     ClipboardItem, Context, EntityInputHandler, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
@@ -71,7 +72,7 @@ impl TextInput {
     pub(super) fn on_mouse_down(
         &mut self,
         event: &MouseDownEvent,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.is_selecting = true;
@@ -81,6 +82,18 @@ impl TextInput {
         } else {
             self.move_to(self.index_for_mouse_position(event.position), cx)
         }
+
+        // Explicit self-focus, NOT redundant with gpui's own auto-focus
+        // listener: `stop_propagation` below (see its own comment) breaks
+        // gpui's bubble-phase walk before that listener -- registered on this
+        // same element, but earlier, so it runs later in the reverse-order
+        // bubble walk -- ever fires. Without this call, clicking away from
+        // the field and back (e.g. into the terminal, then back into the
+        // rename box) would leave the field visibly present but permanently
+        // unfocused: no caret, no IME, keystrokes falling through to
+        // whatever now holds focus instead. This is what makes that
+        // recoverable.
+        window.focus(&self.focus_handle);
 
         // Fifth deliberate adaptation from gpui's own `examples/input.rs`
         // (see `mod.rs`'s header for the other four): that example's input
@@ -95,8 +108,9 @@ impl TextInput {
         // out to whatever clickable ancestor wraps the input -- for the tab
         // bar specifically, that ends the rename out from under the click
         // that was only trying to move the cursor. `render.rs`'s
-        // `on_select_tab` names this call as the reason it can rely on
-        // in-editor clicks never reaching it; do not remove this without
+        // `on_select_tab` no longer depends on this alone (it now also
+        // checks the clicked tab's id), but this stays as the reason
+        // in-editor clicks don't reach it either; do not remove this without
         // checking there first.
         cx.stop_propagation();
     }
