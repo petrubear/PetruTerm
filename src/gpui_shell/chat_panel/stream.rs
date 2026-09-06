@@ -72,6 +72,17 @@ impl ChatPanelView {
                     let _ = tx.send(AiEvent::Error(e.to_string()));
                 }
                 Ok(mut stream) => {
+                    // `errored` matters: `mark_done` unconditionally sets
+                    // `state = Idle`, so an unconditional `Done` here would
+                    // run immediately after `mark_error`'s `Error` in the
+                    // same poll-drain tick and silently overwrite it back to
+                    // Idle -- the error vanishes with no message shown and
+                    // no way to tell the request ever failed. Found by a
+                    // Codex trial review; the earlier Escape-recovers-a-
+                    // stuck-panel fix only covered a request that fails
+                    // before any token arrives, not one that fails partway
+                    // through.
+                    let mut errored = false;
                     while let Some(result) = stream.next().await {
                         match result {
                             Ok(tok) => {
@@ -79,11 +90,14 @@ impl ChatPanelView {
                             }
                             Err(e) => {
                                 let _ = tx.send(AiEvent::Error(e.to_string()));
+                                errored = true;
                                 break;
                             }
                         }
                     }
-                    let _ = tx.send(AiEvent::Done);
+                    if !errored {
+                        let _ = tx.send(AiEvent::Done);
+                    }
                 }
             }
         }));
