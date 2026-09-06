@@ -24,6 +24,7 @@ pub mod status_bar;
 pub mod tabs;
 pub mod terminal_element;
 pub mod text_input;
+mod workspace;
 
 pub use config_watch::spawn_config_watcher;
 
