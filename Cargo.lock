@@ -5837,6 +5837,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tracing-tracy",
+ "unicode-segmentation",
  "wgpu",
  "winit",
 ]
