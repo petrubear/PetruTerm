@@ -144,7 +144,7 @@ impl LlmProvider for OpenRouterProvider {
             .client
             .post(&url)
             .bearer_auth(self.api_key.expose_secret())
-            .header("HTTP-Referer", "https://github.com/edisontim/petruterm")
+            .header("HTTP-Referer", "https://github.com/petrubear/PetruTerm")
             .header("X-Title", "PetruTerm")
             .json(&ChatRequest {
                 model: &self.model,
@@ -194,7 +194,7 @@ impl LlmProvider for OpenRouterProvider {
             .client
             .post(&url)
             .bearer_auth(self.api_key.expose_secret())
-            .header("HTTP-Referer", "https://github.com/edisontim/petruterm")
+            .header("HTTP-Referer", "https://github.com/petrubear/PetruTerm")
             .header("X-Title", "PetruTerm")
             .json(&body)
             .send()
