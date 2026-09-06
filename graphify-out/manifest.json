@@ -340,9 +340,9 @@
     "semantic_hash": "1495d12b78207bd4dff6192e769abf43"
   },
   "src/llm/openrouter.rs": {
-    "mtime": 1788127088.0343585,
-    "ast_hash": "6cf7194036c0fab79c393eb18c032895",
-    "semantic_hash": "6cf7194036c0fab79c393eb18c032895"
+    "mtime": 1788730033.479877,
+    "ast_hash": "2c39fab0c98eb9d6f8116aac0c99dda7",
+    "semantic_hash": ""
   },
   "src/llm/shell_context.rs": {
     "mtime": 1788127088.0346365,
@@ -535,8 +535,8 @@
     "semantic_hash": "7986faae6d019d823dfc6c6fe474c11c"
   },
   ".context/quality/TECHNICAL_DEBT.md": {
-    "mtime": 1788127088.0009806,
-    "ast_hash": "810cf06b391c4113d76509fc2831ddcf",
+    "mtime": 1788729655.3648093,
+    "ast_hash": "60d13275fe70afd874e72f8a5c05c4b1",
     "semantic_hash": ""
   },
   ".context/quality/TECHNICAL_DEBT_archive.md": {
@@ -685,8 +685,8 @@
     "semantic_hash": ""
   },
   "src/bin/gpui_petruterm.rs": {
-    "mtime": 1788576655.5238032,
-    "ast_hash": "f772761497a5340b8e75061e35f1fec2",
+    "mtime": 1788714245.2037714,
+    "ast_hash": "9f2944edbd970c02ca347ebeec742590",
     "semantic_hash": ""
   },
   "src/gpui_shell/font_state.rs": {
@@ -700,8 +700,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/mod.rs": {
-    "mtime": 1788578699.929966,
-    "ast_hash": "00cbc5b39b1c1ad6106b73314152820e",
+    "mtime": 1788731632.822309,
+    "ast_hash": "cea9f71e8434c37afd0e75b809d31044",
     "semantic_hash": ""
   },
   "src/gpui_shell/rasterize.rs": {
@@ -735,8 +735,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/mouse.rs": {
-    "mtime": 1788579458.286428,
-    "ast_hash": "21ad2a6670b825162226281a60eb8200",
+    "mtime": 1788719689.7557595,
+    "ast_hash": "4ab1d17da858d8e08dd0912b76d448f0",
     "semantic_hash": ""
   },
   "docs/superpowers/plans/2026-09-04-gpui-m2-core-chrome.md": {
@@ -745,13 +745,13 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/tabs.rs": {
-    "mtime": 1788573356.9963126,
-    "ast_hash": "8afdad045cb4f1326d93b7859836fe5e",
+    "mtime": 1788715118.4161005,
+    "ast_hash": "fe8995b1615e11070348761e0e062a47",
     "semantic_hash": ""
   },
   "src/gpui_shell/leader.rs": {
-    "mtime": 1788568080.884527,
-    "ast_hash": "429d44ff7712a49cf315918faee05f30",
+    "mtime": 1788721182.3648138,
+    "ast_hash": "45076d4e235e3c404b8b28d52a8001a4",
     "semantic_hash": ""
   },
   "src/gpui_shell/pane_view.rs": {
@@ -760,8 +760,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/actions.rs": {
-    "mtime": 1788579495.3057275,
-    "ast_hash": "9bcc786b55c5f0d7c6ff7c3e505a8dca",
+    "mtime": 1788721153.7110066,
+    "ast_hash": "86ba1c50ac85bbbdaf86d89824bd3bf3",
     "semantic_hash": ""
   },
   "src/gpui_shell/config_watch.rs": {
@@ -770,18 +770,18 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/input.rs": {
-    "mtime": 1788578125.1308968,
-    "ast_hash": "56eaf1a41214468a44f3383e10f1b4df",
+    "mtime": 1788731686.7678416,
+    "ast_hash": "4c07f7f1da926eaf5fb1f3d4146cd1f0",
     "semantic_hash": ""
   },
   "src/gpui_shell/poll.rs": {
-    "mtime": 1788578125.1380064,
-    "ast_hash": "cf20b8b738382cc41bc2c0ad53c0bb55",
+    "mtime": 1788731642.1271417,
+    "ast_hash": "d66b36bfe3f2de9b0a0ad7d35dd106bf",
     "semantic_hash": ""
   },
   "src/gpui_shell/render.rs": {
-    "mtime": 1788577934.4840279,
-    "ast_hash": "74c7a940a530c380fd626eb4c4378b24",
+    "mtime": 1788731754.1817012,
+    "ast_hash": "5f4febc2b45758997cfc5787e15ba734",
     "semantic_hash": ""
   },
   "src/gpui_shell/panes/geometry.rs": {
@@ -812,6 +812,66 @@
   "src/gpui_shell/status_bar/render.rs": {
     "mtime": 1788579935.590297,
     "ast_hash": "2d63749bd4b19d64b65b0b3af989f660",
+    "semantic_hash": ""
+  },
+  "src/gpui_shell/chat_panel/markdown.rs": {
+    "mtime": 1788723215.330777,
+    "ast_hash": "93acf2856529bce88ba92740d1c62347",
+    "semantic_hash": ""
+  },
+  "src/gpui_shell/chat_panel/mod.rs": {
+    "mtime": 1788723215.330809,
+    "ast_hash": "8b802f5393b3f95c87bf56c57da6a0df",
+    "semantic_hash": ""
+  },
+  "src/gpui_shell/chat_panel/render.rs": {
+    "mtime": 1788723215.330831,
+    "ast_hash": "c049d3b2861dcac8a1419fabafb55280",
+    "semantic_hash": ""
+  },
+  "src/gpui_shell/text_input/edit.rs": {
+    "mtime": 1788718954.0599794,
+    "ast_hash": "178030c5d0c2a7dbb8e85294fdf42d1e",
+    "semantic_hash": ""
+  },
+  "src/gpui_shell/text_input/element.rs": {
+    "mtime": 1788713959.518861,
+    "ast_hash": "3208ffc5814092001a616d4119a77ce2",
+    "semantic_hash": ""
+  },
+  "src/gpui_shell/text_input/ime.rs": {
+    "mtime": 1788713959.518843,
+    "ast_hash": "4fdae52d38733358381912ce277e5fce",
+    "semantic_hash": ""
+  },
+  "src/gpui_shell/text_input/mod.rs": {
+    "mtime": 1788728435.099599,
+    "ast_hash": "2e3f1818414ec7d5d8ba8b2a777393e6",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/plans/2026-09-06-gpui-m3a-text-input.md": {
+    "mtime": 1788712592.2854092,
+    "ast_hash": "539c8f3edfaaeec5e1a7d6beec5e7137",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/plans/2026-09-06-gpui-m3b-chat-panel.md": {
+    "mtime": 1788720060.757758,
+    "ast_hash": "7e3d12e32a9c07ab01c9757e401e9542",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/specs/2026-09-06-gpui-m3-sidebars-design.md": {
+    "mtime": 1788710641.1564586,
+    "ast_hash": "b282813728fc3607e9f3676b65a1248e",
+    "semantic_hash": ""
+  },
+  "src/gpui_shell/chat_panel/stream.rs": {
+    "mtime": 1788731015.0463533,
+    "ast_hash": "3b85f5131a8924855a163e1bac598519",
+    "semantic_hash": ""
+  },
+  "src/gpui_shell/ai_block.rs": {
+    "mtime": 1788732015.708353,
+    "ast_hash": "2bbc07fac4e24bea4958f184f0394bf8",
     "semantic_hash": ""
   }
 }

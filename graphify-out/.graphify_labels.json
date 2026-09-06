@@ -127,5 +127,14 @@
   "125": ".dispatch_leader_action",
   "126": "exit_code.rs",
   "127": "build_font_system",
-  "128": "ExitCodeState"
+  "128": "ExitCodeState",
+  "129": "to_rgba",
+  "130": "gpu.rs",
+  "131": "render_line",
+  "132": "Self",
+  "133": "M3b — AI Chat Panel Implementation Plan",
+  "134": "build_font_system",
+  "135": "M3a — Text Input Primitive Implementation Plan",
+  "136": "Pty",
+  "138": "pty_schedule.rs"
 }
