@@ -29,6 +29,7 @@ mod render;
 mod render_sidebar;
 pub mod sidebar;
 mod sidebar_nav;
+mod spawn_terminal;
 pub mod status_bar;
 pub mod tabs;
 pub mod terminal_element;
@@ -36,6 +37,7 @@ pub mod text_input;
 mod workspace;
 
 pub use config_watch::spawn_config_watcher;
+pub(crate) use spawn_terminal::spawn_terminal;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -54,51 +56,6 @@ use crate::term::Terminal;
 use crate::ui::palette::{Action, CommandPalette};
 use leader::LeaderAction;
 use panes::PaneForest;
-
-/// Spawn one real terminal (shell + PTY + alacritty grid).
-///
-/// Uses a genuinely no-op `term::Wakeup` closure. gpui owns the real window
-/// and event loop in this migration, and constructing a
-/// `winit::event_loop::EventLoop` at all — even one that is never run — has
-/// a process-global side effect on macOS: it registers itself as the
-/// `NSApplication`'s delegate. gpui drives its own window/run loop through
-/// that same shared, process-wide `NSApplication`, so the two conflict
-/// fatally (a winit `EventLoop` half-installs a delegate it never actually
-/// runs, and AppKit ends up routing an event through it, which panics: "a
-/// delegate was not configured on the application"). No winit APIs must be
-/// called anywhere in this module. Returns the terminal's `WakeupGate`
-/// alongside it: `GpuiShellRoot`'s poll loop checks it each tick and only
-/// calls `cx.notify()` when the PTY actually produced output (M1a), rather
-/// than gpui's own cross-thread wake (no `spawn_blocking`-style bridge
-/// exists in gpui 0.2.2's `BackgroundExecutor` to drive that from here).
-///
-/// Cell pixel size for the PTY winsize comes from `terminal_element::
-/// measured_cell_size()` — the same real, font-metrics-driven value the
-/// render path uses (previously hardcoded `9, 18` here, disagreeing with
-/// whatever the render path actually painted; both now read one cached
-/// source of truth, kept in sync across config reloads).
-pub(crate) fn spawn_terminal(
-    cols: u16,
-    rows: u16,
-    config: &Config,
-) -> anyhow::Result<(Rc<Terminal>, Arc<WakeupGate>)> {
-    let (cell_width, cell_height) = font_state::measured_cell_size();
-    let cell_w = f32::from(cell_width).round().max(1.0) as u16;
-    let cell_h = f32::from(cell_height).round().max(1.0) as u16;
-    let wakeup: crate::term::Wakeup = Arc::new(|| {});
-    let wakeup_gate = Arc::new(WakeupGate::new());
-    let terminal = Terminal::new(
-        config,
-        cols,
-        rows,
-        cell_w,
-        cell_h,
-        wakeup,
-        Arc::clone(&wakeup_gate),
-        None,
-    )?;
-    Ok((Rc::new(terminal), wakeup_gate))
-}
 
 /// The `Render` root view for the gpui-petruterm spike window.
 pub struct GpuiShellRoot {
