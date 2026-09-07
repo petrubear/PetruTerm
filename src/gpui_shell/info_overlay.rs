@@ -63,7 +63,6 @@ impl InfoOverlay {
     /// Open the overlay showing `content` (parsed as markdown, reusing the
     /// same `AnnotatedLine` model the chat panel's message list already
     /// uses) under `title`.
-    #[allow(dead_code)] // first caller is Task 4's sidebar row activation
     pub fn open(&mut self, title: String, content: &str) {
         let mut state = ParseState::default();
         self.lines = parse_markdown(content, CONTENT_WIDTH, &mut state);

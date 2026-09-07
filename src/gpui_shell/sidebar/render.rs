@@ -13,12 +13,20 @@ use crate::config::schema::ColorScheme;
 use super::super::font_state;
 use super::super::pane_view::to_rgba;
 use super::super::workspace::WorkspaceManager;
-use super::sections::{render_placeholder_section, render_workspaces_section};
+use super::sections::{
+    render_mcp_section, render_skills_section, render_steering_section, render_workspaces_section,
+};
 use super::SidebarSection;
+use crate::llm::mcp::manager::McpManager;
+use crate::llm::skills::SkillManager;
+use crate::llm::steering::SteeringManager;
 
 pub const SIDEBAR_WIDTH_PX: f32 = 220.0;
 
-pub use super::sections::{WorkspaceCloseCallback, WorkspaceNewCallback, WorkspaceSelectCallback};
+pub use super::sections::{
+    McpOpenCallback, SkillOpenCallback, SteeringOpenCallback, WorkspaceCloseCallback,
+    WorkspaceNewCallback, WorkspaceSelectCallback,
+};
 
 pub type SectionSelectCallback = Rc<dyn Fn(&SidebarSection, &mut Window, &mut App)>;
 
@@ -34,6 +42,15 @@ pub struct SidebarRenderCx<'a> {
     pub on_close_workspace: WorkspaceCloseCallback,
     pub on_select_section: SectionSelectCallback,
     pub workspace_rename: Option<(usize, gpui::AnyElement)>,
+    pub mcp_manager: &'a McpManager,
+    pub mcp_cursor: usize,
+    pub on_open_mcp: McpOpenCallback,
+    pub skill_manager: &'a SkillManager,
+    pub skills_cursor: usize,
+    pub on_open_skill: SkillOpenCallback,
+    pub steering_manager: &'a SteeringManager,
+    pub steering_cursor: usize,
+    pub on_open_steering: SteeringOpenCallback,
 }
 
 pub fn render_workspace_sidebar(ctx: SidebarRenderCx<'_>) -> Div {
@@ -63,13 +80,24 @@ pub fn render_workspace_sidebar(ctx: SidebarRenderCx<'_>) -> Div {
                 ctx.workspace_rename,
             )
             .into_any_element(),
-            SidebarSection::Mcp => render_placeholder_section("MCP", ctx.colors).into_any_element(),
-            SidebarSection::Skills => {
-                render_placeholder_section("Skills", ctx.colors).into_any_element()
+            SidebarSection::Mcp => {
+                render_mcp_section(ctx.mcp_manager, ctx.colors, ctx.mcp_cursor, ctx.on_open_mcp)
+                    .into_any_element()
             }
-            SidebarSection::Steering => {
-                render_placeholder_section("Steering", ctx.colors).into_any_element()
-            }
+            SidebarSection::Skills => render_skills_section(
+                ctx.skill_manager,
+                ctx.colors,
+                ctx.skills_cursor,
+                ctx.on_open_skill,
+            )
+            .into_any_element(),
+            SidebarSection::Steering => render_steering_section(
+                ctx.steering_manager,
+                ctx.colors,
+                ctx.steering_cursor,
+                ctx.on_open_steering,
+            )
+            .into_any_element(),
         })
 }
 

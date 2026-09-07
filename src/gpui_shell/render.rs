@@ -248,6 +248,25 @@ impl Render for GpuiShellRoot {
                 cx.notify();
             }));
 
+        let on_open_mcp: sidebar::sections::McpOpenCallback =
+            Rc::new(cx.listener(|this, idx: &usize, _window, cx| {
+                this.sidebar.set_mcp_cursor(*idx);
+                this.sidebar_open_mcp_at(*idx);
+                cx.notify();
+            }));
+        let on_open_skill: sidebar::sections::SkillOpenCallback =
+            Rc::new(cx.listener(|this, idx: &usize, _window, cx| {
+                this.sidebar.set_skills_cursor(*idx);
+                this.sidebar_open_skill_at(*idx);
+                cx.notify();
+            }));
+        let on_open_steering: sidebar::sections::SteeringOpenCallback =
+            Rc::new(cx.listener(|this, idx: &usize, _window, cx| {
+                this.sidebar.set_steering_cursor(*idx);
+                this.sidebar_open_steering_at(*idx);
+                cx.notify();
+            }));
+
         // Status bar row -- built from the poll-loop-refreshed cwd/git-branch/
         // exit-code state above plus this frame's leader/zoom state, same
         // inputs `StatusBar::build` takes in the wgpu app's own render path
@@ -347,6 +366,15 @@ impl Render for GpuiShellRoot {
                     on_close_workspace,
                     on_select_section,
                     workspace_rename: workspace_rename_element,
+                    mcp_manager: &self.mcp_manager,
+                    mcp_cursor: self.sidebar.mcp_cursor(),
+                    on_open_mcp,
+                    skill_manager: &self.skill_manager,
+                    skills_cursor: self.sidebar.skills_cursor(),
+                    on_open_skill,
+                    steering_manager: &self.steering_manager,
+                    steering_cursor: self.sidebar.steering_cursor(),
+                    on_open_steering,
                 };
                 let bar = sidebar::render::render_workspace_sidebar(sidebar_ctx);
                 el.child(bar.with_animation(

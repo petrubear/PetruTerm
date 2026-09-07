@@ -16,6 +16,7 @@ mod input;
 mod key_map;
 mod leader;
 mod leader_dispatch;
+mod mcp_overlay;
 mod mouse;
 mod pane_view;
 mod panes;
@@ -210,10 +211,8 @@ pub struct GpuiShellRoot {
     /// local, if trusted) at startup -- M3d's Skills sidebar section reads
     /// this directly, same "used by gpui_shell, never copied" relationship
     /// M3b already established for `ChatPanel`/`AiBlock`.
-    #[allow(dead_code)] // first real reader is Task 4's Skills section
     skill_manager: SkillManager,
     /// Steering-file content loaded the same way, at the same time.
-    #[allow(dead_code)] // first real reader is Task 4's Steering section
     steering_manager: SteeringManager,
     /// MCP server connections, started once at startup (mirrors the wgpu
     /// build's own blocking `tokio_rt.block_on(mgr.start_all(&cfg))`,
@@ -223,7 +222,6 @@ pub struct GpuiShellRoot {
     /// tool-calling (out of scope for M3d, a future milestone) would need to
     /// share it with a spawned async task the same way the wgpu build's own
     /// `mcp_manager` field does.
-    #[allow(dead_code)] // first real reader is Task 4's MCP section
     mcp_manager: Arc<McpManager>,
     /// The read-only content popup every sidebar row's activation opens
     /// (Task 4) -- see `info_overlay.rs`'s own doc comment for why it's

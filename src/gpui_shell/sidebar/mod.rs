@@ -46,13 +46,10 @@ pub struct WorkspaceSidebar {
     /// Highlighted row within the MCP section's server list. Unused until
     /// Task 4 renders that list; kept here now so the section-switching
     /// skeleton this task builds doesn't need touching again to add it.
-    #[allow(dead_code)] // first reader is Task 4
     mcp_cursor: usize,
     /// Highlighted row within the Skills section's list. See `mcp_cursor`.
-    #[allow(dead_code)] // first reader is Task 4
     skills_cursor: usize,
     /// Highlighted row within the Steering section's list. See `mcp_cursor`.
-    #[allow(dead_code)] // first reader is Task 4
     steering_cursor: usize,
 }
 
@@ -88,32 +85,26 @@ impl WorkspaceSidebar {
         self.active_section = section;
     }
 
-    #[allow(dead_code)] // first reader is Task 4
     pub fn mcp_cursor(&self) -> usize {
         self.mcp_cursor
     }
 
-    #[allow(dead_code)] // first reader is Task 4
     pub fn set_mcp_cursor(&mut self, idx: usize) {
         self.mcp_cursor = idx;
     }
 
-    #[allow(dead_code)] // first reader is Task 4
     pub fn skills_cursor(&self) -> usize {
         self.skills_cursor
     }
 
-    #[allow(dead_code)] // first reader is Task 4
     pub fn set_skills_cursor(&mut self, idx: usize) {
         self.skills_cursor = idx;
     }
 
-    #[allow(dead_code)] // first reader is Task 4
     pub fn steering_cursor(&self) -> usize {
         self.steering_cursor
     }
 
-    #[allow(dead_code)] // first reader is Task 4
     pub fn set_steering_cursor(&mut self, idx: usize) {
         self.steering_cursor = idx;
     }
