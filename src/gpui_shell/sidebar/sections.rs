@@ -27,7 +27,7 @@ pub fn render_workspaces_section(
     on_new: WorkspaceNewCallback,
     on_close: WorkspaceCloseCallback,
     rename: Option<(usize, gpui::AnyElement)>,
-) -> Div {
+) -> impl IntoElement {
     let active_index = workspaces.active_index();
     let mut rename = rename;
     let rows: Vec<_> = workspaces
@@ -71,10 +71,12 @@ pub fn render_workspaces_section(
         .collect();
 
     div()
+        .id("workspace-list-scroll")
         .flex()
         .flex_col()
         .flex_1()
         .min_h_0()
+        .overflow_y_scroll()
         .child(
             div()
                 .flex()

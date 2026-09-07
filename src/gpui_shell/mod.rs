@@ -24,6 +24,7 @@ mod rasterize;
 mod rename;
 mod render;
 pub mod sidebar;
+mod sidebar_nav;
 pub mod status_bar;
 pub mod tabs;
 pub mod terminal_element;

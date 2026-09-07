@@ -61,10 +61,15 @@ pub fn render_workspace_sidebar(ctx: SidebarRenderCx<'_>) -> Div {
                 ctx.on_new_workspace,
                 ctx.on_close_workspace,
                 ctx.workspace_rename,
-            ),
-            SidebarSection::Mcp => render_placeholder_section("MCP", ctx.colors),
-            SidebarSection::Skills => render_placeholder_section("Skills", ctx.colors),
-            SidebarSection::Steering => render_placeholder_section("Steering", ctx.colors),
+            )
+            .into_any_element(),
+            SidebarSection::Mcp => render_placeholder_section("MCP", ctx.colors).into_any_element(),
+            SidebarSection::Skills => {
+                render_placeholder_section("Skills", ctx.colors).into_any_element()
+            }
+            SidebarSection::Steering => {
+                render_placeholder_section("Steering", ctx.colors).into_any_element()
+            }
         })
 }
 

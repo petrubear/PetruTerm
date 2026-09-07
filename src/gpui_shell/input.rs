@@ -5,7 +5,7 @@
 use gpui::{Context, Focusable, KeyDownEvent, Window};
 
 use super::leader::LeaderAction;
-use super::{panes, sidebar, GpuiShellRoot};
+use super::{panes, GpuiShellRoot};
 
 /// Maps a gpui named-key string to the resize direction it drives under
 /// `Leader Option+Arrow` / resize-mode continuation. gpui's own arrow-key
@@ -126,31 +126,12 @@ impl GpuiShellRoot {
         // (the user clicked back into it), and a visibility-keyed guard
         // here would swallow every terminal keystroke in that state -- the
         // exact M3a-class Critical this project has now avoided three times
-        // over by keying every guard like it on real focus.
-        // `ToggleWorkspaceSidebar`'s dispatch arm (`leader_dispatch.rs`) is
-        // the only place that moves focus TO this handle via the keyboard;
-        // clicking a row or section tab (Task 4 / this task's own section-
-        // tab clicks) must do the same explicitly, same fix `TextInput::
-        // on_mouse_down` needed in M3a.
+        // over by keying every guard like it on real focus. See
+        // `sidebar_nav.rs`'s own doc comment on `handle_sidebar_focused_key`
+        // for the rest of the reasoning (moved there to keep this file under
+        // the 400-line convention).
         if self.sidebar_focus_handle.is_focused(window) {
-            match event.keystroke.key.as_str() {
-                "tab" => {
-                    if event.keystroke.modifiers.shift {
-                        self.sidebar.prev_section();
-                    } else {
-                        self.sidebar.next_section();
-                    }
-                }
-                "down" | "j" => self.sidebar_move_cursor(1, cx),
-                "up" | "k" => self.sidebar_move_cursor(-1, cx),
-                "enter" => self.sidebar_activate_selection(cx),
-                "escape" => {
-                    self.sidebar.toggle();
-                    window.focus(&self.focus_handle);
-                }
-                _ => {}
-            }
-            cx.notify();
+            self.handle_sidebar_focused_key(event, window, cx);
             return;
         }
 
@@ -408,49 +389,5 @@ impl GpuiShellRoot {
             terminal.write_input(&bytes);
             cx.notify();
         }
-    }
-
-    /// Move the highlighted row within whichever section is active by
-    /// `delta` (`+1`/`-1`). Only the Workspaces arm does anything yet --
-    /// arrow-nav there switches immediately, same as a click (see this
-    /// plan's Global Constraints on why that section's cursor IS its active
-    /// index, unlike the wgpu reference's decoupled highlight-then-Enter).
-    /// The other three arms are Task 4's to fill in, once their sections
-    /// have real lists to move a cursor over.
-    pub(super) fn sidebar_move_cursor(&mut self, delta: i32, cx: &mut Context<Self>) {
-        match self.sidebar.active_section() {
-            sidebar::SidebarSection::Workspaces => {
-                let len = self.workspaces.len();
-                if len == 0 {
-                    return;
-                }
-                let current = self.workspaces.active_index() as i32;
-                let next = (current + delta).rem_euclid(len as i32) as usize;
-                self.switch_workspace_to_index(next);
-            }
-            sidebar::SidebarSection::Mcp
-            | sidebar::SidebarSection::Skills
-            | sidebar::SidebarSection::Steering => {
-                // Task 4 fills these in once each section has a real list.
-            }
-        }
-        cx.notify();
-    }
-
-    pub(super) fn sidebar_activate_selection(&mut self, cx: &mut Context<Self>) {
-        match self.sidebar.active_section() {
-            sidebar::SidebarSection::Workspaces => {
-                // Arrow-nav already switched (above); a click already
-                // switches too (`render.rs`'s `on_select_workspace`).
-                // Nothing left for Enter to do.
-            }
-            sidebar::SidebarSection::Mcp
-            | sidebar::SidebarSection::Skills
-            | sidebar::SidebarSection::Steering => {
-                // Task 4 fills these in: open the InfoOverlay for whichever
-                // row `self.sidebar.{mcp,skills,steering}_cursor()` names.
-            }
-        }
-        cx.notify();
     }
 }
