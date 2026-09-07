@@ -29,16 +29,10 @@ impl GpuiShellRoot {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        // The palette's query field intercepts Up/Down directly (Enter/
-        // Escape are TextInput's own bound actions, handled via
-        // `palette_query`'s `cx.subscribe` callback in `mod.rs` instead --
-        // see `palette.rs`'s own doc comment on `handle_palette_focused_key`).
-        // Keyed on real focus, not `self.palette.is_visible()`: unlike
-        // `InfoOverlay`, the palette's query field is a genuine focus-
-        // grabbing `TextInput`, so it follows the same guard shape every
-        // other `TextInput` consumer in this codebase uses.
-        if self.palette_query_focused(window, cx) {
-            self.handle_palette_focused_key(event, window, cx);
+        // The palette's own key guard -- see `palette.rs`'s own doc
+        // comment on `maybe_handle_palette_key` for the full reasoning
+        // (moved there to keep this file under the 400-line convention).
+        if self.maybe_handle_palette_key(event, window, cx) {
             return;
         }
 

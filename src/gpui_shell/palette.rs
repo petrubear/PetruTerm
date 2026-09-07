@@ -146,24 +146,39 @@ impl GpuiShellRoot {
         self.palette_query.focus_handle(cx).is_focused(window)
     }
 
-    /// Up/Down move the highlighted result while the query field holds
-    /// focus. Enter and Escape are NOT handled here -- `TextInput`'s own
-    /// `"TextInput"`-scoped key bindings (`text_input/mod.rs`) consume
-    /// those as its own `Submit`/`Cancel` actions before this bubble
-    /// listener ever sees them; `mod.rs`'s `cx.subscribe` callback on
-    /// `palette_query` is where this struct reacts to them instead.
-    pub(super) fn handle_palette_focused_key(
+    /// The palette's own key guard, called from `input.rs`'s `on_key_down`
+    /// as its very first statement -- moved here (out of `input.rs` itself)
+    /// to keep that file under the 400-line convention, the same class of
+    /// fix M3d's `sidebar_nav.rs` split already established for an
+    /// identical overshoot. Returns `true` if the key was consumed (the
+    /// query field held focus), telling the caller to `return` early.
+    ///
+    /// The palette's query field intercepts Up/Down directly. Enter/Escape
+    /// are NOT handled here -- `TextInput`'s own `"TextInput"`-scoped key
+    /// bindings (`text_input/mod.rs`) consume those as its own
+    /// `Submit`/`Cancel` actions before this bubble listener ever sees
+    /// them; `mod.rs`'s `cx.subscribe` callback on `palette_query` is where
+    /// this struct reacts to them instead. Keyed on real focus, not
+    /// `self.palette.visible`: unlike `InfoOverlay`, the palette's query
+    /// field is a genuine focus-grabbing `TextInput`, so it follows the
+    /// same guard shape every other `TextInput` consumer in this codebase
+    /// uses.
+    pub(super) fn maybe_handle_palette_key(
         &mut self,
         event: &KeyDownEvent,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
-    ) {
+    ) -> bool {
+        if !self.palette_query_focused(window, cx) {
+            return false;
+        }
         match event.keystroke.key.as_str() {
             "down" => self.palette.select_down(),
             "up" => self.palette.select_up(),
             _ => {}
         }
         cx.notify();
+        true
     }
 
     /// Run one confirmed palette action. This task's version covers only
