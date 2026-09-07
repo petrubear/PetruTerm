@@ -39,6 +39,7 @@ pub mod status_bar;
 pub mod tabs;
 pub mod terminal_element;
 pub mod text_input;
+mod toast;
 mod workspace;
 
 pub use config_watch::spawn_config_watcher;
@@ -215,18 +216,12 @@ pub struct GpuiShellRoot {
     /// `cx.subscribe` callback below (Step 4) is how this struct reacts to
     /// them instead.
     palette_query: gpui::Entity<text_input::TextInput>,
-    /// Set by the `palette_query` subscription (Step 4) when `Submit` fires
-    /// and `CommandPalette::confirm()` returns an action to run;
-    /// `render()`'s own top (`render.rs`, Task 2) drains and dispatches it
-    /// every frame. Needed because `cx.subscribe`'s callback is handed no
-    /// `Window` -- the same constraint M3b's chat-panel `/q` close already
-    /// worked around (`render.rs`'s own doc comment on its focus-reclaim
-    /// guard has the full precedent).
+    /// Set when the palette confirms an action with no `Window` in hand
+    /// (`cx.subscribe` callback) -- `render()`'s own top drains and
+    /// dispatches it every frame. Same constraint M3b's chat `/q` close hit.
     pending_palette_action: Option<Action>,
     /// In-terminal text search (`Cmd+F`) -- `crate::ui::search_bar::
-    /// SearchBar`, used directly, same relationship as `CommandPalette`.
-    /// Unlike the palette, this drives real GPU-paint highlighting (M4b
-    /// Task 3) rather than only its own popup content.
+    /// SearchBar`, reused directly; drives real GPU-paint highlighting too.
     search_bar: SearchBar,
     /// The search query's own persistent `TextInput` entity -- same
     /// "cleared and refocused on each open, not rebuilt" shape as the
@@ -235,6 +230,8 @@ pub struct GpuiShellRoot {
     /// The right-click context menu's own state -- see `context_menu.rs`'s
     /// own doc comment for why this isn't a reuse of `ContextMenu`.
     context_menu: context_menu::ContextMenu,
+    /// Transient top-right notification -- see `toast.rs`'s own doc comment.
+    toast: Option<(String, std::time::Instant)>,
 }
 
 impl GpuiShellRoot {
@@ -389,6 +386,7 @@ impl GpuiShellRoot {
             search_bar,
             search_query,
             context_menu: context_menu::ContextMenu::default(),
+            toast: None,
         }
     }
 }

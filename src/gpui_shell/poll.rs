@@ -3,7 +3,7 @@
 // 400-line convention.
 
 use std::sync::atomic::Ordering;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use gpui::Context;
 
@@ -124,6 +124,18 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                                 should_notify = true; // status bar's leader indicator needs to clear
                             }
                         }
+                    }
+                    // Toast auto-dismiss: cleared once its deadline passes,
+                    // same shape as leader-deadline expiry just above --
+                    // piggybacks on this same 33ms tick rather than a
+                    // dedicated timer. See `toast.rs`'s own doc comment.
+                    if this
+                        .toast
+                        .as_ref()
+                        .is_some_and(|(_, deadline)| Instant::now() >= *deadline)
+                    {
+                        this.toast = None;
+                        should_notify = true;
                     }
                     // Status bar: CWD, exit code, git branch -- all keyed
                     // off the active tab's focused terminal, all

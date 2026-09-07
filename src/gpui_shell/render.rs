@@ -11,7 +11,7 @@ use gpui::{
 use super::pane_view::to_rgba;
 use super::{
     ai_block, chat_panel, context_menu, info_overlay, palette, pane_view, render_callbacks,
-    search_bar, status_bar, tabs, GpuiShellRoot,
+    search_bar, status_bar, tabs, toast, GpuiShellRoot,
 };
 
 /// Duration of the drawer's opening grow animation (Step 3). Closing is
@@ -386,6 +386,9 @@ impl Render for GpuiShellRoot {
                     on_context_action,
                     on_close_context_menu,
                 ))
+            })
+            .when_some(self.toast.clone(), |el, (msg, _)| {
+                el.child(toast::render_toast(&msg, &self.config.colors))
             })
     }
 }
