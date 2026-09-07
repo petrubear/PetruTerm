@@ -54,6 +54,7 @@ use crate::llm::skills::SkillManager;
 use crate::llm::steering::SteeringManager;
 use crate::term::Terminal;
 use crate::ui::palette::{Action, CommandPalette};
+use crate::ui::search_bar::SearchBar;
 use leader::LeaderAction;
 use panes::PaneForest;
 
@@ -217,6 +218,15 @@ pub struct GpuiShellRoot {
     /// worked around (`render.rs`'s own doc comment on its focus-reclaim
     /// guard has the full precedent).
     pending_palette_action: Option<Action>,
+    /// In-terminal text search (`Cmd+F`) -- `crate::ui::search_bar::
+    /// SearchBar`, used directly, same relationship as `CommandPalette`.
+    /// Unlike the palette, this drives real GPU-paint highlighting (M4b
+    /// Task 3) rather than only its own popup content.
+    search_bar: SearchBar,
+    /// The search query's own persistent `TextInput` entity -- same
+    /// "cleared and refocused on each open, not rebuilt" shape as the
+    /// palette's `palette_query` (M4a).
+    search_query: gpui::Entity<text_input::TextInput>,
 }
 
 impl GpuiShellRoot {
@@ -265,6 +275,18 @@ impl GpuiShellRoot {
                 text_input::TextInputEvent::Cancel => {
                     this.palette.close();
                 }
+            }
+            cx.notify();
+        })
+        .detach();
+
+        let search_bar = SearchBar::default();
+        let search_query =
+            cx.new(|cx| text_input::TextInput::new(cx, &config.colors, "", "Search..."));
+        cx.subscribe(&search_query, |this, _input, event, cx| {
+            match event {
+                text_input::TextInputEvent::Submit => this.search_bar.next_match(),
+                text_input::TextInputEvent::Cancel => this.search_bar.close(),
             }
             cx.notify();
         })
@@ -356,6 +378,8 @@ impl GpuiShellRoot {
             palette,
             palette_query,
             pending_palette_action: None,
+            search_bar,
+            search_query,
         }
     }
 }

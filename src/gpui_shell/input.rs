@@ -332,6 +332,29 @@ impl GpuiShellRoot {
             return;
         }
 
+        // ── Cmd+F — toggle the in-terminal search bar ────────────────────
+        // Standalone combo, not a leader chord, same shape as `Ctrl+Space`
+        // above. Only reachable once neither composer/palette/overlay guard
+        // above already returned, so it can't be swallowed mid-edit.
+        if event.keystroke.modifiers.platform
+            && !event.keystroke.modifiers.shift
+            && !event.keystroke.modifiers.control
+            && !event.keystroke.modifiers.alt
+            && event.keystroke.key == "f"
+        {
+            if self.search_bar.visible {
+                self.search_bar.close();
+                window.focus(&self.focus_handle);
+            } else {
+                self.search_query
+                    .update(cx, |input, cx| input.set_content("", cx));
+                self.search_bar.open();
+                self.search_query.focus_handle(cx).focus(window);
+            }
+            cx.notify();
+            return;
+        }
+
         // ── Cmd+1-9 — switch to tab N (standard macOS pattern) ───────────
         if event.keystroke.modifiers.platform {
             if let Ok(n) = event.keystroke.key.parse::<usize>() {
