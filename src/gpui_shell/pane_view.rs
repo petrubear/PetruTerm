@@ -43,6 +43,7 @@ use gpui::{
 
 use crate::config::schema::ColorScheme;
 use crate::term::Terminal;
+use crate::ui::search_bar::SearchMatch;
 
 use super::mouse::OnFocusCallback;
 use super::panes::{PaneTree, RectCache, SplitDir};
@@ -110,6 +111,10 @@ pub(super) struct PaneRenderCx<'a> {
     pub rects: Rc<std::cell::RefCell<RectCache>>,
     pub on_focus: PaneFocusCallback,
     pub on_drag: SeparatorDragCallback,
+    /// Active search matches for the focused pane, threaded to whichever
+    /// leaf's `terminal_id == focused` (M4b Task 3) -- every other leaf
+    /// gets `None`.
+    pub search: Option<(Vec<SearchMatch>, usize)>,
 }
 
 /// Walk `node` into a nested flex tree. The returned `Div` carries no
@@ -171,6 +176,11 @@ pub(super) fn render_leaf(terminal_id: usize, ctx: &PaneRenderCx) -> Div {
             is_active: terminal_id == ctx.focused,
             cursor_blink_on: ctx.cursor_blink_on,
             on_focus,
+            search: if terminal_id == ctx.focused {
+                ctx.search.clone()
+            } else {
+                None
+            },
         })
 }
 

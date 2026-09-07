@@ -12,6 +12,8 @@
 use std::rc::Rc;
 
 use alacritty_terminal::vte::ansi::CursorShape;
+
+use crate::ui::search_bar::SearchMatch;
 use gpui::{
     fill, point, px, relative, size, App, Bounds, Corners, Element, ElementId, GlobalElementId,
     InspectorElementId, IntoElement, LayoutId, Pixels, Style, Window,
@@ -29,6 +31,12 @@ pub struct TerminalGridElement {
     pub is_active: bool,
     pub cursor_blink_on: bool,
     pub on_focus: OnFocusCallback,
+    /// Active matches for the currently-focused pane's search, plus which
+    /// index is "current" -- `None` for every pane except the focused one
+    /// (search always targets the focused terminal only, matching the
+    /// wgpu build's own `Mux::focused_terminal_id()` scoping). Threaded
+    /// through to `rasterize::rasterize_grid`'s own `search` parameter.
+    pub search: Option<(Vec<SearchMatch>, usize)>,
 }
 
 impl IntoElement for TerminalGridElement {
@@ -112,6 +120,10 @@ impl Element for TerminalGridElement {
             window,
         );
 
+        let search_ref = self
+            .search
+            .as_ref()
+            .map(|(matches, current)| (matches.as_slice(), *current));
         if let Some(render_image) = rasterize::rasterize_grid(
             &self.terminal,
             self.cell_width,
@@ -119,6 +131,7 @@ impl Element for TerminalGridElement {
             window.scale_factor(),
             &self.colors,
             window,
+            search_ref,
         ) {
             // `bounds` is now the pane's FULL layout rect (M2's flex tree
             // sizes this element via `relative(1.0)`, not a fixed

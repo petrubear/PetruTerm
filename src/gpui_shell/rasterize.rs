@@ -14,6 +14,8 @@ use std::sync::Arc;
 use alacritty_terminal::selection::SelectionRange;
 use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::vte::ansi::Color as AnsiColor;
+
+use crate::ui::search_bar::SearchMatch;
 use cosmic_text::{
     Attrs, Buffer, Family, FeatureTag, FontFeatures, Shaping, Style, SwashCache, SwashContent,
     Weight, Wrap,
@@ -28,6 +30,41 @@ use crate::term::Terminal;
 /// Per-cell resolved (fg, bg, style) — one entry per character in a row's
 /// shaped string, indices aligned with `grid_rows[row].chars()`.
 type CellColorStyle = ([f32; 4], [f32; 4], CellStyle);
+
+/// Highlight colors for search matches -- Dracula bg/yellow/orange, ported
+/// verbatim from the wgpu build's own `SEARCH_MATCH_FG`/`SEARCH_MATCH_BG`/
+/// `SEARCH_CURRENT_BG` (`src/app/mux/mod.rs`), converted from that file's
+/// 0-255 `AnsiColor::Spec(Rgb {..})` literals to this file's own `[f32; 4]`
+/// (0.0-1.0) color space -- same values, same visual result.
+#[allow(clippy::eq_op)]
+const SEARCH_MATCH_FG: [f32; 4] = [40.0 / 255.0, 42.0 / 255.0, 54.0 / 255.0, 1.0];
+#[allow(clippy::eq_op)]
+const SEARCH_MATCH_BG: [f32; 4] = [241.0 / 255.0, 250.0 / 255.0, 140.0 / 255.0, 1.0];
+#[allow(clippy::eq_op)]
+const SEARCH_CURRENT_BG: [f32; 4] = [255.0 / 255.0, 184.0 / 255.0, 108.0 / 255.0, 1.0];
+
+/// Return overridden (fg, bg) colors if (grid_line, col) falls inside any
+/// search match -- ported from the wgpu build's own `search_highlight_at`
+/// (`src/app/mux/mod.rs`), same pre-built per-line index for O(1) line
+/// lookup + O(matches_on_line) range check (TD-PERF-22), just returning
+/// this file's `[f32; 4]` colors instead of `AnsiColor`.
+fn search_highlight_at(
+    grid_line: i32,
+    col: usize,
+    idx: &rustc_hash::FxHashMap<i32, Vec<(usize, usize, bool)>>,
+) -> Option<([f32; 4], [f32; 4])> {
+    for &(start, end, is_current) in idx.get(&grid_line)? {
+        if col >= start && col < end {
+            let bg = if is_current {
+                SEARCH_CURRENT_BG
+            } else {
+                SEARCH_MATCH_BG
+            };
+            return Some((SEARCH_MATCH_FG, bg));
+        }
+    }
+    None
+}
 
 /// Resolve one cell's (fg, bg) into real theme colors, applying inverse-video
 /// and selection-highlight swaps in that order — ported from
@@ -132,6 +169,7 @@ pub fn rasterize_grid(
     scale: f32,
     colors: &ColorScheme,
     window: &mut Window,
+    search: Option<(&[SearchMatch], usize)>,
 ) -> Option<Arc<RenderImage>> {
     terminal.with_term(|term| {
         let content = term.renderable_content();
@@ -143,6 +181,28 @@ pub fn rasterize_grid(
 
         let sel_range: Option<SelectionRange> =
             term.selection.as_ref().and_then(|s| s.to_range(term));
+
+        // Build a line-indexed search map once — O(matches) — so the
+        // per-cell lookup below is O(1) (TD-PERF-22, ported from the wgpu
+        // build's own `collect_grid_cells`). Keyed on buffer-space grid
+        // line (matching `SearchMatch::grid_line`'s own semantics
+        // directly, the same space `cell.point.line.0` below is in before
+        // any viewport conversion) — no coordinate translation needed.
+        let search_idx: rustc_hash::FxHashMap<i32, Vec<(usize, usize, bool)>> =
+            if let Some((matches, current_idx)) = search {
+                let mut idx: rustc_hash::FxHashMap<i32, Vec<(usize, usize, bool)>> =
+                    rustc_hash::FxHashMap::default();
+                for (i, m) in matches.iter().enumerate() {
+                    idx.entry(m.grid_line).or_default().push((
+                        m.col,
+                        m.col + m.len,
+                        i == current_idx,
+                    ));
+                }
+                idx
+            } else {
+                rustc_hash::FxHashMap::default()
+            };
 
         // See `viewport_row`'s doc comment: `display_iter`'s cell line
         // numbers are buffer-space, not viewport-space, whenever
@@ -187,6 +247,11 @@ pub fn rasterize_grid(
                 }
             });
             let (fg, bg) = resolve_cell_colors(cell.fg, cell.bg, cell.flags, in_selection, colors);
+            // Search highlight overrides selection, not the reverse --
+            // matches the wgpu build's own priority order in
+            // `collect_grid_cells`.
+            let (fg, bg) =
+                search_highlight_at(cell.point.line.0, col, &search_idx).unwrap_or((fg, bg));
             let style = CellStyle {
                 bold: cell.flags.contains(Flags::BOLD),
                 italic: cell.flags.contains(Flags::ITALIC),

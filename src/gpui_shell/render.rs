@@ -173,6 +173,10 @@ impl Render for GpuiShellRoot {
             rects: self.rect_cache.clone(),
             on_focus,
             on_drag,
+            search: self
+                .search_bar
+                .visible
+                .then(|| (self.search_bar.matches.clone(), self.search_bar.current)),
         };
         let panes = match self.workspaces.active().zoomed_pane {
             Some(terminal_id) => pane_view::render_leaf(terminal_id, &pane_ctx),
