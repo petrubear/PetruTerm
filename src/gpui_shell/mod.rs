@@ -40,6 +40,10 @@ use gpui::{App, Context, FocusHandle, Focusable};
 
 use crate::app::pty_schedule::WakeupGate;
 use crate::config::Config;
+use crate::llm::mcp::manager::McpManager;
+use crate::llm::mcp::{config as mcp_config, trust};
+use crate::llm::skills::SkillManager;
+use crate::llm::steering::SteeringManager;
 use crate::term::Terminal;
 use leader::LeaderAction;
 use panes::PaneForest;
@@ -192,6 +196,25 @@ pub struct GpuiShellRoot {
     /// (see `ai_block.rs`'s doc comment on why the two must never share a
     /// channel).
     ai_block: ai_block::AiBlockView,
+    /// Skill metadata loaded from `~/.config/petruterm/skills/` (+ project-
+    /// local, if trusted) at startup -- M3d's Skills sidebar section reads
+    /// this directly, same "used by gpui_shell, never copied" relationship
+    /// M3b already established for `ChatPanel`/`AiBlock`.
+    #[allow(dead_code)] // first real reader is Task 4's Skills section
+    skill_manager: SkillManager,
+    /// Steering-file content loaded the same way, at the same time.
+    #[allow(dead_code)] // first real reader is Task 4's Steering section
+    steering_manager: SteeringManager,
+    /// MCP server connections, started once at startup (mirrors the wgpu
+    /// build's own blocking `tokio_rt.block_on(mgr.start_all(&cfg))`,
+    /// `src/app/ui/mod.rs` -- ported as-is rather than redesigned into an
+    /// async poll-drain, since the reference itself blocks app construction
+    /// here and an LLM-disabled session skips this entirely). `Arc` because
+    /// tool-calling (out of scope for M3d, a future milestone) would need to
+    /// share it with a spawned async task the same way the wgpu build's own
+    /// `mcp_manager` field does.
+    #[allow(dead_code)] // first real reader is Task 4's MCP section
+    mcp_manager: Arc<McpManager>,
 }
 
 impl GpuiShellRoot {
@@ -224,6 +247,55 @@ impl GpuiShellRoot {
         let chat = chat_panel::ChatPanelView::new(cx, &config);
         let ai_block = ai_block::AiBlockView::new(cx, &config);
 
+        // Same construction pattern as the wgpu app's own `tokio_rt` field
+        // on its `App`/`Mux` struct (`src/app/ui/mod.rs`) -- hoisted into
+        // its own binding, rather than built inline in the `Self { .. }`
+        // literal below (M3c's shape), because MCP startup needs to
+        // `.block_on()` it before the struct exists.
+        let tokio_rt = tokio::runtime::Runtime::new().expect("Failed to build tokio runtime");
+
+        // Skill/steering: load global (`~/.config/petruterm/{skills,steering}/`)
+        // always; project-local (`<cwd>/.petruterm/{skills,steering}/`) only when
+        // the cwd has been explicitly trusted -- mirrors the wgpu build's own
+        // startup sequence (`src/app/ui/mod.rs`) exactly, including its
+        // AUDIT-SEC-03 reasoning (a malicious repo's `.petruterm/` must not be
+        // read just for being opened).
+        let mut skill_manager = SkillManager::new();
+        let mut steering_manager = SteeringManager::new();
+        if let Ok(cwd) = std::env::current_dir() {
+            let trusted = trust::is_trusted(&cwd);
+            skill_manager.load(&cwd, trusted);
+            steering_manager.load(&cwd, trusted);
+        }
+
+        // MCP: skip entirely when LLM is disabled -- no AI panel, no tool
+        // calls (AUDIT-ENERGY-03, matching the wgpu build's own gate).
+        // Project-local `.petruterm/mcp.json` is loaded only when trusted
+        // (AUDIT-SEC-02): an untrusted repo's MCP config must not spawn
+        // arbitrary processes just for being opened.
+        let mcp_manager = if config.llm.enabled {
+            let mut mgr = McpManager::new();
+            if let Ok(mut cfg) = mcp_config::load_global() {
+                if let Ok(cwd) = std::env::current_dir() {
+                    let local_path = cwd.join(".petruterm/mcp.json");
+                    if local_path.exists() && trust::is_trusted(&cwd) {
+                        if let Ok(local) = mcp_config::load_local(&cwd) {
+                            cfg.extend(local);
+                        }
+                    }
+                }
+                if !cfg.is_empty() {
+                    let errors = tokio_rt.block_on(mgr.start_all(&cfg));
+                    for (name, err) in &errors {
+                        log::warn!("MCP server '{name}' failed to start: {err:#}");
+                    }
+                }
+            }
+            Arc::new(mgr)
+        } else {
+            Arc::new(McpManager::new())
+        };
+
         workspaces
             .active_mut()
             .tab_panes
@@ -244,9 +316,7 @@ impl GpuiShellRoot {
             resize_mode: false,
             leader_prefix: None,
             leader_map,
-            // Same construction pattern as the wgpu app's own `tokio_rt`
-            // field on its `App`/`Mux` struct (`src/app/ui/mod.rs`).
-            tokio_rt: tokio::runtime::Runtime::new().expect("Failed to build tokio runtime"),
+            tokio_rt,
             cached_cwd: initial_cwd,
             git_branch: status_bar::GitBranchState::default(),
             exit_code: status_bar::ExitCodeState::default(),
@@ -255,6 +325,9 @@ impl GpuiShellRoot {
             sidebar: sidebar::WorkspaceSidebar::default(),
             chat,
             ai_block,
+            skill_manager,
+            steering_manager,
+            mcp_manager,
         }
     }
 }
