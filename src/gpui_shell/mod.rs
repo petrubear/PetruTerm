@@ -24,6 +24,7 @@ mod poll;
 mod rasterize;
 mod rename;
 mod render;
+mod render_sidebar;
 pub mod sidebar;
 mod sidebar_nav;
 pub mod status_bar;
