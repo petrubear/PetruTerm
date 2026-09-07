@@ -134,7 +134,8 @@ impl GpuiShellRoot {
             LeaderAction::OpenCommandPalette => {
                 self.palette_query
                     .update(cx, |input, cx| input.set_content("", cx));
-                self.palette.open_with_items(Vec::new());
+                self.palette
+                    .open_with_items(super::palette::interim_actions());
                 self.palette_query.focus_handle(cx).focus(window);
             }
         }

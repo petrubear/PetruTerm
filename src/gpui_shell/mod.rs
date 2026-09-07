@@ -18,6 +18,7 @@ mod leader;
 mod leader_dispatch;
 mod mcp_overlay;
 mod mouse;
+mod palette;
 mod pane_view;
 mod panes;
 mod poll;

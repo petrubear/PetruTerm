@@ -9,7 +9,9 @@ use gpui::{
 };
 
 use super::pane_view::to_rgba;
-use super::{ai_block, chat_panel, info_overlay, pane_view, status_bar, tabs, GpuiShellRoot};
+use super::{
+    ai_block, chat_panel, info_overlay, palette, pane_view, status_bar, tabs, GpuiShellRoot,
+};
 
 /// Duration of the drawer's opening grow animation (Step 3). Closing is
 /// instant -- see this file's own `render()` doc comment on the animated
@@ -27,11 +29,8 @@ impl Render for GpuiShellRoot {
         // confirm()` (called from `palette_query`'s `cx.subscribe`
         // callback, `mod.rs`) already closes the palette itself before
         // this ever fires, so no explicit close call is needed here.
-        if let Some(_action) = self.pending_palette_action.take() {
-            // Task 3 replaces this with a real
-            // `self.dispatch_palette_action(action, window, cx);` call.
-            // Nothing to dispatch to yet -- Task 2 is the first task with
-            // any UI able to produce a confirmed action at all.
+        if let Some(action) = self.pending_palette_action.take() {
+            self.dispatch_palette_action(action, window, cx);
             window.focus(&self.focus_handle);
         }
 
@@ -82,6 +81,7 @@ impl Render for GpuiShellRoot {
             && self.workspace_rename.is_none()
             && (!self.chat.is_visible() || !self.chat.composer_focused(window, cx))
             && (!self.ai_block.is_visible() || !self.ai_block.composer_focused(window, cx))
+            && (!self.palette.visible || !self.palette_query_focused(window, cx))
         {
             window.focus(&self.focus_handle);
         }
@@ -346,6 +346,13 @@ impl Render for GpuiShellRoot {
             .when(self.info_overlay.is_visible(), |el| {
                 el.child(info_overlay::render_info_overlay(
                     &self.info_overlay,
+                    &self.config.colors,
+                ))
+            })
+            .when(self.palette.visible, |el| {
+                el.child(palette::render_command_palette(
+                    &self.palette,
+                    &self.palette_query,
                     &self.config.colors,
                 ))
             })
