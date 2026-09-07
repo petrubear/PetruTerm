@@ -31,15 +31,10 @@
 //    the row overflows its container by the separator's width every frame.
 //    Letting the second child simply take the remainder is exact.
 
-use std::cell::Cell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use gpui::{
-    div, fill, point, prelude::*, px, relative, size, App, Bounds, DispatchPhase, Div, Element,
-    ElementId, GlobalElementId, InspectorElementId, LayoutId, MouseButton, MouseDownEvent,
-    MouseMoveEvent, MouseUpEvent, Pixels, Point, Rgba, Style, Window,
-};
+use gpui::{div, prelude::*, px, relative, App, Bounds, Div, Pixels, Point, Rgba, Window};
 
 use crate::config::schema::ColorScheme;
 use crate::term::Terminal;
@@ -47,30 +42,20 @@ use crate::ui::search_bar::SearchMatch;
 
 use super::mouse::OnFocusCallback;
 use super::panes::{PaneTree, RectCache, SplitDir};
+use super::separator::SeparatorElement;
 use super::terminal_element::TerminalGridElement;
 
-/// Thickness of the separator strip between two panes. The painted line is
-/// only [`SEPARATOR_LINE_PX`] thick and centered inside it; the rest is grab
-/// room, matching the wgpu app's own ±8px separator hit tolerance
-/// (`src/app/mod.rs`'s `separator_at_pixel`) -- a literal 1px hit target is
-/// unusable with a trackpad.
+// Re-exported so `render.rs`'s existing `pane_view::is_dragging_separator()`
+// call site keeps working unchanged -- the function itself moved to
+// `separator.rs` (M4b Task 3 review) alongside the drag state it reads.
+pub(super) use super::separator::is_dragging_separator;
+
+/// Thickness of the separator strip between two panes -- the wider grab
+/// room around the thin painted line (`separator.rs`'s own
+/// `SEPARATOR_LINE_PX`), matching the wgpu app's own ±8px separator hit
+/// tolerance (`src/app/mod.rs`'s `separator_at_pixel`) -- a literal 1px hit
+/// target is unusable with a trackpad.
 const SEPARATOR_PX: f32 = 6.0;
-const SEPARATOR_LINE_PX: f32 = 1.0;
-
-thread_local! {
-    /// `Some(node_id)` while a separator drag is in progress. Lives here
-    /// rather than on `GpuiShellRoot` for the same reason `mouse.rs`'s
-    /// `CLICK_STATE` does: the elements that read and write it are rebuilt
-    /// from scratch every frame.
-    static DRAGGING_SEPARATOR: Cell<Option<u32>> = const { Cell::new(None) };
-}
-
-/// Whether a pane separator is currently being dragged. `mouse.rs` checks
-/// this so a drag that passes over a pane doesn't also extend that pane's
-/// text selection.
-pub(super) fn is_dragging_separator() -> bool {
-    DRAGGING_SEPARATOR.with(|d| d.get().is_some())
-}
 
 /// Called with a leaf's terminal id when that pane is clicked -- the
 /// multi-pane counterpart of `mouse::OnFocusCallback`, which the per-leaf
@@ -275,134 +260,4 @@ fn fit_terminal(
         f32::from(cell_width).round().max(1.0) as u16,
         f32::from(cell_height).round().max(1.0) as u16,
     );
-}
-
-/// Paints the divider line and owns the separator's drag gesture.
-///
-/// A custom `Element` rather than plain `div()` builder callbacks for one
-/// concrete reason: `Div`'s own `on_mouse_move`/`on_mouse_up` listeners are
-/// hover-gated (`Interactivity::on_mouse_move` checks `hitbox.is_hovered`),
-/// and the pointer leaves a 6px strip within the first frame of any real
-/// drag. `Window::on_mouse_event` -- the same primitive `mouse.rs` uses for
-/// text-selection and scrollbar drags -- isn't hover-gated, but may only be
-/// called during the paint phase, which is exactly what an `Element` gives.
-struct SeparatorElement {
-    node_id: u32,
-    dir: SplitDir,
-    color: Rgba,
-    on_drag: SeparatorDragCallback,
-}
-
-impl IntoElement for SeparatorElement {
-    type Element = Self;
-
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
-
-impl Element for SeparatorElement {
-    type RequestLayoutState = ();
-    type PrepaintState = ();
-
-    fn id(&self) -> Option<ElementId> {
-        None
-    }
-
-    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
-        None
-    }
-
-    fn request_layout(
-        &mut self,
-        _id: Option<&GlobalElementId>,
-        _inspector_id: Option<&InspectorElementId>,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> (LayoutId, Self::RequestLayoutState) {
-        let mut style = Style::default();
-        style.size.width = relative(1.0).into();
-        style.size.height = relative(1.0).into();
-        (window.request_layout(style, [], cx), ())
-    }
-
-    fn prepaint(
-        &mut self,
-        _id: Option<&GlobalElementId>,
-        _inspector_id: Option<&InspectorElementId>,
-        _bounds: Bounds<Pixels>,
-        _request_layout: &mut Self::RequestLayoutState,
-        _window: &mut Window,
-        _cx: &mut App,
-    ) -> Self::PrepaintState {
-    }
-
-    fn paint(
-        &mut self,
-        _id: Option<&GlobalElementId>,
-        _inspector_id: Option<&InspectorElementId>,
-        bounds: Bounds<Pixels>,
-        _request_layout: &mut Self::RequestLayoutState,
-        _prepaint: &mut Self::PrepaintState,
-        window: &mut Window,
-        _cx: &mut App,
-    ) {
-        let line = px(SEPARATOR_LINE_PX);
-        let line_bounds = match self.dir {
-            SplitDir::Horizontal => Bounds {
-                origin: point(
-                    bounds.origin.x + (bounds.size.width - line) / 2.0,
-                    bounds.origin.y,
-                ),
-                size: size(line, bounds.size.height),
-            },
-            SplitDir::Vertical => Bounds {
-                origin: point(
-                    bounds.origin.x,
-                    bounds.origin.y + (bounds.size.height - line) / 2.0,
-                ),
-                size: size(bounds.size.width, line),
-            },
-        };
-        window.paint_quad(fill(line_bounds, self.color));
-
-        let node_id = self.node_id;
-        window.on_mouse_event(move |event: &MouseDownEvent, phase, window, _cx| {
-            if phase != DispatchPhase::Bubble || event.button != MouseButton::Left {
-                return;
-            }
-            if !bounds.contains(&event.position) {
-                return;
-            }
-            DRAGGING_SEPARATOR.with(|d| d.set(Some(node_id)));
-            window.refresh();
-        });
-
-        let on_drag = self.on_drag.clone();
-        window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
-            if phase != DispatchPhase::Bubble {
-                return;
-            }
-            if DRAGGING_SEPARATOR.with(|d| d.get()) != Some(node_id) {
-                return;
-            }
-            if event.pressed_button != Some(MouseButton::Left) {
-                // A release that never reached the mouse-up handler (e.g. it
-                // happened outside the window) -- end the drag rather than
-                // keeping it stuck to the pointer forever.
-                DRAGGING_SEPARATOR.with(|d| d.set(None));
-                return;
-            }
-            on_drag(node_id, event.position, window, cx);
-        });
-
-        window.on_mouse_event(move |event: &MouseUpEvent, phase, _window, _cx| {
-            if phase != DispatchPhase::Bubble || event.button != MouseButton::Left {
-                return;
-            }
-            if DRAGGING_SEPARATOR.with(|d| d.get()) == Some(node_id) {
-                DRAGGING_SEPARATOR.with(|d| d.set(None));
-            }
-        });
-    }
 }

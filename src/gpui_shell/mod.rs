@@ -28,6 +28,7 @@ mod rename;
 mod render;
 mod render_sidebar;
 mod search_bar;
+mod separator;
 pub mod sidebar;
 mod sidebar_nav;
 mod spawn_terminal;
