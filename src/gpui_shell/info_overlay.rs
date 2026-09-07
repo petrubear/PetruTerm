@@ -17,7 +17,8 @@
 // non-modal and let the terminal stay interactive underneath them.
 
 use gpui::{
-    div, prelude::*, px, rgba, App, FontWeight, MouseButton, MouseDownEvent, ScrollHandle, Window,
+    div, prelude::*, px, rgba, App, Context, FontWeight, KeyDownEvent, MouseButton, MouseDownEvent,
+    ScrollHandle, Window,
 };
 
 use crate::config::schema::ColorScheme;
@@ -26,6 +27,7 @@ use crate::llm::markdown::{parse_markdown, AnnotatedLine, ParseState};
 use super::chat_panel::markdown::render_line;
 use super::font_state;
 use super::pane_view::to_rgba;
+use super::GpuiShellRoot;
 
 /// Character width `parse_markdown` wraps content to -- matches the wgpu
 /// build's own `CONTENT_WIDTH` (`src/app/mod.rs`'s `open_sidebar_info_
@@ -168,4 +170,38 @@ pub fn render_info_overlay(overlay: &InfoOverlay, colors: &ColorScheme) -> impl 
                         .children(lines),
                 ),
         )
+}
+
+impl GpuiShellRoot {
+    /// `InfoOverlay`'s own key guard, called from `input.rs`'s
+    /// `on_key_down` as its very first statement -- moved here (out of
+    /// `input.rs` itself) to keep that file under the 400-line convention.
+    /// Returns `true` if the key was consumed. Unlike every other guard in
+    /// this codebase, this one is keyed on `is_visible()`, not
+    /// `is_focused(window)`: `InfoOverlay` grabs no `FocusHandle` of its
+    /// own (it's read-only -- nothing to type into, nowhere for real gpui
+    /// focus to go), and it is a genuine blocking modal (its backdrop's
+    /// `cx.stop_propagation()`, above, means there is no "clicked back
+    /// into the terminal while this stays open" case the way there is for
+    /// the chat panel or AI block) -- so visibility really is the only,
+    /// and the correct, signal here.
+    pub(super) fn maybe_handle_info_overlay_key(
+        &mut self,
+        event: &KeyDownEvent,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if !self.info_overlay.is_visible() {
+            return false;
+        }
+        match event.keystroke.key.as_str() {
+            "escape" => self.info_overlay.close(),
+            "down" => self.info_overlay.scroll_down(),
+            "up" => self.info_overlay.scroll_up(),
+            "j" => self.info_overlay.scroll_down(),
+            "k" => self.info_overlay.scroll_up(),
+            _ => {}
+        }
+        cx.notify();
+        true
+    }
 }

@@ -30,6 +30,7 @@ mod render_sidebar;
 pub mod sidebar;
 mod sidebar_nav;
 mod spawn_terminal;
+mod standalone_keys;
 pub mod status_bar;
 pub mod tabs;
 pub mod terminal_element;

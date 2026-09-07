@@ -36,29 +36,13 @@ impl GpuiShellRoot {
             return;
         }
 
-        // InfoOverlay intercepts all keys while open (Escape closes; Arrow
-        // Down/Up or j/k scroll) -- checked first, before every other guard
-        // in this function, since it visually sits on top of everything
-        // else. Unlike every other guard here, this one is keyed on
-        // `is_visible()`, not `is_focused(window)`: InfoOverlay grabs no
-        // `FocusHandle` of its own (it's read-only -- nothing to type into,
-        // nowhere for real gpui focus to go), and it is a genuine blocking
-        // modal (its backdrop's `cx.stop_propagation()`, `info_overlay.rs`,
-        // means there is no "clicked back into the terminal while this
-        // stays open" case the way there is for the chat panel or AI
-        // block) -- so visibility really is the only, and the correct,
-        // signal here. See `info_overlay.rs`'s own doc comment for the
-        // full reasoning.
-        if self.info_overlay.is_visible() {
-            match event.keystroke.key.as_str() {
-                "escape" => self.info_overlay.close(),
-                "down" => self.info_overlay.scroll_down(),
-                "up" => self.info_overlay.scroll_up(),
-                "j" => self.info_overlay.scroll_down(),
-                "k" => self.info_overlay.scroll_up(),
-                _ => {}
-            }
-            cx.notify();
+        // InfoOverlay intercepts all keys while open -- checked first,
+        // before every other guard in this function, since it visually
+        // sits on top of everything else. See `info_overlay.rs`'s own doc
+        // comment on `maybe_handle_info_overlay_key` for the full
+        // reasoning (moved there to keep this file under the 400-line
+        // convention).
+        if self.maybe_handle_info_overlay_key(event, cx) {
             return;
         }
 
@@ -307,51 +291,31 @@ impl GpuiShellRoot {
         // above already returned. Only reachable at all when neither
         // composer holds focus (both guards at the top of this function
         // already returned otherwise), so this can't be swallowed by a
-        // focused text field's own key bindings, and pressing it while
-        // typing in either composer instead falls through to that
-        // composer's own Escape/Enter handling -- there's no case where a
-        // real keystroke silently does nothing.
+        // focused text field's own key bindings. See `standalone_keys.rs`'s
+        // own doc comment on `toggle_ai_block` for the rest of the
+        // reasoning (moved there to keep this file under the 400-line
+        // convention).
         if event.keystroke.modifiers.control
             && !event.keystroke.modifiers.shift
             && !event.keystroke.modifiers.platform
             && !event.keystroke.modifiers.alt
             && event.keystroke.key == "space"
         {
-            self.ai_block.toggle(window, cx);
-            // `toggle` only ever moves focus TO the composer (opening);
-            // closing deliberately returns none, mirroring `LeaderAction::
-            // ToggleAiPanel`'s own division of labor (`actions.rs`). This is
-            // the other half: send focus back to the terminal right here
-            // rather than waiting on `render()`'s guard, which can't tell
-            // "the block just closed" from "the composer still holds a
-            // stale focus handle".
-            if !self.ai_block.is_visible() {
-                window.focus(&self.focus_handle);
-            }
-            cx.notify();
+            self.toggle_ai_block(window, cx);
             return;
         }
 
         // ── Cmd+F — toggle the in-terminal search bar ────────────────────
         // Standalone combo, not a leader chord, same shape as `Ctrl+Space`
-        // above. Only reachable once neither composer/palette/overlay guard
-        // above already returned, so it can't be swallowed mid-edit.
+        // above. See `standalone_keys.rs`'s own doc comment on
+        // `toggle_search_bar` for the full reasoning.
         if event.keystroke.modifiers.platform
             && !event.keystroke.modifiers.shift
             && !event.keystroke.modifiers.control
             && !event.keystroke.modifiers.alt
             && event.keystroke.key == "f"
         {
-            if self.search_bar.visible {
-                self.search_bar.close();
-                window.focus(&self.focus_handle);
-            } else {
-                self.search_query
-                    .update(cx, |input, cx| input.set_content("", cx));
-                self.search_bar.open();
-                self.search_query.focus_handle(cx).focus(window);
-            }
-            cx.notify();
+            self.toggle_search_bar(window, cx);
             return;
         }
 
