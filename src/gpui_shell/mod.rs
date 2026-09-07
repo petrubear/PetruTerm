@@ -10,6 +10,7 @@ mod actions;
 mod ai_block;
 mod chat_panel;
 mod config_watch;
+mod context_menu;
 pub mod font_state;
 mod info_overlay;
 mod input;
@@ -230,6 +231,11 @@ pub struct GpuiShellRoot {
     /// "cleared and refocused on each open, not rebuilt" shape as the
     /// palette's `palette_query` (M4a).
     search_query: gpui::Entity<text_input::TextInput>,
+    /// The right-click context menu's own state -- see `context_menu.rs`'s
+    /// own doc comment on why this is a new, minimal type rather than a
+    /// reuse of `crate::ui::context_menu::ContextMenu`.
+    #[allow(dead_code)]
+    context_menu: context_menu::ContextMenu,
 }
 
 impl GpuiShellRoot {
@@ -383,6 +389,7 @@ impl GpuiShellRoot {
             pending_palette_action: None,
             search_bar,
             search_query,
+            context_menu: context_menu::ContextMenu::default(),
         }
     }
 }

@@ -44,4 +44,13 @@ impl GpuiShellRoot {
         }
         cx.notify();
     }
+
+    /// `Cmd+K` -- clear the focused terminal's screen and scrollback.
+    /// Shares its actual clear logic with the context menu's own `Clear`
+    /// item (`context_menu.rs`'s `dispatch_context_action`) via
+    /// `clear_active_terminal`, so the two can't drift apart.
+    pub(super) fn clear_focused_terminal(&mut self, cx: &mut Context<Self>) {
+        self.clear_active_terminal();
+        cx.notify();
+    }
 }

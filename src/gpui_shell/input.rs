@@ -325,6 +325,20 @@ impl GpuiShellRoot {
             return;
         }
 
+        // ── Cmd+K — clear screen + scrollback ─────────────────────────────
+        // Standalone combo, not a leader chord, same shape as `Cmd+F`
+        // above. See `standalone_keys.rs`'s own doc comment on
+        // `clear_focused_terminal` for the full reasoning.
+        if event.keystroke.modifiers.platform
+            && !event.keystroke.modifiers.shift
+            && !event.keystroke.modifiers.control
+            && !event.keystroke.modifiers.alt
+            && event.keystroke.key == "k"
+        {
+            self.clear_focused_terminal(cx);
+            return;
+        }
+
         // ── Cmd+1-9 — switch to tab N (standard macOS pattern) ───────────
         if event.keystroke.modifiers.platform {
             if let Ok(n) = event.keystroke.key.parse::<usize>() {
@@ -367,14 +381,7 @@ impl GpuiShellRoot {
         // in-process platform call).
         if event.keystroke.modifiers.platform && event.keystroke.key == "v" {
             if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
-                if terminal.bracketed_paste_mode() {
-                    let mut data = b"\x1b[200~".to_vec();
-                    data.extend_from_slice(text.as_bytes());
-                    data.extend_from_slice(b"\x1b[201~");
-                    terminal.write_input(&data);
-                } else {
-                    terminal.write_input(text.as_bytes());
-                }
+                self.paste_text_to_active_terminal(&text);
                 cx.notify();
             }
             return;
