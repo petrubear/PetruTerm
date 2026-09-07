@@ -11,6 +11,7 @@ use gpui::{
 use super::leader::LeaderAction;
 use super::pane_view::to_rgba;
 use super::sidebar;
+use super::sidebar::SidebarSection;
 use super::{ai_block, chat_panel, info_overlay, pane_view, status_bar, tabs, GpuiShellRoot};
 
 /// Duration of the drawer's opening grow animation (Step 3). Closing is
@@ -240,6 +241,13 @@ impl Render for GpuiShellRoot {
             .as_ref()
             .map(|(id, input)| (*id, input.clone().into_any_element()));
 
+        let on_select_section: sidebar::render::SectionSelectCallback =
+            Rc::new(cx.listener(|this, section: &SidebarSection, window, cx| {
+                this.sidebar.set_section(*section);
+                window.focus(&this.sidebar_focus_handle);
+                cx.notify();
+            }));
+
         // Status bar row -- built from the poll-loop-refreshed cwd/git-branch/
         // exit-code state above plus this frame's leader/zoom state, same
         // inputs `StatusBar::build` takes in the wgpu app's own render path
@@ -330,14 +338,17 @@ impl Render for GpuiShellRoot {
             // terminal grid it contains and pushes the tab bar off-screen on
             // a small window.
             .when(self.sidebar.is_visible(), |el| {
-                let bar = sidebar::render::render_workspace_sidebar(
-                    &self.workspaces,
-                    &self.config.colors,
+                let sidebar_ctx = sidebar::render::SidebarRenderCx {
+                    workspaces: &self.workspaces,
+                    colors: &self.config.colors,
+                    active_section: self.sidebar.active_section(),
                     on_select_workspace,
                     on_new_workspace,
                     on_close_workspace,
-                    workspace_rename_element,
-                );
+                    on_select_section,
+                    workspace_rename: workspace_rename_element,
+                };
+                let bar = sidebar::render::render_workspace_sidebar(sidebar_ctx);
                 el.child(bar.with_animation(
                     "workspace-sidebar-drawer",
                     Animation::new(SIDEBAR_OPEN_ANIM).with_easing(ease_out_quint()),

@@ -117,7 +117,20 @@ impl GpuiShellRoot {
             LeaderAction::NextWorkspace => self.next_workspace(),
             LeaderAction::PrevWorkspace => self.prev_workspace(),
             LeaderAction::RenameWorkspace => self.begin_workspace_rename(window, cx),
-            LeaderAction::ToggleWorkspaceSidebar => self.sidebar.toggle(),
+            LeaderAction::ToggleWorkspaceSidebar => {
+                self.sidebar.toggle();
+                // Same division of labor `ToggleAiPanel` already has: opening
+                // moves focus TO the sidebar so Tab/arrow navigation (Task 3)
+                // works immediately; closing gives it back to the terminal
+                // rather than leaving a stale focus target (`is_focused`
+                // would otherwise report `true` for a handle nothing can see
+                // or type into anymore).
+                if self.sidebar.is_visible() {
+                    window.focus(&self.sidebar_focus_handle);
+                } else {
+                    window.focus(&self.focus_handle);
+                }
+            }
         }
         cx.notify();
     }

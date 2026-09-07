@@ -188,6 +188,14 @@ pub struct GpuiShellRoot {
     /// The workspace sidebar drawer -- one global drawer on the LEFT,
     /// mirroring `chat`'s drawer on the right (`render.rs`'s `middle_row`).
     sidebar: sidebar::WorkspaceSidebar,
+    /// The sidebar's own keyboard-focus identity, distinct from the root
+    /// `focus_handle` -- lets `on_key_down` (`input.rs`) tell "the sidebar
+    /// is open" (`sidebar.is_visible()`) apart from "the sidebar actually
+    /// has keyboard focus right now" (`sidebar_focus_handle.is_focused
+    /// (window)`), same distinction every other focusable surface in this
+    /// codebase already needs (tab rename, workspace rename, the chat
+    /// composer, the AI block).
+    sidebar_focus_handle: FocusHandle,
     /// The AI chat panel -- one global drawer, not one per pane (see
     /// `chat_panel/mod.rs`'s doc comment on why the wgpu build's
     /// `panel_id`/`set_active_terminal` plumbing has no equivalent here).
@@ -329,6 +337,7 @@ impl GpuiShellRoot {
             tab_rename: None,
             workspace_rename: None,
             sidebar: sidebar::WorkspaceSidebar::default(),
+            sidebar_focus_handle: cx.focus_handle(),
             chat,
             ai_block,
             skill_manager,
