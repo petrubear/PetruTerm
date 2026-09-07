@@ -135,7 +135,7 @@ impl GpuiShellRoot {
                 self.palette_query
                     .update(cx, |input, cx| input.set_content("", cx));
                 self.palette
-                    .open_with_items(super::palette::interim_actions());
+                    .open_with_items(super::palette_dispatch::gpui_shell_actions(&self.config));
                 self.palette_query.focus_handle(cx).focus(window);
             }
         }

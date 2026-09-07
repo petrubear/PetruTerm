@@ -14,38 +14,12 @@ use gpui::{
 };
 
 use crate::config::schema::ColorScheme;
-use crate::ui::palette::{Action, CommandPalette, PaletteAction};
+use crate::ui::palette::CommandPalette;
 
 use super::font_state;
-use super::leader::LeaderAction;
 use super::pane_view::to_rgba;
 use super::text_input::TextInput;
 use super::GpuiShellRoot;
-
-/// A small, real (not placeholder) subset of `Action` this task can already
-/// dispatch end-to-end, so Task 2's own dogfood step (open, type, arrow,
-/// Enter, Escape) exercises the full round-trip rather than an empty list.
-/// Task 3 removes this function entirely, replacing every call site with
-/// its own filtered `built_in_actions`-derived list.
-pub(super) fn interim_actions() -> Vec<PaletteAction> {
-    vec![
-        PaletteAction {
-            name: "New Tab".to_string(),
-            action: Action::NewTab,
-            keybind: Some("^F c".into()),
-        },
-        PaletteAction {
-            name: "Close Tab".to_string(),
-            action: Action::CloseTab,
-            keybind: Some("^F &".into()),
-        },
-        PaletteAction {
-            name: "Quit".to_string(),
-            action: Action::Quit,
-            keybind: Some("Cmd+Q".into()),
-        },
-    ]
-}
 
 /// Build the palette's `div()` tree: a dimmed, window-covering backdrop
 /// (`InfoOverlay`'s own shape, `info_overlay.rs`) centered on a fixed-size
@@ -179,23 +153,5 @@ impl GpuiShellRoot {
         }
         cx.notify();
         true
-    }
-
-    /// Run one confirmed palette action. This task's version covers only
-    /// the 3-item `interim_actions()` subset; Task 3 replaces this entire
-    /// function body with the full, spec-table-driven dispatch
-    /// (`palette_dispatch.rs`).
-    pub(super) fn dispatch_palette_action(
-        &mut self,
-        action: Action,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        match action {
-            Action::NewTab => self.dispatch_leader_action(LeaderAction::NewTab, window, cx),
-            Action::CloseTab => self.dispatch_leader_action(LeaderAction::CloseTab, window, cx),
-            Action::Quit => cx.quit(),
-            _ => {}
-        }
     }
 }
