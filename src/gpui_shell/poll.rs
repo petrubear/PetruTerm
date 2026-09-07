@@ -62,6 +62,11 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                             // `ai_block.rs`'s doc comment), so it needs the
                             // same rewire the chat panel just got above.
                             this.ai_block.rewire_provider(&this.config.llm);
+                            this.show_toast(
+                                "Config reloaded.",
+                                std::time::Duration::from_millis(3000),
+                                cx,
+                            );
                             cx.notify();
                         })
                         .is_ok();

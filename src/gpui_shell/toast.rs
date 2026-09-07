@@ -31,8 +31,8 @@ impl GpuiShellRoot {
     /// clock, rather than queueing both; this is exactly the wgpu build's
     /// own `dispatch_notification`'s behavior (`self.toast = Some((msg,
     /// deadline))`, unconditional overwrite). Drained on expiry by
-    /// `poll.rs`'s own tick (Task 2).
-    #[allow(dead_code)]
+    /// `poll.rs`'s own tick, called from `poll.rs`'s config-hot-reload
+    /// branch (Task 2) -- the first real trigger.
     pub(super) fn show_toast(
         &mut self,
         message: impl Into<String>,
