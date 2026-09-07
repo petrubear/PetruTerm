@@ -40,7 +40,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use gpui::{App, Context, FocusHandle, Focusable};
+use gpui::{App, AppContext, Context, FocusHandle, Focusable};
 
 use crate::app::pty_schedule::WakeupGate;
 use crate::config::Config;
@@ -49,6 +49,7 @@ use crate::llm::mcp::{config as mcp_config, trust};
 use crate::llm::skills::SkillManager;
 use crate::llm::steering::SteeringManager;
 use crate::term::Terminal;
+use crate::ui::palette::{Action, CommandPalette};
 use leader::LeaderAction;
 use panes::PaneForest;
 
@@ -229,6 +230,34 @@ pub struct GpuiShellRoot {
     /// modal and why that makes its `is_visible()` guard (`input.rs`)
     /// correct rather than a shortcut.
     info_overlay: info_overlay::InfoOverlay,
+    /// The command palette's own state (query, filtered results, selected
+    /// index, visibility) -- `crate::ui::palette::CommandPalette`, used
+    /// directly rather than copied, the same relationship M3b/M3d
+    /// established for `ChatPanel`/`SkillManager`/`McpManager`. `gpui_shell`
+    /// always opens it via `open_with_items(..)` with its own filtered list
+    /// (`palette_dispatch.rs`, Task 3) rather than `open()`'s unfiltered
+    /// `all_actions` -- several of the wgpu build's own actions have no
+    /// `gpui_shell` equivalent yet (see the M4 spec's §7 deferred list).
+    palette: CommandPalette,
+    /// The palette's query input -- a single persistent `TextInput` entity
+    /// (unlike tab/workspace rename, which build a fresh one per edit; the
+    /// palette opens/closes far more often, so its content is cleared and
+    /// refocused on each open instead of rebuilding the widget). Its own
+    /// `Submit`/`Cancel` actions are bound inside `TextInput`'s own
+    /// `"TextInput"` key context (`text_input/mod.rs`'s
+    /// `register_key_bindings`) and consumed by gpui's action-dispatch
+    /// before they ever reach `on_key_down`'s bubble listener -- the
+    /// `cx.subscribe` callback below (Step 4) is how this struct reacts to
+    /// them instead.
+    palette_query: gpui::Entity<text_input::TextInput>,
+    /// Set by the `palette_query` subscription (Step 4) when `Submit` fires
+    /// and `CommandPalette::confirm()` returns an action to run;
+    /// `render()`'s own top (`render.rs`, Task 2) drains and dispatches it
+    /// every frame. Needed because `cx.subscribe`'s callback is handed no
+    /// `Window` -- the same constraint M3b's chat-panel `/q` close already
+    /// worked around (`render.rs`'s own doc comment on its focus-reclaim
+    /// guard has the full precedent).
+    pending_palette_action: Option<Action>,
 }
 
 impl GpuiShellRoot {
@@ -260,6 +289,27 @@ impl GpuiShellRoot {
         );
         let chat = chat_panel::ChatPanelView::new(cx, &config);
         let ai_block = ai_block::AiBlockView::new(cx, &config);
+        let palette = CommandPalette::new(&config);
+        let palette_query =
+            cx.new(|cx| text_input::TextInput::new(cx, &config.colors, "", "Type a command..."));
+        // Set up once, for the widget's whole lifetime -- `palette_query` is
+        // a persistent entity (Step 2's own doc comment), not rebuilt per
+        // open like a rename editor, so this subscription only needs
+        // creating once too.
+        cx.subscribe(&palette_query, |this, _input, event, cx| {
+            match event {
+                text_input::TextInputEvent::Submit => {
+                    if let Some(action) = this.palette.confirm() {
+                        this.pending_palette_action = Some(action);
+                    }
+                }
+                text_input::TextInputEvent::Cancel => {
+                    this.palette.close();
+                }
+            }
+            cx.notify();
+        })
+        .detach();
 
         // Same construction pattern as the wgpu app's own `tokio_rt` field
         // on its `App`/`Mux` struct (`src/app/ui/mod.rs`) -- hoisted into
@@ -344,6 +394,9 @@ impl GpuiShellRoot {
             steering_manager,
             mcp_manager,
             info_overlay: info_overlay::InfoOverlay::new(),
+            palette,
+            palette_query,
+            pending_palette_action: None,
         }
     }
 }

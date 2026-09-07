@@ -19,6 +19,22 @@ const CHAT_PANEL_OPEN_ANIM: Duration = Duration::from_millis(180);
 
 impl Render for GpuiShellRoot {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Runs before the focus-reclaim guard below: dispatching a
+        // confirmed palette action (Task 3's `dispatch_palette_action`) can
+        // itself change `self.palette.is_visible()` this same frame, and
+        // the guard needs to see that change to correctly reclaim focus
+        // for the terminal without a one-frame lag. `CommandPalette::
+        // confirm()` (called from `palette_query`'s `cx.subscribe`
+        // callback, `mod.rs`) already closes the palette itself before
+        // this ever fires, so no explicit close call is needed here.
+        if let Some(_action) = self.pending_palette_action.take() {
+            // Task 3 replaces this with a real
+            // `self.dispatch_palette_action(action, window, cx);` call.
+            // Nothing to dispatch to yet -- Task 2 is the first task with
+            // any UI able to produce a confirmed action at all.
+            window.focus(&self.focus_handle);
+        }
+
         // Skipped while a child owns focus. This runs every frame, and the
         // poll loop repaints at ~30Hz, so focusing unconditionally would tear
         // focus away from the rename editor ~30 times a second and make it

@@ -47,6 +47,7 @@ pub enum LeaderAction {
     PrevWorkspace,
     RenameWorkspace,
     ToggleWorkspaceSidebar,
+    OpenCommandPalette,
 }
 
 impl TryFrom<&str> for LeaderAction {
@@ -74,6 +75,7 @@ impl TryFrom<&str> for LeaderAction {
             "PrevWorkspace" => Ok(LeaderAction::PrevWorkspace),
             "RenameWorkspace" => Ok(LeaderAction::RenameWorkspace),
             "ToggleWorkspaceSidebar" => Ok(LeaderAction::ToggleWorkspaceSidebar),
+            "CommandPalette" => Ok(LeaderAction::OpenCommandPalette),
             _ => Err(()),
         }
     }
@@ -209,6 +211,7 @@ mod tests {
             kb("j", "FocusPaneDown"),
             kb("k", "FocusPaneUp"),
             kb("l", "FocusPaneRight"),
+            kb("o", "CommandPalette"),
         ];
         let map = build_leader_map(&bindings);
         assert_eq!(map.get("c"), Some(&LeaderAction::NewTab));
@@ -231,11 +234,12 @@ mod tests {
         // Seeded even though it's absent from the input bindings, same as "z".
         assert_eq!(map.get("w"), Some(&LeaderAction::NewWorkspace));
         assert_eq!(map.get("s"), Some(&LeaderAction::ToggleWorkspaceSidebar));
+        assert_eq!(map.get("o"), Some(&LeaderAction::OpenCommandPalette));
     }
 
     #[test]
     fn unparseable_action_strings_are_skipped() {
-        let bindings = vec![kb("o", "CommandPalette")];
+        let bindings = vec![kb("o", "SomeUnknownFutureAction")];
         let map = build_leader_map(&bindings);
         assert_eq!(map.get("o"), None);
         assert_eq!(map.len(), 3); // just the seeded "z", "w", and "s"

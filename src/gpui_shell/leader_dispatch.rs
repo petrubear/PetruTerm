@@ -5,7 +5,7 @@
 // function alone (all sixteen `LeaderAction` variants) was the single
 // largest contributor. Pure code motion: no logic changed.
 
-use gpui::{Context, Window};
+use gpui::{Context, Focusable, Window};
 
 use super::leader::LeaderAction;
 use super::panes::{PaneForest, SplitDir};
@@ -130,6 +130,12 @@ impl GpuiShellRoot {
                 } else {
                     window.focus(&self.focus_handle);
                 }
+            }
+            LeaderAction::OpenCommandPalette => {
+                self.palette_query
+                    .update(cx, |input, cx| input.set_content("", cx));
+                self.palette.open_with_items(Vec::new());
+                self.palette_query.focus_handle(cx).focus(window);
             }
         }
         cx.notify();
