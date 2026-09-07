@@ -232,8 +232,7 @@ pub struct GpuiShellRoot {
     /// palette's `palette_query` (M4a).
     search_query: gpui::Entity<text_input::TextInput>,
     /// The right-click context menu's own state -- see `context_menu.rs`'s
-    /// own doc comment on why this is a new, minimal type rather than a
-    /// reuse of `crate::ui::context_menu::ContextMenu`.
+    /// own doc comment for why this isn't a reuse of `ContextMenu`.
     #[allow(dead_code)]
     context_menu: context_menu::ContextMenu,
 }
