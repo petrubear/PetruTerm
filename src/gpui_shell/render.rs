@@ -10,7 +10,8 @@ use gpui::{
 
 use super::pane_view::to_rgba;
 use super::{
-    ai_block, chat_panel, info_overlay, palette, pane_view, status_bar, tabs, GpuiShellRoot,
+    ai_block, chat_panel, info_overlay, palette, pane_view, search_bar, status_bar, tabs,
+    GpuiShellRoot,
 };
 
 /// Duration of the drawer's opening grow animation (Step 3). Closing is
@@ -32,6 +33,55 @@ impl Render for GpuiShellRoot {
         if let Some(action) = self.pending_palette_action.take() {
             self.dispatch_palette_action(action, window, cx);
             window.focus(&self.focus_handle);
+        }
+
+        // Search: run the query if dirty, scroll to the current match if
+        // needed -- ported verbatim from the wgpu build's own driver
+        // (`src/app/frame.rs`, lines 647-685), just moved from "once per
+        // poll tick" to "once per render() call" (this file has no
+        // separate per-tick hook the way `frame.rs` does, and `render()`
+        // already runs every frame the poll loop wakes for).
+        if self.search_bar.visible {
+            let active_ws = self.workspaces.active();
+            let active_tid = active_ws.tab_panes[active_ws.tabs.active_index()].focused_terminal;
+            if let Some(terminal) = self.terminals.get(&active_tid).cloned() {
+                if self.search_bar.dirty {
+                    let query = self.search_bar.query.clone();
+                    if query.is_empty() {
+                        self.search_bar.set_matches(Vec::new(), false);
+                    } else {
+                        let prev_query = self.search_bar.last_query.clone();
+                        let can_filter = !self.search_bar.matches.is_empty()
+                            && !self.search_bar.matches_truncated
+                            && query.starts_with(prev_query.as_str())
+                            && !prev_query.is_empty();
+                        let (matches, truncated) = if can_filter {
+                            crate::term::search::filter_matches(
+                                &terminal,
+                                &self.search_bar.matches,
+                                &query,
+                            )
+                        } else {
+                            crate::term::search::search_terminal(&terminal, &query)
+                        };
+                        self.search_bar.set_matches(matches, truncated);
+                    }
+                    self.search_bar.last_query = query;
+                    self.search_bar.dirty = false;
+                }
+                if self.search_bar.scroll_needed {
+                    if let Some(m) = self.search_bar.current_match().cloned() {
+                        let (disp_off, _) = terminal.scrollback_info();
+                        let screen_rows = terminal.rows.get() as i32;
+                        let target_offset = (screen_rows / 2 - m.grid_line).max(0) as usize;
+                        let delta = disp_off as i32 - target_offset as i32;
+                        if delta != 0 {
+                            terminal.scroll_display(-delta);
+                        }
+                    }
+                    self.search_bar.scroll_needed = false;
+                }
+            }
         }
 
         // Skipped while a child owns focus. This runs every frame, and the
@@ -303,6 +353,13 @@ impl Render for GpuiShellRoot {
             .when(self.ai_block.is_visible(), |el| {
                 el.child(ai_block::render_ai_block(
                     &self.ai_block,
+                    &self.config.colors,
+                ))
+            })
+            .when(self.search_bar.visible, |el| {
+                el.child(search_bar::render_search_bar(
+                    &self.search_bar,
+                    &self.search_query,
                     &self.config.colors,
                 ))
             });

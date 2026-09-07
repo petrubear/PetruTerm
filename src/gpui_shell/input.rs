@@ -36,6 +36,12 @@ impl GpuiShellRoot {
             return;
         }
 
+        // The search bar's own key guard -- see `search_bar.rs`'s own doc
+        // comment on `maybe_handle_search_key` for the full reasoning.
+        if self.maybe_handle_search_key(event, window, cx) {
+            return;
+        }
+
         // InfoOverlay intercepts all keys while open -- checked first,
         // before every other guard in this function, since it visually
         // sits on top of everything else. See `info_overlay.rs`'s own doc
