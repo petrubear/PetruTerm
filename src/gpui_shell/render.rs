@@ -11,7 +11,7 @@ use gpui::{
 use super::leader::LeaderAction;
 use super::pane_view::to_rgba;
 use super::sidebar;
-use super::{ai_block, chat_panel, pane_view, status_bar, tabs, GpuiShellRoot};
+use super::{ai_block, chat_panel, info_overlay, pane_view, status_bar, tabs, GpuiShellRoot};
 
 /// Duration of the drawer's opening grow animation (Step 3). Closing is
 /// instant -- see this file's own `render()` doc comment on the animated
@@ -361,6 +361,7 @@ impl Render for GpuiShellRoot {
         div()
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::on_key_down))
+            .relative()
             .flex()
             .flex_col()
             .size_full()
@@ -368,5 +369,11 @@ impl Render for GpuiShellRoot {
             .child(tab_bar)
             .child(middle_row)
             .when_some(status_bar_row, |el, bar| el.child(bar))
+            .when(self.info_overlay.is_visible(), |el| {
+                el.child(info_overlay::render_info_overlay(
+                    &self.info_overlay,
+                    &self.config.colors,
+                ))
+            })
     }
 }

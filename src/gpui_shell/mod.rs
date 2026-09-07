@@ -11,6 +11,7 @@ mod ai_block;
 mod chat_panel;
 mod config_watch;
 pub mod font_state;
+mod info_overlay;
 mod input;
 mod key_map;
 mod leader;
@@ -215,6 +216,11 @@ pub struct GpuiShellRoot {
     /// `mcp_manager` field does.
     #[allow(dead_code)] // first real reader is Task 4's MCP section
     mcp_manager: Arc<McpManager>,
+    /// The read-only content popup every sidebar row's activation opens
+    /// (Task 4) -- see `info_overlay.rs`'s own doc comment for why it's
+    /// modal and why that makes its `is_visible()` guard (`input.rs`)
+    /// correct rather than a shortcut.
+    info_overlay: info_overlay::InfoOverlay,
 }
 
 impl GpuiShellRoot {
@@ -328,6 +334,7 @@ impl GpuiShellRoot {
             skill_manager,
             steering_manager,
             mcp_manager,
+            info_overlay: info_overlay::InfoOverlay::new(),
         }
     }
 }

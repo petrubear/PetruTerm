@@ -29,6 +29,32 @@ impl GpuiShellRoot {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // InfoOverlay intercepts all keys while open (Escape closes; Arrow
+        // Down/Up or j/k scroll) -- checked first, before every other guard
+        // in this function, since it visually sits on top of everything
+        // else. Unlike every other guard here, this one is keyed on
+        // `is_visible()`, not `is_focused(window)`: InfoOverlay grabs no
+        // `FocusHandle` of its own (it's read-only -- nothing to type into,
+        // nowhere for real gpui focus to go), and it is a genuine blocking
+        // modal (its backdrop's `cx.stop_propagation()`, `info_overlay.rs`,
+        // means there is no "clicked back into the terminal while this
+        // stays open" case the way there is for the chat panel or AI
+        // block) -- so visibility really is the only, and the correct,
+        // signal here. See `info_overlay.rs`'s own doc comment for the
+        // full reasoning.
+        if self.info_overlay.is_visible() {
+            match event.keystroke.key.as_str() {
+                "escape" => self.info_overlay.close(),
+                "down" => self.info_overlay.scroll_down(),
+                "up" => self.info_overlay.scroll_up(),
+                "j" => self.info_overlay.scroll_down(),
+                "k" => self.info_overlay.scroll_up(),
+                _ => {}
+            }
+            cx.notify();
+            return;
+        }
+
         // While the rename `TextInput` genuinely holds focus, every key
         // belongs to it, full stop -- checked before anything else,
         // including the leader-key arm below (renaming while chording the
