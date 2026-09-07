@@ -201,6 +201,12 @@ impl Default for TabManager {
 /// notified) -- built from `Context::listener` at the call site.
 pub type TabSelectCallback = Rc<dyn Fn(&usize, &mut Window, &mut App)>;
 
+/// Called with the clicked tab's index and the right-click position. A callback
+/// that triggers the tab color picker menu at the given position for the
+/// specified tab.
+pub(super) type TabRightClickCallback =
+    Rc<dyn Fn(usize, gpui::Point<gpui::Pixels>, &mut Window, &mut App)>;
+
 /// The tab bar row: one flat, clickable cell per tab. The active tab gets a
 /// filled background plus an accent underline and full-strength text; the
 /// rest are dimmed -- matching the wgpu app's own flat-rect-plus-underline
@@ -210,6 +216,7 @@ pub fn render_tab_bar(
     tabs: &TabManager,
     colors: &ColorScheme,
     on_select: TabSelectCallback,
+    on_right_click: TabRightClickCallback,
     rename: Option<(usize, gpui::AnyElement)>,
 ) -> Div {
     let active_index = tabs.active_index();
@@ -230,6 +237,7 @@ pub fn render_tab_bar(
             let is_active = idx == active_index;
             let is_renaming = rename.as_ref().is_some_and(|(id, _)| *id == tab.id);
             let on_select = on_select.clone();
+            let on_right_click = on_right_click.clone();
             let cell = div()
                 .px_2()
                 .py_1()
@@ -237,7 +245,13 @@ pub fn render_tab_bar(
                 .cursor_pointer()
                 .on_mouse_down(MouseButton::Left, move |_: &MouseDownEvent, window, cx| {
                     on_select(&idx, window, cx)
-                });
+                })
+                .on_mouse_down(
+                    MouseButton::Right,
+                    move |event: &MouseDownEvent, window, cx| {
+                        on_right_click(idx, event.position, window, cx)
+                    },
+                );
             let cell = if is_renaming {
                 cell.child(rename.take().expect("checked is_some").1)
             } else {

@@ -126,6 +126,45 @@ impl Render for GpuiShellRoot {
         let (on_focus, on_drag, on_right_click, on_context_action, on_close_context_menu) =
             render_callbacks::build_frame_callbacks(cx);
 
+        let tab_color_view = cx.entity().downgrade();
+        let on_tab_right_click: tabs::TabRightClickCallback =
+            Rc::new(move |tab_idx, position, _window, cx| {
+                tab_color_view
+                    .update(cx, |root, cx| {
+                        let brights = root.config.colors.brights;
+                        let names = ["Red", "Green", "Yellow", "Blue", "Magenta", "Cyan", "White"];
+                        let mut items: Vec<crate::ui::context_menu::ContextMenuItem> = names
+                            .iter()
+                            .enumerate()
+                            .map(|(i, name)| {
+                                let color = brights[i + 1];
+                                crate::ui::context_menu::ContextMenuItem {
+                                    label: (*name).to_string(),
+                                    keybind: None,
+                                    action: crate::ui::context_menu::ContextAction::SetTabColor(
+                                        tab_idx,
+                                        Some(color),
+                                    ),
+                                    swatch_color: Some(color),
+                                }
+                            })
+                            .collect();
+                        items.push(crate::ui::context_menu::ContextMenuItem {
+                            label: "Reset".to_string(),
+                            keybind: None,
+                            action: crate::ui::context_menu::ContextAction::SetTabColor(
+                                tab_idx, None,
+                            ),
+                            swatch_color: None,
+                        });
+                        root.context_menu.position = position;
+                        root.context_menu.items = items;
+                        root.context_menu.visible = true;
+                        cx.notify();
+                    })
+                    .ok();
+            });
+
         let pane_ctx = pane_view::PaneRenderCx {
             terminals: &self.terminals,
             focused: self.workspaces.active().tab_panes[active_index].focused_terminal,
@@ -200,6 +239,7 @@ impl Render for GpuiShellRoot {
             &self.workspaces.active().tabs,
             &self.config.colors,
             on_select_tab,
+            on_tab_right_click,
             rename,
         );
 
