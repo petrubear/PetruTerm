@@ -10,8 +10,8 @@ use gpui::{
 
 use super::pane_view::to_rgba;
 use super::{
-    ai_block, chat_panel, info_overlay, palette, pane_view, search_bar, status_bar, tabs,
-    GpuiShellRoot,
+    ai_block, chat_panel, context_menu, info_overlay, palette, pane_view, search_bar, status_bar,
+    tabs, GpuiShellRoot,
 };
 
 /// Duration of the drawer's opening grow animation (Step 3). Closing is
@@ -139,7 +139,7 @@ impl Render for GpuiShellRoot {
                 })
                 .ok();
         });
-        let drag_view = view;
+        let drag_view = view.clone();
         let on_drag: pane_view::SeparatorDragCallback =
             Rc::new(move |node_id, position, _window, cx| {
                 drag_view
@@ -162,6 +162,58 @@ impl Render for GpuiShellRoot {
                     .ok();
             });
 
+        let right_click_view = view.clone();
+        let on_right_click: context_menu::RightClickCallback =
+            Rc::new(move |position, _window, cx| {
+                right_click_view
+                    .update(cx, |root, cx| {
+                        root.context_menu.position = position;
+                        root.context_menu.items = vec![
+                            crate::ui::context_menu::ContextMenuItem {
+                                label: "Copy".to_string(),
+                                keybind: Some("Cmd+C".to_string()),
+                                action: crate::ui::context_menu::ContextAction::Copy,
+                                swatch_color: None,
+                            },
+                            crate::ui::context_menu::ContextMenuItem {
+                                label: "Paste".to_string(),
+                                keybind: Some("Cmd+V".to_string()),
+                                action: crate::ui::context_menu::ContextAction::Paste,
+                                swatch_color: None,
+                            },
+                            crate::ui::context_menu::ContextMenuItem {
+                                label: "Clear".to_string(),
+                                keybind: Some("Cmd+K".to_string()),
+                                action: crate::ui::context_menu::ContextAction::Clear,
+                                swatch_color: None,
+                            },
+                        ];
+                        root.context_menu.visible = true;
+                        cx.notify();
+                    })
+                    .ok();
+            });
+
+        let action_view = view.clone();
+        let on_context_action: context_menu::ContextActionCallback =
+            Rc::new(move |action, _window, cx| {
+                let action = action.clone();
+                action_view
+                    .update(cx, |root, cx| root.dispatch_context_action(action, cx))
+                    .ok();
+            });
+
+        let close_menu_view = view.clone();
+        let on_close_context_menu: context_menu::ContextMenuCloseCallback =
+            Rc::new(move |_window, cx| {
+                close_menu_view
+                    .update(cx, |root, cx| {
+                        root.context_menu.close();
+                        cx.notify();
+                    })
+                    .ok();
+            });
+
         let pane_ctx = pane_view::PaneRenderCx {
             terminals: &self.terminals,
             focused: self.workspaces.active().tab_panes[active_index].focused_terminal,
@@ -177,6 +229,7 @@ impl Render for GpuiShellRoot {
                 .search_bar
                 .visible
                 .then(|| (self.search_bar.matches.clone(), self.search_bar.current)),
+            on_right_click,
         };
         let panes = match self.workspaces.active().zoomed_pane {
             Some(terminal_id) => pane_view::render_leaf(terminal_id, &pane_ctx),
@@ -372,6 +425,14 @@ impl Render for GpuiShellRoot {
                     &self.palette,
                     &self.palette_query,
                     &self.config.colors,
+                ))
+            })
+            .when(self.context_menu.visible, |el| {
+                el.child(context_menu::render_context_menu(
+                    &self.context_menu,
+                    &self.config.colors,
+                    on_context_action,
+                    on_close_context_menu,
                 ))
             })
     }

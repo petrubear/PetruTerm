@@ -21,7 +21,7 @@ use gpui::{
 
 use crate::term::Terminal;
 
-use super::{mouse, mouse::OnFocusCallback, rasterize};
+use super::{context_menu, mouse, mouse::OnFocusCallback, rasterize};
 
 pub struct TerminalGridElement {
     pub terminal: Rc<Terminal>,
@@ -37,6 +37,10 @@ pub struct TerminalGridElement {
     /// wgpu build's own `Mux::focused_terminal_id()` scoping). Threaded
     /// through to `rasterize::rasterize_grid`'s own `search` parameter.
     pub search: Option<(Vec<SearchMatch>, usize)>,
+    /// Opens the context menu at a right-click's position over this pane.
+    /// See `context_menu.rs`'s own doc comment on `RightClickCallback` for
+    /// why this carries no terminal id.
+    pub on_right_click: context_menu::RightClickCallback,
 }
 
 impl IntoElement for TerminalGridElement {
@@ -119,6 +123,8 @@ impl Element for TerminalGridElement {
             self.on_focus.clone(),
             window,
         );
+
+        context_menu::register_right_click(bounds, self.on_right_click.clone(), window);
 
         let search_ref = self
             .search

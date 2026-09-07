@@ -9,7 +9,16 @@
 // the item list, rendered as real clickable `div()`s (Task 2/3) the same
 // way every other list this migration has built already works.
 
-use gpui::{Context, Pixels, Point};
+use std::rc::Rc;
+
+use gpui::{
+    div, prelude::*, px, App, Bounds, Context, DispatchPhase, MouseButton, MouseDownEvent, Pixels,
+    Point, Window,
+};
+
+use crate::config::schema::ColorScheme;
+
+use super::pane_view::to_rgba;
 
 use crate::ui::context_menu::{ContextAction, ContextMenuItem};
 
@@ -32,6 +41,120 @@ impl ContextMenu {
     pub fn close(&mut self) {
         self.visible = false;
     }
+}
+
+/// Called with the click's real window-space pixel position on a right
+/// mouse-down over the terminal grid. No terminal id: Copy/Paste/Clear all
+/// operate on the globally-active terminal (this file's own doc comment
+/// has the reasoning), the same scoping the wgpu build's own
+/// `Mux::active_terminal()`-based menu already uses.
+pub(super) type RightClickCallback = Rc<dyn Fn(Point<Pixels>, &mut Window, &mut App)>;
+
+/// Called when a menu row is clicked, with that row's own `ContextAction`.
+pub type ContextActionCallback =
+    Rc<dyn Fn(&crate::ui::context_menu::ContextAction, &mut Window, &mut App)>;
+
+/// Called when a click lands outside the menu (`on_mouse_down_out`, Step 2).
+pub type ContextMenuCloseCallback = Rc<dyn Fn(&mut Window, &mut App)>;
+
+/// Register the terminal grid's own right-click handler -- a new,
+/// independent `window.on_mouse_event` registration alongside (not
+/// replacing) `mouse::register_mouse_handlers`'s existing left-click/drag/
+/// scroll handling in `terminal_element.rs`'s `paint()`. Deliberately NOT
+/// added to `mouse.rs` itself (874 lines already, well over this project's
+/// 400-line convention from pre-existing work) -- this keeps that
+/// pre-existing overshoot from growing worse for no reason.
+pub(super) fn register_right_click(
+    bounds: Bounds<Pixels>,
+    on_right_click: RightClickCallback,
+    window: &mut Window,
+) {
+    window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
+        if phase != DispatchPhase::Bubble || event.button != MouseButton::Right {
+            return;
+        }
+        if !bounds.contains(&event.position) {
+            return;
+        }
+        on_right_click(event.position, window, cx);
+    });
+}
+
+/// Build the context menu's `div()` tree: a small popup positioned at
+/// `menu.position`, one clickable row per item, closing on any click
+/// outside itself. `on_mouse_down_out` fires during the CAPTURE phase and
+/// does NOT call `cx.stop_propagation()`, so the outside click that closed
+/// this menu still reaches whatever it actually landed on (the terminal, a
+/// different tab) afterward -- unlike M4a's palette or M3d's
+/// `InfoOverlay`, both genuine blocking modals with a `stop_propagation`-
+/// backed backdrop.
+pub fn render_context_menu(
+    menu: &ContextMenu,
+    colors: &ColorScheme,
+    on_action: ContextActionCallback,
+    on_close_outside: ContextMenuCloseCallback,
+) -> impl IntoElement {
+    let rows: Vec<_> = menu
+        .items
+        .iter()
+        .enumerate()
+        .filter(|(_, item)| !item.is_non_interactive())
+        .map(|(idx, item)| {
+            let action = item.action.clone();
+            let label = item.label.clone();
+            let keybind = item.keybind.clone();
+            let swatch = item.swatch_color;
+            let on_action = on_action.clone();
+            div()
+                .id(("context-menu-row", idx))
+                .flex()
+                .flex_row()
+                .items_center()
+                .justify_between()
+                .px_2()
+                .py_1()
+                .cursor_pointer()
+                .text_color(to_rgba(colors.foreground))
+                .hover(|el| el.bg(to_rgba(colors.ui_surface_active)))
+                .child(
+                    div()
+                        .flex()
+                        .flex_row()
+                        .items_center()
+                        .gap_2()
+                        .when_some(swatch, |el, color| {
+                            el.child(
+                                div()
+                                    .w(px(10.0))
+                                    .h(px(10.0))
+                                    .rounded_full()
+                                    .bg(to_rgba(color)),
+                            )
+                        })
+                        .child(label),
+                )
+                .when_some(keybind, |el, kb| {
+                    el.child(div().text_size(px(11.0)).child(kb))
+                })
+                .on_mouse_down(MouseButton::Left, move |_: &MouseDownEvent, window, cx| {
+                    on_action(&action, window, cx)
+                })
+        })
+        .collect();
+
+    div()
+        .id("context-menu")
+        .absolute()
+        .left(menu.position.x)
+        .top(menu.position.y)
+        .flex()
+        .flex_col()
+        .min_w(px(160.0))
+        .bg(to_rgba(colors.ui_surface))
+        .border_1()
+        .border_color(to_rgba(colors.ui_border))
+        .on_mouse_down_out(move |_: &MouseDownEvent, window, cx| on_close_outside(window, cx))
+        .children(rows)
 }
 
 impl GpuiShellRoot {

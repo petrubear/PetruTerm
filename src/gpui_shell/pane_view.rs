@@ -100,6 +100,11 @@ pub(super) struct PaneRenderCx<'a> {
     /// leaf's `terminal_id == focused` (M4b Task 3) -- every other leaf
     /// gets `None`.
     pub search: Option<(Vec<SearchMatch>, usize)>,
+    /// Opens the context menu on a right-click anywhere in the pane area --
+    /// passed straight through to every leaf's own `TerminalGridElement`
+    /// unchanged (no per-leaf wrapping needed, since it carries no
+    /// terminal id -- see `context_menu.rs`'s own doc comment on why).
+    pub on_right_click: super::context_menu::RightClickCallback,
 }
 
 /// Walk `node` into a nested flex tree. The returned `Div` carries no
@@ -166,6 +171,7 @@ pub(super) fn render_leaf(terminal_id: usize, ctx: &PaneRenderCx) -> Div {
             } else {
                 None
             },
+            on_right_click: ctx.on_right_click.clone(),
         })
 }
 
