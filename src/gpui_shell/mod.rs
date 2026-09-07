@@ -27,6 +27,7 @@ mod poll;
 mod rasterize;
 mod rename;
 mod render;
+mod render_callbacks;
 mod render_sidebar;
 mod search_bar;
 mod separator;
