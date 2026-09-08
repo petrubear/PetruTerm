@@ -120,6 +120,25 @@ impl GpuiShellRoot {
         self.palette_query.focus_handle(cx).is_focused(window)
     }
 
+    /// Sync `CommandPalette`'s query/results from `palette_query`'s real,
+    /// live `TextInput` content. `CommandPalette::type_char`/`backspace`
+    /// are the wgpu build's own character-at-a-time input model; nothing
+    /// in `gpui_shell` ever calls either, since real keystrokes go through
+    /// `TextInput`'s own cursor-based editing instead -- without this,
+    /// `self.palette.query` never changes and the results list never
+    /// filters. Checked once per `render()` call (`render.rs`'s own top),
+    /// the same "driver, not an event handler" shape `drive_search`
+    /// already uses.
+    pub(super) fn drive_palette_query(&mut self, cx: &App) {
+        if !self.palette.visible {
+            return;
+        }
+        let content = self.palette_query.read(cx).content();
+        if content != self.palette.query {
+            self.palette.set_query(content.to_string());
+        }
+    }
+
     /// The palette's own key guard, called from `input.rs`'s `on_key_down`
     /// as its very first statement -- moved here (out of `input.rs` itself)
     /// to keep that file under the 400-line convention, the same class of

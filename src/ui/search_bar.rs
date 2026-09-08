@@ -54,6 +54,23 @@ impl SearchBar {
         }
     }
 
+    /// Replace the query wholesale and mark dirty for the next `drive_search`
+    /// pass. Unlike `type_char`/`backspace` (this struct's own append/
+    /// trim-last-char model), this accepts any new content regardless of how
+    /// it changed -- needed by consumers backed by a real cursor-based text-
+    /// editing widget (paste, mid-string insert/delete, select+replace),
+    /// none of which fit the append/backspace shape. Only `gpui_shell::
+    /// search_bar::drive_search_query` calls this (a different Cargo bin
+    /// target, `gpui-petruterm`, than the `petruterm` binary this file is
+    /// also compiled into) -- the wgpu app's own input path still drives
+    /// `type_char`/`backspace` directly, so this is genuinely unused from
+    /// that bin's own perspective, not a temporary gap awaiting a caller.
+    #[allow(dead_code)]
+    pub fn set_query(&mut self, query: String) {
+        self.query = query;
+        self.dirty = true;
+    }
+
     /// Replace match list after a search run. Resets to first match.
     pub fn set_matches(&mut self, matches: Vec<SearchMatch>, truncated: bool) {
         self.current = 0;

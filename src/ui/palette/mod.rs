@@ -89,6 +89,23 @@ impl CommandPalette {
         self.filter();
     }
 
+    /// Replace the query wholesale and re-filter. Unlike `type_char`/
+    /// `backspace` (this struct's own append/trim-last-char model), this
+    /// accepts any new content regardless of how it changed -- needed by
+    /// consumers backed by a real cursor-based text-editing widget (paste,
+    /// mid-string insert/delete, select+replace), none of which fit the
+    /// append/backspace shape. Only `gpui_shell::palette::drive_palette_
+    /// query` calls this (a different Cargo bin target, `gpui-petruterm`,
+    /// than the `petruterm` binary this file is also compiled into) --
+    /// the wgpu app's own input path still drives `type_char`/`backspace`
+    /// directly, so this is genuinely unused from that bin's own
+    /// perspective, not a temporary gap awaiting a caller.
+    #[allow(dead_code)]
+    pub fn set_query(&mut self, query: String) {
+        self.query = query;
+        self.filter();
+    }
+
     /// Delete the last character from the query and re-filter.
     pub fn backspace(&mut self) {
         self.query.pop();

@@ -35,6 +35,12 @@ impl Render for GpuiShellRoot {
             window.focus(&self.focus_handle);
         }
 
+        // Sync query state from the real `TextInput` widgets' live content
+        // -- see `palette.rs`'s/`search_bar.rs`'s own doc comments on
+        // `drive_palette_query`/`drive_search_query`.
+        self.drive_palette_query(cx);
+        self.drive_search_query(cx);
+
         // Search: run the query if dirty, scroll to the current match if
         // needed. See `search_bar.rs`'s own doc comment on `drive_search`
         // for the full reasoning (moved there to keep this file under the

@@ -54,6 +54,24 @@ impl GpuiShellRoot {
         self.search_query.focus_handle(cx).is_focused(window)
     }
 
+    /// Sync `SearchBar`'s query from `search_query`'s real, live `TextInput`
+    /// content -- same gap, same fix as `palette.rs`'s own
+    /// `drive_palette_query`: `SearchBar::type_char`/`backspace` are the
+    /// wgpu build's own character-at-a-time input model, and nothing in
+    /// `gpui_shell` ever calls either, so `self.search_bar.query` never
+    /// changed and `drive_search` never had anything to run. Checked once
+    /// per `render()` call, right before `drive_search` itself so a
+    /// same-frame content change is picked up immediately.
+    pub(super) fn drive_search_query(&mut self, cx: &App) {
+        if !self.search_bar.visible {
+            return;
+        }
+        let content = self.search_query.read(cx).content();
+        if content != self.search_bar.query {
+            self.search_bar.set_query(content.to_string());
+        }
+    }
+
     /// The search bar's own key guard, called from `input.rs`'s
     /// `on_key_down`. Returns `true` if the key was consumed. Up/Down move
     /// to the prev/next match directly (`SearchBar::prev_match`/
