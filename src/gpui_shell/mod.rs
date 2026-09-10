@@ -9,6 +9,7 @@
 mod actions;
 mod ai_block;
 mod blocks;
+mod branch_picker;
 mod chat_panel;
 mod config_watch;
 mod context_menu;
@@ -92,9 +93,9 @@ pub struct GpuiShellRoot {
     block_managers: HashMap<usize, crate::term::BlockManager>,
     /// Word typed since terminal's last prompt (for Tab-triggered expansion).
     snippet_word: String,
-    /// Text queued for the chat composer by the context menu's
-    /// `SendToChat` action, drained at the top of `render()` (no `Window`
-    /// where it's set) -- same shape as `pending_palette_action`.
+    /// In-flight git-branch scan for branch picker (see `branch_picker.rs`).
+    branch_scan_rx: Option<crossbeam_channel::Receiver<Vec<String>>>,
+    /// Text queued for chat composer by context menu, drained at render top.
     pending_send_to_chat: Option<String>,
     cursor_blink_on: bool,
     cursor_last_blink: std::time::Instant,
@@ -166,9 +167,7 @@ pub struct GpuiShellRoot {
     /// The workspace sidebar drawer -- one global drawer on the LEFT,
     /// mirroring `chat`'s drawer on the right (`render.rs`'s `middle_row`).
     sidebar: sidebar::WorkspaceSidebar,
-    /// The sidebar's own keyboard-focus identity, distinct from the root
-    /// `focus_handle` -- lets `on_key_down` tell "the sidebar is open"
-    /// apart from "the sidebar actually has keyboard focus right now".
+    /// Sidebar's keyboard-focus identity (distinct from root focus_handle).
     sidebar_focus_handle: FocusHandle,
     /// The AI chat panel -- one global drawer, not one per pane (see
     /// `chat_panel/mod.rs`'s doc comment on why the wgpu build's
@@ -359,6 +358,7 @@ impl GpuiShellRoot {
             wakeup_gates,
             block_managers,
             snippet_word: String::new(),
+            branch_scan_rx: None,
             pending_send_to_chat: None,
             cursor_blink_on: true,
             cursor_last_blink: std::time::Instant::now(),

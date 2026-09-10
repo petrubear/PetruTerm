@@ -54,6 +54,7 @@ pub(super) fn gpui_shell_actions(config: &Config) -> Vec<PaletteAction> {
                     | Action::OpenConfigFolder
                     | Action::ReloadConfig
                     | Action::SwitchToTab(_)
+                    | Action::OpenBranchPicker
                     | Action::ExpandSnippet(_)
             )
         })
@@ -162,6 +163,11 @@ impl GpuiShellRoot {
                     active_ws.tab_panes[active_ws.tabs.active_index()].focused_terminal;
                 if let Some(terminal) = self.terminals.get(&active_tid) {
                     terminal.write_input(body.as_bytes());
+                }
+            }
+            Action::OpenBranchPicker => {
+                if let Some(cwd) = self.cached_cwd.clone() {
+                    self.open_branch_picker(&cwd);
                 }
             }
             // Every other variant is filtered out of `gpui_shell_actions`

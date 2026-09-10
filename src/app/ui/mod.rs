@@ -1635,6 +1635,13 @@ impl UiManager {
                     .unwrap_or_default();
                 self.git_checkout(&branch, &cwd);
             }
+            Action::OpenBranchPicker => {
+                let cwd = mux
+                    .active_cwd()
+                    .or_else(|| std::env::current_dir().ok())
+                    .unwrap_or_default();
+                self.open_branch_picker(&cwd);
+            }
             Action::ExpandSnippet(body) => {
                 if let Some(terminal) = mux.active_terminal() {
                     terminal.scroll_to_bottom();

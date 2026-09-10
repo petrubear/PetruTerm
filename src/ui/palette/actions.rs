@@ -62,6 +62,12 @@ pub enum Action {
     ToggleStatusBar,
     RenameTab,
     GitCheckout(String),
+    /// Open the palette in branch-picker mode (populates async). Reachable
+    /// from the command palette in `gpui_shell`; the wgpu build reaches
+    /// the same `open_branch_picker` via a status-bar click instead
+    /// (`src/app/mod.rs`'s own dispatch) and does not yet expose this as
+    /// a palette entry, though nothing stops it from adopting one too.
+    OpenBranchPicker,
     ExpandSnippet(String),
     // Phase 3 P3 — Themes
     OpenThemePicker,
@@ -306,6 +312,11 @@ pub fn built_in_actions(config: &Config) -> Vec<PaletteAction> {
             name: "Saved Workspaces...".to_string(),
             action: Action::OpenSavedWorkspaces,
             keybind: Some("^F W L".into()),
+        },
+        PaletteAction {
+            name: "Git: Switch Branch".to_string(),
+            action: Action::OpenBranchPicker,
+            keybind: None,
         },
     ];
     actions.sort_unstable_by(|a, b| a.name.cmp(&b.name));
