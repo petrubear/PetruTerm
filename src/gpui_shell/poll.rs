@@ -50,6 +50,7 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                                 &crate::config::keybind_view::leader_bindings_view(&new_config)
                                     .bindings,
                             );
+                            this.palette.rebuild_snippets(&new_config.snippets);
                             this.config = new_config;
                             // M3b Task 2: pick up an edited `llm.*` block
                             // (provider, model, api key, base url) on the
@@ -99,6 +100,10 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                                     exited_terminals.push(id);
                                 }
                                 crate::term::PtyEvent::Osc133(marker) => {
+                                    let is_prompt_start = matches!(
+                                        marker,
+                                        crate::term::osc133::Osc133Marker::PromptStart
+                                    );
                                     let command_text = match &marker {
                                         crate::term::osc133::Osc133Marker::CommandStart(cmd) => {
                                             cmd.clone()
@@ -115,6 +120,15 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                                     });
                                     if let Some(manager) = this.block_managers.get_mut(&id) {
                                         manager.on_marker(marker, absolute_row, command_text);
+                                    }
+                                    if is_prompt_start {
+                                        let active_ws = this.workspaces.active();
+                                        let active_tid = active_ws.tab_panes
+                                            [active_ws.tabs.active_index()]
+                                        .focused_terminal;
+                                        if id == active_tid {
+                                            this.snippet_word.clear();
+                                        }
                                     }
                                 }
                                 crate::term::PtyEvent::ScreenCleared => {

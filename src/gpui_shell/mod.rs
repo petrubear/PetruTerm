@@ -34,6 +34,7 @@ mod search_bar;
 mod separator;
 pub mod sidebar;
 mod sidebar_nav;
+mod snippets;
 mod spawn_terminal;
 mod standalone_keys;
 pub mod status_bar;
@@ -89,18 +90,16 @@ pub struct GpuiShellRoot {
     /// itself, since `Terminal.block_manager` has no interior mutability.
     /// Populated/cleaned at the same call sites as `wakeup_gates`.
     block_managers: HashMap<usize, crate::term::BlockManager>,
+    /// Word typed since terminal's last prompt (for Tab-triggered expansion).
+    snippet_word: String,
     /// Text queued for the chat composer by the context menu's
     /// `SendToChat` action, drained at the top of `render()` (no `Window`
     /// where it's set) -- same shape as `pending_palette_action`.
     pending_send_to_chat: Option<String>,
     cursor_blink_on: bool,
     cursor_last_blink: std::time::Instant,
-    /// Last-painted pixel bounds of every leaf and split in the active tab,
-    /// refreshed each frame by `pane_view`'s `on_children_prepainted` hooks.
-    /// `Rc<RefCell<_>>` (rather than the plain field Task 1 left here)
-    /// because those hooks are `'static` closures owned by the element tree:
-    /// they have to write into the cache from inside a frame that `render()`
-    /// has already returned from.
+    /// Last-painted pixel bounds of every leaf/split in active tab.
+    /// `Rc<RefCell<_>>` for `'static` closures to write into from frames.
     rect_cache: Rc<RefCell<panes::RectCache>>,
     /// Leader-key ("Ctrl+F" by default) chorded-input state -- ported from
     /// `src/app/input/mod.rs`'s `leader_active`/`leader_deadline`. `true`
@@ -359,6 +358,7 @@ impl GpuiShellRoot {
             config,
             wakeup_gates,
             block_managers,
+            snippet_word: String::new(),
             pending_send_to_chat: None,
             cursor_blink_on: true,
             cursor_last_blink: std::time::Instant::now(),

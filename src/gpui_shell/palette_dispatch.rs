@@ -54,6 +54,7 @@ pub(super) fn gpui_shell_actions(config: &Config) -> Vec<PaletteAction> {
                     | Action::OpenConfigFolder
                     | Action::ReloadConfig
                     | Action::SwitchToTab(_)
+                    | Action::ExpandSnippet(_)
             )
         })
         .collect()
@@ -154,6 +155,14 @@ impl GpuiShellRoot {
             }
             Action::SwitchToTab(n) if self.workspaces.active_mut().tabs.switch_to_index(n) => {
                 cx.notify();
+            }
+            Action::ExpandSnippet(body) => {
+                let active_ws = self.workspaces.active();
+                let active_tid =
+                    active_ws.tab_panes[active_ws.tabs.active_index()].focused_terminal;
+                if let Some(terminal) = self.terminals.get(&active_tid) {
+                    terminal.write_input(body.as_bytes());
+                }
             }
             // Every other variant is filtered out of `gpui_shell_actions`
             // (see its own doc comment) -- unreachable in practice, kept as

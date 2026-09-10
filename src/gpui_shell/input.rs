@@ -29,25 +29,18 @@ impl GpuiShellRoot {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        // The palette's own key guard -- see `palette.rs`'s own doc
-        // comment on `maybe_handle_palette_key` for the full reasoning
-        // (moved there to keep this file under the 400-line convention).
+        // Palette key guard -- see `palette.rs`'s `maybe_handle_palette_key`.
         if self.maybe_handle_palette_key(event, window, cx) {
             return;
         }
 
-        // The search bar's own key guard -- see `search_bar.rs`'s own doc
-        // comment on `maybe_handle_search_key` for the full reasoning.
+        // Search bar key guard -- see `search_bar.rs`'s `maybe_handle_search_key`.
         if self.maybe_handle_search_key(event, window, cx) {
             return;
         }
 
-        // InfoOverlay intercepts all keys while open -- checked first,
-        // before every other guard in this function, since it visually
-        // sits on top of everything else. See `info_overlay.rs`'s own doc
-        // comment on `maybe_handle_info_overlay_key` for the full
-        // reasoning (moved there to keep this file under the 400-line
-        // convention).
+        // InfoOverlay intercepts all keys (checked first, on top visually).
+        // See `info_overlay.rs`'s `maybe_handle_info_overlay_key` doc.
         if self.maybe_handle_info_overlay_key(event, cx) {
             return;
         }
@@ -352,33 +345,24 @@ impl GpuiShellRoot {
 
         let active_ws = self.workspaces.active();
         let active_tid = active_ws.tab_panes[active_ws.tabs.active_index()].focused_terminal;
-        let Some(terminal) = self.terminals.get(&active_tid) else {
-            return;
-        };
-        // Any keystroke -- paste included -- snaps the view back to the
-        // live edge, matching the wgpu app's own key handler
-        // (src/app/input/mod.rs's scroll_to_bottom() call before every key
-        // write). alacritty's grid deliberately pins a scrolled view even
-        // as new output arrives, so without this a key press while
-        // scrolled back leaves its own output landing off-screen.
-        // `cx.notify()` here, not just below: a swallowed key (an unbound
-        // Cmd-combo, e.g.) reaches neither this function's other `notify()`
-        // calls, but scroll_to_bottom() already ran unconditionally above
-        // -- without this, the view would jump to the bottom in Terminal
-        // state but not on screen until the poll loop's own next incidental
-        // repaint (up to 530ms later, the blink toggle).
-        terminal.scroll_to_bottom();
-        cx.notify();
+        {
+            let Some(terminal) = self.terminals.get(&active_tid) else {
+                return;
+            };
+            // Any keystroke -- paste included -- snaps the view back to the
+            // live edge, matching the wgpu app's own key handler. alacritty's
+            // grid pins a scrolled view even as new output arrives, so without
+            // this a key press while scrolled back leaves its output off-screen.
+            terminal.scroll_to_bottom();
+            cx.notify();
+        }
 
         // Cmd+V paste. `key_map::translate_key` never sees this: gpui only
-        // populates `key_char` when cmd is NOT held (see its own doc
-        // comment), and there's no gpui keybinding action claiming Cmd+V
-        // either, so it falls through as an unbound cmd-combo. Ported from
-        // the wgpu app's own paste path (`frame.rs`'s `flush_pending_paste`)
-        // minus its background-thread dance: that existed to keep arboard's
-        // clipboard read off the main thread (TD-PERF-15), a cost gpui's own
-        // `cx.read_from_clipboard()` doesn't have (a direct, already
-        // in-process platform call).
+        // populates `key_char` when cmd is NOT held, and there's no gpui
+        // keybinding action claiming Cmd+V either, so it falls through as an
+        // unbound cmd-combo. Ported from the wgpu app's own paste path minus
+        // background-thread dance: gpui's `cx.read_from_clipboard()` has no
+        // such overhead (direct platform call).
         if event.keystroke.modifiers.platform && event.keystroke.key == "v" {
             if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
                 self.paste_text_to_active_terminal(&text);
@@ -387,6 +371,13 @@ impl GpuiShellRoot {
             return;
         }
 
+        if self.maybe_expand_snippet_tab(event, active_tid, cx) {
+            return;
+        }
+
+        let Some(terminal) = self.terminals.get(&active_tid) else {
+            return;
+        };
         let mode = terminal.with_term(|term| *term.mode());
         if let Some(bytes) = super::key_map::translate_key(
             &event.keystroke,
@@ -394,6 +385,7 @@ impl GpuiShellRoot {
             self.config.keyboard.option_as_meta,
         ) {
             terminal.write_input(&bytes);
+            self.track_snippet_key(event);
             cx.notify();
         }
     }
