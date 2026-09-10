@@ -56,6 +56,9 @@ pub(super) fn gpui_shell_actions(config: &Config) -> Vec<PaletteAction> {
                     | Action::SwitchToTab(_)
                     | Action::OpenBranchPicker
                     | Action::ExpandSnippet(_)
+                    | Action::SaveWorkspace
+                    | Action::OpenSavedWorkspaces
+                    | Action::RestoreWorkspace(_)
             )
         })
         .collect()
@@ -168,6 +171,38 @@ impl GpuiShellRoot {
             Action::OpenBranchPicker => {
                 if let Some(cwd) = self.cached_cwd.clone() {
                     self.open_branch_picker(&cwd);
+                }
+            }
+            Action::SaveWorkspace => {
+                if let Err(e) = self.save_active_workspace() {
+                    log::error!("save_active_workspace: {e}");
+                }
+            }
+            Action::OpenSavedWorkspaces => {
+                let items: Vec<crate::ui::palette::PaletteAction> =
+                    crate::app::mux::snapshot::list_saved_workspaces()
+                        .into_iter()
+                        .map(|info| crate::ui::palette::PaletteAction {
+                            name: format!(
+                                "{} ({} tabs) — {}",
+                                info.name, info.tab_count, info.saved_at
+                            ),
+                            action: crate::ui::palette::Action::RestoreWorkspace(
+                                info.path.to_string_lossy().into_owned(),
+                            ),
+                            keybind: None,
+                        })
+                        .collect();
+                if items.is_empty() {
+                    self.palette.open();
+                } else {
+                    self.palette.open_with_items(items);
+                }
+            }
+            Action::RestoreWorkspace(path) => {
+                match crate::app::mux::snapshot::load_workspace(&std::path::PathBuf::from(&path)) {
+                    Ok(snap) => self.restore_workspace(snap, cx),
+                    Err(e) => log::error!("load_workspace: {e}"),
                 }
             }
             // Every other variant is filtered out of `gpui_shell_actions`

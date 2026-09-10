@@ -44,9 +44,10 @@ pub mod terminal_element;
 pub mod text_input;
 mod toast;
 mod workspace;
+mod workspace_snapshot;
 
 pub use config_watch::spawn_config_watcher;
-pub(crate) use spawn_terminal::spawn_terminal;
+pub(crate) use spawn_terminal::{spawn_terminal, spawn_terminal_at};
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -77,9 +78,8 @@ pub struct GpuiShellRoot {
     /// workspace and the poll loop wants one map to walk (design doc §3.6).
     workspaces: workspace::WorkspaceManager,
     /// terminal_id -> live Terminal handle. A tab's PaneForest only stores
-    /// usize ids (matching src/ui/panes.rs's own design); this map is
-    /// where the actual Rc<Terminal> lives, looked up by id wherever a
-    /// leaf's real terminal is needed (paint, key routing, resize).
+    /// usize ids (matching src/ui/panes.rs's own design); this map is where
+    /// the actual Rc<Terminal> lives, looked up by id for paint/key/resize.
     terminals: HashMap<usize, Rc<Terminal>>,
     /// `new()`'s initial terminal (id 0) and every later spawn (splits, new
     /// tabs) draw ids from this one counter.

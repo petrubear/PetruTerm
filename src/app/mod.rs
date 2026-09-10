@@ -18,7 +18,7 @@ pub(crate) mod hover_link;
 mod input;
 mod layout;
 mod menu;
-mod mux;
+pub(crate) mod mux;
 pub(crate) mod perf;
 pub(crate) mod pty_schedule;
 mod renderer;

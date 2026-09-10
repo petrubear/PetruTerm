@@ -42,6 +42,18 @@ pub(crate) fn spawn_terminal(
     rows: u16,
     config: &Config,
 ) -> anyhow::Result<(Rc<Terminal>, Arc<WakeupGate>)> {
+    spawn_terminal_at(cols, rows, config, None)
+}
+
+/// Same as `spawn_terminal`, but spawns the shell in `cwd` instead of the
+/// process's own working directory -- used by workspace restore
+/// (`workspace_snapshot.rs`) to recreate panes at their saved CWDs.
+pub(crate) fn spawn_terminal_at(
+    cols: u16,
+    rows: u16,
+    config: &Config,
+    cwd: Option<std::path::PathBuf>,
+) -> anyhow::Result<(Rc<Terminal>, Arc<WakeupGate>)> {
     let (cell_width, cell_height) = font_state::measured_cell_size();
     let cell_w = f32::from(cell_width).round().max(1.0) as u16;
     let cell_h = f32::from(cell_height).round().max(1.0) as u16;
@@ -55,7 +67,7 @@ pub(crate) fn spawn_terminal(
         cell_h,
         wakeup,
         Arc::clone(&wakeup_gate),
-        None,
+        cwd,
     )?;
     Ok((Rc::new(terminal), wakeup_gate))
 }
