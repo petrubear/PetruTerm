@@ -171,11 +171,10 @@ pub fn render_context_menu(
 
 impl GpuiShellRoot {
     /// Run one confirmed context-menu action. `ContextAction`'s remaining
-    /// variants (`CopyLastCommand`, `OpenLink`, `CopyLink`, `Separator`,
-    /// `Label`) are never constructed by this milestone's own item lists
-    /// yet (`OpenLink`/`CopyLink` get real arms in Task 3) -- no arm
-    /// needed for them here, `_ => {}` covers anything unreachable in
-    /// practice the same way M4a's palette dispatch does.
+    /// variants (`CopyLastCommand`, `Separator`, `Label`) are never
+    /// constructed by this milestone's own item lists yet -- no arm needed
+    /// for them here, `_ => {}` covers anything unreachable in practice the
+    /// same way M4a's palette dispatch does.
     #[allow(dead_code)]
     pub(super) fn dispatch_context_action(
         &mut self,
@@ -232,6 +231,20 @@ impl GpuiShellRoot {
                     self.pending_send_to_chat = Some(text);
                     cx.notify();
                 }
+            }
+            ContextAction::OpenLink(url) => {
+                let open_arg =
+                    if url.starts_with('/') || url.starts_with("./") || url.starts_with("../") {
+                        crate::app::hover_link::path_for_open(&url).to_string()
+                    } else {
+                        url
+                    };
+                std::thread::spawn(move || {
+                    let _ = std::process::Command::new("open").arg(&open_arg).spawn();
+                });
+            }
+            ContextAction::CopyLink(url) => {
+                cx.write_to_clipboard(gpui::ClipboardItem::new_string(url));
             }
             _ => {}
         }

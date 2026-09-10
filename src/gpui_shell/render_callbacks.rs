@@ -69,14 +69,42 @@ pub(super) fn build_frame_callbacks(
 
     let right_click_view = view.clone();
     let on_right_click: context_menu::RightClickCallback =
-        Rc::new(move |position, _col, row, _window, cx| {
+        Rc::new(move |position, col, row, _window, cx| {
             right_click_view
                 .update(cx, |root, cx| {
-                    root.context_menu.position = position;
-
                     let active_ws = root.workspaces.active();
                     let active_tid =
                         active_ws.tab_panes[active_ws.tabs.active_index()].focused_terminal;
+
+                    let link = root.terminals.get(&active_tid).and_then(|terminal| {
+                        let (row_text, _) = super::blocks::row_text_and_absolute_row(terminal, row);
+                        crate::app::hover_link::scan_link_at(&row_text, col)
+                    });
+
+                    if let Some((_, _, _, text)) = link {
+                        root.context_menu.position = position;
+                        root.context_menu.items = vec![
+                            crate::ui::context_menu::ContextMenuItem {
+                                label: "Open Link".to_string(),
+                                keybind: None,
+                                action: crate::ui::context_menu::ContextAction::OpenLink(
+                                    text.clone(),
+                                ),
+                                swatch_color: None,
+                            },
+                            crate::ui::context_menu::ContextMenuItem {
+                                label: "Copy Link".to_string(),
+                                keybind: None,
+                                action: crate::ui::context_menu::ContextAction::CopyLink(text),
+                                swatch_color: None,
+                            },
+                        ];
+                        root.context_menu.visible = true;
+                        cx.notify();
+                        return;
+                    }
+
+                    root.context_menu.position = position;
 
                     let block = root.terminals.get(&active_tid).and_then(|terminal| {
                         let (_, absolute_row) =

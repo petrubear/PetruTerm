@@ -14,7 +14,7 @@ use crate::ui::{ContextAction, SidebarState};
 
 mod app_state;
 mod frame;
-mod hover_link;
+pub(crate) mod hover_link;
 mod input;
 mod layout;
 mod menu;
