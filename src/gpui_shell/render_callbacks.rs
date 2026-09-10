@@ -68,35 +68,85 @@ pub(super) fn build_frame_callbacks(
         });
 
     let right_click_view = view.clone();
-    let on_right_click: context_menu::RightClickCallback = Rc::new(move |position, _window, cx| {
-        right_click_view
-            .update(cx, |root, cx| {
-                root.context_menu.position = position;
-                root.context_menu.items = vec![
-                    crate::ui::context_menu::ContextMenuItem {
-                        label: "Copy".to_string(),
-                        keybind: Some("Cmd+C".to_string()),
-                        action: crate::ui::context_menu::ContextAction::Copy,
-                        swatch_color: None,
-                    },
-                    crate::ui::context_menu::ContextMenuItem {
-                        label: "Paste".to_string(),
-                        keybind: Some("Cmd+V".to_string()),
-                        action: crate::ui::context_menu::ContextAction::Paste,
-                        swatch_color: None,
-                    },
-                    crate::ui::context_menu::ContextMenuItem {
-                        label: "Clear".to_string(),
-                        keybind: Some("Cmd+K".to_string()),
-                        action: crate::ui::context_menu::ContextAction::Clear,
-                        swatch_color: None,
-                    },
-                ];
-                root.context_menu.visible = true;
-                cx.notify();
-            })
-            .ok();
-    });
+    let on_right_click: context_menu::RightClickCallback =
+        Rc::new(move |position, _col, row, _window, cx| {
+            right_click_view
+                .update(cx, |root, cx| {
+                    root.context_menu.position = position;
+
+                    let active_ws = root.workspaces.active();
+                    let active_tid =
+                        active_ws.tab_panes[active_ws.tabs.active_index()].focused_terminal;
+
+                    let block = root.terminals.get(&active_tid).and_then(|terminal| {
+                        let (_, absolute_row) =
+                            super::blocks::row_text_and_absolute_row(terminal, row);
+                        root.block_managers
+                            .get(&active_tid)
+                            .and_then(|m| m.block_at_absolute_row(absolute_row))
+                            .map(|b| (b.id, b.command_text.clone()))
+                    });
+
+                    let mut items = vec![
+                        crate::ui::context_menu::ContextMenuItem {
+                            label: "Copy".to_string(),
+                            keybind: Some("Cmd+C".to_string()),
+                            action: crate::ui::context_menu::ContextAction::Copy,
+                            swatch_color: None,
+                        },
+                        crate::ui::context_menu::ContextMenuItem {
+                            label: "Paste".to_string(),
+                            keybind: Some("Cmd+V".to_string()),
+                            action: crate::ui::context_menu::ContextAction::Paste,
+                            swatch_color: None,
+                        },
+                        crate::ui::context_menu::ContextMenuItem {
+                            label: "Clear".to_string(),
+                            keybind: Some("Cmd+K".to_string()),
+                            action: crate::ui::context_menu::ContextAction::Clear,
+                            swatch_color: None,
+                        },
+                    ];
+
+                    if let Some((block_id, command_text)) = block {
+                        items.push(crate::ui::context_menu::ContextMenuItem {
+                            label: "Copy Output".to_string(),
+                            keybind: Some("Leader y".to_string()),
+                            action: crate::ui::context_menu::ContextAction::CopyBlockOutput(
+                                active_tid, block_id,
+                            ),
+                            swatch_color: None,
+                        });
+                        items.push(crate::ui::context_menu::ContextMenuItem {
+                            label: "Re-run Command".to_string(),
+                            keybind: Some("Leader r".to_string()),
+                            action: crate::ui::context_menu::ContextAction::ReRunCommand(
+                                command_text,
+                            ),
+                            swatch_color: None,
+                        });
+                    }
+
+                    let has_selection = root
+                        .terminals
+                        .get(&active_tid)
+                        .and_then(|t| t.selection_text())
+                        .is_some();
+                    if has_selection {
+                        items.push(crate::ui::context_menu::ContextMenuItem {
+                            label: "Send to Chat".to_string(),
+                            keybind: None,
+                            action: crate::ui::context_menu::ContextAction::SendToChat,
+                            swatch_color: None,
+                        });
+                    }
+
+                    root.context_menu.items = items;
+                    root.context_menu.visible = true;
+                    cx.notify();
+                })
+                .ok();
+        });
 
     let action_view = view.clone();
     let on_context_action: context_menu::ContextActionCallback =

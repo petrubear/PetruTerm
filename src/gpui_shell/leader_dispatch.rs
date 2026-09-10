@@ -34,6 +34,8 @@ impl GpuiShellRoot {
                 self.next_terminal_id += 1;
                 self.terminals.insert(terminal_id, terminal);
                 self.wakeup_gates.insert(terminal_id, gate);
+                self.block_managers
+                    .insert(terminal_id, crate::term::BlockManager::new());
                 let ws = self.workspaces.active_mut();
                 ws.tabs.new_tab("zsh");
                 ws.tab_panes.push(PaneForest::new(terminal_id));
@@ -102,6 +104,8 @@ impl GpuiShellRoot {
                 self.next_terminal_id += 1;
                 self.terminals.insert(terminal_id, terminal);
                 self.wakeup_gates.insert(terminal_id, gate);
+                self.block_managers
+                    .insert(terminal_id, crate::term::BlockManager::new());
                 self.workspaces.new_workspace(name);
                 self.workspaces.active_mut().tabs.new_tab("zsh");
                 self.workspaces

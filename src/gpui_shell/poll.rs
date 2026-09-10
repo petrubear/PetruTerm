@@ -94,8 +94,35 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                     let mut exited_terminals = Vec::new();
                     for (&id, terminal) in &this.terminals {
                         while let Ok(event) = terminal.pty.rx.try_recv() {
-                            if matches!(event, crate::term::PtyEvent::Exit(_)) {
-                                exited_terminals.push(id);
+                            match event {
+                                crate::term::PtyEvent::Exit(_) => {
+                                    exited_terminals.push(id);
+                                }
+                                crate::term::PtyEvent::Osc133(marker) => {
+                                    let command_text = match &marker {
+                                        crate::term::osc133::Osc133Marker::CommandStart(cmd) => {
+                                            cmd.clone()
+                                        }
+                                        _ => String::new(),
+                                    };
+                                    let absolute_row = terminal.with_term(|t| {
+                                        use alacritty_terminal::grid::Dimensions;
+                                        let content = t.renderable_content();
+                                        let history = t.grid().history_size() as i64;
+                                        let cursor_vp = content.cursor.point.line.0.max(0) as i64;
+                                        let disp_off = content.display_offset as i64;
+                                        history + cursor_vp - disp_off
+                                    });
+                                    if let Some(manager) = this.block_managers.get_mut(&id) {
+                                        manager.on_marker(marker, absolute_row, command_text);
+                                    }
+                                }
+                                crate::term::PtyEvent::ScreenCleared => {
+                                    if let Some(manager) = this.block_managers.get_mut(&id) {
+                                        manager.clear();
+                                    }
+                                }
+                                _ => {}
                             }
                         }
                     }

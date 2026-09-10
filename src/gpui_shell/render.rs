@@ -35,6 +35,15 @@ impl Render for GpuiShellRoot {
             window.focus(&self.focus_handle);
         }
 
+        if let Some(text) = self.pending_send_to_chat.take() {
+            if !self.chat.is_visible() {
+                self.chat.toggle(window, cx);
+            }
+            self.chat.composer.update(cx, |input, cx| {
+                input.set_content(&text, cx);
+            });
+        }
+
         // Sync query state from the real `TextInput` widgets' live content
         // -- see `palette.rs`'s/`search_bar.rs`'s own doc comments on
         // `drive_palette_query`/`drive_search_query`.
@@ -52,44 +61,19 @@ impl Render for GpuiShellRoot {
         // focus away from the rename editor ~30 times a second and make it
         // look like typing does nothing.
         //
-        // The chat composer's half of this guard (M3b Task 1) is keyed on
-        // `composer_focused` -- i.e. `is_focused(window)` -- NOT on
-        // `self.chat.is_visible()`. This is the same fix M3a shipped for
-        // `tab_rename` in `input.rs`'s key guard: the panel can be open
-        // while the terminal holds focus (the user clicked back into it),
-        // and a visibility-keyed guard here would then rip focus away from
-        // the terminal ~30 times a second right back to the composer,
-        // making it impossible to type into the terminal while the panel is
-        // open at all.
-        //
-        // Task 2 adds the `!self.chat.is_visible() ||` half: `/q` (typed
-        // into the composer, handled entirely inside a `cx.subscribe`
-        // callback with no `Window` available -- see
-        // `chat_panel::ChatPanelView::close`'s doc comment) can close the
-        // panel without ever calling `window.focus`, leaving
-        // `composer_focused` reporting stale "true" forever (gpui's
-        // `is_focused` is just an id comparison against `window.focus`;
-        // nothing clears it just because the composer's div stopped being
-        // rendered). Without this half, that guard's `!composer_focused`
-        // check would never fire again after a `/q` close, and every
-        // keystroke would keep landing on a composer that isn't even in the
-        // tree instead of the terminal -- a variant of M3a's own Critical,
-        // reached through a path (no `Window`) that `Leader a a`'s close
-        // (which fixes focus inline in `actions.rs`, `Window` in hand) never
-        // goes through. Safe to OR in: it only forces a refocus while the
-        // panel is already hidden, a state in which the composer can never
-        // legitimately hold focus, so it can't fight a real in-progress
-        // "typing in the open composer" case the way a guard checking
-        // "hide the composer whenever the panel is visible" would.
-        //
-        // M3b Task 3 adds the identical `!self.ai_block.is_visible() || ...`
-        // half for the inline AI block's own composer -- same reasoning,
-        // same shape, and it needs the visibility half too: the block's
-        // Enter-after-`Done` path (running the resolved command) closes it
-        // from inside a `cx.subscribe` callback with no `Window` (see
-        // `ai_block.rs`'s doc comment), leaving `composer_focused` reporting
-        // stale "true" until this guard's `!is_visible()` half reclaims
-        // focus on the very next frame.
+        // Each composer's half of this guard is keyed on `composer_focused`
+        // (`is_focused(window)`), NOT on `is_visible()`: the panel/block can
+        // be open while the terminal holds focus (the user clicked back into
+        // it), and a visibility-keyed guard would then rip focus away from
+        // the terminal ~30 times a second. The `!is_visible() ||` half
+        // handles the opposite gap: a composer-side `/q` or Enter-after-
+        // `Done` close runs inside a `cx.subscribe` callback with no
+        // `Window`, so it can't call `window.focus` -- `composer_focused`
+        // would otherwise report stale "true" forever (gpui's `is_focused`
+        // is just an id comparison; nothing clears it when the composer's
+        // div leaves the tree). Safe to OR in: it only forces a refocus
+        // while the composer is already hidden, a state in which it can
+        // never legitimately hold focus.
         if self.tab_rename.is_none()
             && self.workspace_rename.is_none()
             && (!self.chat.is_visible() || !self.chat.composer_focused(window, cx))

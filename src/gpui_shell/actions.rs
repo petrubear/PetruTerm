@@ -29,6 +29,8 @@ impl GpuiShellRoot {
         self.next_terminal_id += 1;
         self.terminals.insert(terminal_id, terminal);
         self.wakeup_gates.insert(terminal_id, gate);
+        self.block_managers
+            .insert(terminal_id, crate::term::BlockManager::new());
         let ws = self.workspaces.active_mut();
         let active = ws.tabs.active_index();
         ws.tab_panes[active].split(dir, terminal_id);
@@ -254,6 +256,7 @@ impl GpuiShellRoot {
         }
         self.terminals.remove(&terminal_id);
         self.wakeup_gates.remove(&terminal_id);
+        self.block_managers.remove(&terminal_id);
         self.rect_cache.borrow_mut().leaves.remove(&terminal_id);
         // terminal_id is globally unique, so at most one workspace can have
         // it zoomed -- checking all of them (cheap; there are at most a

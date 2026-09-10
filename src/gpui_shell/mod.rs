@@ -8,6 +8,7 @@
 
 mod actions;
 mod ai_block;
+mod blocks;
 mod chat_panel;
 mod config_watch;
 mod context_menu;
@@ -84,6 +85,14 @@ pub struct GpuiShellRoot {
     pub focus_handle: FocusHandle,
     config: Config,
     wakeup_gates: HashMap<usize, Arc<WakeupGate>>,
+    /// One `BlockManager` per terminal -- lives here, not on `Terminal`
+    /// itself, since `Terminal.block_manager` has no interior mutability.
+    /// Populated/cleaned at the same call sites as `wakeup_gates`.
+    block_managers: HashMap<usize, crate::term::BlockManager>,
+    /// Text queued for the chat composer by the context menu's
+    /// `SendToChat` action, drained at the top of `render()` (no `Window`
+    /// where it's set) -- same shape as `pending_palette_action`.
+    pending_send_to_chat: Option<String>,
     cursor_blink_on: bool,
     cursor_last_blink: std::time::Instant,
     /// Last-painted pixel bounds of every leaf and split in the active tab,
@@ -159,12 +168,8 @@ pub struct GpuiShellRoot {
     /// mirroring `chat`'s drawer on the right (`render.rs`'s `middle_row`).
     sidebar: sidebar::WorkspaceSidebar,
     /// The sidebar's own keyboard-focus identity, distinct from the root
-    /// `focus_handle` -- lets `on_key_down` (`input.rs`) tell "the sidebar
-    /// is open" (`sidebar.is_visible()`) apart from "the sidebar actually
-    /// has keyboard focus right now" (`sidebar_focus_handle.is_focused
-    /// (window)`), same distinction every other focusable surface in this
-    /// codebase already needs (tab rename, workspace rename, the chat
-    /// composer, the AI block).
+    /// `focus_handle` -- lets `on_key_down` tell "the sidebar is open"
+    /// apart from "the sidebar actually has keyboard focus right now".
     sidebar_focus_handle: FocusHandle,
     /// The AI chat panel -- one global drawer, not one per pane (see
     /// `chat_panel/mod.rs`'s doc comment on why the wgpu build's
@@ -176,25 +181,18 @@ pub struct GpuiShellRoot {
     /// channel).
     ai_block: ai_block::AiBlockView,
     /// Skill metadata loaded from `~/.config/petruterm/skills/` (+ project-
-    /// local, if trusted) at startup -- M3d's Skills sidebar section reads
-    /// this directly, same "used by gpui_shell, never copied" relationship
-    /// M3b already established for `ChatPanel`/`AiBlock`.
+    /// local, if trusted) at startup -- read directly by M3d's sidebar.
     skill_manager: SkillManager,
     /// Steering-file content loaded the same way, at the same time.
     steering_manager: SteeringManager,
     /// MCP server connections, started once at startup (mirrors the wgpu
-    /// build's own blocking `tokio_rt.block_on(mgr.start_all(&cfg))`,
-    /// `src/app/ui/mod.rs` -- ported as-is rather than redesigned into an
-    /// async poll-drain, since the reference itself blocks app construction
-    /// here and an LLM-disabled session skips this entirely). `Arc` because
-    /// tool-calling (out of scope for M3d, a future milestone) would need to
-    /// share it with a spawned async task the same way the wgpu build's own
-    /// `mcp_manager` field does.
+    /// build's own blocking `tokio_rt.block_on(mgr.start_all(&cfg))`).
+    /// `Arc` because tool-calling would need to share it with a spawned
+    /// async task, same as the wgpu build's own `mcp_manager` field.
     mcp_manager: Arc<McpManager>,
     /// The read-only content popup every sidebar row's activation opens
     /// (Task 4) -- see `info_overlay.rs`'s own doc comment for why it's
-    /// modal and why that makes its `is_visible()` guard (`input.rs`)
-    /// correct rather than a shortcut.
+    /// modal and why that makes its `is_visible()` guard correct.
     info_overlay: info_overlay::InfoOverlay,
     /// The command palette's own state (query, filtered results, selected
     /// index, visibility) -- `crate::ui::palette::CommandPalette`, used
@@ -257,6 +255,8 @@ impl GpuiShellRoot {
         terminals.insert(terminal_id, terminal);
         let mut wakeup_gates = HashMap::new();
         wakeup_gates.insert(terminal_id, gate);
+        let mut block_managers = HashMap::new();
+        block_managers.insert(terminal_id, crate::term::BlockManager::new());
 
         let leader_map = leader::build_leader_map(
             &crate::config::keybind_view::leader_bindings_view(&config).bindings,
@@ -358,6 +358,8 @@ impl GpuiShellRoot {
             focus_handle: cx.focus_handle(),
             config,
             wakeup_gates,
+            block_managers,
+            pending_send_to_chat: None,
             cursor_blink_on: true,
             cursor_last_blink: std::time::Instant::now(),
             rect_cache: Rc::new(RefCell::new(panes::RectCache::default())),

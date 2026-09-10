@@ -48,7 +48,7 @@ impl ContextMenu {
 /// operate on the globally-active terminal (this file's own doc comment
 /// has the reasoning), the same scoping the wgpu build's own
 /// `Mux::active_terminal()`-based menu already uses.
-pub(super) type RightClickCallback = Rc<dyn Fn(Point<Pixels>, &mut Window, &mut App)>;
+pub(super) type RightClickCallback = Rc<dyn Fn(Point<Pixels>, usize, usize, &mut Window, &mut App)>;
 
 /// Called when a menu row is clicked, with that row's own `ContextAction`.
 pub type ContextActionCallback =
@@ -66,6 +66,10 @@ pub type ContextMenuCloseCallback = Rc<dyn Fn(&mut Window, &mut App)>;
 /// pre-existing overshoot from growing worse for no reason.
 pub(super) fn register_right_click(
     bounds: Bounds<Pixels>,
+    cell_width: Pixels,
+    cell_height: Pixels,
+    cols: usize,
+    rows: usize,
     on_right_click: RightClickCallback,
     window: &mut Window,
 ) {
@@ -76,7 +80,15 @@ pub(super) fn register_right_click(
         if !bounds.contains(&event.position) {
             return;
         }
-        on_right_click(event.position, window, cx);
+        let (col, row) = super::mouse::pixel_to_cell(
+            event.position,
+            bounds,
+            cell_width,
+            cell_height,
+            cols,
+            rows,
+        );
+        on_right_click(event.position, col, row, window, cx);
     });
 }
 
@@ -158,11 +170,11 @@ pub fn render_context_menu(
 }
 
 impl GpuiShellRoot {
-    /// Run one confirmed context-menu action. `ContextAction`'s other
-    /// variants (`SendToChat`, `CopyLastCommand`, `OpenLink`, `CopyLink`,
-    /// `CopyBlockOutput`, `ReRunCommand`, `Separator`, `Label`) are never
-    /// constructed by this milestone's own item lists (Task 2/3) -- no
-    /// arm needed for them here, `_ => {}` covers anything unreachable in
+    /// Run one confirmed context-menu action. `ContextAction`'s remaining
+    /// variants (`CopyLastCommand`, `OpenLink`, `CopyLink`, `Separator`,
+    /// `Label`) are never constructed by this milestone's own item lists
+    /// yet (`OpenLink`/`CopyLink` get real arms in Task 3) -- no arm
+    /// needed for them here, `_ => {}` covers anything unreachable in
     /// practice the same way M4a's palette dispatch does.
     #[allow(dead_code)]
     pub(super) fn dispatch_context_action(
@@ -192,6 +204,34 @@ impl GpuiShellRoot {
             ContextAction::SetTabColor(idx, color) => {
                 self.workspaces.active_mut().tabs.set_tab_color(idx, color);
                 cx.notify();
+            }
+            ContextAction::CopyBlockOutput(tid, bid) => {
+                if let Some(text) = self.block_output_text(tid, bid) {
+                    if !text.is_empty() {
+                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+                    }
+                }
+            }
+            ContextAction::ReRunCommand(cmd) if !cmd.is_empty() => {
+                let active_ws = self.workspaces.active();
+                let active_tid =
+                    active_ws.tab_panes[active_ws.tabs.active_index()].focused_terminal;
+                if let Some(terminal) = self.terminals.get(&active_tid) {
+                    terminal.write_input(format!("{cmd}\n").as_bytes());
+                }
+            }
+            ContextAction::SendToChat => {
+                let active_ws = self.workspaces.active();
+                let active_tid =
+                    active_ws.tab_panes[active_ws.tabs.active_index()].focused_terminal;
+                if let Some(text) = self
+                    .terminals
+                    .get(&active_tid)
+                    .and_then(|t| t.selection_text())
+                {
+                    self.pending_send_to_chat = Some(text);
+                    cx.notify();
+                }
             }
             _ => {}
         }

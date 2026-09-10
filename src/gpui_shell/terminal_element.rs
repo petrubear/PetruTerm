@@ -124,7 +124,15 @@ impl Element for TerminalGridElement {
             window,
         );
 
-        context_menu::register_right_click(bounds, self.on_right_click.clone(), window);
+        context_menu::register_right_click(
+            bounds,
+            self.cell_width,
+            self.cell_height,
+            self.terminal.cols.get() as usize,
+            self.terminal.rows.get() as usize,
+            self.on_right_click.clone(),
+            window,
+        );
 
         let search_ref = self
             .search
