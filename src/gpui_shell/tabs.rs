@@ -1,11 +1,9 @@
 // gpui chrome migration (M2): tab list + the tab bar that renders it. The
 // data half (Tab/TabManager/tab_display_label) is ported from src/ui/tabs.rs
 // verbatim -- pure data + one pure string-formatting function, zero I/O.
-// `render_tab_bar` (M2 Task 3) is the "tab-bar Render impl" the port's
-// original header anticipated; it's here rather than in mod.rs so the labels
-// it paints and any future hit-testing both sit next to `tab_display_label`,
-// their single source of truth (they diverged once in the wgpu app, which is
-// what TD-P9-02 was).
+// `render_tab_bar` (M2 Task 3) is here rather than in mod.rs so the labels it
+// paints and any future hit-testing sit next to `tab_display_label`, their
+// single source of truth (they diverged once in the wgpu app -- TD-P9-02).
 
 #![allow(dead_code)]
 
@@ -201,9 +199,8 @@ impl Default for TabManager {
 /// notified) -- built from `Context::listener` at the call site.
 pub type TabSelectCallback = Rc<dyn Fn(&usize, &mut Window, &mut App)>;
 
-/// Called with the clicked tab's index and the right-click position. A callback
-/// that triggers the tab color picker menu at the given position for the
-/// specified tab.
+/// Called with the clicked tab's index and the right-click position --
+/// triggers the tab color picker menu at that position for that tab.
 pub(super) type TabRightClickCallback =
     Rc<dyn Fn(usize, gpui::Point<gpui::Pixels>, &mut Window, &mut App)>;
 
@@ -255,7 +252,11 @@ pub fn render_tab_bar(
             let cell = if is_renaming {
                 cell.child(rename.take().expect("checked is_some").1)
             } else {
-                cell.child(tab_display_label(&tab.title, idx, is_active, None))
+                cell.child(
+                    div()
+                        .italic()
+                        .child(tab_display_label(&tab.title, idx, is_active, None)),
+                )
             };
             if is_active {
                 cell.bg(to_rgba(colors.ui_surface_active))

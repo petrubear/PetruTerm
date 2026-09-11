@@ -27,10 +27,13 @@ pub fn render_status_bar(bar: &StatusBar, colors: &StatusBarColors) -> Div {
 
     let segment_div = |seg: &StatusBarSegment| -> Div {
         let clickable = matches!(seg.kind, SegmentKind::GitBranch | SegmentKind::ExitCode);
-        let cell = div()
+        let mut cell = div()
             .bg(to_rgba(seg.bg))
             .text_color(to_rgba(seg.fg))
             .child(seg.text.clone());
+        if seg.kind == SegmentKind::GitBranch {
+            cell = cell.italic();
+        }
         if clickable {
             cell.cursor_pointer()
                 .on_mouse_down(MouseButton::Left, |_: &MouseDownEvent, _window, _cx| {})
