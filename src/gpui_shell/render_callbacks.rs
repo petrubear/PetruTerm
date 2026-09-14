@@ -17,7 +17,7 @@ use std::rc::Rc;
 
 use gpui::Context;
 
-use super::{context_menu, pane_view, GpuiShellRoot};
+use super::{chat_panel, context_menu, pane_view, GpuiShellRoot};
 
 pub(super) fn build_frame_callbacks(
     cx: &mut Context<GpuiShellRoot>,
@@ -27,6 +27,8 @@ pub(super) fn build_frame_callbacks(
     context_menu::RightClickCallback,
     context_menu::ContextActionCallback,
     context_menu::ContextMenuCloseCallback,
+    chat_panel::ChatPillCallback,
+    chat_panel::ChatPillCallback,
 ) {
     let view = cx.entity().downgrade();
 
@@ -185,7 +187,7 @@ pub(super) fn build_frame_callbacks(
                 .ok();
         });
 
-    let close_menu_view = view;
+    let close_menu_view = view.clone();
     let on_close_context_menu: context_menu::ContextMenuCloseCallback =
         Rc::new(move |_window, cx| {
             close_menu_view
@@ -196,11 +198,27 @@ pub(super) fn build_frame_callbacks(
                 .ok();
         });
 
+    let fix_view = view.clone();
+    let on_fix_last_error: chat_panel::ChatPillCallback = Rc::new(move |window, cx| {
+        fix_view
+            .update(cx, |root, cx| root.fix_last_error(window, cx))
+            .ok();
+    });
+
+    let explain_view = view;
+    let on_explain_last_output: chat_panel::ChatPillCallback = Rc::new(move |window, cx| {
+        explain_view
+            .update(cx, |root, cx| root.explain_last_output(window, cx))
+            .ok();
+    });
+
     (
         on_focus,
         on_drag,
         on_right_click,
         on_context_action,
         on_close_context_menu,
+        on_fix_last_error,
+        on_explain_last_output,
     )
 }

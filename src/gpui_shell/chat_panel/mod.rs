@@ -26,7 +26,7 @@ pub(super) mod markdown;
 mod render;
 mod stream;
 
-pub use render::{render_chat_panel, PANEL_WIDTH_PX};
+pub use render::{render_chat_panel, ChatPillCallback, PANEL_WIDTH_PX};
 
 use std::sync::Arc;
 

@@ -113,8 +113,15 @@ impl Render for GpuiShellRoot {
         // See `render_callbacks.rs`'s own doc comment for why these five
         // are built in one place (moved there to keep this file under the
         // 400-line convention) and why each holds a WEAK handle.
-        let (on_focus, on_drag, on_right_click, on_context_action, on_close_context_menu) =
-            render_callbacks::build_frame_callbacks(cx);
+        let (
+            on_focus,
+            on_drag,
+            on_right_click,
+            on_context_action,
+            on_close_context_menu,
+            on_fix_last_error,
+            on_explain_last_output,
+        ) = render_callbacks::build_frame_callbacks(cx);
 
         let tab_color_view = cx.entity().downgrade();
         let on_tab_right_click: tabs::TabRightClickCallback =
@@ -337,6 +344,8 @@ impl Render for GpuiShellRoot {
                     &self.chat,
                     &self.config.llm,
                     &self.config.colors,
+                    on_fix_last_error,
+                    on_explain_last_output,
                 );
                 el.child(panel.with_animation(
                     "chat-panel-drawer",

@@ -22,7 +22,8 @@
 // real close paths; a decorative "×" that silently did nothing on click
 // would be worse than no icon at all.
 
-use gpui::{div, prelude::*, px, Div, FontWeight};
+use gpui::{div, prelude::*, px, App, Div, FontWeight, MouseButton, MouseDownEvent, Window};
+use std::rc::Rc;
 
 use crate::config::schema::{ColorScheme, LlmConfig};
 use crate::llm::chat_panel::{ChatPanel, PanelState};
@@ -38,6 +39,14 @@ use super::{ChatPanelView, MARKDOWN_WRAP_WIDTH};
 /// concern if the dogfood asks for it.
 pub const PANEL_WIDTH_PX: f32 = 480.0;
 
+/// Called on a suggestion-pill click ("Fix last error" / "Explain
+/// command"/"Explain more", both the zero-state's and the post-response
+/// row's) -- built where `cx` is in scope (`render_callbacks.rs`,
+/// `GpuiShellRoot::render`'s own indirect caller), same "callback passed
+/// down as a render parameter" shape `render_tab_bar`'s `on_select`/
+/// `render_context_menu`'s `on_action` already use.
+pub type ChatPillCallback = Rc<dyn Fn(&mut Window, &mut App)>;
+
 /// Build the chat panel's `div()` tree. Callers own visibility (only called
 /// `when view.is_visible()`), width/animation (`render.rs`'s root layout
 /// places this as a flex sibling of the pane tree and, on open, animates its
@@ -45,7 +54,13 @@ pub const PANEL_WIDTH_PX: f32 = 480.0;
 /// API), and the markdown cache (`view.sync_markdown_cache()` must run,
 /// against the same `&mut ChatPanelView` `gpui_shell::render` already holds,
 /// before this read-only call -- see `mod.rs`'s doc comment on that split).
-pub fn render_chat_panel(view: &ChatPanelView, llm: &LlmConfig, colors: &ColorScheme) -> Div {
+pub fn render_chat_panel(
+    view: &ChatPanelView,
+    llm: &LlmConfig,
+    colors: &ColorScheme,
+    on_fix_last_error: ChatPillCallback,
+    on_explain_last_output: ChatPillCallback,
+) -> Div {
     div()
         .flex()
         .flex_col()
@@ -56,7 +71,12 @@ pub fn render_chat_panel(view: &ChatPanelView, llm: &LlmConfig, colors: &ColorSc
         .border_l_1()
         .border_color(to_rgba(colors.ui_border))
         .child(render_header(&view.panel, llm, colors))
-        .child(render_message_list(&view.panel, colors))
+        .child(render_message_list(
+            &view.panel,
+            colors,
+            on_fix_last_error,
+            on_explain_last_output,
+        ))
         .child(render_composer(view, colors))
 }
 
@@ -129,7 +149,12 @@ fn header_status(panel: &ChatPanel) -> String {
     }
 }
 
-fn render_message_list(panel: &ChatPanel, colors: &ColorScheme) -> impl IntoElement {
+fn render_message_list(
+    panel: &ChatPanel,
+    colors: &ColorScheme,
+    on_fix_last_error: ChatPillCallback,
+    on_explain_last_output: ChatPillCallback,
+) -> impl IntoElement {
     let mut list = div()
         .id("chat-panel-messages")
         .flex()
@@ -146,8 +171,31 @@ fn render_message_list(panel: &ChatPanel, colors: &ColorScheme) -> impl IntoElem
     if panel.messages.is_empty() && panel.streaming_buf.is_empty() {
         list = list.child(
             div()
-                .text_color(to_rgba(colors.ui_muted))
-                .child("Ask a question to get started."),
+                .flex()
+                .flex_col()
+                .items_center()
+                .gap_2()
+                .py_4()
+                .child(
+                    div()
+                        .text_color(to_rgba(colors.ui_accent))
+                        .child("\u{2726}"),
+                )
+                .child(
+                    div()
+                        .text_color(to_rgba(colors.ui_muted))
+                        .child("Ask a question below"),
+                )
+                .child(render_pill(
+                    "Fix last error",
+                    on_fix_last_error.clone(),
+                    colors,
+                ))
+                .child(render_pill(
+                    "Explain command",
+                    on_explain_last_output.clone(),
+                    colors,
+                )),
         );
     }
 
@@ -175,6 +223,19 @@ fn render_message_list(panel: &ChatPanel, colors: &ColorScheme) -> impl IntoElem
             &mut ParseState::default(),
         );
         list = list.child(render_message_body_lines(&lines, colors));
+    }
+
+    if panel.show_suggestions {
+        list = list.child(
+            div()
+                .flex()
+                .flex_row()
+                .justify_center()
+                .gap_2()
+                .py_2()
+                .child(render_pill("Fix last error", on_fix_last_error, colors))
+                .child(render_pill("Explain more", on_explain_last_output, colors)),
+        );
     }
 
     list
@@ -210,6 +271,36 @@ fn render_message_body_lines(lines: &[AnnotatedLine], colors: &ColorScheme) -> D
         block = block.child(render_line(line, colors));
     }
     block
+}
+
+/// One clickable suggestion pill -- shared by the zero-state's two pills
+/// and the post-response row's two pills (Step 5/6). Real gpui `.hover()`
+/// (already used once, M4c's context-menu rows) replaces the wgpu build's
+/// manual `zero_state_hover`/`suggestion_hover` tracking entirely -- both
+/// fields stay permanently unread by `gpui_shell`.
+fn render_pill(label: &str, on_click: ChatPillCallback, colors: &ColorScheme) -> impl IntoElement {
+    div()
+        .flex()
+        .items_center()
+        .justify_center()
+        .mx_2()
+        .px_3()
+        .py_1()
+        .rounded_md()
+        .border_1()
+        .border_color(to_rgba(colors.ui_border))
+        .bg(to_rgba(colors.ui_surface_hover))
+        .text_color(to_rgba(colors.ui_muted))
+        .cursor_pointer()
+        .hover(|el| {
+            el.bg(to_rgba(colors.ui_surface_active))
+                .border_color(to_rgba(colors.ui_accent))
+                .text_color(to_rgba(colors.foreground))
+        })
+        .on_mouse_down(MouseButton::Left, move |_: &MouseDownEvent, window, cx| {
+            on_click(window, cx)
+        })
+        .child(label.to_string())
 }
 
 fn render_composer(view: &ChatPanelView, colors: &ColorScheme) -> impl IntoElement {
