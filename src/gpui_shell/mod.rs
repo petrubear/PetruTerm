@@ -16,6 +16,7 @@ pub mod font_state;
 mod info_overlay;
 mod input;
 mod key_map;
+mod key_write;
 mod leader;
 mod leader_dispatch;
 mod mcp_overlay;

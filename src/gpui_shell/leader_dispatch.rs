@@ -77,15 +77,25 @@ impl GpuiShellRoot {
             }
             LeaderAction::ToggleAiPanel => {
                 self.chat.toggle(window, cx);
-                // `toggle` only ever moves focus TO the composer (opening);
-                // closing deliberately returns none, mirroring
-                // `end_tab_rename`'s division of labor. This is the other
-                // half: send focus back to the terminal right here rather
-                // than waiting on render()'s guard, which can't tell "the
-                // panel just closed" from "the composer still holds a stale
-                // focus handle" -- gpui doesn't clear a `FocusHandle`'s
-                // focused status just because its element left the tree.
-                if !self.chat.is_visible() {
+                if self.chat.is_visible() {
+                    // `init_default_files` is idempotent (checks `attached_
+                    // files.contains` before adding), matching the wgpu
+                    // build's own `open_panel_with_context`, which calls it
+                    // unconditionally on every open -- safe to call here
+                    // every time the panel opens, not just the first time.
+                    if let Some(cwd) = self.cached_cwd.clone() {
+                        self.chat.panel.init_default_files(&cwd);
+                    }
+                } else {
+                    // `toggle` only ever moves focus TO the composer
+                    // (opening); closing deliberately returns none,
+                    // mirroring `end_tab_rename`'s division of labor. This
+                    // is the other half: send focus back to the terminal
+                    // right here rather than waiting on render()'s guard,
+                    // which can't tell "the panel just closed" from "the
+                    // composer still holds a stale focus handle" -- gpui
+                    // doesn't clear a `FocusHandle`'s focused status just
+                    // because its element left the tree.
                     window.focus(&self.focus_handle);
                 }
             }

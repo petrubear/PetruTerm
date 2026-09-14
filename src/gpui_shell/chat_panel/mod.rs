@@ -22,6 +22,7 @@
 // `poll.rs`'s drain tick) have everything they need without reaching back
 // into `GpuiShellRoot` for anything but `config`/`tokio_rt` at the call site.
 
+mod file_picker;
 pub(super) mod markdown;
 mod render;
 mod stream;
@@ -90,6 +91,9 @@ pub struct ChatPanelView {
     /// submitted (`stream.rs::submit`), mirroring the wgpu build's own
     /// `streaming_handle.abort()` (TD-MEM-12).
     in_flight: Option<tokio::task::JoinHandle<()>>,
+    /// The file picker's async directory-scan channel (Task 3) -- see
+    /// `file_picker.rs`'s `open_file_picker_async`/`poll_file_scan`.
+    file_scan_rx: Option<crossbeam_channel::Receiver<Vec<std::path::PathBuf>>>,
 }
 
 impl ChatPanelView {
@@ -115,6 +119,7 @@ impl ChatPanelView {
             ai_tx,
             ai_rx,
             in_flight: None,
+            file_scan_rx: None,
         };
         view.rewire_provider(&config.llm);
         view
@@ -202,5 +207,53 @@ impl ChatPanelView {
     /// only a newly-completed message ever triggers real work here.
     pub fn sync_markdown_cache(&mut self) {
         self.panel.ensure_wrap_cache(MARKDOWN_WRAP_WIDTH);
+    }
+}
+
+impl GpuiShellRoot {
+    /// The file picker's own key guard, called from `input.rs`'s
+    /// `on_key_down`. Returns `true` if the key was consumed. Keyed on
+    /// `self.chat.panel.file_picker_open` (a mode flag), not
+    /// `is_focused(window)` -- see this plan's own Global Constraints for
+    /// why that's correct here, matching `InfoOverlay`'s own precedent.
+    pub(super) fn maybe_handle_file_picker_key(
+        &mut self,
+        event: &gpui::KeyDownEvent,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if !self.chat.panel.file_picker_open {
+            return false;
+        }
+        let key = event.keystroke.key.as_str();
+        if key == "escape" || key == "tab" {
+            self.chat.panel.close_file_picker();
+        } else if key == "enter" {
+            let cwd = self.cached_cwd.clone().unwrap_or_default();
+            let filtered: Vec<std::path::PathBuf> = self
+                .chat
+                .panel
+                .filtered_picker_items()
+                .into_iter()
+                .cloned()
+                .collect();
+            self.chat.panel.picker_confirm(&cwd, &filtered);
+        } else if key == "up" {
+            self.chat.panel.picker_move_up();
+        } else if key == "down" {
+            let len = self.chat.panel.filtered_picker_items().len();
+            self.chat.panel.picker_move_down(len);
+        } else if key == "backspace" {
+            self.chat.panel.picker_backspace();
+        } else if !event.keystroke.modifiers.platform && !event.keystroke.modifiers.control {
+            if key == "space" {
+                self.chat.panel.picker_type_char(' ');
+            } else if key.chars().count() == 1 {
+                self.chat
+                    .panel
+                    .picker_type_char(key.chars().next().unwrap());
+            }
+        }
+        cx.notify();
+        true
     }
 }

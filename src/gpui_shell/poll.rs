@@ -242,6 +242,9 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                     if this.poll_branch_scan() {
                         should_notify = true;
                     }
+                    if this.chat.poll_file_scan() {
+                        should_notify = true;
+                    }
                     if should_notify {
                         cx.notify();
                     }
