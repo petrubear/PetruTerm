@@ -59,6 +59,8 @@ pub(super) fn gpui_shell_actions(config: &Config) -> Vec<PaletteAction> {
                     | Action::SaveWorkspace
                     | Action::OpenSavedWorkspaces
                     | Action::RestoreWorkspace(_)
+                    | Action::ExplainLastOutput
+                    | Action::FixLastError
             )
         })
         .collect()
@@ -205,6 +207,8 @@ impl GpuiShellRoot {
                     Err(e) => log::error!("load_workspace: {e}"),
                 }
             }
+            Action::ExplainLastOutput => self.explain_last_output(window, cx),
+            Action::FixLastError => self.fix_last_error(window, cx),
             // Every other variant is filtered out of `gpui_shell_actions`
             // (see its own doc comment) -- unreachable in practice, kept as
             // an explicit no-op rather than a `panic!`/`unreachable!()`

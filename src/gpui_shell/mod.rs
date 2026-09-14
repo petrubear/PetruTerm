@@ -1,12 +1,11 @@
 // gpui chrome migration (M0 foundation spike + M1a foundation fixes): live
-// terminal rendering root.
-//
-// Owns one or more `term::Terminal` instances and renders them through
+// terminal rendering root. Owns one or more `term::Terminal` instances and renders them through
 // `TerminalGridElement` (see `terminal_element.rs`). Keyboard input is
 // forwarded from gpui's key-down events straight to the PTY via `key_map`'s
 // full key-event mapping.
 
 mod actions;
+mod ai_actions;
 mod ai_block;
 mod blocks;
 mod branch_picker;

@@ -181,8 +181,19 @@ impl GpuiShellRoot {
             // same position the wgpu build's own `leader_prefix` check
             // occupies (`src/app/input/mod.rs:314`).
             if let Some(prefix) = self.leader_prefix.take() {
-                if prefix == 'a' && event.keystroke.key == "a" {
-                    self.dispatch_leader_action(LeaderAction::ToggleAiPanel, window, cx);
+                if prefix == 'a' {
+                    match event.keystroke.key.as_str() {
+                        "a" => self.dispatch_leader_action(LeaderAction::ToggleAiPanel, window, cx),
+                        "e" => {
+                            self.dispatch_leader_action(LeaderAction::ExplainLastOutput, window, cx)
+                        }
+                        "f" => self.dispatch_leader_action(LeaderAction::FixLastError, window, cx),
+                        // `c`/`z` (ClearAiContext/UndoLastWrite) stay out of
+                        // scope -- both ACP/tool-calling-dependent, per this
+                        // milestone's own spec §6. Dropped, matching the
+                        // wgpu build's own `_ => {}` fallthrough.
+                        _ => {}
+                    }
                 }
                 if prefix == 'e' && event.keystroke.key == "e" {
                     self.dispatch_leader_action(LeaderAction::ToggleWorkspaceSidebar, window, cx);
@@ -199,11 +210,6 @@ impl GpuiShellRoot {
                         self.dispatch_leader_action(action, window, cx);
                     }
                 }
-                // Every other `a`-prefix subkey (c/e/f/z in the wgpu build)
-                // is out of scope for this milestone -- see leader.rs's doc
-                // comment and the M3b plan's Scope section. An unrecognized
-                // subkey is simply dropped, matching the wgpu build's own
-                // `_ => {}` fallthrough.
                 return;
             }
 

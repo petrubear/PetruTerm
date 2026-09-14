@@ -89,6 +89,8 @@ impl GpuiShellRoot {
                     window.focus(&self.focus_handle);
                 }
             }
+            LeaderAction::ExplainLastOutput => self.explain_last_output(window, cx),
+            LeaderAction::FixLastError => self.fix_last_error(window, cx),
             LeaderAction::NewWorkspace => {
                 let name = format!("ws{}", self.workspaces.len() + 1);
                 let (terminal, gate) = match spawn_terminal(80, 24, &self.config) {
