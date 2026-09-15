@@ -37,7 +37,12 @@ impl ChatPanelView {
                 self.acp_session = None;
                 if let Some(agent_cfg) = config.llm.agent.clone() {
                     let cwd = std::env::current_dir().unwrap_or_default();
-                    self.acp_pending_connect = Some(spawn_acp_connect(tokio_rt, agent_cfg, cwd));
+                    self.acp_pending_connect = Some(spawn_acp_connect(
+                        tokio_rt,
+                        agent_cfg,
+                        cwd,
+                        config.llm.enabled,
+                    ));
                 } else {
                     self.llm_init_error =
                         Some("llm.agent config is required when backend = \"agent\"".into());
@@ -80,10 +85,22 @@ fn spawn_acp_connect(
     rt: &tokio::runtime::Runtime,
     agent_cfg: crate::config::schema::AcpAgentConfig,
     cwd: PathBuf,
+    mcp_enabled: bool,
 ) -> tokio::sync::oneshot::Receiver<Result<AcpSession, String>> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     rt.spawn(async move {
-        let result = AcpSession::connect(&agent_cfg, &cwd, Vec::new())
+        let mcp_servers = if mcp_enabled {
+            let trusted = crate::llm::mcp::trust::is_trusted(&cwd);
+            crate::llm::mcp::config::load_merged(&cwd, trusted)
+                .map(|cfg| crate::llm::mcp::config::to_acp_servers(&cfg))
+                .unwrap_or_else(|e| {
+                    log::warn!("ACP: failed to load MCP config: {e:#}");
+                    Vec::new()
+                })
+        } else {
+            Vec::new()
+        };
+        let result = AcpSession::connect(&agent_cfg, &cwd, mcp_servers)
             .await
             .map_err(|e| format!("{e:#}"));
         let _ = tx.send(result);

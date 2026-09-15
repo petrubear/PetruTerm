@@ -58,11 +58,22 @@ impl GpuiShellRoot {
         if !self.chat.is_visible() {
             self.chat.toggle(window, cx);
         }
+        // Same call-site restructuring as `stream.rs`'s `handle_chat_
+        // composer_submit` (M5d Task 6): `ChatPanelView::submit` can't reach
+        // `skill_manager`/`steering_manager` itself, so the addendum is
+        // built here, where both are in scope on `GpuiShellRoot`.
+        let addendum = crate::llm::prompt_context::build_prompt_addendum(
+            &self.skill_manager,
+            &self.steering_manager,
+            self.chat.panel.matched_skill.as_deref(),
+            &query,
+            &self.chat.panel.attached_files,
+        );
         self.chat.panel.set_input(query);
         self.chat
             .composer
             .update(cx, |input, cx| input.set_content("", cx));
-        self.chat.submit(&self.tokio_rt, cx);
+        self.chat.submit(addendum, &self.tokio_rt, cx);
     }
 
     /// Execute one confirmed inline agent action (`ChatPanel::resolve_

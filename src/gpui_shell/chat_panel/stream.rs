@@ -41,10 +41,18 @@ impl ChatPanelView {
     /// Submit the current panel input to the ACP agent (if connected) or
     /// the configured direct provider otherwise -- see this module's doc
     /// comment for what's still deliberately excluded from both paths.
-    pub fn submit(&mut self, tokio_rt: &tokio::runtime::Runtime, cx: &mut Context<GpuiShellRoot>) {
+    pub fn submit(
+        &mut self,
+        addendum: crate::llm::prompt_context::PromptAddendum,
+        tokio_rt: &tokio::runtime::Runtime,
+        cx: &mut Context<GpuiShellRoot>,
+    ) {
         let Some(user_content) = self.panel.submit_input() else {
             return;
         };
+        if let Some(name) = addendum.matched_skill.clone() {
+            self.panel.matched_skill = Some(name);
+        }
 
         if self.acp_session.is_some() {
             // `try_send_prompt` requires a `tokio::sync::mpsc::Sender<AiEvent>`
@@ -66,8 +74,13 @@ impl ChatPanelView {
                 }
             });
             let terminal_tx = self.acp_terminal_tx.clone();
+            let prompt_text = if addendum.text.is_empty() {
+                user_content
+            } else {
+                format!("{}\n\n{user_content}", addendum.text.trim_start())
+            };
             let send_result = self.acp_session.as_mut().unwrap().try_send_prompt(
-                user_content,
+                prompt_text,
                 bridge_tx,
                 terminal_tx,
             );
@@ -91,11 +104,11 @@ impl ChatPanelView {
         };
         self.panel.context_window = provider.context_window();
 
-        let system_prompt = format!(
-            "{}\n\n{}",
-            crate::config::load_system_prompt(),
-            crate::llm::agent_action::system_prompt_instructions()
-        );
+        let mut system_prompt = crate::config::load_system_prompt();
+        system_prompt.push_str(&addendum.text);
+        system_prompt.push('\n');
+        system_prompt.push('\n');
+        system_prompt.push_str(crate::llm::agent_action::system_prompt_instructions());
         let mut messages = vec![ChatMessage::system(system_prompt)];
         messages.extend(self.panel.messages.iter().cloned());
 
@@ -242,8 +255,19 @@ impl GpuiShellRoot {
         if text.starts_with('/') {
             self.handle_slash_command(&text, cx);
         } else {
+            // `ChatPanelView` has no access to `skill_manager`/`steering_manager`
+            // (they live on `GpuiShellRoot`, a different struct) -- built here,
+            // where both are in scope, and passed down into `submit` rather
+            // than reached for from inside it.
+            let addendum = crate::llm::prompt_context::build_prompt_addendum(
+                &self.skill_manager,
+                &self.steering_manager,
+                self.chat.panel.matched_skill.as_deref(),
+                &text,
+                &self.chat.panel.attached_files,
+            );
             self.chat.panel.set_input(text);
-            self.chat.submit(&self.tokio_rt, cx);
+            self.chat.submit(addendum, &self.tokio_rt, cx);
         }
     }
 
