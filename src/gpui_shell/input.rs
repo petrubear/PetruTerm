@@ -59,6 +59,12 @@ impl GpuiShellRoot {
             return;
         }
 
+        // ACP write/run confirm card's own key guard -- see `standalone_keys.rs`'s
+        // `maybe_handle_awaiting_confirm_key` doc comment.
+        if self.maybe_handle_awaiting_confirm_key(event, cx) {
+            return;
+        }
+
         // While the rename `TextInput` genuinely holds focus, every key
         // belongs to it, full stop -- checked before anything else,
         // including the leader-key arm below (renaming while chording the
@@ -213,10 +219,11 @@ impl GpuiShellRoot {
                             self.dispatch_leader_action(LeaderAction::ExplainLastOutput, window, cx)
                         }
                         "f" => self.dispatch_leader_action(LeaderAction::FixLastError, window, cx),
-                        // `c`/`z` (ClearAiContext/UndoLastWrite) stay out of
-                        // scope -- both ACP/tool-calling-dependent, per this
-                        // milestone's own spec §6. Dropped, matching the
-                        // wgpu build's own `_ => {}` fallthrough.
+                        "z" => self.dispatch_leader_action(LeaderAction::UndoLastWrite, window, cx),
+                        // `c` (ClearAiContext) stays out of scope -- ACP/
+                        // tool-calling-dependent, per this milestone's own
+                        // spec §9. Dropped, matching the wgpu build's own
+                        // `_ => {}` fallthrough.
                         _ => {}
                     }
                 }

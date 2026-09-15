@@ -60,6 +60,10 @@ const MARKDOWN_WRAP_WIDTH: usize = 100_000;
 /// global panel, so a bare `AiEvent` is all `stream.rs`'s channel carries.
 const AI_CHANNEL_CAP: usize = 256;
 
+/// Cap on `undo_stack`'s size -- oldest entry evicted past this, matching
+/// `UiManager::cmd_undo_last_write`'s own `MAX_UNDO = 10`.
+const UNDO_STACK_CAP: usize = 10;
+
 /// Gpui-side state for the chat panel: the engine-agnostic `ChatPanel`
 /// itself, the `TextInput` entity that is its composer, and whether the
 /// drawer is currently open.
@@ -97,6 +101,13 @@ pub struct ChatPanelView {
     /// The file picker's async directory-scan channel (Task 3) -- see
     /// `file_picker.rs`'s `open_file_picker_async`/`poll_file_scan`.
     file_scan_rx: Option<crossbeam_channel::Receiver<Vec<std::path::PathBuf>>>,
+    /// Oneshot channel to answer the ACP agent's own `session/
+    /// requestPermission`/`fs/write_text_file` request once the user
+    /// presses y/n. `None` while no confirm card is showing.
+    pub(super) pending_confirm_tx: Option<tokio::sync::oneshot::Sender<bool>>,
+    /// Saved (path, original content) pairs for `Leader a z` -- newest
+    /// last, capped at `UNDO_STACK_CAP`.
+    pub(super) undo_stack: std::collections::VecDeque<(std::path::PathBuf, String)>,
     /// The connected ACP agent session, if `config.llm.backend == Agent`
     /// and the connect succeeded. `None` in Provider mode, or while a
     /// connect is still pending/failed.
@@ -157,6 +168,8 @@ impl ChatPanelView {
             ai_rx,
             in_flight: None,
             file_scan_rx: None,
+            pending_confirm_tx: None,
+            undo_stack: std::collections::VecDeque::new(),
             acp_session: None,
             acp_pending_connect: None,
             acp_terminal_tx,

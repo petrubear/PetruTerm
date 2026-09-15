@@ -87,4 +87,62 @@ impl GpuiShellRoot {
         cx.notify();
         true
     }
+
+    /// The ACP write/run confirm card's own key guard, called from
+    /// `input.rs`'s `on_key_down`. Returns `true` if the key was
+    /// consumed. Mode-keyed on `panel.state`, same reasoning as `maybe_
+    /// handle_confirm_action_key`.
+    pub(super) fn maybe_handle_awaiting_confirm_key(
+        &mut self,
+        event: &KeyDownEvent,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        use crate::llm::chat_panel::{ConfirmDisplay, PanelState};
+        if !matches!(self.chat.panel.state, PanelState::AwaitingConfirm) {
+            return false;
+        }
+        let key = event.keystroke.key.as_str();
+        if key == "y" || key == "enter" {
+            if let Some(tx) = self.chat.pending_confirm_tx.take() {
+                if let Some(ConfirmDisplay::Run { cmd }) = self.chat.panel.confirm_display.as_ref()
+                {
+                    self.pending_pty_run = Some(cmd.clone());
+                }
+                let _ = tx.send(true);
+                self.chat.panel.resolve_confirm();
+            }
+        } else if key == "n" || key == "escape" {
+            if let Some(tx) = self.chat.pending_confirm_tx.take() {
+                let _ = tx.send(false);
+                self.chat.panel.resolve_confirm();
+            }
+        }
+        cx.notify();
+        true
+    }
+
+    /// `Leader a z` -- restore the most recently agent-written file's
+    /// prior content. Ported from `UiManager::cmd_undo_last_write`
+    /// (`src/app/ui/mod.rs:630+`).
+    pub(super) fn undo_last_write(&mut self) {
+        if let Some((path, content)) = self.chat.undo_stack.pop_back() {
+            match std::fs::write(&path, &content) {
+                Ok(()) => {
+                    let msg = format!("Restored: {}", path.display());
+                    self.chat
+                        .panel
+                        .messages
+                        .push(crate::llm::ChatMessage::assistant(msg));
+                }
+                Err(e) => {
+                    log::error!("undo write {}: {e}", path.display());
+                    let msg = format!("Undo failed: {e}");
+                    self.chat
+                        .panel
+                        .messages
+                        .push(crate::llm::ChatMessage::assistant(msg));
+                }
+            }
+        }
+    }
 }

@@ -169,11 +169,21 @@ impl ChatPanelView {
                 AiEvent::ToolStatus { tool, path, done } => {
                     self.panel.set_tool_status(&tool, &path, done);
                 }
-                // Confirm/undo surfaces for tool-calling -- still out of
-                // scope here; completed in Task 6.
-                AiEvent::ConfirmWrite { .. }
-                | AiEvent::ConfirmRun { .. }
-                | AiEvent::UndoState { .. } => {}
+                AiEvent::ConfirmWrite { display, result_tx } => {
+                    self.panel.mark_awaiting_confirm(display);
+                    self.pending_confirm_tx = Some(result_tx);
+                }
+                AiEvent::ConfirmRun { cmd, result_tx } => {
+                    self.panel
+                        .mark_awaiting_confirm(crate::llm::chat_panel::ConfirmDisplay::Run { cmd });
+                    self.pending_confirm_tx = Some(result_tx);
+                }
+                AiEvent::UndoState { path, content } => {
+                    if self.undo_stack.len() >= super::UNDO_STACK_CAP {
+                        self.undo_stack.pop_front();
+                    }
+                    self.undo_stack.push_back((path, content));
+                }
             }
         }
         changed

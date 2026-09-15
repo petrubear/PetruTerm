@@ -46,6 +46,16 @@ impl Render for GpuiShellRoot {
 
         self.flush_pending_agent_action(window, cx);
 
+        if let Some(cmd) = self.pending_pty_run.take() {
+            let active_ws = self.workspaces.active();
+            let active_tid = active_ws.tab_panes[active_ws.tabs.active_index()].focused_terminal;
+            if let Some(terminal) = self.terminals.get(&active_tid) {
+                let mut data = cmd.into_bytes();
+                data.push(b'\n');
+                terminal.write_input(&data);
+            }
+        }
+
         // Sync query state from the real `TextInput` widgets' live content
         // -- see `palette.rs`'s/`search_bar.rs`'s own doc comments on
         // `drive_palette_query`/`drive_search_query`.

@@ -246,6 +246,10 @@ pub struct GpuiShellRoot {
     /// `terminal_exit_code` returns `Some`. Mirrors `UiManager::pending_
     /// acp_wait_for_exit`.
     pending_acp_wait_for_exit: Vec<(usize, tokio::sync::oneshot::Sender<i32>)>,
+    /// A confirmed `ConfirmDisplay::Run` command, drained at the top of
+    /// `render()` (no `Window` where it's set). Mirrors `pending_agent_
+    /// action`'s own placement (Task 1).
+    pending_pty_run: Option<String>,
 }
 
 impl GpuiShellRoot {
@@ -413,6 +417,7 @@ impl GpuiShellRoot {
             terminal_exit_codes: HashMap::new(),
             terminal_final_output: HashMap::new(),
             pending_acp_wait_for_exit: Vec::new(),
+            pending_pty_run: None,
         }
     }
 }
