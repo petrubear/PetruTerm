@@ -117,6 +117,25 @@ impl GpuiShellRoot {
         }
     }
 
+    /// Execute a confirmed ACP `terminal/create`-adjacent Run command
+    /// (`ChatPanel::resolve_action_yes`-style confirm, but for the ACP
+    /// write/run confirm flow -- see `standalone_keys.rs`'s `maybe_
+    /// handle_awaiting_confirm_key`). Drained here from `render()`'s top,
+    /// same "no `Window` where it's set" reasoning as `flush_pending_
+    /// agent_action`.
+    pub(super) fn flush_pending_pty_run(&mut self) {
+        let Some(cmd) = self.pending_pty_run.take() else {
+            return;
+        };
+        let active_ws = self.workspaces.active();
+        let active_tid = active_ws.tab_panes[active_ws.tabs.active_index()].focused_terminal;
+        if let Some(terminal) = self.terminals.get(&active_tid) {
+            let mut data = cmd.into_bytes();
+            data.push(b'\n');
+            terminal.write_input(&data);
+        }
+    }
+
     /// Read the bottom `n` visible terminal rows of the focused pane,
     /// joined with `\n`, trimmed. Ported from `Mux::last_terminal_lines`
     /// (`src/app/mux/mod.rs:611-627`), adapted to read the focused
