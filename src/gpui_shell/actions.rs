@@ -254,6 +254,7 @@ impl GpuiShellRoot {
             rasterize::evict_terminal(terminal_key, cx);
             mouse::forget_terminal(terminal_key);
         }
+        self.record_terminal_final_output(terminal_id);
         self.terminals.remove(&terminal_id);
         self.wakeup_gates.remove(&terminal_id);
         self.block_managers.remove(&terminal_id);

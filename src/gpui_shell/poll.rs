@@ -93,10 +93,12 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                     // (nothing ever consumed them before this loop
                     // existed either) -- not this fix's concern.
                     let mut exited_terminals = Vec::new();
+                    let mut exit_codes = Vec::new();
                     for (&id, terminal) in &this.terminals {
                         while let Ok(event) = terminal.pty.rx.try_recv() {
                             match event {
-                                crate::term::PtyEvent::Exit(_) => {
+                                crate::term::PtyEvent::Exit(code) => {
+                                    exit_codes.push((id, code));
                                     exited_terminals.push(id);
                                 }
                                 crate::term::PtyEvent::Osc133(marker) => {
@@ -139,6 +141,9 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                                 _ => {}
                             }
                         }
+                    }
+                    for (id, code) in exit_codes {
+                        this.record_terminal_exit_code(id, code);
                     }
                     for id in exited_terminals {
                         this.on_terminal_exited(id, cx);

@@ -41,6 +41,7 @@ mod standalone_keys;
 pub mod status_bar;
 pub mod tabs;
 pub mod terminal_element;
+mod terminal_output;
 pub mod text_input;
 mod toast;
 mod workspace;
@@ -230,6 +231,15 @@ pub struct GpuiShellRoot {
     toast: Option<(String, std::time::Instant)>,
     /// Confirmed inline agent action, drained at `render()`'s top.
     pending_agent_action: Option<crate::llm::agent_action::AgentAction>,
+    /// Exit code of a terminal that has been reaped, keyed by the id it
+    /// had while alive -- `self.terminals` no longer has an entry for it
+    /// by the time this map is read. Mirrors `Mux::terminal_exit_codes`.
+    terminal_exit_codes: HashMap<usize, i32>,
+    /// Final grid contents of a reaped terminal, captured just before its
+    /// last `Rc<Terminal>` is dropped. Mirrors `Mux::terminal_final_
+    /// output`; bounded the same way (oldest evicted past a small cap) so
+    /// a long session with many closed panes can't grow this unboundedly.
+    terminal_final_output: HashMap<usize, String>,
 }
 
 impl GpuiShellRoot {
@@ -392,6 +402,8 @@ impl GpuiShellRoot {
             context_menu: context_menu::ContextMenu::default(),
             toast: None,
             pending_agent_action: None,
+            terminal_exit_codes: HashMap::new(),
+            terminal_final_output: HashMap::new(),
         }
     }
 }
