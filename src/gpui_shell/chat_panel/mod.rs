@@ -28,6 +28,7 @@ mod confirm;
 mod file_picker;
 pub(super) mod markdown;
 mod render;
+mod slash_command;
 mod stream;
 
 pub use render::{render_chat_panel, ChatPillCallback, PANEL_WIDTH_PX};
