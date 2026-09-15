@@ -1,20 +1,20 @@
-// gpui chrome migration (M3b Task 2): streaming the direct-provider LLM
-// response into the chat panel, plus composer submit and slash-command
-// dispatch.
+// gpui chrome migration (M3b Task 2, extended by M5a Task 5): streaming both
+// the direct-provider LLM response and the ACP agent's `AiEvent` stream into
+// the chat panel, plus composer submit and slash-command dispatch.
 //
-// Deliberately NOT here (see the M3b plan's Scope): the ACP agent backend,
-// tool-calling, and every confirm-prompt surface that exists only to gate a
-// tool call (`AiEvent::ToolStatus`/`ConfirmWrite`/`ConfirmRun`/`UndoState`,
-// and `ChatPanel::resolve_action_yes`/`resolve_action_no` for inline
-// actions) -- with no tools and no `agent_action::system_prompt_instructions`
-// appended to the system prompt below, there is nothing for those surfaces
-// to confirm. `SkillManager`/`McpManager`/`SteeringManager`/`ShellContext`
-// are likewise not wired: `/skills` and `/mcp` report their real (always
-// empty) state below rather than pretending to a manager that doesn't
-// exist, and the system message sent with every query is just
-// `crate::config::load_system_prompt()` -- no steering-file block, no
-// skill-match injection, no shell-context paragraph, no attached-file
-// content, all of which need one of those managers to produce.
+// M5a Task 5 wired `submit`'s ACP branch (`AcpSession::try_send_prompt`) and
+// `drain_events`'s `AiEvent::ToolStatus` handler. Still deliberately NOT
+// here (see the M3b plan's Scope): the remaining confirm-prompt surfaces
+// that exist only to gate a tool call (`AiEvent::ConfirmWrite`/`ConfirmRun`/
+// `UndoState`, and `ChatPanel::resolve_action_yes`/`resolve_action_no` for
+// inline actions) -- completed in Task 6. `SkillManager`/`McpManager`/
+// `SteeringManager`/`ShellContext` are likewise not wired: `/skills` and
+// `/mcp` report their real (always empty) state below rather than
+// pretending to a manager that doesn't exist, and the system message sent
+// with every direct-provider query is just `crate::config::load_system_
+// prompt()` -- no steering-file block, no skill-match injection, no
+// shell-context paragraph, no attached-file content, all of which need one
+// of those managers to produce.
 //
 // The wgpu build's `submit_ai_query` (`src/app/ui/mod.rs:794`) takes a
 // `cwd: PathBuf` purely to sandbox tool execution (`execute_tool`'s
@@ -38,13 +38,48 @@ use super::ChatPanelView;
 const AI_POLL_CAP: usize = 64;
 
 impl ChatPanelView {
-    /// Submit the current panel input to the configured provider.
-    /// Direct-provider path only (`LlmProvider::stream`) -- see this
-    /// module's doc comment for what that deliberately excludes.
+    /// Submit the current panel input to the ACP agent (if connected) or
+    /// the configured direct provider otherwise -- see this module's doc
+    /// comment for what's still deliberately excluded from both paths.
     pub fn submit(&mut self, tokio_rt: &tokio::runtime::Runtime, cx: &mut Context<GpuiShellRoot>) {
-        let Some(_user_content) = self.panel.submit_input() else {
+        let Some(user_content) = self.panel.submit_input() else {
             return;
         };
+
+        if self.acp_session.is_some() {
+            // `try_send_prompt` requires a `tokio::sync::mpsc::Sender<AiEvent>`
+            // (see `AcpSession::try_send_prompt`'s real signature), but the
+            // direct-provider path above -- and `drain_events` below, which
+            // both backends share -- already reads from `self.ai_rx`, a
+            // `crossbeam_channel::Receiver`. Rather than give `drain_events`
+            // a second receiver to poll, bridge a fresh per-prompt tokio
+            // channel back into the existing one: same "spawn a small
+            // forwarding task" shape `backend.rs`'s own `spawn_acp_connect`
+            // already uses for an unrelated result.
+            let (bridge_tx, mut bridge_rx) = tokio::sync::mpsc::channel::<AiEvent>(256);
+            let ai_tx_out = self.ai_tx.clone();
+            tokio_rt.spawn(async move {
+                while let Some(event) = bridge_rx.recv().await {
+                    if ai_tx_out.send(event).is_err() {
+                        break;
+                    }
+                }
+            });
+            let terminal_tx = self.acp_terminal_tx.clone();
+            let send_result = self.acp_session.as_mut().unwrap().try_send_prompt(
+                user_content,
+                bridge_tx,
+                terminal_tx,
+            );
+            if let Err(e) = send_result {
+                self.acp_session = None;
+                self.panel
+                    .mark_error(format!("ACP agent disconnected: {e:#}"));
+            }
+            cx.notify();
+            return;
+        }
+
         let Some(provider) = self.llm_provider.clone() else {
             let msg = self
                 .llm_init_error
@@ -131,12 +166,12 @@ impl ChatPanelView {
                 // -- matched so this stays exhaustive against `AiEvent`,
                 // harmless no-op if one is ever sent down this channel.
                 AiEvent::Usage { .. } => {}
-                // Tool-calling confirm/status surfaces -- out of scope (see
-                // this module's doc comment). Never produced by the
-                // direct-provider path `submit` spawns; matched only for
-                // exhaustiveness.
-                AiEvent::ToolStatus { .. }
-                | AiEvent::ConfirmWrite { .. }
+                AiEvent::ToolStatus { tool, path, done } => {
+                    self.panel.set_tool_status(&tool, &path, done);
+                }
+                // Confirm/undo surfaces for tool-calling -- still out of
+                // scope here; completed in Task 6.
+                AiEvent::ConfirmWrite { .. }
                 | AiEvent::ConfirmRun { .. }
                 | AiEvent::UndoState { .. } => {}
             }
