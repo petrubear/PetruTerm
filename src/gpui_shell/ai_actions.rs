@@ -49,7 +49,12 @@ impl GpuiShellRoot {
     /// clear the composer's visible text to keep the real widget in sync
     /// (a discrepancy the wgpu build doesn't have, since it has no
     /// separate composer widget), then submit.
-    fn run_ai_query(&mut self, query: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn run_ai_query(
+        &mut self,
+        query: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if !self.chat.is_visible() {
             self.chat.toggle(window, cx);
         }
@@ -60,12 +65,64 @@ impl GpuiShellRoot {
         self.chat.submit(&self.tokio_rt, cx);
     }
 
+    /// Execute one confirmed inline agent action (`ChatPanel::resolve_
+    /// action_yes`'s own return value, drained here from `render()`'s top
+    /// -- see `mod.rs`'s new `pending_agent_action` field). Ported from
+    /// `flush_pending_agent_action` (`src/app/frame.rs:259-316`).
+    pub(super) fn flush_pending_agent_action(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        use crate::llm::agent_action::AgentAction;
+        use crate::llm::ChatMessage;
+        let Some(action) = self.pending_agent_action.take() else {
+            return;
+        };
+        match action {
+            AgentAction::RunCommand { cmd, .. } => {
+                let note = format!("Running: `{cmd}`");
+                let active_ws = self.workspaces.active();
+                let active_tid =
+                    active_ws.tab_panes[active_ws.tabs.active_index()].focused_terminal;
+                if let Some(terminal) = self.terminals.get(&active_tid) {
+                    let mut data = cmd.into_bytes();
+                    data.push(b'\n');
+                    terminal.write_input(&data);
+                }
+                self.chat.panel.messages.push(ChatMessage::assistant(note));
+                cx.notify();
+            }
+            AgentAction::OpenFile { path } => {
+                let cwd = self.cached_cwd.clone().unwrap_or_default();
+                let abs = cwd.join(&path);
+                let p = if abs.exists() {
+                    abs.to_string_lossy().into_owned()
+                } else {
+                    path.clone()
+                };
+                let _ = std::process::Command::new("open").arg(&p).spawn();
+                let note = format!("Opening: `{path}`");
+                self.chat.panel.messages.push(ChatMessage::assistant(note));
+                cx.notify();
+            }
+            AgentAction::ExplainOutput { last_n_lines } => {
+                let output = self.last_terminal_lines(last_n_lines);
+                if output.is_empty() {
+                    return;
+                }
+                let query = format!("Explain this terminal output:\n```\n{output}\n```");
+                self.run_ai_query(query, window, cx);
+            }
+        }
+    }
+
     /// Read the bottom `n` visible terminal rows of the focused pane,
     /// joined with `\n`, trimmed. Ported from `Mux::last_terminal_lines`
     /// (`src/app/mux/mod.rs:611-627`), adapted to read the focused
     /// `Terminal` directly (same adaptation style M5c's `blocks.rs::
     /// row_text_and_absolute_row` already used for a sibling grid read).
-    fn last_terminal_lines(&self, n: usize) -> String {
+    pub(super) fn last_terminal_lines(&self, n: usize) -> String {
         let active_ws = self.workspaces.active();
         let active_tid = active_ws.tab_panes[active_ws.tabs.active_index()].focused_terminal;
         let Some(terminal) = self.terminals.get(&active_tid) else {

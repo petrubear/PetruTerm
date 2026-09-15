@@ -228,6 +228,8 @@ pub struct GpuiShellRoot {
     context_menu: context_menu::ContextMenu,
     /// Transient top-right notification -- see `toast.rs`'s own doc comment.
     toast: Option<(String, std::time::Instant)>,
+    /// Confirmed inline agent action, drained at `render()`'s top.
+    pending_agent_action: Option<crate::llm::agent_action::AgentAction>,
 }
 
 impl GpuiShellRoot {
@@ -389,6 +391,7 @@ impl GpuiShellRoot {
             search_query,
             context_menu: context_menu::ContextMenu::default(),
             toast: None,
+            pending_agent_action: None,
         }
     }
 }

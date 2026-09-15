@@ -44,6 +44,8 @@ impl Render for GpuiShellRoot {
             });
         }
 
+        self.flush_pending_agent_action(window, cx);
+
         // Sync query state from the real `TextInput` widgets' live content
         // -- see `palette.rs`'s/`search_bar.rs`'s own doc comments on
         // `drive_palette_query`/`drive_search_query`.

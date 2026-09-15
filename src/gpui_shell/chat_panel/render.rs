@@ -32,6 +32,7 @@ use crate::llm::{ChatMessage, ChatRole};
 
 use super::super::font_state;
 use super::super::pane_view::to_rgba;
+use super::confirm::render_agent_action_card;
 use super::markdown::render_line;
 use super::{ChatPanelView, MARKDOWN_WRAP_WIDTH};
 
@@ -236,6 +237,10 @@ fn render_message_list(
                 .child(render_pill("Fix last error", on_fix_last_error, colors))
                 .child(render_pill("Explain more", on_explain_last_output, colors)),
         );
+    }
+
+    if let PanelState::ConfirmAction(action) = &panel.state {
+        list = list.child(render_agent_action_card(action, colors));
     }
 
     list

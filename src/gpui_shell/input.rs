@@ -52,6 +52,13 @@ impl GpuiShellRoot {
             return;
         }
 
+        // Inline-action confirm card's own key guard -- see
+        // `standalone_keys.rs`'s `maybe_handle_confirm_action_key` doc
+        // comment.
+        if self.maybe_handle_confirm_action_key(event, cx) {
+            return;
+        }
+
         // While the rename `TextInput` genuinely holds focus, every key
         // belongs to it, full stop -- checked before anything else,
         // including the leader-key arm below (renaming while chording the

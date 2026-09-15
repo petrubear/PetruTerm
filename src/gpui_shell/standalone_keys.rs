@@ -9,7 +9,7 @@
 // combo" rather than by feature, since neither surface alone is large
 // enough to justify its own extraction file.
 
-use gpui::{Context, Focusable, Window};
+use gpui::{Context, Focusable, KeyDownEvent, Window};
 
 use super::GpuiShellRoot;
 
@@ -52,5 +52,39 @@ impl GpuiShellRoot {
     pub(super) fn clear_focused_terminal(&mut self, cx: &mut Context<Self>) {
         self.clear_active_terminal();
         cx.notify();
+    }
+
+    /// The inline-action confirm card's own key guard, called from
+    /// `input.rs`'s `on_key_down`. Returns `true` if the key was consumed.
+    /// Mode-keyed on `panel.state`, not focus -- see this milestone's own
+    /// Global Constraints. Lives here rather than in `mod.rs` (where the M5a
+    /// plan sketched it) purely for the 400-line convention -- `mod.rs` was
+    /// already at the limit before this task's own `pending_agent_action`
+    /// field addition, same budget pressure this file's own doc comment
+    /// above already explains for its other three methods.
+    pub(super) fn maybe_handle_confirm_action_key(
+        &mut self,
+        event: &KeyDownEvent,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        use crate::llm::chat_panel::PanelState;
+        if !matches!(self.chat.panel.state, PanelState::ConfirmAction(_)) {
+            return false;
+        }
+        let key = event.keystroke.key.as_str();
+        if key == "y" || key == "enter" {
+            if let Some(action) = self.chat.panel.resolve_action_yes() {
+                self.pending_agent_action = Some(action);
+            }
+        } else if key == "a" {
+            self.chat.panel.auto_confirm_actions = true;
+            if let Some(action) = self.chat.panel.resolve_action_yes() {
+                self.pending_agent_action = Some(action);
+            }
+        } else if key == "n" || key == "escape" {
+            self.chat.panel.resolve_action_no();
+        }
+        cx.notify();
+        true
     }
 }

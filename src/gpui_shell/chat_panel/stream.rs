@@ -56,7 +56,12 @@ impl ChatPanelView {
         };
         self.panel.context_window = provider.context_window();
 
-        let mut messages = vec![ChatMessage::system(crate::config::load_system_prompt())];
+        let system_prompt = format!(
+            "{}\n\n{}",
+            crate::config::load_system_prompt(),
+            crate::llm::agent_action::system_prompt_instructions()
+        );
+        let mut messages = vec![ChatMessage::system(system_prompt)];
         messages.extend(self.panel.messages.iter().cloned());
 
         // TD-MEM-12 parity: cancel any previous in-flight stream before

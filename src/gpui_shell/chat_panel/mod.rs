@@ -22,6 +22,7 @@
 // `poll.rs`'s drain tick) have everything they need without reaching back
 // into `GpuiShellRoot` for anything but `config`/`tokio_rt` at the call site.
 
+mod confirm;
 mod file_picker;
 pub(super) mod markdown;
 mod render;
