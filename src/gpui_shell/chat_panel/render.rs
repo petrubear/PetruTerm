@@ -22,7 +22,9 @@
 // real close paths; a decorative "×" that silently did nothing on click
 // would be worse than no icon at all.
 
-use gpui::{div, prelude::*, px, App, Div, FontWeight, MouseButton, MouseDownEvent, Window};
+use gpui::{
+    div, prelude::*, px, App, Div, FontWeight, MouseButton, MouseDownEvent, ScrollHandle, Window,
+};
 use std::rc::Rc;
 
 use crate::config::schema::{ColorScheme, LlmConfig};
@@ -33,7 +35,7 @@ use crate::llm::{ChatMessage, ChatRole};
 use super::super::font_state;
 use super::super::pane_view::to_rgba;
 use super::composer::render_composer;
-use super::confirm::{render_agent_action_card, render_confirm_card};
+use super::confirm::{render_agent_action_card, render_awaiting_confirm_card};
 use super::markdown::render_line;
 use super::{ChatPanelView, MARKDOWN_WRAP_WIDTH};
 
@@ -80,6 +82,7 @@ pub fn render_chat_panel(
         ))
         .child(render_message_list(
             &view.panel,
+            &view.scroll_handle,
             colors,
             on_fix_last_error,
             on_explain_last_output,
@@ -172,60 +175,47 @@ fn header_status(panel: &ChatPanel) -> String {
     }
 }
 
-fn render_diff_line(line: &crate::llm::diff::DiffLine, colors: &ColorScheme) -> impl IntoElement {
-    use crate::llm::diff::DiffKind;
-    let (prefix, color) = match line.kind {
-        DiffKind::Added => ("+ ", to_rgba([0.4, 0.9, 0.4, 1.0])),
-        DiffKind::Removed => ("- ", to_rgba([0.9, 0.4, 0.4, 1.0])),
-        DiffKind::Context => ("  ", to_rgba(colors.ui_muted)),
-    };
-    div()
-        .text_color(color)
-        .child(format!("{prefix}{}", line.text))
-}
+/// Slop, in pixels, for deciding the message list is "still at the bottom"
+/// -- gpui's own scroll-offset bookkeeping is exact, but a user's last
+/// scroll gesture (trackpad momentum, a mouse-wheel tick) rarely lands on
+/// the precise maximum offset, so a strict `==` comparison would treat
+/// "essentially at the bottom" as "scrolled away" and stop auto-following.
+/// One line's worth of slack (`font_state::font_size()` is ~13-16px)
+/// comfortably covers that without risking a real scroll-up being missed.
+const AUTO_SCROLL_EPSILON_PX: f32 = 32.0;
 
-fn render_awaiting_confirm_card(
-    display: &crate::llm::chat_panel::ConfirmDisplay,
-    colors: &ColorScheme,
-) -> impl IntoElement {
-    use crate::llm::chat_panel::ConfirmDisplay;
-    match display {
-        ConfirmDisplay::Write {
-            path,
-            diff,
-            added,
-            removed,
-        } => {
-            let mut body = div().flex().flex_col().gap_1();
-            body = body.child(
-                div()
-                    .text_color(to_rgba(colors.foreground))
-                    .child(format!("Write: {path} (+{added} -{removed})")),
-            );
-            for line in diff {
-                body = body.child(render_diff_line(line, colors));
-            }
-            render_confirm_card("Confirm write", body, "[y]es  [n]o", colors)
-        }
-        ConfirmDisplay::Run { cmd } => render_confirm_card(
-            "Confirm run",
-            div()
-                .text_color(to_rgba(colors.foreground))
-                .child(format!("Run: `{cmd}`")),
-            "[y]es  [n]o",
-            colors,
-        ),
+/// Whether the message list's last known scroll position (before this
+/// frame's content is added) was at or near the bottom -- gpui's
+/// `ScrollHandle::offset()` grows more negative as the user scrolls down,
+/// bottoming out at `-max_offset()`, so "near the bottom" is "not much
+/// less negative than that". Before any layout has run (`max_offset()` is
+/// still zero), this is trivially true, matching the desired initial
+/// pinned-to-bottom state.
+fn scrolled_near_bottom(handle: &ScrollHandle) -> bool {
+    let max = handle.max_offset().height;
+    if max <= px(0.) {
+        return true;
     }
+    handle.offset().y + max >= px(-AUTO_SCROLL_EPSILON_PX)
 }
 
 fn render_message_list(
     panel: &ChatPanel,
+    scroll_handle: &ScrollHandle,
     colors: &ColorScheme,
     on_fix_last_error: ChatPillCallback,
     on_explain_last_output: ChatPillCallback,
 ) -> impl IntoElement {
+    // Read BEFORE this frame's (possibly new) content is appended below --
+    // this is what answers "was the user already following the
+    // conversation" rather than "does the list look scrolled-to-bottom
+    // after we just added a message", which would always be false the
+    // instant a message pushes old content further up.
+    let was_near_bottom = scrolled_near_bottom(scroll_handle);
+
     let mut list = div()
         .id("chat-panel-messages")
+        .track_scroll(scroll_handle)
         .flex()
         .flex_col()
         .flex_1()
@@ -312,6 +302,15 @@ fn render_message_list(
     }
     if let (PanelState::AwaitingConfirm, Some(display)) = (&panel.state, &panel.confirm_display) {
         list = list.child(render_awaiting_confirm_card(display, colors));
+    }
+
+    // Pull the view back down for a streamed token or a newly-added message
+    // -- but only if the user was already following the conversation.
+    // `ScrollHandle::scroll_to_bottom` just sets a flag consumed at the next
+    // prepaint, so it's safe to call unconditionally every render; gpui
+    // itself is what makes this idempotent/cheap when nothing changed.
+    if was_near_bottom {
+        scroll_handle.scroll_to_bottom();
     }
 
     list

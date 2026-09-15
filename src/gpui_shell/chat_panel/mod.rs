@@ -138,6 +138,14 @@ pub struct ChatPanelView {
     /// the same outward visibility `acp_terminal_tx` already has.
     pub(super) acp_terminal_rx:
         tokio::sync::mpsc::Receiver<crate::llm::acp::terminal::AcpTerminalRequest>,
+    /// Tracks the message list's scroll position across renders (`ScrollHandle`
+    /// wraps `Rc<RefCell<..>>`, so a shared `&` reference is enough to read
+    /// it or call `scroll_to_bottom()` -- no `&mut self` needed at render
+    /// time). `render.rs`'s `render_message_list` reads it each frame to
+    /// decide whether new content (a streamed token, a finished message)
+    /// should pull the view back down, the same "stick to bottom unless the
+    /// user scrolled away to read history" behavior every chat UI has.
+    pub(super) scroll_handle: gpui::ScrollHandle,
 }
 
 impl ChatPanelView {
@@ -175,6 +183,7 @@ impl ChatPanelView {
             acp_pending_connect: None,
             acp_terminal_tx,
             acp_terminal_rx,
+            scroll_handle: gpui::ScrollHandle::new(),
         };
         view.rewire_backend(config, tokio_rt);
         view

@@ -76,3 +76,49 @@ pub(super) fn render_agent_action_card(
         colors,
     )
 }
+
+fn render_diff_line(line: &crate::llm::diff::DiffLine, colors: &ColorScheme) -> impl IntoElement {
+    use crate::llm::diff::DiffKind;
+    let (prefix, color) = match line.kind {
+        DiffKind::Added => ("+ ", to_rgba([0.4, 0.9, 0.4, 1.0])),
+        DiffKind::Removed => ("- ", to_rgba([0.9, 0.4, 0.4, 1.0])),
+        DiffKind::Context => ("  ", to_rgba(colors.ui_muted)),
+    };
+    div()
+        .text_color(color)
+        .child(format!("{prefix}{}", line.text))
+}
+
+pub(super) fn render_awaiting_confirm_card(
+    display: &crate::llm::chat_panel::ConfirmDisplay,
+    colors: &ColorScheme,
+) -> impl IntoElement {
+    use crate::llm::chat_panel::ConfirmDisplay;
+    match display {
+        ConfirmDisplay::Write {
+            path,
+            diff,
+            added,
+            removed,
+        } => {
+            let mut body = div().flex().flex_col().gap_1();
+            body = body.child(
+                div()
+                    .text_color(to_rgba(colors.foreground))
+                    .child(format!("Write: {path} (+{added} -{removed})")),
+            );
+            for line in diff {
+                body = body.child(render_diff_line(line, colors));
+            }
+            render_confirm_card("Confirm write", body, "[y]es  [n]o", colors)
+        }
+        ConfirmDisplay::Run { cmd } => render_confirm_card(
+            "Confirm run",
+            div()
+                .text_color(to_rgba(colors.foreground))
+                .child(format!("Run: `{cmd}`")),
+            "[y]es  [n]o",
+            colors,
+        ),
+    }
+}
