@@ -5,25 +5,25 @@ local module = {}
 
 function module.apply_to_config(config)
   config.llm = {
-    enabled  = false,    -- Set to true to enable AI features
+    enabled  = true,    -- Set to false to disable AI features
 
     -- Backend: "provider" (direct LLM API) or "agent" (ACP agent process like Claude Code CLI).
-    -- Default: "provider". When set to "agent", the fields below are used instead of provider/model.
-    backend  = "provider",
+    -- Default: "agent". When set to "agent", the fields below are used instead of provider/model.
+    backend  = "agent",
 
     -- ACP agent config (used when backend = "agent"). Requires Node.js/npx installed.
     -- Test the adapter standalone first: `npx -y @agentclientprotocol/claude-agent-acp`
     -- should hang waiting on stdin (Ctrl+C to kill) — if that fails, it's a
     -- Node/network problem, not a PetruTerm one.
-    -- agent = {
-    --   command      = "npx",
-    --   args         = { "-y", "@agentclientprotocol/claude-agent-acp" },
-    --   -- Auth: if `claude` (Claude Code CLI) is already logged in via OAuth on
-    --   -- this machine, the SDK reuses those credentials and env can stay empty.
-    --   -- Otherwise set your key here (or export ANTHROPIC_API_KEY in your shell).
-    --   env          = {},          -- e.g. { ANTHROPIC_API_KEY = "sk-ant-..." }
-    --   display_name = nil,         -- override label in chat panel header (nil = command basename)
-    -- },
+    agent = {
+      command      = "npx",
+      args         = { "-y", "@agentclientprotocol/claude-agent-acp" },
+      -- Auth: if `claude` (Claude Code CLI) is already logged in via OAuth on
+      -- this machine, the SDK reuses those credentials and env can stay empty.
+      -- Otherwise set your key here (or export ANTHROPIC_API_KEY in your shell).
+      env          = {},          -- e.g. { ANTHROPIC_API_KEY = "sk-ant-..." }
+      display_name = nil,         -- override label in chat panel header (nil = command basename)
+    },
     -- Fallback package name if the one above fails to resolve via npx:
     -- "@zed-industries/claude-code-acp" (older name, still the hardcoded
     -- default in the agent-client-protocol-tokio crate this project vendors).

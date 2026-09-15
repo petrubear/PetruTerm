@@ -272,3 +272,34 @@ fn extract_version(content: &str) -> Option<&str> {
         .find(|l| l.trim_start().starts_with("# version:"))
         .map(|l| l.trim())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use schema::LlmBackend;
+
+    /// Regression test for the embedded default config actually parsing
+    /// through the real Lua VM -- `include_str!` only checks the file
+    /// exists at compile time, not that its Lua is valid or that mlua's
+    /// deserialization matches `AcpAgentConfig`'s real field names. Caught
+    /// exactly the kind of default-config typo this test guards against
+    /// once already (a stray field name mismatch would panic here with a
+    /// deserialization error, not silently no-op).
+    #[test]
+    fn embedded_default_config_sets_agent_backend() {
+        let (config, _lua) =
+            lua::load_config_str(DEFAULT_CONFIG, "default/config.lua", EMBEDDED_MODULES)
+                .expect("embedded default config must load");
+        assert!(config.llm.enabled);
+        assert_eq!(config.llm.backend, LlmBackend::Agent);
+        let agent = config
+            .llm
+            .agent
+            .expect("agent config must be set by default");
+        assert_eq!(agent.command, "npx");
+        assert_eq!(
+            agent.args,
+            vec!["-y", "@agentclientprotocol/claude-agent-acp"]
+        );
+    }
+}
