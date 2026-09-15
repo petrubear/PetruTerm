@@ -271,7 +271,16 @@ impl GpuiShellRoot {
         let leader_map = leader::build_leader_map(
             &crate::config::keybind_view::leader_bindings_view(&config).bindings,
         );
-        let chat = chat_panel::ChatPanelView::new(cx, &config);
+
+        // Same construction pattern as the wgpu app's own `tokio_rt` field
+        // on its `App`/`Mux` struct (`src/app/ui/mod.rs`) -- hoisted into
+        // its own binding, rather than built inline in the `Self { .. }`
+        // literal below (M3c's shape), because MCP startup needs to
+        // `.block_on()` it before the struct exists, and `ChatPanelView::
+        // new` (M5a) needs it too, to spawn an initial ACP connect when
+        // `config.llm.backend == Agent`.
+        let tokio_rt = tokio::runtime::Runtime::new().expect("Failed to build tokio runtime");
+        let chat = chat_panel::ChatPanelView::new(cx, &config, &tokio_rt);
         let ai_block = ai_block::AiBlockView::new(cx, &config);
         let palette = CommandPalette::new(&config);
         let palette_query =
@@ -306,13 +315,6 @@ impl GpuiShellRoot {
             cx.notify();
         })
         .detach();
-
-        // Same construction pattern as the wgpu app's own `tokio_rt` field
-        // on its `App`/`Mux` struct (`src/app/ui/mod.rs`) -- hoisted into
-        // its own binding, rather than built inline in the `Self { .. }`
-        // literal below (M3c's shape), because MCP startup needs to
-        // `.block_on()` it before the struct exists.
-        let tokio_rt = tokio::runtime::Runtime::new().expect("Failed to build tokio runtime");
 
         // Skill/steering: load global (`~/.config/petruterm/{skills,steering}/`)
         // always; project-local (`<cwd>/.petruterm/{skills,steering}/`) only when

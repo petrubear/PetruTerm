@@ -32,6 +32,7 @@ use crate::llm::{ChatMessage, ChatRole};
 
 use super::super::font_state;
 use super::super::pane_view::to_rgba;
+use super::composer::render_composer;
 use super::confirm::render_agent_action_card;
 use super::markdown::render_line;
 use super::{ChatPanelView, MARKDOWN_WRAP_WIDTH};
@@ -71,7 +72,12 @@ pub fn render_chat_panel(
         .bg(to_rgba(colors.ui_surface))
         .border_l_1()
         .border_color(to_rgba(colors.ui_border))
-        .child(render_header(&view.panel, llm, colors))
+        .child(render_header(
+            &view.panel,
+            llm,
+            view.acp_session.as_ref(),
+            colors,
+        ))
         .child(render_message_list(
             &view.panel,
             colors,
@@ -81,9 +87,25 @@ pub fn render_chat_panel(
         .child(render_composer(view, colors))
 }
 
-fn render_header(panel: &ChatPanel, llm: &LlmConfig, colors: &ColorScheme) -> impl IntoElement {
+fn render_header(
+    panel: &ChatPanel,
+    llm: &LlmConfig,
+    acp_session: Option<&crate::llm::acp::AcpSession>,
+    colors: &ColorScheme,
+) -> impl IntoElement {
     let status = header_status(panel);
-    let short_model = short_model_name(&llm.model);
+    let (icon_label, detail) = if let Some(session) = acp_session {
+        (
+            format!("\u{25c8} {}", session.display_name),
+            format!("agent:{}", session.agent_name),
+        )
+    } else {
+        let short_model = short_model_name(&llm.model);
+        (
+            format!("\u{2726} {short_model}"),
+            format!("{}:{}", llm.provider, llm.model),
+        )
+    };
     div()
         .flex()
         .flex_row()
@@ -105,12 +127,12 @@ fn render_header(panel: &ChatPanel, llm: &LlmConfig, colors: &ColorScheme) -> im
                 .child(
                     div()
                         .text_color(to_rgba(colors.ui_accent))
-                        .child(format!("\u{2726} {short_model}")),
+                        .child(icon_label),
                 )
                 .child(
                     div()
                         .text_color(to_rgba(colors.ui_muted))
-                        .child(format!("\u{2502} {}:{}", llm.provider, llm.model)),
+                        .child(format!("\u{2502} {detail}")),
                 )
                 .when(!status.is_empty(), |el| {
                     el.child(div().text_color(to_rgba(colors.ui_muted)).child(status))
@@ -306,84 +328,4 @@ fn render_pill(label: &str, on_click: ChatPillCallback, colors: &ColorScheme) ->
             on_click(window, cx)
         })
         .child(label.to_string())
-}
-
-fn render_composer(view: &ChatPanelView, colors: &ColorScheme) -> impl IntoElement {
-    let mut root = div()
-        .flex()
-        .flex_col()
-        .flex_shrink_0()
-        .gap_1()
-        .border_t_1()
-        .border_color(to_rgba(colors.ui_border))
-        .px_3()
-        .py_2();
-
-    if !view.panel.attached_files.is_empty() {
-        let mut chips = div().flex().flex_row().flex_wrap().gap_1();
-        for path in &view.panel.attached_files {
-            let name = path
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_else(|| path.to_string_lossy().into_owned());
-            chips = chips.child(
-                div()
-                    .px_2()
-                    .py_0()
-                    .rounded_md()
-                    .bg(to_rgba(colors.ui_surface_hover))
-                    .text_color(to_rgba(colors.ui_muted))
-                    .text_size(px(11.0))
-                    .child(format!("\u{1F4CE} {name}")),
-            );
-        }
-        root = root.child(chips);
-    }
-
-    if view.panel.file_picker_open {
-        let filtered = view.panel.filtered_picker_items();
-        let mut picker_list = div()
-            .id("chat-panel-file-picker")
-            .flex()
-            .flex_col()
-            .max_h(px(160.0))
-            .overflow_y_scroll()
-            .border_1()
-            .border_color(to_rgba(colors.ui_border))
-            .rounded_md();
-        for (idx, path) in filtered.iter().enumerate() {
-            let is_cursor = idx == view.panel.file_picker_cursor;
-            let is_attached = view.panel.attached_files.contains(path);
-            let label = path.to_string_lossy().into_owned();
-            let mut row = div()
-                .px_2()
-                .py_1()
-                .text_size(px(font_state::font_size()))
-                .text_color(to_rgba(colors.foreground));
-            if is_cursor {
-                row = row.bg(to_rgba(colors.ui_surface_active));
-            }
-            let prefix = if is_attached { "\u{2713} " } else { "  " };
-            picker_list = picker_list.child(row.child(format!("{prefix}{label}")));
-        }
-        root = root.child(picker_list);
-    }
-
-    root.child(
-        div()
-            .flex()
-            .h(px(28.0))
-            .items_center()
-            .font_family(font_state::font_family())
-            .text_size(px(font_state::font_size()))
-            .text_color(to_rgba(colors.foreground))
-            .child(view.composer.clone()),
-    )
-    .child(
-        div()
-            .font_family(font_state::font_family())
-            .text_size(px(font_state::font_size()))
-            .text_color(to_rgba(colors.ui_muted))
-            .child("Enter to send  ·  Tab to attach files  ·  /clear /skills /mcp /model /agent  ·  /q to close"),
-    )
 }

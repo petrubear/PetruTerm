@@ -22,6 +22,8 @@
 // `poll.rs`'s drain tick) have everything they need without reaching back
 // into `GpuiShellRoot` for anything but `config`/`tokio_rt` at the call site.
 
+mod backend;
+mod composer;
 mod confirm;
 mod file_picker;
 pub(super) mod markdown;
@@ -95,10 +97,22 @@ pub struct ChatPanelView {
     /// The file picker's async directory-scan channel (Task 3) -- see
     /// `file_picker.rs`'s `open_file_picker_async`/`poll_file_scan`.
     file_scan_rx: Option<crossbeam_channel::Receiver<Vec<std::path::PathBuf>>>,
+    /// The connected ACP agent session, if `config.llm.backend == Agent`
+    /// and the connect succeeded. `None` in Provider mode, or while a
+    /// connect is still pending/failed.
+    pub(super) acp_session: Option<crate::llm::acp::AcpSession>,
+    /// In-flight ACP connect attempt -- see `backend.rs`'s own doc
+    /// comment.
+    acp_pending_connect:
+        Option<tokio::sync::oneshot::Receiver<Result<crate::llm::acp::AcpSession, String>>>,
 }
 
 impl ChatPanelView {
-    pub fn new(cx: &mut Context<GpuiShellRoot>, config: &Config) -> Self {
+    pub fn new(
+        cx: &mut Context<GpuiShellRoot>,
+        config: &Config,
+        tokio_rt: &tokio::runtime::Runtime,
+    ) -> Self {
         let composer = cx.new(|cx| TextInput::new(cx, &config.colors, "", "Ask anything…"));
         // Wired here, once, rather than per-render: the same `cx.subscribe`
         // shape `begin_tab_rename` uses for the tab-rename editor
@@ -121,8 +135,10 @@ impl ChatPanelView {
             ai_rx,
             in_flight: None,
             file_scan_rx: None,
+            acp_session: None,
+            acp_pending_connect: None,
         };
-        view.rewire_provider(&config.llm);
+        view.rewire_backend(config, tokio_rt);
         view
     }
 

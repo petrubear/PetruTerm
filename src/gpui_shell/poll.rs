@@ -57,7 +57,7 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                             // same hot-reload path every other config field
                             // already uses, rather than only at startup and
                             // via `/model`.
-                            this.chat.rewire_provider(&this.config.llm);
+                            this.chat.rewire_backend(&this.config, &this.tokio_rt);
                             // M3b Task 3: the inline AI block has its own
                             // provider instance (own channel/state -- see
                             // `ai_block.rs`'s doc comment), so it needs the
@@ -248,6 +248,9 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                         should_notify = true;
                     }
                     if this.chat.poll_file_scan() {
+                        should_notify = true;
+                    }
+                    if this.chat.poll_acp_connect() {
                         should_notify = true;
                     }
                     if should_notify {

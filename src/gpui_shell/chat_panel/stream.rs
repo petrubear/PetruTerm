@@ -237,23 +237,57 @@ impl GpuiShellRoot {
                     .to_string(),
             ),
             "model" => {
-                let msg = if args.is_empty() {
-                    format!(
-                        "Active: {}:{}",
-                        self.config.llm.provider, self.config.llm.model
-                    )
-                } else {
-                    self.config.llm.model = args.to_string();
-                    self.chat.rewire_provider(&self.config.llm);
-                    format!("Model set to '{args}'.")
+                use crate::config::schema::LlmBackend;
+                let msg = match self.config.llm.backend {
+                    LlmBackend::Agent => "Agent mode: use /agent to switch agents.".to_string(),
+                    LlmBackend::Provider if args.is_empty() => {
+                        format!(
+                            "Active: {}:{}",
+                            self.config.llm.provider, self.config.llm.model
+                        )
+                    }
+                    LlmBackend::Provider => {
+                        self.config.llm.model = args.to_string();
+                        self.chat.rewire_backend(&self.config, &self.tokio_rt);
+                        format!("Model set to '{args}'.")
+                    }
                 };
                 self.push_chat_message(msg);
             }
-            "agent" => self.push_chat_message(
-                "Agent backend is not available in this build (ACP is deferred -- see \
-                 the M3b plan's Scope). Use /model to change the direct-provider model."
-                    .to_string(),
-            ),
+            "agent" => {
+                use crate::config::schema::{AcpAgentConfig, LlmBackend};
+                let msg = match self.config.llm.backend {
+                    LlmBackend::Provider => {
+                        "Provider mode active. Use /model to change models.".to_string()
+                    }
+                    LlmBackend::Agent if args.is_empty() => {
+                        match crate::config::llm_view::agent_display_name(
+                            self.config.llm.agent.as_ref(),
+                        ) {
+                            Some(name) => format!("Active agent: {name}"),
+                            None => {
+                                "No agent configured. Set llm.agent.command in config.".to_string()
+                            }
+                        }
+                    }
+                    LlmBackend::Agent => {
+                        if let Some(agent_cfg) = self.config.llm.agent.as_mut() {
+                            agent_cfg.command = args.to_string();
+                        } else {
+                            self.config.llm.agent = Some(AcpAgentConfig {
+                                command: args.to_string(),
+                                args: vec![],
+                                env: vec![],
+                                display_name: None,
+                            });
+                        }
+                        self.chat.acp_session = None;
+                        self.chat.rewire_backend(&self.config, &self.tokio_rt);
+                        format!("Agent set to '{args}'. Reconnecting...")
+                    }
+                };
+                self.push_chat_message(msg);
+            }
             _ => self.push_chat_message(format!(
                 "Unknown command: /{cmd}. Try /clear, /skills, /mcp, /model, /agent or /quit."
             )),
