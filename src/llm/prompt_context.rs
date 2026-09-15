@@ -16,12 +16,15 @@ use crate::llm::steering::SteeringManager;
 
 /// Cap on a single attached file's injected content, and on the combined
 /// total across all attached files (TD-030, ported verbatim).
+#[allow(dead_code)]
 const MAX_FILE_BYTES: usize = 512 * 1024;
+#[allow(dead_code)]
 const MAX_TOTAL_BYTES: usize = 1024 * 1024;
 
 /// Extra context text to inject alongside a user's query. Empty `text`
 /// means nothing applied -- callers skip appending/prepending in that
 /// case rather than adding a stray blank block.
+#[allow(dead_code)]
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct PromptAddendum {
     pub text: String,
@@ -30,6 +33,7 @@ pub struct PromptAddendum {
     pub matched_skill: Option<String>,
 }
 
+#[allow(dead_code)]
 pub fn build_prompt_addendum(
     skill_manager: &SkillManager,
     steering_manager: &SteeringManager,
