@@ -8,6 +8,7 @@ pub mod markdown;
 pub mod mcp;
 pub mod openai_compat;
 pub mod openrouter;
+pub mod prompt_context;
 pub mod shell_context;
 pub mod skills;
 pub mod steering;
