@@ -808,13 +808,29 @@ impl UiManager {
             return;
         };
 
+        let addendum = crate::llm::prompt_context::build_prompt_addendum(
+            &self.skill_manager,
+            &self.steering_manager,
+            self.panel().matched_skill.as_deref(),
+            &user_content,
+            &self.panel().attached_files,
+        );
+        if let Some(name) = addendum.matched_skill.clone() {
+            self.panel_mut().matched_skill = Some(name);
+        }
+
         // ── ACP agent backend ─────────────────────────────────────────────────
         if self.acp_session.is_some() {
             let (ai_mpsc_tx, ai_mpsc_rx) = tokio::sync::mpsc::channel::<AiEvent>(256);
             let (term_mpsc_tx, term_mpsc_rx) = tokio::sync::mpsc::channel::<AcpTerminalRequest>(16);
 
+            let prompt_text = if addendum.text.is_empty() {
+                user_content
+            } else {
+                format!("{}\n\n{user_content}", addendum.text.trim_start())
+            };
             let send_result = self.acp_session.as_mut().unwrap().try_send_prompt(
-                user_content,
+                prompt_text,
                 ai_mpsc_tx,
                 term_mpsc_tx,
             );
@@ -867,77 +883,7 @@ impl UiManager {
         self.panel_mut().context_window = provider.context_window();
 
         let mut system_text = self.system_prompt.clone();
-
-        // Steering files: global/project Markdown rules always active.
-        if let Some(block) = self.steering_manager.context_block() {
-            system_text.push_str(&format!("\n\n{block}"));
-        }
-
-        // Skill injection (D-4): match by query, or keep the panel's active skill.
-        let active_skill_name = self.panel().matched_skill.clone();
-        let skill_match = {
-            if let Some(skill) = self.skill_manager.match_query(&user_content) {
-                let body = self.skill_manager.read_body(skill).ok();
-                body.map(|b| (skill.name.clone(), b))
-            } else if let Some(name) = &active_skill_name {
-                // No new match — reuse the skill active in this conversation.
-                let found = self
-                    .skill_manager
-                    .skills()
-                    .iter()
-                    .find(|s| &s.name == name)
-                    .cloned();
-                found.and_then(|s| {
-                    self.skill_manager
-                        .read_body(&s)
-                        .ok()
-                        .map(|b| (name.clone(), b))
-                })
-            } else {
-                None
-            }
-        };
-        if let Some((skill_name, skill_body)) = skill_match {
-            system_text.push_str(&format!(
-                "\n\nThe following expert skill has been activated. \
-                 You MUST follow its instructions precisely. \
-                 All files referenced in the instructions (templates, guides, scripts) \
-                 are already included verbatim below — do NOT use file tools to read \
-                 them from disk, their content is already here:\n\n{skill_body}"
-            ));
-            self.panel_mut().matched_skill = Some(skill_name);
-        }
-
-        if let Some(ctx) = ShellContext::load() {
-            system_text.push_str(&format!(
-                "\n\nShell context:\n{}",
-                ctx.format_for_system_message()
-            ));
-        }
-
-        // Inject attached file contents — capped at 512 KB/file and 1 MB total (TD-030).
-        const MAX_FILE_BYTES: usize = 512 * 1024;
-        const MAX_TOTAL_BYTES: usize = 1024 * 1024;
-        let mut total_bytes = 0usize;
-        let attached: Vec<_> = self.panel().attached_files.clone();
-        for path in &attached {
-            if total_bytes >= MAX_TOTAL_BYTES {
-                break;
-            }
-            if let Ok(bytes) = std::fs::read(path) {
-                let cap = bytes
-                    .len()
-                    .min(MAX_FILE_BYTES)
-                    .min(MAX_TOTAL_BYTES - total_bytes);
-                let content = String::from_utf8_lossy(&bytes[..cap]);
-                let name = path.display();
-                system_text.push_str(&format!("\n\n--- File: {name} ---\n{content}"));
-                if cap < bytes.len() {
-                    system_text.push_str("\n[... truncated — file exceeds size limit ...]");
-                }
-                total_bytes += cap;
-            }
-        }
+        system_text.push_str(&addendum.text);
 
         // Append inline action instructions so the LLM knows how to propose actions.
         system_text.push('\n');
