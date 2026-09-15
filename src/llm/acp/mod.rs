@@ -44,7 +44,16 @@ pub struct AcpSession {
 impl AcpSession {
     /// Spawn the agent process, initialise the ACP connection and create a
     /// session.  Returns once the agent is ready to accept prompts.
-    pub async fn connect(cfg: &AcpAgentConfig, cwd: &Path) -> Result<Self> {
+    /// `mcp_servers` is passed straight into the ACP `session/new` request
+    /// (`NewSessionRequest::mcp_servers`) -- the agent connects to and
+    /// calls these servers' tools itself, independent of this project's
+    /// own `McpManager` (used only by the direct-provider tool-calling
+    /// path). Pass an empty `Vec` for no MCP access.
+    pub async fn connect(
+        cfg: &AcpAgentConfig,
+        cwd: &Path,
+        mcp_servers: Vec<agent_client_protocol::schema::McpServer>,
+    ) -> Result<Self> {
         let agent = build_acp_agent(cfg)?;
 
         let agent_name = Path::new(&cfg.command)
@@ -61,7 +70,7 @@ impl AcpSession {
         let (ready_tx, ready_rx) = oneshot::channel::<Result<()>>();
         let cwd = cwd.to_path_buf();
 
-        let task = tokio::spawn(run_session(agent, cwd, prompt_rx, ready_tx));
+        let task = tokio::spawn(run_session(agent, cwd, mcp_servers, prompt_rx, ready_tx));
 
         // Block until initialize + new_session complete (or task dies).
         ready_rx

@@ -83,7 +83,7 @@ fn spawn_acp_connect(
 ) -> tokio::sync::oneshot::Receiver<Result<AcpSession, String>> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     rt.spawn(async move {
-        let result = AcpSession::connect(&agent_cfg, &cwd)
+        let result = AcpSession::connect(&agent_cfg, &cwd, Vec::new())
             .await
             .map_err(|e| format!("{e:#}"));
         let _ = tx.send(result);

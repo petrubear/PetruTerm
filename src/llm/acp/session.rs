@@ -7,8 +7,8 @@ use std::sync::Arc;
 
 use agent_client_protocol::schema::{
     ContentBlock, CreateTerminalRequest, InitializeRequest, KillTerminalRequest,
-    KillTerminalResponse, NewSessionRequest, PromptRequest, ProtocolVersion, ReadTextFileRequest,
-    ReadTextFileResponse, ReleaseTerminalRequest, ReleaseTerminalResponse,
+    KillTerminalResponse, McpServer, NewSessionRequest, PromptRequest, ProtocolVersion,
+    ReadTextFileRequest, ReadTextFileResponse, ReleaseTerminalRequest, ReleaseTerminalResponse,
     RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse,
     SelectedPermissionOutcome, SessionNotification, SessionUpdate, TerminalExitStatus, TerminalId,
     TerminalOutputRequest, TerminalOutputResponse, WaitForTerminalExitRequest,
@@ -29,6 +29,7 @@ use super::{PromptMsg, QueryCtx, TermCtx};
 pub(super) async fn run_session(
     agent: AcpAgent,
     cwd: PathBuf,
+    mcp_servers: Vec<McpServer>,
     mut prompt_rx: mpsc::Receiver<PromptMsg>,
     ready_tx: oneshot::Sender<Result<()>>,
 ) {
@@ -293,7 +294,7 @@ pub(super) async fn run_session(
                 .await?;
 
             let sess = cx
-                .send_request(NewSessionRequest::new(&cwd))
+                .send_request(NewSessionRequest::new(&cwd).mcp_servers(mcp_servers))
                 .block_task()
                 .await?;
             let session_id = sess.session_id;
