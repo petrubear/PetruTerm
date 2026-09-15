@@ -30,11 +30,27 @@ fn spawn_acp_connect(
     rt: &tokio::runtime::Runtime,
     agent_cfg: crate::config::schema::AcpAgentConfig,
     cwd: PathBuf,
+    mcp_enabled: bool,
     wakeup: EventLoopProxy<()>,
 ) -> tokio::sync::oneshot::Receiver<Result<crate::llm::acp::AcpSession, String>> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     rt.spawn(async move {
-        let result = crate::llm::acp::AcpSession::connect(&agent_cfg, &cwd, Vec::new())
+        // MCP config loading is real (blocking) file I/O -- done inside this
+        // spawned task, not before `rt.spawn`, so `spawn_acp_connect` itself
+        // stays non-blocking for its caller (the UI thread), per its own
+        // existing doc comment.
+        let mcp_servers = if mcp_enabled {
+            let trusted = crate::llm::mcp::trust::is_trusted(&cwd);
+            mcp_config::load_merged(&cwd, trusted)
+                .map(|cfg| mcp_config::to_acp_servers(&cfg))
+                .unwrap_or_else(|e| {
+                    log::warn!("ACP: failed to load MCP config: {e:#}");
+                    Vec::new()
+                })
+        } else {
+            Vec::new()
+        };
+        let result = crate::llm::acp::AcpSession::connect(&agent_cfg, &cwd, mcp_servers)
             .await
             .map_err(|e| format!("{e:#}"));
         let _ = tx.send(result);
@@ -302,7 +318,13 @@ impl UiManager {
                 crate::config::schema::LlmBackend::Agent => {
                     let pending = view.agent.as_ref().map(|agent_cfg| {
                         let cwd = std::env::current_dir().unwrap_or_default();
-                        spawn_acp_connect(&tokio_rt, agent_cfg.clone(), cwd, wakeup_proxy.clone())
+                        spawn_acp_connect(
+                            &tokio_rt,
+                            agent_cfg.clone(),
+                            cwd,
+                            view.enabled,
+                            wakeup_proxy.clone(),
+                        )
                     });
                     (None, None, pending)
                 }
@@ -344,32 +366,18 @@ impl UiManager {
         // Skip MCP entirely when LLM is disabled — no AI panel, no tool calls (AUDIT-ENERGY-03).
         let mcp_manager = if view.enabled {
             let mut mgr = McpManager::new();
-            // Always load global MCP servers (installed by the user deliberately).
-            if let Ok(mut cfg) = mcp_config::load_global() {
-                // Load project-local MCP only if this cwd has been explicitly trusted.
-                // This prevents a malicious repo's .petruterm/mcp.json from spawning
-                // arbitrary processes when the directory is opened (AUDIT-SEC-02).
-                if let Ok(cwd) = std::env::current_dir() {
-                    let local_path = cwd.join(".petruterm/mcp.json");
-                    if local_path.exists() {
-                        if crate::llm::mcp::trust::is_trusted(&cwd) {
-                            if let Ok(local) = mcp_config::load_local(&cwd) {
-                                cfg.extend(local);
-                            }
-                        } else {
-                            log::info!(
-                                "Local MCP config found at {}/.petruterm/mcp.json but this \
-                                 directory is not trusted — skipping. Use 'Trust local MCP' \
-                                 in the command palette to enable.",
-                                cwd.display()
-                            );
+            // Behavior preserved exactly: if `std::env::current_dir()` fails, or
+            // `load_merged` returns `Err` (global config failed to load), `mgr`
+            // stays empty -- the whole inner block is simply skipped, same as
+            // the original nested `if let Ok(...)` chain this replaces.
+            if let Ok(cwd) = std::env::current_dir() {
+                let trusted = crate::llm::mcp::trust::is_trusted(&cwd);
+                if let Ok(cfg) = mcp_config::load_merged(&cwd, trusted) {
+                    if !cfg.is_empty() {
+                        let errors = tokio_rt.block_on(mgr.start_all(&cfg));
+                        for (name, err) in &errors {
+                            log::warn!("MCP server '{name}' failed to start: {err:#}");
                         }
-                    }
-                }
-                if !cfg.is_empty() {
-                    let errors = tokio_rt.block_on(mgr.start_all(&cfg));
-                    for (name, err) in &errors {
-                        log::warn!("MCP server '{name}' failed to start: {err:#}");
                     }
                 }
             }

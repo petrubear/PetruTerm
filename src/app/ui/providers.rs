@@ -8,28 +8,22 @@ impl UiManager {
     /// Reload MCP servers from disk config. Creates a fresh McpManager, starts all
     /// servers, and replaces the Arc. Called on hot-reload of mcp.json (D-5).
     pub fn reload_mcp(&mut self, cwd: &std::path::Path) {
-        let mut cfg = match mcp_config::load_global() {
+        // Behavior preserved exactly: on a `load_merged` `Err` (global config
+        // failed to load), this returns early WITHOUT touching
+        // `self.mcp_manager` -- a broken hot-reload keeps whatever MCP
+        // servers were already running, same as the original early-return
+        // this replaces. This differs deliberately from `UiManager::new`'s
+        // own call site above (Step 3), which treats the same error as
+        // "start with zero MCP servers" -- that's correct there because
+        // there's no prior state to preserve at construction time.
+        let trusted = crate::llm::mcp::trust::is_trusted(cwd);
+        let cfg = match mcp_config::load_merged(cwd, trusted) {
             Ok(c) => c,
             Err(e) => {
                 log::warn!("MCP hot-reload: failed to load global config: {e:#}");
                 return;
             }
         };
-        // Include local config only if the cwd is trusted (AUDIT-SEC-02).
-        let local_path = cwd.join(".petruterm/mcp.json");
-        if local_path.exists() {
-            if crate::llm::mcp::trust::is_trusted(cwd) {
-                match mcp_config::load_local(cwd) {
-                    Ok(local) => cfg.extend(local),
-                    Err(e) => log::warn!("MCP hot-reload: failed to load local config: {e:#}"),
-                }
-            } else {
-                log::info!(
-                    "MCP hot-reload: local config at {} not trusted, skipping.",
-                    local_path.display()
-                );
-            }
-        }
         let mut mgr = McpManager::new();
         let errors = self.tokio_rt.block_on(mgr.start_all(&cfg));
         for (name, err) in &errors {
@@ -75,6 +69,7 @@ impl UiManager {
                         &self.tokio_rt,
                         agent_cfg,
                         cwd,
+                        view.enabled,
                         wakeup_proxy,
                     ));
                 } else {
