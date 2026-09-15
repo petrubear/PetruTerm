@@ -105,6 +105,27 @@ pub struct ChatPanelView {
     /// comment.
     acp_pending_connect:
         Option<tokio::sync::oneshot::Receiver<Result<crate::llm::acp::AcpSession, String>>>,
+    /// Sender half of the ACP terminal-request bridge -- cloned into each
+    /// ACP prompt's `try_send_prompt` call (Task 5) as `terminal_tx`. The
+    /// receiver half is drained by `GpuiShellRoot::handle_acp_terminal_
+    /// requests` (`acp_bridge.rs`), called from `poll.rs`'s own tick.
+    /// `tokio::sync::mpsc`, not `crossbeam_channel` -- `AcpSession::try_
+    /// send_prompt` requires this exact channel type.
+    /// `#[allow(dead_code)]`: not yet read anywhere -- Task 5's `submit()`
+    /// is the first consumer, cloning this into `try_send_prompt`'s own
+    /// `terminal_tx` parameter. Same "field exists ahead of its consumer"
+    /// shape Task 2's `terminal_output_text`/`terminal_exit_code` used.
+    #[allow(dead_code)]
+    pub(super) acp_terminal_tx:
+        tokio::sync::mpsc::Sender<crate::llm::acp::terminal::AcpTerminalRequest>,
+    /// `pub(super)`, not private, despite the doc comment above describing
+    /// this as "the receiver half" of an otherwise-private-looking pair --
+    /// `GpuiShellRoot::handle_acp_terminal_requests` (`acp_bridge.rs`) reads
+    /// it directly via `self.chat.acp_terminal_rx.try_recv()`, and that
+    /// function lives outside the `chat_panel` module, so the field needs
+    /// the same outward visibility `acp_terminal_tx` already has.
+    pub(super) acp_terminal_rx:
+        tokio::sync::mpsc::Receiver<crate::llm::acp::terminal::AcpTerminalRequest>,
 }
 
 impl ChatPanelView {
@@ -125,6 +146,7 @@ impl ChatPanelView {
         cx.subscribe(&composer, GpuiShellRoot::on_composer_event)
             .detach();
         let (ai_tx, ai_rx) = crossbeam_channel::bounded(AI_CHANNEL_CAP);
+        let (acp_terminal_tx, acp_terminal_rx) = tokio::sync::mpsc::channel(32);
         let mut view = Self {
             panel: ChatPanel::new(),
             composer,
@@ -137,6 +159,8 @@ impl ChatPanelView {
             file_scan_rx: None,
             acp_session: None,
             acp_pending_connect: None,
+            acp_terminal_tx,
+            acp_terminal_rx,
         };
         view.rewire_backend(config, tokio_rt);
         view

@@ -253,6 +253,7 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                     if this.chat.poll_acp_connect() {
                         should_notify = true;
                     }
+                    this.handle_acp_terminal_requests(cx);
                     if should_notify {
                         cx.notify();
                     }

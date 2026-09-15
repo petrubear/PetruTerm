@@ -4,6 +4,7 @@
 // forwarded from gpui's key-down events straight to the PTY via `key_map`'s
 // full key-event mapping.
 
+mod acp_bridge;
 mod actions;
 mod ai_actions;
 mod ai_block;
@@ -240,6 +241,11 @@ pub struct GpuiShellRoot {
     /// output`; bounded the same way (oldest evicted past a small cap) so
     /// a long session with many closed panes can't grow this unboundedly.
     terminal_final_output: HashMap<usize, String>,
+    /// ACP `terminal/wait_for_exit` requests still waiting on a terminal
+    /// that hasn't exited yet -- resolved on a later poll tick once
+    /// `terminal_exit_code` returns `Some`. Mirrors `UiManager::pending_
+    /// acp_wait_for_exit`.
+    pending_acp_wait_for_exit: Vec<(usize, tokio::sync::oneshot::Sender<i32>)>,
 }
 
 impl GpuiShellRoot {
@@ -406,6 +412,7 @@ impl GpuiShellRoot {
             pending_agent_action: None,
             terminal_exit_codes: HashMap::new(),
             terminal_final_output: HashMap::new(),
+            pending_acp_wait_for_exit: Vec::new(),
         }
     }
 }
