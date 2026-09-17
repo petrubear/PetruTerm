@@ -6,7 +6,7 @@
 
 use std::rc::Rc;
 
-use gpui::{div, prelude::*, App, Div, MouseButton, MouseDownEvent, Window};
+use gpui::{div, prelude::*, px, App, Div, MouseButton, MouseDownEvent, Window};
 
 use crate::config::schema::ColorScheme;
 use crate::llm::mcp::manager::McpManager;
@@ -53,8 +53,10 @@ pub fn render_workspaces_section(
                     .flex_row()
                     .items_center()
                     .justify_between()
+                    .mx_2()
                     .px_2()
                     .py_1()
+                    .rounded_md()
                     .cursor_pointer()
                     .on_mouse_down(MouseButton::Left, move |_: &MouseDownEvent, window, cx| {
                         select(&idx, window, cx)
@@ -83,17 +85,22 @@ pub fn render_workspaces_section(
         .flex_1()
         .min_h_0()
         .overflow_y_scroll()
+        .py_2()
+        .gap_1()
         .child(
             div()
                 .flex()
                 .flex_row()
                 .items_center()
                 .justify_between()
-                .px_2()
-                .py_2()
-                .border_b_1()
-                .border_color(to_rgba(colors.ui_border))
-                .child("Workspaces")
+                .px_3()
+                .pb_2()
+                .text_size(px(10.5))
+                .child(
+                    div()
+                        .text_color(to_rgba(colors.ui_muted))
+                        .child("WORKSPACES"),
+                )
                 .child(
                     div()
                         .cursor_pointer()
@@ -148,6 +155,7 @@ pub fn render_mcp_section(
         .flex_1()
         .min_h_0()
         .overflow_y_scroll()
+        .py_2()
         .children(rows)
         .into_any_element()
 }
@@ -185,6 +193,7 @@ pub fn render_skills_section(
         .flex_1()
         .min_h_0()
         .overflow_y_scroll()
+        .py_2()
         .children(rows)
         .into_any_element()
 }
@@ -217,6 +226,7 @@ pub fn render_steering_section(
         .flex_1()
         .min_h_0()
         .overflow_y_scroll()
+        .py_2()
         .children(rows)
         .into_any_element()
 }
@@ -231,8 +241,10 @@ fn render_browser_row(
     colors: &ColorScheme,
 ) -> Div {
     let row = div()
+        .mx_2()
         .px_2()
         .py_1()
+        .rounded_md()
         .cursor_pointer()
         .child(label)
         .on_mouse_down(MouseButton::Left, move |_: &MouseDownEvent, window, cx| {

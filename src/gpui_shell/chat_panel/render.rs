@@ -316,6 +316,11 @@ fn render_message_list(
     list
 }
 
+/// Bubble treatment (visual-polish pass, 2026-09-17): filled, right-aligned
+/// bubble for the user's own messages (mirrors the wgpu build's W-1 tinted
+/// rows); assistant/system/tool stay left-aligned. No per-child `align-self`
+/// in gpui 0.2.2, so alignment comes from justifying each bubble's own
+/// full-width row, not the bubble div itself.
 fn render_message(
     msg: &ChatMessage,
     lines: &[AnnotatedLine],
@@ -327,17 +332,31 @@ fn render_message(
         ChatRole::System => "System",
         ChatRole::Tool(_) => "Tool",
     };
-    div()
+    let is_user = matches!(msg.role, ChatRole::User);
+    let bubble = div()
         .flex()
         .flex_col()
         .gap_1()
+        .max_w(gpui::relative(0.88))
+        .px_3()
+        .py_2()
+        .rounded_md()
+        .when(is_user, |el| el.bg(to_rgba(colors.ui_surface_active)))
+        .when(!is_user, |el| el.bg(to_rgba(colors.ui_surface_hover)))
         .child(
             div()
                 .text_color(to_rgba(colors.ui_muted))
+                .text_size(px(10.5))
                 .font_weight(FontWeight::BOLD)
                 .child(label),
         )
-        .child(render_message_body_lines(lines, colors))
+        .child(render_message_body_lines(lines, colors));
+    div()
+        .flex()
+        .flex_row()
+        .when(is_user, |el| el.justify_end())
+        .when(!is_user, |el| el.justify_start())
+        .child(bubble)
 }
 
 fn render_message_body_lines(lines: &[AnnotatedLine], colors: &ColorScheme) -> Div {

@@ -10,6 +10,42 @@ use super::{SegmentKind, StatusBar, StatusBarSegment};
 
 // ── Rendering ────────────────────────────────────────────────────────────────
 
+/// Which corners of a segment's own pill get rounded -- only the outer ends
+/// of a left/right GROUP round; segments in the middle of a group, and the
+/// powerline chevrons joining them, stay square so the group still reads as
+/// one continuous pill with arrow caps, not a row of disconnected chips.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PillEdge {
+    /// Only member of its group: round all four corners.
+    Solo,
+    /// First of 2+: round the left corners only.
+    Start,
+    /// Neither first nor last of 2+: no rounding.
+    Middle,
+    /// Last of 2+: round the right corners only.
+    End,
+}
+
+impl PillEdge {
+    fn for_index(i: usize, len: usize) -> Self {
+        match (i, len) {
+            (_, 1) => PillEdge::Solo,
+            (0, _) => PillEdge::Start,
+            (i, len) if i + 1 == len => PillEdge::End,
+            _ => PillEdge::Middle,
+        }
+    }
+
+    fn apply(self, el: Div) -> Div {
+        match self {
+            PillEdge::Solo => el.rounded_md(),
+            PillEdge::Start => el.rounded_l_md(),
+            PillEdge::Middle => el,
+            PillEdge::End => el.rounded_r_md(),
+        }
+    }
+}
+
 /// Render one status-bar row: one `div()` per segment, left-aligned segments
 /// then a flexible spacer then right-aligned segments. Replaces the wgpu
 /// renderer's pixel-column math (`click_kind`/`left_sep_width`/
@@ -25,12 +61,19 @@ pub fn render_status_bar(bar: &StatusBar, colors: &StatusBarColors) -> Div {
     let bar_bg_color = to_rgba(StatusBar::bar_bg(colors));
     let sep_fg = to_rgba(colors.fg_dim);
 
-    let segment_div = |seg: &StatusBarSegment| -> Div {
+    // Padding + group-edge rounding turn each left/right group into a pill
+    // (visual-polish pass, 2026-09-17) -- before this, segments were bare
+    // colored rects flush against each other, no breathing room at all.
+    let segment_div = |seg: &StatusBarSegment, edge: PillEdge| -> Div {
         let clickable = matches!(seg.kind, SegmentKind::GitBranch | SegmentKind::ExitCode);
-        let mut cell = div()
-            .bg(to_rgba(seg.bg))
-            .text_color(to_rgba(seg.fg))
-            .child(seg.text.clone());
+        let mut cell = edge.apply(
+            div()
+                .px_3()
+                .py_1()
+                .bg(to_rgba(seg.bg))
+                .text_color(to_rgba(seg.fg))
+                .child(seg.text.clone()),
+        );
         if seg.kind == SegmentKind::GitBranch {
             cell = cell.italic();
         }
@@ -42,6 +85,7 @@ pub fn render_status_bar(bar: &StatusBar, colors: &StatusBarColors) -> Div {
         }
     };
 
+    let left_len = bar.left.len();
     let mut left_row = div().flex().flex_row().items_center();
     for (i, seg) in bar.left.iter().enumerate() {
         if i > 0 {
@@ -55,9 +99,10 @@ pub fn render_status_bar(bar: &StatusBar, colors: &StatusBarColors) -> Div {
                 div().text_color(sep_fg).bg(to_rgba(seg.bg)).child(" › ")
             });
         }
-        left_row = left_row.child(segment_div(seg));
+        left_row = left_row.child(segment_div(seg, PillEdge::for_index(i, left_len)));
     }
 
+    let right_len = bar.right.len();
     let mut right_row = div().flex().flex_row().items_center();
     if powerline && !bar.right.is_empty() {
         right_row = right_row.child(
@@ -68,8 +113,8 @@ pub fn render_status_bar(bar: &StatusBar, colors: &StatusBarColors) -> Div {
         );
     }
     for (i, seg) in bar.right.iter().enumerate() {
-        right_row = right_row.child(segment_div(seg));
-        if i + 1 < bar.right.len() {
+        right_row = right_row.child(segment_div(seg, PillEdge::for_index(i, right_len)));
+        if i + 1 < right_len {
             let next_bg = bar.right[i + 1].bg;
             right_row = right_row.child(if powerline {
                 div()
@@ -88,6 +133,8 @@ pub fn render_status_bar(bar: &StatusBar, colors: &StatusBarColors) -> Div {
         .items_center()
         .w_full()
         .flex_shrink_0()
+        .px_2()
+        .py_1()
         .bg(bar_bg_color)
         // Without this, this row's text falls back to gpui's own default UI
         // font -- a different (and differently metriced) typeface from the

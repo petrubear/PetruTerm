@@ -112,15 +112,12 @@ fn render_section_tabs(
         (SidebarSection::Skills, "Skills"),
         (SidebarSection::Steering, "Steering"),
     ];
-    // Same "always-2px-bottom-border, colored per active state" treatment as
-    // `tabs::render_tab_bar`'s own cells: an accent-colored underline on the
-    // active cell, the bar's own surface color (i.e. invisible) on the rest,
-    // so switching sections never shifts the row's height. A flat background
-    // tint alone (this row's shape before this fix) reads as barely
-    // distinguishable from its neighbors -- the underline is what actually
-    // draws the eye to which section is active.
-    let accent = to_rgba(colors.ui_accent);
-    let surface = to_rgba(colors.ui_surface);
+    // Rounded-pill treatment (visual-polish pass, 2026-09-17), replacing the
+    // original 2px-underline cells: those existed because a flat background
+    // fill with no padding read as barely distinguishable from its
+    // neighbors. With real inset padding + a rounded pill (same fill/radius
+    // as `tabs::render_tab_bar`'s own active cell) the fill alone reads
+    // clearly, so the underline is no longer needed.
     let cells: Vec<_> = tabs
         .into_iter()
         .map(|(section, label)| {
@@ -128,9 +125,10 @@ fn render_section_tabs(
             let select = on_select.clone();
             let cell = div()
                 .flex_1()
-                .px_1()
+                .px_2()
                 .py_1()
-                .border_b_2()
+                .m_1()
+                .rounded_md()
                 .text_size(px(11.0))
                 .cursor_pointer()
                 .child(label)
@@ -139,14 +137,18 @@ fn render_section_tabs(
                 });
             if is_active {
                 cell.bg(to_rgba(colors.ui_surface_active))
-                    .border_color(accent)
                     .text_color(to_rgba(colors.foreground))
             } else {
-                cell.border_color(surface)
-                    .text_color(to_rgba(colors.ui_muted))
+                cell.text_color(to_rgba(colors.ui_muted))
             }
         })
         .collect();
 
-    div().flex().flex_row().flex_shrink_0().children(cells)
+    div()
+        .flex()
+        .flex_row()
+        .flex_shrink_0()
+        .border_b_1()
+        .border_color(to_rgba(colors.ui_border))
+        .children(cells)
 }
