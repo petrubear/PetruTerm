@@ -286,8 +286,19 @@ impl Pty {
         // macOS/BSD: `close()` blocks until the in-flight `read()` on the same
         // fd completes, but that `read()` cannot complete until the slave closes
         // — which needs the SIGHUP we would otherwise send afterwards.
+        //
+        // `killpg`, not `kill` (TD-GPUI-01): `spawn_shell`'s `pre_exec` already
+        // calls `setsid()`, so `child_pid_libc` is also the new session's pgid.
+        // A plain `kill` only reached the shell itself -- a descendant that
+        // outlives it without calling `setsid()` of its own (`sleep 300 &
+        // disown`, a `nohup`ed dev server) keeps a slave-side fd open, so
+        // `read(master_fd)` never sees EIO and the join below never returns.
+        // `killpg` reaches every process still in that group, closing the
+        // common case. It does not reach a descendant that detached into its
+        // own session or is ignoring SIGHUP -- that residual is accepted, not
+        // fixed here (see `Drop`'s own doc comment).
         unsafe {
-            libc::kill(self.child_pid_libc, libc::SIGHUP);
+            libc::killpg(self.child_pid_libc, libc::SIGHUP);
         }
         if let Some(h) = self.reader_thread.take() {
             let _ = h.join();
@@ -322,8 +333,10 @@ impl Pty {
     /// `petruterm` (wgpu) binary's own call graph never reaches this method.
     #[allow(dead_code)]
     pub fn request_exit(&self) {
+        // `killpg`, matching `shutdown()`'s own TD-GPUI-01 fix -- same reasoning:
+        // `child_pid_libc` is the session's pgid (`setsid()` in `spawn_shell`).
         unsafe {
-            libc::kill(self.child_pid_libc, libc::SIGHUP);
+            libc::killpg(self.child_pid_libc, libc::SIGHUP);
         }
     }
 
@@ -354,18 +367,19 @@ impl Drop for Pty {
         // `master_fd < 0` means `shutdown()` already ran; skip, rather than
         // re-`kill` a pid the OS may since have recycled.
         //
-        // NOT a complete fix, and deliberately so: this narrows the hang
-        // rather than eliminating it. `shutdown()` SIGHUPs the direct child
-        // only -- not the session or process group -- and then joins the
-        // reader unboundedly, but `read(master_fd)` returns EIO only once
-        // EVERY slave-side fd is closed. So a process still holding the tty
-        // that does not die with the shell (`sleep 300 & disown`, a
-        // `nohup`ed dev server) still wedges the join, now inside `Drop`
-        // where no caller can guard against it. Closing that residual path
-        // needs either a `killpg` on the session or a bounded join with an
-        // fd-close fallback; both are behavior changes to shared code that
-        // the wgpu binary also runs, so they belong with the M5 pty pass the
-        // SDD ledger already parks, not here.
+        // STILL NOT a complete fix (TD-GPUI-01, narrowed 2026-09-17):
+        // `shutdown()` now `killpg`s the whole session/pgid instead of just the
+        // direct child (`spawn_shell`'s `pre_exec` already `setsid()`s the
+        // child, so `child_pid_libc` doubles as the pgid) -- this covers the
+        // common case named above (`sleep 300 & disown`, a plain `nohup`ed
+        // job: neither calls its own `setsid()`, so both stay in the shell's
+        // group and now get SIGHUP'd too). The join is still unbounded, so a
+        // descendant that detaches into its own session, or that ignores
+        // SIGHUP outright, still wedges it -- now inside `Drop`, where no
+        // caller can guard against it. Closing that last sliver needs a
+        // bounded join with an fd-close fallback, a further behavior change to
+        // shared code the wgpu binary also runs; left for a future pass if it
+        // ever surfaces in practice.
         if self.master_fd >= 0 {
             self.shutdown();
         }

@@ -56,10 +56,13 @@ impl GpuiShellRoot {
                     }
                 }
                 AcpTerminalRequest::Kill { pane_id } => {
+                    // `Pty::request_exit` (TD-GPUI-01), not a raw `libc::kill`
+                    // here: it `killpg`s the whole session/pgid rather than
+                    // just this direct child, so a descendant the killed
+                    // command spawned (and that doesn't outlive the tty on
+                    // its own) goes down with it too.
                     if let Some(terminal) = self.terminals.get(&pane_id) {
-                        unsafe {
-                            libc::kill(terminal.child_pid as libc::pid_t, libc::SIGHUP);
-                        }
+                        terminal.pty.request_exit();
                     }
                 }
             }
