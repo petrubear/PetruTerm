@@ -146,13 +146,6 @@ impl TabManager {
             .unwrap_or(default)
     }
 
-    /// Rename the active tab.
-    pub fn rename_active(&mut self, title: impl Into<String>) {
-        if let Some(tab) = self.tabs.get_mut(self.active) {
-            tab.title = title.into();
-        }
-    }
-
     /// Rename the tab with the given id, wherever it currently sits and
     /// regardless of which tab is active. Returns whether a tab with that id
     /// was found. Used by `gpui_shell`'s rename flow, which pins its edit to
