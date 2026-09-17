@@ -139,6 +139,24 @@ impl TextInput {
         }
     }
 
+    /// Re-derive the four theme-sourced colors from a fresh `ColorScheme`
+    /// (TD-GPUI-05). `new` only ever snapshots these at construction, so a
+    /// long-lived field (the chat composer, the palette/search query inputs)
+    /// would otherwise keep rendering the theme it was born under across a
+    /// config hot-reload -- visibly stale next to everything around it,
+    /// which re-reads `ColorScheme` fresh every frame. The caller is
+    /// responsible for calling this on every live `TextInput` it owns from
+    /// the same hot-reload path that already replaces `GpuiShellRoot::
+    /// config` (`poll.rs`); a rename editor's few-seconds lifetime makes it
+    /// not worth wiring in here too.
+    pub fn set_colors(&mut self, colors: &ColorScheme, cx: &mut Context<Self>) {
+        self.text_color = to_rgba(colors.foreground);
+        self.placeholder_color = to_rgba(colors.ui_muted);
+        self.cursor_color = to_rgba(colors.ui_accent);
+        self.selection_color = to_rgba(colors.ui_surface_active);
+        cx.notify();
+    }
+
     pub fn content(&self) -> &str {
         &self.content
     }

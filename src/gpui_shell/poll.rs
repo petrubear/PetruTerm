@@ -52,6 +52,26 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                             );
                             this.palette.rebuild_snippets(&new_config.snippets);
                             this.config = new_config;
+                            // TD-GPUI-05: reinject the new theme's colors into
+                            // every long-lived TextInput -- `TextInput::new`
+                            // only ever snapshots `ColorScheme` at
+                            // construction, so without this these four would
+                            // keep rendering the outgoing theme after every
+                            // other chrome element (which re-reads
+                            // `ColorScheme` fresh each frame) had already
+                            // switched. Rename editors are excluded
+                            // deliberately: they live seconds, not minutes.
+                            let colors = this.config.colors.clone();
+                            this.chat
+                                .composer
+                                .update(cx, |input, cx| input.set_colors(&colors, cx));
+                            this.ai_block
+                                .composer
+                                .update(cx, |input, cx| input.set_colors(&colors, cx));
+                            this.palette_query
+                                .update(cx, |input, cx| input.set_colors(&colors, cx));
+                            this.search_query
+                                .update(cx, |input, cx| input.set_colors(&colors, cx));
                             // M3b Task 2: pick up an edited `llm.*` block
                             // (provider, model, api key, base url) on the
                             // same hot-reload path every other config field
@@ -85,13 +105,15 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                     // `exit`, Ctrl+D, a crash) -- nothing else in this
                     // module reads `Pty::rx`, so without this an exited
                     // shell's pane just sits there dead until the user
-                    // notices and closes it by hand. Only `Exit` is
-                    // acted on here; other PtyEvent variants (title
-                    // changes, bell, OSC 52 clipboard) are drained too
-                    // so the channel can't grow unbounded, but are
-                    // otherwise a known, pre-existing gap in gpui_shell
-                    // (nothing ever consumed them before this loop
-                    // existed either) -- not this fix's concern.
+                    // notices and closes it by hand. `TitleChanged` and
+                    // `Bell` are drained with no action (TD-GPUI-04:
+                    // matches the wgpu build's own handling of both --
+                    // `Mux::poll_pty_events` only `log::debug!`s a title
+                    // change and does nothing at all for a bell, so there
+                    // is no real behavior to port for either). OSC 52
+                    // clipboard (`ClipboardStore`/`ClipboardLoad`) DOES
+                    // have real wgpu behavior worth porting -- see their
+                    // arms below.
                     let mut exited_terminals = Vec::new();
                     let mut exit_codes = Vec::new();
                     for (&id, terminal) in &this.terminals {
@@ -137,6 +159,35 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                                     if let Some(manager) = this.block_managers.get_mut(&id) {
                                         manager.clear();
                                     }
+                                }
+                                // TD-GPUI-04: OSC 52 clipboard, ported from
+                                // `Mux::poll_pty_events` (`src/app/mux/mod.rs`)
+                                // verbatim -- same two-phase shape: read/write
+                                // the OS clipboard off-thread (never block the
+                                // poll loop on it), and for a load, loop the
+                                // result back through the terminal's own PTY
+                                // channel as a synthetic `PtyWrite` so the
+                                // actual write happens back on this loop, not
+                                // on the clipboard thread.
+                                crate::term::PtyEvent::ClipboardStore(text) => {
+                                    std::thread::spawn(move || {
+                                        let _ = arboard::Clipboard::new()
+                                            .and_then(|mut cb| cb.set_text(text));
+                                    });
+                                }
+                                crate::term::PtyEvent::ClipboardLoad(fmt) => {
+                                    let tx = terminal.pty.tx.clone();
+                                    std::thread::spawn(move || {
+                                        let text = arboard::Clipboard::new()
+                                            .ok()
+                                            .and_then(|mut cb| cb.get_text().ok())
+                                            .unwrap_or_default();
+                                        let _ =
+                                            tx.send(crate::term::PtyEvent::PtyWrite(fmt(&text)));
+                                    });
+                                }
+                                crate::term::PtyEvent::PtyWrite(text) => {
+                                    terminal.write_input(text.as_bytes());
                                 }
                                 _ => {}
                             }
