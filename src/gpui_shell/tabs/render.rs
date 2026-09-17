@@ -30,14 +30,17 @@ pub type TabSelectCallback = Rc<dyn Fn(&usize, &mut Window, &mut App)>;
 pub(crate) type TabRightClickCallback =
     Rc<dyn Fn(usize, gpui::Point<gpui::Pixels>, &mut Window, &mut App)>;
 
-/// The tab bar row: one rounded pill per tab, gapped from its neighbors.
-/// The active tab gets a filled surface background, an accent-colored dot,
-/// and full-strength text; the rest sit flush against the bar with dimmed
-/// text and no fill -- the same "pill row" treatment already used for the
-/// status bar's own segments and the sidebar's row highlights, replacing
-/// this bar's original flat-rect-plus-underline look (visual-polish pass,
-/// 2026-09-17 -- no behavior changed, `on_select`/`on_right_click`/rename
-/// wiring is untouched).
+/// The tab bar row: now the header strip of the terminal "card" (visual-
+/// polish pass 2, 2026-09-17 -- `render.rs`'s `terminal_card` wraps this bar
+/// above the pane area, inside its own rounded/bordered frame, replacing
+/// this bar's old role as a full-window-width bar sitting *above* the
+/// sidebar too). Lighter treatment than pass 1's filled pill chips, matching
+/// the approved mockup's minimal tab strip: no background of its own (the
+/// card already has one), a soft highlight only behind the active label, an
+/// accent-colored dot for the active tab, dimmed text for the rest, and a
+/// bottom border separating the strip from the pane content below it (no
+/// behavior changed, `on_select`/`on_right_click`/rename wiring is
+/// untouched).
 pub fn render_tab_bar(
     tabs: &TabManager,
     colors: &ColorScheme,
@@ -46,7 +49,6 @@ pub fn render_tab_bar(
     rename: Option<(usize, gpui::AnyElement)>,
 ) -> Div {
     let active_index = tabs.active_index();
-    let surface = to_rgba(colors.ui_surface);
     // `rename`'s element can't be cloned into every loop iteration
     // (`AnyElement` isn't `Clone`), and `.children()`'s closure must be
     // `FnMut` -- so it's built out here and `take()`n exactly once, on the
@@ -69,7 +71,7 @@ pub fn render_tab_bar(
                 .flex_row()
                 .items_center()
                 .gap_2()
-                .px_3()
+                .px_2()
                 .py_1()
                 .rounded_md()
                 .cursor_pointer()
@@ -105,7 +107,7 @@ pub fn render_tab_bar(
                 )
             };
             if is_active {
-                cell.bg(to_rgba(colors.ui_surface_active))
+                cell.bg(to_rgba(colors.ui_surface_hover))
                     .text_color(to_rgba(colors.foreground))
             } else {
                 cell.text_color(to_rgba(colors.ui_muted))
@@ -118,9 +120,11 @@ pub fn render_tab_bar(
         .items_center()
         .gap_1()
         .px_2()
+        .py_1()
         .w_full()
         .flex_shrink_0()
-        .bg(surface)
+        .border_b_1()
+        .border_color(to_rgba(colors.ui_border))
         // Same fix as `status_bar::render_status_bar`: without an explicit
         // font, tab labels render in gpui's own default UI font instead of
         // the terminal grid's configured monospace face.

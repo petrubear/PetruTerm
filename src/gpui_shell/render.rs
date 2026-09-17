@@ -20,6 +20,15 @@ use super::{
 /// one direction for free.
 const CHAT_PANEL_OPEN_ANIM: Duration = Duration::from_millis(180);
 
+/// Outer window padding and the gap between floating "cards" (sidebar,
+/// terminal, chat panel, status bar) -- the floating-card visual language
+/// adopted in the visual-polish pass 2 rewrite (2026-09-17), matching the
+/// approved mockup's own margin/gap rhythm. Before this pass every region
+/// rendered edge-to-edge/full-bleed against the window and against each
+/// other (confirmed wrong live, against a real screenshot vs. the mockup --
+/// not merely under-styled).
+const CARD_GAP_PX: f32 = 10.0;
+
 impl Render for GpuiShellRoot {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // Runs before the focus-reclaim guard below: dispatching a
@@ -126,44 +135,7 @@ impl Render for GpuiShellRoot {
             on_explain_last_output,
         ) = render_callbacks::build_frame_callbacks(cx);
 
-        let tab_color_view = cx.entity().downgrade();
-        let on_tab_right_click: tabs::TabRightClickCallback =
-            Rc::new(move |tab_idx, position, _window, cx| {
-                tab_color_view
-                    .update(cx, |root, cx| {
-                        let brights = root.config.colors.brights;
-                        let names = ["Red", "Green", "Yellow", "Blue", "Magenta", "Cyan", "White"];
-                        let mut items: Vec<crate::ui::context_menu::ContextMenuItem> = names
-                            .iter()
-                            .enumerate()
-                            .map(|(i, name)| {
-                                let color = brights[i + 1];
-                                crate::ui::context_menu::ContextMenuItem {
-                                    label: (*name).to_string(),
-                                    keybind: None,
-                                    action: crate::ui::context_menu::ContextAction::SetTabColor(
-                                        tab_idx,
-                                        Some(color),
-                                    ),
-                                    swatch_color: Some(color),
-                                }
-                            })
-                            .collect();
-                        items.push(crate::ui::context_menu::ContextMenuItem {
-                            label: "Reset".to_string(),
-                            keybind: None,
-                            action: crate::ui::context_menu::ContextAction::SetTabColor(
-                                tab_idx, None,
-                            ),
-                            swatch_color: None,
-                        });
-                        root.context_menu.position = position;
-                        root.context_menu.items = items;
-                        root.context_menu.visible = true;
-                        cx.notify();
-                    })
-                    .ok();
-            });
+        let on_tab_right_click = render_callbacks::build_tab_right_click_callback(cx);
 
         let pane_ctx = pane_view::PaneRenderCx {
             terminals: &self.terminals,
@@ -330,10 +302,29 @@ impl Render for GpuiShellRoot {
                 ))
             });
 
+        // Terminal "card": tab strip + pane area as one floating panel with
+        // its own rounded/bordered frame -- part of the floating-card visual
+        // language below, replacing the tab bar's old role as a bar spanning
+        // the *entire* window width (even over the sidebar).
+        let terminal_card = div()
+            .flex()
+            .flex_col()
+            .flex_1()
+            .min_h_0()
+            .min_w_0()
+            .rounded_lg()
+            .overflow_hidden()
+            .border_1()
+            .border_color(to_rgba(self.config.colors.ui_border))
+            .bg(to_rgba(self.config.colors.ui_surface))
+            .child(tab_bar)
+            .child(pane_area);
+
         let middle_row = div()
             .flex()
             .flex_1()
             .min_h_0()
+            .gap(px(CARD_GAP_PX))
             // `min_h_0`: a flex item's automatic minimum size is its content
             // size, so without this the pane row refuses to shrink below the
             // terminal grid it contains and pushes the tab bar off-screen on
@@ -341,7 +332,7 @@ impl Render for GpuiShellRoot {
             .when(self.sidebar.is_visible(), |el| {
                 el.child(self.render_sidebar_drawer(cx))
             })
-            .child(pane_area)
+            .child(terminal_card)
             .when(self.chat.is_visible(), |el| {
                 let panel = chat_panel::render_chat_panel(
                     &self.chat,
@@ -364,8 +355,9 @@ impl Render for GpuiShellRoot {
             .flex()
             .flex_col()
             .size_full()
+            .gap(px(CARD_GAP_PX))
+            .p(px(CARD_GAP_PX))
             .bg(to_rgba(self.config.colors.background))
-            .child(tab_bar)
             .child(middle_row)
             .when_some(status_bar_row, |el, bar| el.child(bar))
             .when(self.info_overlay.is_visible(), |el| {

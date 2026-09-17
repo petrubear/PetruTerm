@@ -196,16 +196,6 @@ impl StatusBar {
     pub fn bar_bg(colors: &StatusBarColors) -> [f32; 4] {
         colors.bar_bg
     }
-
-    /// Powerline left arrow glyph (U+E0B0 — solid right-pointing triangle).
-    pub fn pl_left_arrow() -> &'static str {
-        "\u{E0B0}"
-    }
-
-    /// Powerline right arrow glyph (U+E0B2 — solid left-pointing triangle).
-    pub fn pl_right_arrow() -> &'static str {
-        "\u{E0B2}"
-    }
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

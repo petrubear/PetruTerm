@@ -17,7 +17,7 @@ use std::rc::Rc;
 
 use gpui::Context;
 
-use super::{chat_panel, context_menu, pane_view, GpuiShellRoot};
+use super::{chat_panel, context_menu, pane_view, tabs, GpuiShellRoot};
 
 pub(super) fn build_frame_callbacks(
     cx: &mut Context<GpuiShellRoot>,
@@ -221,4 +221,48 @@ pub(super) fn build_frame_callbacks(
         on_fix_last_error,
         on_explain_last_output,
     )
+}
+
+/// Tab bar's own right-click callback -- opens the tab-color picker context
+/// menu. Split out from `build_frame_callbacks` above (rather than folded
+/// into its tuple) since it needs its own `cx.entity().downgrade()`, not
+/// one of the five already threaded through `render()`'s pane/context-menu
+/// plumbing; kept here (not `render.rs`) purely for the 400-line convention.
+pub(super) fn build_tab_right_click_callback(
+    cx: &mut Context<GpuiShellRoot>,
+) -> tabs::TabRightClickCallback {
+    let view = cx.entity().downgrade();
+    Rc::new(move |tab_idx, position, _window, cx| {
+        view.update(cx, |root, cx| {
+            let brights = root.config.colors.brights;
+            let names = ["Red", "Green", "Yellow", "Blue", "Magenta", "Cyan", "White"];
+            let mut items: Vec<crate::ui::context_menu::ContextMenuItem> = names
+                .iter()
+                .enumerate()
+                .map(|(i, name)| {
+                    let color = brights[i + 1];
+                    crate::ui::context_menu::ContextMenuItem {
+                        label: (*name).to_string(),
+                        keybind: None,
+                        action: crate::ui::context_menu::ContextAction::SetTabColor(
+                            tab_idx,
+                            Some(color),
+                        ),
+                        swatch_color: Some(color),
+                    }
+                })
+                .collect();
+            items.push(crate::ui::context_menu::ContextMenuItem {
+                label: "Reset".to_string(),
+                keybind: None,
+                action: crate::ui::context_menu::ContextAction::SetTabColor(tab_idx, None),
+                swatch_color: None,
+            });
+            root.context_menu.position = position;
+            root.context_menu.items = items;
+            root.context_menu.visible = true;
+            cx.notify();
+        })
+        .ok();
+    })
 }

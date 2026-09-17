@@ -71,8 +71,10 @@ pub fn render_chat_panel(
         .flex_shrink_0()
         .h_full()
         .w(px(PANEL_WIDTH_PX))
+        .rounded_lg()
+        .overflow_hidden()
         .bg(to_rgba(colors.ui_surface))
-        .border_l_1()
+        .border_1()
         .border_color(to_rgba(colors.ui_border))
         .child(render_header(
             &view.panel,
