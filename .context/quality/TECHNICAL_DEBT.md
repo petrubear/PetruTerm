@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-09-06
-**Open Items:** 9
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 3 | **gpui M5:** 4 | **gpui M3:** 2 | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 4
+**Last Updated:** 2026-09-17
+**Open Items:** 3
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 3 | **gpui M5/M3:** 0 (TD-GPUI-01..06 + ACP todos RESUELTOS, 2026-09-17) | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 4
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -250,73 +250,67 @@ usuario ("funciona"): el alpha `0.85` de `ui_surface`/`ui_surface_hover`
 (`ColorScheme::apply_blur_translucency`, `schema.rs`) se ve bien; sin apilado
 parcheado reportado. Si en uso prolongado se ve desigual, reevaluar el factor.
 
-## Migración gpui — diferido a M5 (abierto, 2026-09-06)
+## Migración gpui — COMPLETA (2026-09-17)
 
 > Encontrados durante M2 (core chrome) en la branch `worktree-gpui-migration`, en revisión
-> de tarea o en la revisión whole-branch. Ninguno bloquea M2; todos tocan código que el
+> de tarea o en la revisión whole-branch. Ninguno bloqueaba M2; todos tocaban código que el
 > binario wgpu en producción **también** ejecuta, o archivos fuera del criterio de salida
-> de M2, así que se agrupan para el pase de limpieza de M5. Registrados aquí y no solo en
-> el ledger SDD (`.superpowers/sdd/...`) porque ese directorio es git-ignored y se pierde.
+> de M2, así que se agruparon para un pase de limpieza posterior. Ese pase se ejecutó
+> 2026-09-17 (commits `a7645e2..b21bba9`): TD-GPUI-01..06 + TD-GPUI-ACP todos RESUELTOS.
+> Sin items abiertos en esta categoría.
 
-**TD-GPUI-01** — ABIERTO (2026-09-06). `Drop for Pty` (`src/term/pty.rs`) **acota pero no
-elimina** el deadlock `close()`-vs-`read()`. `shutdown()` manda SIGHUP solo al hijo directo
-(no al process group ni a la sesión) y luego hace `reader_thread.join()` sin límite, pero
-`read(master_fd)` devuelve EIO únicamente cuando se cierra **todo** fd del lado slave. Un
-proceso que sobreviva a la shell y siga sosteniendo el tty (`sleep 300 & disown`, un dev
-server con `nohup`) cuelga el join — ahora **dentro de `Drop`**, donde ningún caller puede
-protegerse. Síntoma: ventana congelada al cerrar panel/tab/app, proceso inmune a SIGTERM
-(requiere `kill -9`). Afecta a los dos binarios: en el wgpu llega vía `Mux::cmd_close_pane`
-/`cmd_close_tab`/`close_terminal` (`*slot = None`), en el hilo principal de winit. Fix:
-`killpg` sobre la sesión, o join acotado con fallback a cerrar el fd. Es cambio de
-comportamiento en código compartido, por eso no se hizo al cierre de M2.
+**TD-GPUI-01** — RESUELTO (2026-09-17, `1839be3`). `Pty::shutdown()`/`request_exit()` ahora
+usan `killpg(child_pid_libc, SIGHUP)` en vez de `kill` — `spawn_shell`'s `pre_exec` ya llama
+`setsid()`, así que `child_pid_libc` duplica como pgid de la sesión. Cierra el caso común
+(`sleep 300 & disown`, un dev server `nohup`ed: ninguno llama su propio `setsid()`, así que
+ambos siguen en el grupo del shell y ahora reciben SIGHUP también). Residual aceptado, no
+eliminado: un descendiente que se desprende a su propia sesión o ignora SIGHUP sigue
+colgando el join, ahora dentro de `Drop` — necesitaría join acotado con fallback a cerrar el
+fd, cambio de comportamiento adicional en código compartido, dejado para un pase futuro si
+aparece en la práctica. De paso, `gpui_shell`'s ACP `terminal/kill` (`acp_bridge.rs`) pasó de
+un `libc::kill` duplicado a `Pty::request_exit()`, heredando el mismo fix.
 
-**TD-GPUI-02** — ABIERTO (2026-09-06). `Mux::cmd_close_tab` (`src/app/mux/mod.rs:792-807`)
-no tiene guard de última tab ni salida a `event_loop.exit()`, a diferencia de su hermano
-`close_terminal` (`:505-529`), que sí devuelve `true` sin tabs y cuyo caller en
-`frame.rs:379-382` sí cierra la app. `Action::CloseTab` (`src/app/ui/mod.rs:1410`) tampoco
-propaga retorno. Resultado probable: en el binario wgpu, `Leader &` sobre la única tab deja
-la app en estado inconsistente en vez de cerrarla — el hueco que en gpui_shell se cerró con
-`cx.quit()` (commit `aa21396`). Encontrado leyendo el wgpu como referencia; **no verificado
-en vivo**, confirmarlo antes de arreglar.
+**TD-GPUI-02** — RESUELTO (2026-09-17, `4406fc4`). `Mux::cmd_close_tab` (`src/app/mux/mod.rs`)
+ahora hace no-op si solo queda una tab, igual que la convención ya establecida por su hermano
+`cmd_close_workspace` ("No-op if only one workspace remains") — no el cascade-to-quit de
+gpui_shell (`cx.quit()`, commit `aa21396`), decisión deliberada: cambiar `Leader &` para que
+cierre la app entera en vez de rehusarse sería un cambio de comportamiento más grande en el
+binario de producción, sin forma de verificarlo visualmente en esta sesión. Antes del fix,
+`Leader &` sobre la única tab vaciaba `self.tabs`/`self.panes` sin panic (todo consumidor de
+`active_terminal()` ya maneja `None`) pero dejaba la ventana en una chrome vacía inusable.
 
-**TD-GPUI-03** — ABIERTO (2026-09-06). `src/gpui_shell/mouse.rs` (852) y
-`src/gpui_shell/rasterize.rs` (814) exceden la convención de 400 líneas de `AGENTS.md`. Son
-archivos de M1b, no nombrados en el criterio de salida de M2 (que sí cubría `panes.rs` y
-`status_bar.rs`, ya divididos en Task 6a), por eso quedaron fuera de ese pase. El resto de
+**TD-GPUI-03** — RESUELTO (2026-09-17, `b21bba9`). `src/gpui_shell/mouse.rs` (875) y
+`src/gpui_shell/rasterize.rs` (880) excedían la convención de 400 líneas de `AGENTS.md`.
+Convertidos en directorios-módulo: `rasterize/{mod,cache,colors,grid,glyphs,spans}.rs`
+(363-279 líneas) y `mouse/{mod,click_state,geometry}.rs` (215-356 líneas). Pura moción de
+código — mismo orden de cómputo, mismos parámetros — con re-exports en cada `mod.rs` para que
+todo call site externo (`rasterize::...`, `mouse::...`) siga sin cambios. El resto de
 `src/gpui_shell/` está bajo 400.
 
-**TD-GPUI-ACP** — PENDIENTE, pedido explícito del usuario (2026-09-06). `gpui-petruterm` no
-tiene backend ACP (Agent Client Protocol) — M3b lo excluyó a propósito de su alcance junto con
-tool-calling y las superficies de confirmación que dependen de él (ver el header de
-`src/gpui_shell/chat_panel/stream.rs`). El binario wgpu (`petruterm`) sí lo tiene, completo y
-en producción desde Phase 8 (`src/llm/acp/{mod,session,fs,terminal}.rs`, 540 líneas,
-engine-agnostic — mismo perfil de "puerto directo" que `ChatPanel`). El usuario pidió
-explícitamente portarlo a `gpui_shell` como trabajo futuro, no ahora: necesita su propio
-diseño (sesión del agente, enrutamiento de tool-calls, tarjetas de confirmación write/run,
-undo) en vez de sumarse como una tarea más de M3b. Candidato a milestone propio (M3e o
-principio de M4) una vez M3b esté dogfooded. Mientras tanto, ACP solo funciona en el binario
-`petruterm` original.
+**TD-GPUI-04** — RESUELTO (2026-09-17, código en `2693396`, agrupado por descuido junto con
+TD-GPUI-05 en el mismo commit — nota de higiene, no de código). `ClipboardStore`/
+`ClipboardLoad` (OSC 52) portados a `poll.rs` verbatim desde `Mux::poll_pty_events` (mismo
+patrón: leer/escribir el clipboard del SO fuera del hilo del poll, loopback vía un
+`PtyEvent::PtyWrite` sintético para que la escritura real ocurra de vuelta en el poll loop).
+`TitleChanged`/`Bell` se dejaron como no-op tras verificar contra el código real del binario
+wgpu — a diferencia de lo que decía esta misma entrada, wgpu **tampoco** implementa título de
+tab dinámico (solo `log::debug!`) ni hace nada con la campana, así que no había comportamiento
+real que portar para ninguno de los dos.
 
-**TD-GPUI-04** — ABIERTO (2026-09-06). El poll loop de `gpui_shell` drena `Pty::rx` y solo
-actúa sobre `PtyEvent::Exit`; el resto de variantes (`TitleChanged`, `Bell`,
-`ClipboardStore`, `ClipboardLoad`, `PtyWrite`, `Osc133`, `ScreenCleared`) se descartan para
-evitar que el canal (bounded, 1024) crezca sin límite. Son funciones que el binario wgpu sí
-implementa: título de tab dinámico, campana, clipboard OSC 52, marcadores OSC 133 (que
-alimentan el exit code de la status bar). Paridad pendiente; decidir en M3/M4 cuáles entran.
+**TD-GPUI-05** — RESUELTO (2026-09-17, `2693396`). `TextInput::set_colors()` nuevo, llamado
+desde el handler de hot-reload de `poll.rs` para las cuatro entidades de larga vida
+(`chat.composer`, `ai_block.composer`, `palette_query`, `search_query`) — los editores de
+rename quedaron fuera a propósito, viven segundos.
 
-**TD-GPUI-05** — ABIERTO (2026-09-06). `TextInput` (`src/gpui_shell/text_input/mod.rs`) captura sus colores
-(`text_color`/`placeholder_color`/`cursor_color`/`selection_color`) **al construirse**, desde el
-`ColorScheme` que le pasa el llamador. Un hot-reload de config mientras el campo está abierto recolorea todo
-lo que lo rodea pero no el campo, que se queda con la paleta vieja hasta reabrirlo. Inocuo en M3a (el rename
-de tab vive segundos), pero **M3b sí lo nota**: el composer del chat vive minutos y quedaría visiblemente
-descolocado respecto a su panel tras un reload. Fix: releer colores en `render` en vez de snapshotearlos, o
-que el host los reinyecte en el tick del poll loop que ya aplica el reload.
+**TD-GPUI-06** — RESUELTO (2026-09-17, `a7645e2`). `TabManager::rename_active`
+(`src/gpui_shell/tabs.rs`) eliminado.
 
-**TD-GPUI-06** — ABIERTO (2026-09-06). `TabManager::rename_active` (`src/gpui_shell/tabs.rs`) quedó sin uso
-dentro de `gpui_shell` — su único llamador pasó a `rename_tab(id, ..)` cuando M3a fijó el rename a un id de
-tab en vez de "la activa". No genera warning porque el módulo tiene `#![allow(dead_code)]` global (que ya
-existía, no se añadió para taparlo) y no es alcanzable desde el binario wgpu (`src/ui/tabs.rs` es una copia
-aparte). Barrer en M3c, que reestructura este archivo de todos modos para la capa de workspaces.
+**TD-GPUI-ACP** — RESUELTO (2026-09-14, M5a). `gpui-petruterm` tiene backend ACP completo desde
+M5a (ACP Agent Backend & Tool-Calling, branch `worktree-gpui-migration`, commits `923dfa6..37206ad`):
+sesión de agente, tool-calling, tarjetas de confirmación write/run, undo. M5d (commits
+`a6c0b2b..f819874`) además cerró la paridad de inyección de contexto (skills/steering/MCP en el
+prompt) y el default de config (`config/default/llm.lua`) pasó a `backend = "agent"` (commit
+`0d14c5f`). ACP es ahora el backend por defecto en ambos binarios.
 
 ---
 
@@ -344,6 +338,7 @@ Wave 6: AUDIT-REFAC-07, AUDIT-CLEAN-03
 Wave 7: AUDIT-REFAC-08
 Phase 9: COMPLETA, verificada y MERGEADA a master (2026-07-03, v0.3.0) — TD-P9-01..08 cerrados.
 GRAPH-ARCH-01: COMPLETA (2026-07-25) — LLM domain + keys/leader view + font/max_fps consolidation, todo en master.
+Migración gpui: COMPLETA (2026-09-17) — TD-GPUI-01..06 + TD-GPUI-ACP RESUELTOS, sin merge a master aún (branch worktree-gpui-migration).
 Watch: AUDIT-CLEAN-02, AUDIT-PERF-10, TD-P9-07, AUDIT-DEP-01
 Backlog abierto (P3): GRAPH-ARCH-01-A, GRAPH-ARCH-01-B, GRAPH-ARCH-01-C
 ```
