@@ -108,15 +108,29 @@ impl Element for ResizeHandleElement {
         window: &mut Window,
         _cx: &mut App,
     ) {
-        let line = px(1.0);
-        let line_bounds = Bounds {
-            origin: point(
-                bounds.origin.x + (bounds.size.width - line) / 2.0,
-                bounds.origin.y,
-            ),
-            size: size(line, bounds.size.height),
-        };
-        window.paint_quad(fill(line_bounds, self.color));
+        // The grab-line only paints while it's actually being grabbed or
+        // hovered -- a permanent 1px line down the sidebar's edge, live at
+        // every window size, read as a stray rule cutting the UI in half
+        // rather than an affordance ("necesito que desaparezca"). The
+        // handle's hit area (this whole 6px strip, via `on_mouse_event`
+        // below) still exists everywhere: only the visible feedback is
+        // conditional. Cheap poll-loop repaints already run at ~30Hz, so
+        // this needs no extra `window.refresh()` to catch a hover starting
+        // or ending -- the next tick just repaints with a fresh
+        // `mouse_position()` read.
+        let dragging = DRAGGING.with(|d| d.get());
+        let hovered = bounds.contains(&window.mouse_position());
+        if dragging || hovered {
+            let line = px(1.0);
+            let line_bounds = Bounds {
+                origin: point(
+                    bounds.origin.x + (bounds.size.width - line) / 2.0,
+                    bounds.origin.y,
+                ),
+                size: size(line, bounds.size.height),
+            };
+            window.paint_quad(fill(line_bounds, self.color));
+        }
 
         window.on_mouse_event(move |event: &MouseDownEvent, phase, window, _cx| {
             if phase != DispatchPhase::Bubble || event.button != MouseButton::Left {

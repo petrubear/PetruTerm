@@ -159,6 +159,8 @@ fn render_section_tabs(
         .flex()
         .flex_row()
         .flex_shrink_0()
+        .px_2()
+        .py_1()
         .border_b_1()
         .border_color(to_rgba(colors.ui_border))
         .children(cells)
