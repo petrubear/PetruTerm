@@ -112,7 +112,10 @@ echo "==> Copying default config..."
 cp -r "$ROOT/config/default" "$RESOURCES/config"
 
 # ── icon (optional) ──────────────────────────────────────────────────────────
-ICON_PNG="$ROOT/assets/AppIcon.png"
+# Distinct from the wgpu app's assets/AppIcon.png (same silhouette, hue-shifted
+# to PetruTheme's Rosewater accent) so the two apps are visually distinguishable
+# in the Dock/Spotlight at a glance.
+ICON_PNG="$ROOT/assets/AppIcon-gpui.png"
 ICON_ICNS="$RESOURCES/AppIcon.icns"
 if [ -f "$ICON_PNG" ]; then
     echo "==> Generating AppIcon.icns from $ICON_PNG..."
