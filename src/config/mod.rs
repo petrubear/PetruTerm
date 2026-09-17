@@ -26,6 +26,8 @@ const THEME_TOKYO_NIGHT: &str = include_str!("../../assets/themes/tokyo-night.lu
 const THEME_CATPPUCCIN_MOCHA: &str = include_str!("../../assets/themes/catppuccin-mocha.lua");
 const THEME_ONE_DARK: &str = include_str!("../../assets/themes/one-dark.lua");
 const THEME_GRUVBOX_DARK: &str = include_str!("../../assets/themes/gruvbox-dark.lua");
+const THEME_PETRU_DARK: &str = include_str!("../../assets/themes/petru-theme-dark.lua");
+const THEME_PETRU_LIGHT: &str = include_str!("../../assets/themes/petru-theme-light.lua");
 
 /// Modules preloaded for the embedded fallback config (no filesystem access).
 pub const EMBEDDED_MODULES: &[(&str, &str)] = &[
@@ -232,6 +234,8 @@ fn ensure_default_configs(dir: &std::path::Path) -> Result<()> {
         ("catppuccin-mocha.lua", THEME_CATPPUCCIN_MOCHA),
         ("one-dark.lua", THEME_ONE_DARK),
         ("gruvbox-dark.lua", THEME_GRUVBOX_DARK),
+        ("petru-theme-dark.lua", THEME_PETRU_DARK),
+        ("petru-theme-light.lua", THEME_PETRU_LIGHT),
     ];
     for (name, content) in bundled_themes {
         let dest = themes_dir.join(name);
@@ -301,5 +305,29 @@ mod tests {
             agent.args,
             vec!["-y", "@agentclientprotocol/claude-agent-acp"]
         );
+    }
+
+    /// Regression test for every bundled theme actually parsing through the
+    /// real Lua VM -- `include_str!` (used to seed these into
+    /// ~/.config/petruterm/themes/) only checks the file exists at compile
+    /// time, not that its Lua is valid or that `table_to_color_scheme`
+    /// accepts its shape (e.g. an `ansi`/`brights` array short by one entry
+    /// would silently zero-fill rather than error, but a genuine Lua syntax
+    /// error would only ever surface the first time a user opened the
+    /// palette's theme switcher).
+    #[test]
+    fn bundled_themes_all_parse() {
+        let dir = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/themes"));
+        let entries: Vec<_> = std::fs::read_dir(dir)
+            .expect("assets/themes must exist")
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().extension().is_some_and(|x| x == "lua"))
+            .collect();
+        assert!(!entries.is_empty(), "expected at least one bundled theme");
+        for entry in entries {
+            let path = entry.path();
+            lua::load_theme(&path)
+                .unwrap_or_else(|e| panic!("theme {} failed to load: {e:#}", path.display()));
+        }
     }
 }
