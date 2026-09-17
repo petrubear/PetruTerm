@@ -33,6 +33,7 @@ mod rename;
 mod render;
 mod render_callbacks;
 mod render_sidebar;
+mod resize_handle;
 mod search_bar;
 mod separator;
 pub mod sidebar;
@@ -170,6 +171,12 @@ pub struct GpuiShellRoot {
     sidebar: sidebar::WorkspaceSidebar,
     /// Sidebar's keyboard-focus identity (distinct from root focus_handle).
     sidebar_focus_handle: FocusHandle,
+    /// Live sidebar width, user-adjustable via the drag handle on its right
+    /// edge (`resize_handle.rs`) -- requested after the fixed 220px width
+    /// was reported unusable at anything short of a maximized window.
+    /// `sidebar::render::DEFAULT_SIDEBAR_WIDTH_PX` is only the starting
+    /// value now, not a compile-time constant every render reads.
+    sidebar_width_px: f32,
     /// The AI chat panel -- one global drawer, not one per pane (see
     /// `chat_panel/mod.rs`'s doc comment on why the wgpu build's
     /// `panel_id`/`set_active_terminal` plumbing has no equivalent here).

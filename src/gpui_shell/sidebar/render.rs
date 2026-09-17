@@ -21,7 +21,16 @@ use crate::llm::mcp::manager::McpManager;
 use crate::llm::skills::SkillManager;
 use crate::llm::steering::SteeringManager;
 
-pub const SIDEBAR_WIDTH_PX: f32 = 220.0;
+/// Starting width, and the open/close drawer animation's target -- no
+/// longer the only width the sidebar ever renders at. `GpuiShellRoot::
+/// sidebar_width_px` (initialized from this constant, then user-adjustable
+/// via the drag handle `render_sidebar.rs` adds) is the live value.
+pub const DEFAULT_SIDEBAR_WIDTH_PX: f32 = 220.0;
+/// Drag-resize clamp -- narrow enough that all four section tabs still fit
+/// without clipping (the exact bug that prompted adding resize at all), wide
+/// enough that it can't eat the whole window.
+pub const MIN_SIDEBAR_WIDTH_PX: f32 = 180.0;
+pub const MAX_SIDEBAR_WIDTH_PX: f32 = 480.0;
 
 pub use super::sections::{
     McpOpenCallback, SkillOpenCallback, SteeringOpenCallback, WorkspaceCloseCallback,
@@ -36,6 +45,7 @@ pub type SectionSelectCallback = Rc<dyn Fn(&SidebarSection, &mut Window, &mut Ap
 pub struct SidebarRenderCx<'a> {
     pub workspaces: &'a WorkspaceManager,
     pub colors: &'a ColorScheme,
+    pub width_px: f32,
     pub active_section: SidebarSection,
     pub on_select_workspace: WorkspaceSelectCallback,
     pub on_new_workspace: WorkspaceNewCallback,
@@ -59,7 +69,7 @@ pub fn render_workspace_sidebar(ctx: SidebarRenderCx<'_>) -> Div {
         .flex_col()
         .flex_shrink_0()
         .h_full()
-        .w(px(SIDEBAR_WIDTH_PX))
+        .w(px(ctx.width_px))
         .bg(to_rgba(ctx.colors.ui_surface))
         .border_r_1()
         .border_color(to_rgba(ctx.colors.ui_border))

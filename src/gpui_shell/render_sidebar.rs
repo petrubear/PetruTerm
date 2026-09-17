@@ -12,10 +12,13 @@
 use std::rc::Rc;
 use std::time::Duration;
 
-use gpui::{ease_out_quint, prelude::*, px, Animation, AnimationExt as _, Context};
+use gpui::{div, ease_out_quint, prelude::*, px, Animation, AnimationExt as _, Context};
 
 use super::leader::LeaderAction;
+use super::pane_view::to_rgba;
+use super::resize_handle::{self, ResizeHandleElement};
 use super::sidebar;
+use super::sidebar::render::{MAX_SIDEBAR_WIDTH_PX, MIN_SIDEBAR_WIDTH_PX};
 use super::sidebar::SidebarSection;
 use super::GpuiShellRoot;
 
@@ -79,9 +82,11 @@ impl GpuiShellRoot {
                 cx.notify();
             }));
 
+        let width_px = self.sidebar_width_px;
         let sidebar_ctx = sidebar::render::SidebarRenderCx {
             workspaces: &self.workspaces,
             colors: &self.config.colors,
+            width_px,
             active_section: self.sidebar.active_section(),
             on_select_workspace,
             on_new_workspace,
@@ -99,10 +104,45 @@ impl GpuiShellRoot {
             on_open_steering,
         };
         let bar = sidebar::render::render_workspace_sidebar(sidebar_ctx);
-        bar.with_animation(
+        let bar = bar.with_animation(
             "workspace-sidebar-drawer",
             Animation::new(SIDEBAR_OPEN_ANIM).with_easing(ease_out_quint()),
-            |bar, delta| bar.w(px(sidebar::render::SIDEBAR_WIDTH_PX * delta)),
-        )
+            move |bar, delta| bar.w(px(width_px * delta)),
+        );
+
+        // Drag handle on the sidebar's own right edge -- requested live
+        // after the fixed 220px width was reported unusable at anything
+        // short of a maximized window. `resize_handle.rs`'s own doc comment
+        // covers why this needs a custom `Element` rather than plain
+        // `div()` mouse listeners. Mirrors `render_callbacks.rs`'s
+        // `on_drag` (pane-separator dragging) exactly: a weak handle +
+        // manual `.update()`, not `cx.listener`, because the callback's
+        // own event type (`Point<Pixels>`, by value) doesn't match what
+        // `cx.listener` expects (a reference).
+        let drag_view = cx.entity().downgrade();
+        let on_drag: resize_handle::ResizeDragCallback = Rc::new(move |position, _window, cx| {
+            drag_view
+                .update(cx, |root, cx| {
+                    let new_width =
+                        f32::from(position.x).clamp(MIN_SIDEBAR_WIDTH_PX, MAX_SIDEBAR_WIDTH_PX);
+                    if root.sidebar_width_px != new_width {
+                        root.sidebar_width_px = new_width;
+                        cx.notify();
+                    }
+                })
+                .ok();
+        });
+        let handle_color = to_rgba(self.config.colors.ui_border);
+        let handle = div()
+            .flex_shrink_0()
+            .w(px(resize_handle::RESIZE_HANDLE_PX))
+            .h_full()
+            .cursor_col_resize()
+            .child(ResizeHandleElement {
+                color: handle_color,
+                on_drag,
+            });
+
+        div().flex().flex_row().h_full().child(bar).child(handle)
     }
 }
