@@ -264,7 +264,9 @@ fn render_empty_section(message: &str, colors: &ColorScheme) -> Div {
         .flex_col()
         .flex_1()
         .min_h_0()
-        .p_2()
+        .px_3()
+        .py_2()
+        .text_size(px(11.5))
         .text_color(to_rgba(colors.ui_muted))
         .child(message.to_string())
 }

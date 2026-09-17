@@ -118,7 +118,6 @@ pub fn render_tab_bar(
         .items_center()
         .gap_1()
         .px_2()
-        .py_2()
         .w_full()
         .flex_shrink_0()
         .bg(surface)

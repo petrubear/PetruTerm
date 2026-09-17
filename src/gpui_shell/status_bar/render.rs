@@ -134,7 +134,6 @@ pub fn render_status_bar(bar: &StatusBar, colors: &StatusBarColors) -> Div {
         .w_full()
         .flex_shrink_0()
         .px_2()
-        .py_1()
         .bg(bar_bg_color)
         // Without this, this row's text falls back to gpui's own default UI
         // font -- a different (and differently metriced) typeface from the

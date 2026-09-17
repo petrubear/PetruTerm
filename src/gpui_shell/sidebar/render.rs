@@ -125,11 +125,10 @@ fn render_section_tabs(
             let select = on_select.clone();
             let cell = div()
                 .flex_1()
-                .px_2()
+                .px_1()
                 .py_1()
-                .m_1()
                 .rounded_md()
-                .text_size(px(11.0))
+                .text_size(px(10.5))
                 .cursor_pointer()
                 .child(label)
                 .on_mouse_down(MouseButton::Left, move |_: &MouseDownEvent, window, cx| {
