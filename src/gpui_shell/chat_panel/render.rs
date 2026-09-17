@@ -119,6 +119,7 @@ fn render_header(
         .flex_shrink_0()
         .px_3()
         .py_2()
+        .min_h(font_state::header_row_min_height())
         .border_b_1()
         .border_color(to_rgba(colors.ui_border))
         .font_family(font_state::font_family())
@@ -178,12 +179,10 @@ fn header_status(panel: &ChatPanel) -> String {
 }
 
 /// Slop, in pixels, for deciding the message list is "still at the bottom"
-/// -- gpui's own scroll-offset bookkeeping is exact, but a user's last
-/// scroll gesture (trackpad momentum, a mouse-wheel tick) rarely lands on
-/// the precise maximum offset, so a strict `==` comparison would treat
-/// "essentially at the bottom" as "scrolled away" and stop auto-following.
-/// One line's worth of slack (`font_state::font_size()` is ~13-16px)
-/// comfortably covers that without risking a real scroll-up being missed.
+/// -- a user's last scroll gesture (trackpad momentum, a mouse-wheel tick)
+/// rarely lands on the precise maximum offset, so a strict `==` comparison
+/// would treat "essentially at the bottom" as "scrolled away" and stop
+/// auto-following. One line's worth of slack covers that safely.
 const AUTO_SCROLL_EPSILON_PX: f32 = 32.0;
 
 /// Whether the message list's last known scroll position (before this

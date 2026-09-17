@@ -287,6 +287,24 @@ pub fn font_size() -> f32 {
     FONT_SYSTEM.with_borrow(|state| state.size)
 }
 
+/// Shared minimum height for the three floating cards' own header rows
+/// (terminal tab strip, sidebar section tabs, chat panel header) -- pinned
+/// to the *terminal's* configured font size, not each row's own text size,
+/// so all three read as the same height and weight regardless of the
+/// sidebar's own smaller nav-tab text (kept small on purpose: the sidebar
+/// has four labels to fit in a narrow, user-resizable column down to
+/// `sidebar::render::MIN_SIDEBAR_WIDTH_PX`, and matching the terminal's
+/// font size there reintroduces the "Steering" label clipping bug that
+/// `sidebar_width_px` was added to fix). A live dogfood screenshot boxing
+/// all three headers side by side showed the sidebar's own row sitting
+/// visibly shorter than the other two even after their paddings were
+/// numerically equalized -- this ties the row's height itself to a shared
+/// budget instead of trusting padding-plus-line-height arithmetic to land
+/// the same by coincidence for two different font sizes.
+pub fn header_row_min_height() -> Pixels {
+    px(font_size() + 26.0)
+}
+
 /// The resolved internal family name the terminal grid actually renders
 /// with (from fontdb, per `build_font_system`'s doc comment -- may differ
 /// from the config string). Chrome text drawn via gpui's own `div()`/text

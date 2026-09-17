@@ -151,6 +151,17 @@ pub(super) fn render_leaf(terminal_id: usize, ctx: &PaneRenderCx) -> Div {
     div()
         .flex()
         .size_full()
+        // A few pixels of inset on all four sides (requested live -- the
+        // grid used to start flush against the terminal card's own edge/
+        // border). Safe to add here rather than inside `TerminalGridElement`
+        // itself: that element requests `relative(1.)` and just fills
+        // whatever box this wrapper's padding leaves it, `on_children_
+        // prepainted` below reports that already-shrunk box as `bounds`, and
+        // `fit_terminal` sizes the PTY off the same `bounds` -- so the grid,
+        // the recorded leaf rect (`focus_dir`'s nearest-neighbour search)
+        // and the PTY's winsize all agree on the padded box with nothing
+        // else to update.
+        .p_2()
         .on_children_prepainted(move |bounds, _window, _cx| {
             let Some(bounds) = bounds.first().copied() else {
                 return;

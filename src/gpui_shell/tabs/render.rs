@@ -121,6 +121,7 @@ pub fn render_tab_bar(
         .gap_1()
         .px_2()
         .py_1()
+        .min_h(super::super::font_state::header_row_min_height())
         .w_full()
         .flex_shrink_0()
         .border_b_1()
