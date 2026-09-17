@@ -770,7 +770,18 @@ impl Mux {
     }
 
     /// TD-017: Close the active tab and clean up its pane tree and all owned terminals.
+    ///
+    /// No-op if only one tab remains (TD-GPUI-02) -- same "refuse to close the last
+    /// container" convention `cmd_close_workspace` already uses for the last workspace,
+    /// rather than this binary's `Action::CloseTab` cascading into an app quit the way
+    /// gpui_shell's `close_tab_at` does. Without this guard, `Leader &` on the last tab
+    /// emptied `self.tabs`/`self.panes` outright: nothing panics (every consumer of
+    /// `active_terminal()` already handles `None`), but the window is left rendering an
+    /// empty, unusable chrome with no way back in except quitting externally.
     pub fn cmd_close_tab(&mut self) {
+        if self.tabs.tab_count() <= 1 {
+            return;
+        }
         let active = self.tabs.active_index();
         if let Some(tab) = self.tabs.active_tab() {
             self.tabs.close_tab(tab.id);
