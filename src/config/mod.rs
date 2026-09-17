@@ -330,4 +330,44 @@ mod tests {
                 .unwrap_or_else(|e| panic!("theme {} failed to load: {e:#}", path.display()));
         }
     }
+
+    /// Regression test: `config.colors` set inline in `config.lua`/`ui.lua`
+    /// must actually reach the parsed `Config` -- `table_to_config` used to
+    /// never read the `colors` key at all (`config` starts as
+    /// `Config::default()` and nothing set `.colors` before this test was
+    /// added), so every user customization of it was silently ignored and
+    /// the app always rendered `ColorScheme::default()`'s hardcoded values
+    /// instead. Invisible for as long as the shipped default `ui.lua`
+    /// happened to hardcode those same values a second time -- caught only
+    /// once a real theme swap (a background genuinely different from the
+    /// Rust-side default) produced no visible change at all.
+    #[test]
+    fn inline_config_colors_are_applied() {
+        let src = r##"
+            return {
+                colors = {
+                    foreground = "#1d1d20",
+                    background = "#f7f7f8",
+                    cursor_bg = "#d32e0d",
+                    cursor_border = "#d32e0d",
+                    cursor_fg = "#1d1d20",
+                    selection_bg = "#d1d0dd",
+                    selection_fg = "#353347",
+                    ansi = { "#b4b2c7", "#db0e48", "#128108", "#936709", "#1166f0", "#cf0d9b", "#087d6a", "#353347" },
+                    brights = { "#9d9ab6", "#b50c3b", "#0d5b06", "#6d4c07", "#0d55cb", "#a90b7e", "#065749", "#23222f" },
+                },
+            }
+        "##;
+        let (config, _lua) = lua::load_config_str(src, "test/config.lua", &[])
+            .expect("inline colors config must load");
+        // f7f7f8 -> 247/255, 247/255, 248/255.
+        assert!((config.colors.background[0] - 247.0 / 255.0).abs() < 1e-4);
+        assert!((config.colors.background[1] - 247.0 / 255.0).abs() < 1e-4);
+        assert!((config.colors.background[2] - 248.0 / 255.0).abs() < 1e-4);
+        // Must NOT be the Rust-side ColorScheme::dracula_pro() background (#0e0e10).
+        assert_ne!(
+            config.colors.background,
+            schema::ColorScheme::dracula_pro().background
+        );
+    }
 }

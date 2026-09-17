@@ -732,6 +732,21 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
         }
     }
 
+    // `config.colors` was never actually read here -- `config` starts as
+    // `Config::default()` and nothing before this point touched `.colors`,
+    // so every `config.lua`/`ui.lua` customization of it was silently
+    // ignored and the app always rendered `ColorScheme::default()`'s
+    // hardcoded Dracula Pro values instead. Invisible until now because the
+    // shipped default `ui.lua` happens to hardcode those exact same values
+    // a second time -- a user picking a *different* theme by editing
+    // `config.colors` directly (as opposed to the palette's "Switch Theme",
+    // which goes through the separate, already-correct `load_theme()`/
+    // `table_to_color_scheme()` path for standalone theme files) got no
+    // visible change at all.
+    if let Ok(colors_table) = table.get::<LuaTable>("colors") {
+        config.colors = table_to_color_scheme(colors_table)?;
+    }
+
     // V-4: soften the chrome surfaces when the window is translucent/blurred.
     config.colors.apply_blur_translucency(&config.window);
 
