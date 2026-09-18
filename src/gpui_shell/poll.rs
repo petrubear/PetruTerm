@@ -295,6 +295,18 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                             should_notify = true;
                         }
                     }
+                    // Battery: cheap, local IOKit call (no subprocess), so
+                    // this piggybacks on the same 33ms tick like the leader-
+                    // deadline/toast checks above rather than needing its
+                    // own timer -- `poll_battery`'s own TTL guard keeps the
+                    // actual IOKit call down to once every 30s.
+                    if status_bar::poll_battery(
+                        &mut this.battery,
+                        Instant::now(),
+                        std::time::Duration::from_secs(30),
+                    ) {
+                        should_notify = true;
+                    }
                     if this.poll_branch_scan() {
                         should_notify = true;
                     }

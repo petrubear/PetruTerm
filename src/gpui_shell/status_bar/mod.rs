@@ -13,14 +13,18 @@
 //
 // Split (Task 6a) under the 400-line convention: this file keeps the
 // segment/`StatusBar` types + `truncate_path`/`format_time`; `git` holds the
-// git-branch async bridge, `exit_code` holds `ExitCodeState`, and `render`
-// holds `render_status_bar`. Re-exported below so every caller keeps using
-// `status_bar::{...}` paths unchanged.
+// git-branch async bridge, `exit_code` holds `ExitCodeState`, `battery`
+// holds `BatteryState` (added later, once the widget itself was ported --
+// see that file's own doc comment), and `render` holds `render_status_bar`.
+// Re-exported below so every caller keeps using `status_bar::{...}` paths
+// unchanged.
 
+mod battery;
 mod exit_code;
 mod git;
 mod render;
 
+pub use battery::{poll_battery, BatteryState};
 pub use exit_code::ExitCodeState;
 pub use git::{poll_git_branch, GitBranchState};
 pub use render::render_status_bar;

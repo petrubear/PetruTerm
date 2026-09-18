@@ -239,7 +239,7 @@ impl Render for GpuiShellRoot {
                 self.exit_code.cache,
                 self.workspaces.active().zoomed_pane.is_some(),
                 self.config.status_bar.style.clone(),
-                None, // battery -- not tracked in gpui_shell yet, out of this task's scope
+                self.battery.cache,
                 &sb_colors,
             );
             status_bar::render_status_bar(&bar, &sb_colors)

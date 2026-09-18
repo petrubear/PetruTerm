@@ -169,6 +169,7 @@ impl GpuiShellRoot {
             tokio_rt,
             cached_cwd: initial_cwd,
             git_branch: status_bar::GitBranchState::default(),
+            battery: status_bar::BatteryState::default(),
             exit_code: status_bar::ExitCodeState::default(),
             tab_rename: None,
             workspace_rename: None,

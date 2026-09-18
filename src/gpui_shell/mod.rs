@@ -143,6 +143,9 @@ pub struct GpuiShellRoot {
     cached_cwd: Option<std::path::PathBuf>,
     /// Git-branch fetch/cache state for the status bar's GitBranch segment.
     git_branch: status_bar::GitBranchState,
+    /// Battery poll/cache state for the status bar's Battery segment --
+    /// `None` on a desktop Mac / non-macOS with no battery to report.
+    battery: status_bar::BatteryState,
     /// Exit-code cache for the status bar's ExitCode segment, mtime-gated
     /// against the active pane's shell-context file.
     exit_code: status_bar::ExitCodeState,
