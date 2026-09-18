@@ -110,15 +110,26 @@ impl GpuiShellRoot {
             move |bar, delta| bar.w(px(width_px * delta)),
         );
 
-        // Drag handle on the sidebar's own right edge -- requested live
-        // after the fixed 220px width was reported unusable at anything
-        // short of a maximized window. `resize_handle.rs`'s own doc comment
-        // covers why this needs a custom `Element` rather than plain
-        // `div()` mouse listeners. Mirrors `render_callbacks.rs`'s
-        // `on_drag` (pane-separator dragging) exactly: a weak handle +
-        // manual `.update()`, not `cx.listener`, because the callback's
-        // own event type (`Point<Pixels>`, by value) doesn't match what
-        // `cx.listener` expects (a reference).
+        // Drag handle -- requested live after the fixed 220px width was
+        // reported unusable at anything short of a maximized window.
+        // `resize_handle.rs`'s own doc comment covers why this needs a
+        // custom `Element` rather than plain `div()` mouse listeners.
+        // Mirrors `render_callbacks.rs`'s `on_drag` (pane-separator
+        // dragging) exactly: a weak handle + manual `.update()`, not
+        // `cx.listener`, because the callback's own event type
+        // (`Point<Pixels>`, by value) doesn't match what `cx.listener`
+        // expects (a reference).
+        //
+        // Floats (`.absolute()`, `right(-CARD_GAP_PX)`) over the
+        // `CARD_GAP_PX` gap `middle_row` already leaves between this card
+        // and its neighbor, rather than being a normal flex sibling that
+        // adds its own width on top of that gap -- the earlier flex-sibling
+        // version doubled the visual space between the sidebar and the
+        // terminal card (handle width + the row's own gap + both cards' own
+        // borders), visibly wider than every other card-to-card gap in the
+        // window. A live dogfood screenshot boxed the mismatch directly:
+        // this keeps every gap in the layout the same width, with nothing
+        // added on top.
         let drag_view = cx.entity().downgrade();
         let on_drag: resize_handle::ResizeDragCallback = Rc::new(move |position, _window, cx| {
             drag_view
@@ -134,15 +145,17 @@ impl GpuiShellRoot {
         });
         let handle_color = to_rgba(self.config.colors.ui_border);
         let handle = div()
-            .flex_shrink_0()
-            .w(px(resize_handle::RESIZE_HANDLE_PX))
+            .absolute()
+            .top_0()
+            .right(px(-super::render::CARD_GAP_PX))
             .h_full()
+            .w(px(super::render::CARD_GAP_PX))
             .cursor_col_resize()
             .child(ResizeHandleElement {
                 color: handle_color,
                 on_drag,
             });
 
-        div().flex().flex_row().h_full().child(bar).child(handle)
+        div().relative().h_full().child(bar).child(handle)
     }
 }

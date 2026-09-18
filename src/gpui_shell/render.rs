@@ -27,7 +27,11 @@ const CHAT_PANEL_OPEN_ANIM: Duration = Duration::from_millis(180);
 /// rendered edge-to-edge/full-bleed against the window and against each
 /// other (confirmed wrong live, against a real screenshot vs. the mockup --
 /// not merely under-styled).
-const CARD_GAP_PX: f32 = 10.0;
+///
+/// `pub(super)` (not private): `render_sidebar.rs`'s own drag handle floats
+/// over exactly this gap rather than adding its own width beside it -- see
+/// that file's own doc comment on why.
+pub(super) const CARD_GAP_PX: f32 = 10.0;
 
 impl Render for GpuiShellRoot {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {

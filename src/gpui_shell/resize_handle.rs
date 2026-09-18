@@ -24,9 +24,6 @@ use gpui::{
 use std::cell::Cell;
 use std::rc::Rc;
 
-/// Width of the grab strip (matches `pane_view.rs`'s own `SEPARATOR_PX`).
-pub(super) const RESIZE_HANDLE_PX: f32 = 6.0;
-
 /// Called on every mouse-move while a drag is active, with the pointer's
 /// current window-relative position -- the caller (not this element) owns
 /// turning that into a clamped width and updating its own state.
@@ -112,8 +109,9 @@ impl Element for ResizeHandleElement {
         // hovered -- a permanent 1px line down the sidebar's edge, live at
         // every window size, read as a stray rule cutting the UI in half
         // rather than an affordance ("necesito que desaparezca"). The
-        // handle's hit area (this whole 6px strip, via `on_mouse_event`
-        // below) still exists everywhere: only the visible feedback is
+        // handle's hit area (this whole strip, sized by the caller's own
+        // wrapping div, via `on_mouse_event` below) still exists everywhere:
+        // only the visible feedback is
         // conditional. Cheap poll-loop repaints already run at ~30Hz, so
         // this needs no extra `window.refresh()` to catch a hover starting
         // or ending -- the next tick just repaints with a fresh
