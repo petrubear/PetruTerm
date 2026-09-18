@@ -57,9 +57,17 @@ pub(super) fn render_header(
                 .items_center()
                 .gap_2()
                 .child(
+                    // Same pill treatment as the terminal tab bar's active
+                    // cell (`tabs::render_tab_bar`) -- requested live to
+                    // read as the same visual language rather than plain
+                    // text sitting next to a proper pill.
                     div()
+                        .px_2()
+                        .py_1()
+                        .rounded_md()
+                        .bg(to_rgba(colors.ui_surface_hover))
                         .text_color(to_rgba(colors.ui_accent))
-                        .child(icon_label),
+                        .child(div().italic().child(icon_label)),
                 )
                 .child(
                     div()
