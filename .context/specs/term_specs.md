@@ -5,6 +5,14 @@
 **Platform:** macOS (initial), cross-platform post-Phase 1
 **Config:** Lua 5.4 DSL at `~/.config/petruterm/config.lua`
 
+> **Status note:** this is the original design spec and does not track later changes. The
+> lazy.nvim-style plugin system described below (Phase 4) was **cancelled** (2026-04-28, see
+> `.context/specs/build_phases.md`) — there is no `src/plugins/` module. A second binary,
+> `gpui-petruterm`, was added after this spec was written (gpui chrome migration, merged to
+> `master` 2026-09-17) and is not described here — see `.context/architecture/SYSTEM_MAP.md`'s
+> "gpui Chrome Binary" section. For the current, accurate feature/config reference, see
+> `README.md`.
+
 ---
 
 ## 1. Design Principles

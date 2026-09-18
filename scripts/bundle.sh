@@ -7,7 +7,9 @@
 #   - petruterm      (wgpu/winit)  -> dist/PetruTerm.app
 #   - gpui-petruterm (gpui)        -> dist/PetruTerm-gpui.app
 #
-# Requires: Rust toolchain, codesign (Xcode CLT)
+# Requires: Rust toolchain, full Xcode.app (not just Command Line Tools) --
+# the gpui dependency's build script compiles Metal shaders via
+# `xcrun -sdk macosx metal`, which CLT alone does not provide.
 #
 # To install: open dist/PetruTerm.app / dist/PetruTerm-gpui.app
 

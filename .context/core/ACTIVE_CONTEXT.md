@@ -1,16 +1,20 @@
 # Active Context
 
-**Current Focus (branch `worktree-gpui-migration`):** ninguno — sin tareas de feature abiertas.
-Sesión en dogfood activo: el usuario dirige el siguiente fix a partir de lo que ve corriendo en
+**Current Focus (branch `master`):** ninguno — sin tareas de feature abiertas. Sesión en dogfood
+activo: el usuario dirige el siguiente fix a partir de lo que ve corriendo en
 `/Applications/PetruTerm-gpui.app`, no hay backlog en cola.
 **Last Active:** 2026-09-17
-**Branch:** `worktree-gpui-migration` (worktree permanente, nunca se mergea a `master` — ver
-`.context/core/SESSION_STATE.md`). Todo lo de abajo en este archivo, salvo esta sección, describe
-el estado de `master` (el binario wgpu) a la fecha en que se escribió (2026-07-25) — sigue siendo
-la referencia arquitectónica del binario wgpu, pero **no** refleja el trabajo de esta branch.
-**Estado (branch gpui):** M0-M5d COMPLETOS (grid parity, chrome, sidebars, chat panel, command
+**Branch:** `master`. La migración gpui (desarrollada en `worktree-gpui-migration`) se mergeó a
+`master` el 2026-09-17 a pedido explícito del usuario; `master` ya avanzó por delante del tip de
+esa branch con commits propios (bundling del binario gpui, focus border, widget de batería, pase
+de visual-polish, bumps a 1.0.0/1.0.1, fix de drag-and-drop) — ver `.context/core/SESSION_STATE.md`
+para el detalle. La branch/worktree `worktree-gpui-migration` sigue existiendo localmente pero
+está obsoleta (su tip es ancestro de `master`). Todo lo de abajo en este archivo, salvo esta
+sección, describe el estado de `master` (el binario wgpu) a la fecha en que se escribió
+(2026-07-25) — sigue siendo la referencia arquitectónica del binario wgpu.
+**Estado (binario gpui):** M0-M5d COMPLETOS (grid parity, chrome, sidebars, chat panel, command
 palette, ACP agent backend por defecto, inyección de contexto skills/MCP). TD-GPUI-01..06 +
-TD-GPUI-ACP resueltos. Sesión actual: pase de visual-polish (tarjetas flotantes, resize del
+TD-GPUI-ACP resueltos. Sesión más reciente: pase de visual-polish (tarjetas flotantes, resize del
 sidebar, alineación de headers, color de tabs, widget de batería) — ver `SESSION_STATE.md` para
 el detalle commit-por-commit.
 **Próxima tarea:** ninguna en cola. Candidatos no solicitados aún (no empezar sin pedido

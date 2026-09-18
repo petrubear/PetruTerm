@@ -6,19 +6,25 @@ dogfood pass on `gpui_shell`'s chrome, matching an approved design mockup.
 
 ## Branch
 
-`worktree-gpui-migration` (permanent worktree at `.claude/worktrees/gpui-migration`, forked
-from `master` at `03b0071`). **Never merges to master** — this is a standing, indefinite
-constraint, not a milestone-completion decision to revisit each session. `master` is untouched
-by this branch's work and continues to receive its own unrelated commits independently.
+**Merged to `master` (2026-09-17).** The gpui chrome work was developed on
+`worktree-gpui-migration` (worktree at `.claude/worktrees/gpui-migration`) through M5d, then the
+user explicitly requested the merge — done from the gpui side (`a9204fa`), and `master` has since
+fast-forwarded past it with its own follow-on commits (`gpui-petruterm` bundling, focus border,
+battery widget port, visual-polish pass, the 1.0.0/1.0.1 version bumps, drag-and-drop fix). The
+`worktree-gpui-migration` branch/worktree still exists locally but its tip (`a9204fa`) is now an
+ancestor of `master` — it is stale and safe to remove once confirmed no longer needed.
+`master` is the only actively developed branch going forward.
 
 ## Project Status
 
-- The wgpu binary (`petruterm`, on `master`) is unaffected and still the shipped product.
-- The gpui binary (`gpui-petruterm`, this branch only) is feature-complete through M5d: full
-  grid parity, core chrome (tabs/panes/status bar), sidebars (workspaces/MCP/skills/steering),
-  AI chat panel + inline block, command palette, search, context menu, toasts, ACP agent
-  backend (now the default for both binaries), and prompt-context injection (skills/steering/
-  MCP) at parity with the wgpu build.
+- Both binaries ship from `master`: `petruterm` (wgpu/winit) and `gpui-petruterm` (gpui chrome),
+  packaged side by side by `./scripts/bundle.sh` into `dist/PetruTerm.app` /
+  `dist/PetruTerm-gpui.app`.
+- The gpui binary is feature-complete through M5d: full grid parity, core chrome
+  (tabs/panes/status bar), sidebars (workspaces/MCP/skills/steering), AI chat panel + inline
+  block, command palette, search, context menu, toasts, ACP agent backend (now the default for
+  both binaries), and prompt-context injection (skills/steering/MCP) at parity with the wgpu
+  build.
 - TD-GPUI-01..06 + TD-GPUI-ACP debt cleanup: all RESOLVED (`.context/quality/TECHNICAL_DEBT.md`,
   "Migración gpui — COMPLETA" section).
 - This session's own work (all on top of an already-complete M5d): bundled PetruTheme Dark/Light

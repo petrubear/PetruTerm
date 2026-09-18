@@ -1,5 +1,66 @@
 # Changelog
 
+## [1.0.1] — 2026-09-17
+
+### Fixed
+- File drag-and-drop now works in `gpui-petruterm` (was previously wgpu-binary only).
+
+---
+
+## [1.0.0] — 2026-09-17
+
+### Added
+- `gpui-petruterm` — a second binary with a chrome built on [gpui](https://www.gpui.rs/) (Zed's retained-mode UI framework), at feature parity with the wgpu/winit binary: grid rendering, tabs/panes, sidebars (Workspaces/MCP/Skills/Steering), AI chat panel + inline block, command palette, search, context menu, toasts, and prompt-context injection (skills/steering/MCP).
+- ACP (Agent Client Protocol) is now the default LLM backend for both binaries.
+- `./scripts/bundle.sh` builds and packages both binaries into `dist/PetruTerm.app` and `dist/PetruTerm-gpui.app`, each with its own bundle ID and icon.
+- Bundled `PetruTheme Dark`/`PetruTheme Light` themes.
+- A colored focus border around the active pane, the battery status-bar widget, and a floating-card chrome restyle (sidebar drag-to-resize, aligned header rows, per-tab accent color on inactive tabs) ported to `gpui_shell`.
+
+### Fixed
+- `config.colors` set in `config.lua`/`ui.lua` was silently never applied — now read and honored (pre-existing bug, not introduced by the gpui work).
+
+This release folds in the full gpui chrome migration (milestones M0-M5d); see `.context/core/SESSION_STATE.md` and `.context/quality/TECHNICAL_DEBT.md` for the detailed, commit-by-commit history.
+
+---
+
+## [0.4.1] — 2026-08-20
+
+### Changed
+- `[PERF-ROI-01]` incremental rendering: merged GPU range uploads, stable per-row GPU slots for terminal instances (only changed rows re-upload), row damage propagation via alacritty's `TermDamage`, and new performance baseline counters.
+- `[PERF-ROI-02]` PTY wakeups coalesced instead of firing per read.
+
+---
+
+## [0.4.0] — 2026-08-03
+
+### Added
+- Bold, italic, and weight variants now render in the terminal grid, resolved automatically from the installed font family's own faces via fontdb.
+
+### Changed
+- `GRAPH-ARCH-01`: consolidated several duplicated `Config`-reading call sites behind shared views/helpers (`LlmRuntimeView`, `LeaderBindingsView`, `RenderContext::locate_scaled_font`, `App::frame_interval`).
+- Status bar clock now shows local time instead of UTC.
+
+---
+
+## [0.3.1] — 2026-07-08
+
+### Fixed
+- A lost `EventLoopProxy` wakeup on macOS that could leave pasted text or Atuin selections unrendered until a manual scroll; the PTY-echo grace window is now armed only on real PTY writes and scoped correctly.
+- Left-margin cell of the tab color-picker menu row not painting.
+- Various critical/high-severity code review findings.
+
+### Changed
+- Bundled themes now curate an explicit `ui_border` color instead of deriving one.
+
+---
+
+## [0.3.0] — 2026-07-03
+
+### Added
+- Phase 9 UI Restyle: floating-surface chrome (sidebar, command palette, chat panel, tab bar, status bar), macOS window blur/vibrancy (`config.window.blur`), rounded window corners, and translucent surface color tokens.
+
+---
+
 ## [0.2.1] — 2026-07-01
 
 ### Added

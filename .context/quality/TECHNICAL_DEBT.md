@@ -338,7 +338,7 @@ Wave 6: AUDIT-REFAC-07, AUDIT-CLEAN-03
 Wave 7: AUDIT-REFAC-08
 Phase 9: COMPLETA, verificada y MERGEADA a master (2026-07-03, v0.3.0) — TD-P9-01..08 cerrados.
 GRAPH-ARCH-01: COMPLETA (2026-07-25) — LLM domain + keys/leader view + font/max_fps consolidation, todo en master.
-Migración gpui: COMPLETA (2026-09-17) — TD-GPUI-01..06 + TD-GPUI-ACP RESUELTOS, sin merge a master aún (branch worktree-gpui-migration).
+Migración gpui: COMPLETA (2026-09-17) — TD-GPUI-01..06 + TD-GPUI-ACP RESUELTOS, mergeada a master (2026-09-17, gpui-petruterm 1.0.0).
 Watch: AUDIT-CLEAN-02, AUDIT-PERF-10, TD-P9-07, AUDIT-DEP-01
 Backlog abierto (P3): GRAPH-ARCH-01-A, GRAPH-ARCH-01-B, GRAPH-ARCH-01-C
 ```

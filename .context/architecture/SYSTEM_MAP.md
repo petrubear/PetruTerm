@@ -1,9 +1,9 @@
 # System Map
 
 > This document describes `petruterm` — the wgpu/winit binary shipped from `master`. A second
-> binary, `gpui-petruterm`, exists only on the permanent (never-merged) `worktree-gpui-migration`
-> branch and shares `src/term`/`src/config`/`src/llm`/`src/platform` with this one, replacing only
-> the chrome/rendering layer (`src/app`, `src/ui`, `src/renderer` → `src/gpui_shell`). See
+> binary, `gpui-petruterm`, also ships from `master` (the gpui migration merged 2026-09-17) and
+> shares `src/term`/`src/config`/`src/llm`/`src/platform` with this one, replacing only the
+> chrome/rendering layer (`src/app`, `src/ui`, `src/renderer` → `src/gpui_shell`). See
 > "gpui Chrome Binary" near the end of this file for its own architecture summary.
 
 ## High-Level Architecture
@@ -240,7 +240,7 @@ Stream complete → show [Run] [Edit] [Explain] actions
 
 ---
 
-## gpui Chrome Binary (`gpui-petruterm`, `worktree-gpui-migration` only)
+## gpui Chrome Binary (`gpui-petruterm`, shipped from `master`)
 
 Replaces `src/app` + `src/ui` + `src/renderer` (winit event loop, hand-rolled wgpu chrome
 rendering) with [gpui](https://www.gpui.rs/) (Zed's retained-mode Rust UI framework) driving a

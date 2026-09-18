@@ -2,34 +2,42 @@
 
 ## Overview
 
-PetruTerm is a developer-first terminal emulator written in Rust, built for speed and extensibility. It provides GPU-accelerated rendering, a Lua configuration DSL modeled after WezTerm, a command palette, first-class LLM integration (Warp-style), font ligatures, snippets, and a lazy.nvim-style plugin system. Primary target: macOS.
+PetruTerm is a developer-first terminal emulator written in Rust, built for speed and extensibility. It provides GPU-accelerated rendering, a Lua configuration DSL modeled after WezTerm, a command palette, first-class LLM integration (Warp-style, including an Agent Client Protocol backend), font ligatures, and snippets. Primary target: macOS.
+
+The project ships **two binaries** from the same crate:
+- `petruterm` — the original wgpu/winit renderer and chrome (`src/app`, `src/ui`, `src/renderer`).
+- `gpui-petruterm` — a gpui-based chrome (`src/gpui_shell`) at feature parity with the wgpu binary, sharing the same terminal/config/LLM core. `./scripts/bundle.sh` builds and packages both.
+
+A plugin system (lazy.nvim-style Lua plugin loader) was planned as Phase 4 but was **cancelled** (2026-04-28, see `.context/specs/build_phases.md`) — there is no `src/plugins/` module and no plugin directory is scanned.
 
 ## Tech Stack
 
 - **Language:** Rust (edition 2021)
 - **GPU:** wgpu (WebGPU / Metal on macOS)
-- **Windowing:** winit
+- **UI (gpui binary):** gpui (Zed's retained-mode Rust UI framework) — its build script requires full Xcode.app (not just Command Line Tools) to compile Metal shaders
+- **Windowing:** winit (wgpu binary)
 - **Terminal Core:** alacritty_terminal (VTE/xterm/PTY/grid)
 - **Font:** cosmic-text + swash + fontdb (ligatures, emoji, fallback chains)
 - **Config DSL:** Lua 5.4 via mlua
-- **LLM:** tokio + reqwest (OpenRouter, Ollama, LMStudio)
-- **Key Dependencies:** wgpu, winit, alacritty_terminal, mlua, cosmic-text, tokio, reqwest, notify, fuzzy-matcher
+- **LLM:** tokio + reqwest (OpenRouter, Ollama, LMStudio, GitHub Copilot) + agent-client-protocol (ACP)
+- **Key Dependencies:** wgpu, winit, gpui, alacritty_terminal, mlua, cosmic-text, tokio, reqwest, notify, fuzzy-matcher
 
 ## Architecture
 
-PetruTerm uses a winit event loop as its backbone. The App struct owns a Tab/Pane manager, an alacritty_terminal instance per pane, and a wgpu Renderer. A Lua VM (mlua) loads config at startup and watches for hot-reload via notify. The LLM engine runs on a tokio runtime and streams responses into the inline AI block. Plugins are Lua files auto-scanned from `~/.config/petruterm/plugins/`.
+The wgpu binary (`petruterm`) uses a winit event loop as its backbone. The App struct owns a Tab/Pane manager, an alacritty_terminal instance per pane, and a wgpu Renderer. The gpui binary (`gpui-petruterm`) drives the same terminal/config/LLM core through gpui's own retained-mode render tree instead of winit/wgpu. A Lua VM (mlua) loads config at startup and watches for hot-reload via notify. The LLM engine runs on a tokio runtime and streams responses into the inline AI block or an external ACP agent process.
 
 ## Quick Commands
 
-| Action  | Command                 |
-| ------- | ----------------------- |
-| Build   | `cargo build`           |
-| Release | `cargo build --release` |
-| Test    | `cargo test`            |
-| Check   | `cargo check`           |
-| Lint    | `cargo clippy`          |
-| Format  | `cargo fmt`             |
-| Bundle  | `./scripts/bundle.sh`   |
+| Action        | Command                                    |
+| ------------- | ------------------------------------------- |
+| Build         | `cargo build`                              |
+| Release       | `cargo build --release`                    |
+| Test          | `cargo test`                               |
+| Check         | `cargo check`                              |
+| Lint          | `cargo clippy`                             |
+| Format        | `cargo fmt`                                |
+| Local CI      | `./scripts/ci-local.sh` (mirrors `.github/workflows/ci.yml`: check, test, clippy, fmt, audit, all under `RUSTFLAGS=-D warnings`) |
+| Bundle (both) | `./scripts/bundle.sh` → `dist/PetruTerm.app` + `dist/PetruTerm-gpui.app` |
 
 ## Project Structure
 
@@ -39,7 +47,8 @@ PetruTerm/
 ├── Cargo.toml                   # Workspace manifest
 ├── Cargo.lock
 ├── scripts/
-│   └── bundle.sh                # .app bundle script
+│   ├── bundle.sh                # Builds + packages both .app bundles
+│   └── ci-local.sh              # Local mirror of the CI workflow
 ├── assets/
 │   └── themes/                  # Bundled color themes (Lua)
 ├── config/
@@ -50,16 +59,19 @@ PetruTerm/
 │       ├── keybinds.lua
 │       └── llm.lua
 ├── src/
-│   ├── main.rs                  # Entry point
-│   ├── app.rs                   # App struct, event loop dispatch
+│   ├── main.rs                  # wgpu binary entry point
+│   ├── lib.rs                   # Shared library root
+│   ├── bin/
+│   │   └── gpui_petruterm.rs    # gpui binary entry point
+│   ├── app/                     # wgpu binary: App struct, mux, input, renderer glue, ui
+│   ├── gpui_shell/               # gpui binary: chrome (tabs, panes, sidebar, chat, status bar)
 │   ├── renderer/                # wgpu GPU renderer
 │   ├── term/                    # Terminal engine (wraps alacritty_terminal)
-│   ├── ui/                      # Tabs, panes, status bar, command palette
+│   ├── ui/                      # Command palette (shared)
 │   ├── font/                    # Font loading + shaping
 │   ├── config/                  # Lua DSL + hot reload
-│   ├── llm/                     # LLM providers + inline AI mode
-│   ├── plugins/                 # Plugin loader + Lua API
-│   └── snippets/                # Snippet manager
+│   ├── llm/                     # LLM providers, ACP client, MCP, inline AI mode
+│   └── platform/                # macOS platform integration (menu bar, notifications)
 ├── .context/
 │   ├── core/
 │   │   ├── SESSION_STATE.md
@@ -81,7 +93,6 @@ PetruTerm/
 - Config types are plain Rust structs derived from `serde::Deserialize`; Lua values are deserialized into them via mlua
 - Module files stay under 400 lines; split when exceeded
 - Error handling: use `anyhow::Result` for application errors, `thiserror` for library-style errors
-- All Lua API functions exposed to plugins must be documented in `src/plugins/api.rs`
 
 ## Context Files
 
@@ -96,7 +107,11 @@ PetruTerm/
 
 ## Current Focus
 
-**Phase 4 — Plugin Ecosystem.** See `.context/specs/build_phases.md` for deliverables checklist and exit criteria.
+No open feature phase. Phases 1-9 (core terminal, LLM/ACP integration, UI restyle) and the gpui
+chrome migration (M0-M5d) are complete and merged to `master`; Phase 4 (Plugin Ecosystem) was
+cancelled. Current work is dogfood-driven polish on `gpui_shell` — see
+`.context/core/SESSION_STATE.md` for the latest session and `.context/specs/build_phases.md` for
+the full phase history.
 
 ## Important Notes
 
@@ -105,7 +120,9 @@ PetruTerm/
 - Lua config is loaded once at startup; hot-reload replaces only changed fields (no full restart)
 - LLM features are entirely optional and can be disabled via `config.llm.enabled = false`
 - Default theme: Dracula Pro. Default font: Monolisa Nerd Font (fallback: JetBrains Mono)
-- macOS only for Phase 1; cross-platform considered for Phase 2+
+- macOS only; no cross-platform target currently planned
+- Building either binary requires full Xcode.app, not just Command Line Tools — `gpui`'s build
+  script needs the `metal` shader compiler, which CLT does not ship
 - LLM API key resolution order: (1) `llm.api_key` in Lua config, (2) `OPENROUTER_API_KEY` env var,
   (3) macOS Keychain: `security add-generic-password -s PetruTerm -a OPENROUTER_API_KEY -w <key>`
 

@@ -53,7 +53,10 @@ cargo build --release
 ./scripts/bundle.sh
 ```
 
-This creates `PetruTerm.app` in the project root, ready to drag to `/Applications`.
+This builds and packages both binaries into `dist/PetruTerm.app` (wgpu/winit renderer) and
+`dist/PetruTerm-gpui.app` (gpui-based chrome, at feature parity) — install either or both.
+Requires full Xcode.app, not just Command Line Tools, since `gpui`'s build script compiles
+Metal shaders via `xcrun -sdk macosx metal`.
 
 ### Download a release
 
@@ -734,16 +737,20 @@ Place an `AGENTS.md` file in your project root to give the AI panel automatic co
 
 ## Tech Stack
 
-| Component          | Crate                                        |
-| ------------------ | -------------------------------------------- |
-| GPU rendering      | `wgpu` 29 (Metal on macOS)                   |
-| Windowing          | `winit` 0.30                                 |
-| Terminal emulation | `alacritty_terminal` 0.25                    |
-| Font shaping       | `cosmic-text` 0.18 + HarfBuzz + FreeType LCD |
-| Config DSL         | `mlua` 0.11 (Lua 5.4)                        |
-| Async / LLM        | `tokio` + `reqwest`                          |
-| Fuzzy search       | `skim` + `fuzzy-matcher`                     |
-| Hashing            | `rustc-hash` (FxHasher)                      |
+| Component                    | Crate                                          |
+| ----------------------------- | ----------------------------------------------- |
+| GPU rendering (wgpu binary)   | `wgpu` 29 (Metal on macOS)                     |
+| Windowing (wgpu binary)       | `winit` 0.30                                   |
+| Chrome UI (gpui binary)       | `gpui` 0.2.2 (Zed's retained-mode UI framework) |
+| Terminal emulation            | `alacritty_terminal` 0.25                      |
+| Font shaping                  | `cosmic-text` 0.18 + HarfBuzz + FreeType LCD   |
+| Config DSL                    | `mlua` 0.11 (Lua 5.4)                          |
+| Async / LLM                   | `tokio` + `reqwest` + `agent-client-protocol`  |
+| Fuzzy search                  | `skim` + `fuzzy-matcher`                       |
+| Hashing                       | `rustc-hash` (FxHasher)                        |
+
+Both binaries are built from the same crate and share the terminal/config/LLM core — `petruterm`
+uses wgpu/winit for rendering and windowing, `gpui-petruterm` uses gpui for both.
 
 ---
 
@@ -758,7 +765,6 @@ Place an `AGENTS.md` file in your project root to give the AI panel automatic co
 ├── llm.lua                # AI provider/agent and features
 ├── snippets.lua           # Tab-expandable snippets
 ├── notifications.lua      # Toast vs native notification style
-├── plugins/               # Auto-scanned Lua plugins
 ├── skills/                # SKILL.md prompts, one directory per skill (see Skills)
 │   └── <name>/SKILL.md
 ├── steering/              # Always-on AI instructions, one .md per file (see Steering)
