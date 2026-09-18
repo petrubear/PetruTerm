@@ -122,7 +122,15 @@ pub fn render_tab_bar(
         .px_2()
         .py_1()
         .min_h(super::super::font_state::header_row_min_height())
-        .w_full()
+        // `mx_2` (not `w_full`): the card wrapping this bar rounds its own
+        // corners (`rounded_lg`, `render.rs`'s `terminal_card`), and a
+        // border-bottom running edge-to-edge would meet that curve at a
+        // sharp square notch -- clipping only touches pixels *within* the
+        // corner radius, and this row's own height already puts its border
+        // well below that band, so nothing clips it. Insetting the row
+        // (and so its border) by the same margin the card's radius spans
+        // lets the divider float clear of both rounded corners instead.
+        .mx_2()
         .flex_shrink_0()
         .border_b_1()
         .border_color(to_rgba(colors.ui_border))

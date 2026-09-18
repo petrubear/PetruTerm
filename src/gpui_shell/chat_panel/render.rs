@@ -120,6 +120,8 @@ fn render_header(
         .px_3()
         .py_2()
         .min_h(font_state::header_row_min_height())
+        // Corner-clash fix -- see `tabs::render_tab_bar`'s doc comment.
+        .mx_2()
         .border_b_1()
         .border_color(to_rgba(colors.ui_border))
         .font_family(font_state::font_family())
@@ -317,11 +319,10 @@ fn render_message_list(
     list
 }
 
-/// Bubble treatment (visual-polish pass, 2026-09-17): filled, right-aligned
-/// bubble for the user's own messages (mirrors the wgpu build's W-1 tinted
-/// rows); assistant/system/tool stay left-aligned. No per-child `align-self`
-/// in gpui 0.2.2, so alignment comes from justifying each bubble's own
-/// full-width row, not the bubble div itself.
+/// Bubble treatment: filled, right-aligned bubble for the user's own
+/// messages (mirrors the wgpu build's W-1 tinted rows); assistant/system/
+/// tool stay left-aligned. No per-child `align-self` in gpui 0.2.2, so
+/// alignment comes from justifying each bubble's own full-width row.
 fn render_message(
     msg: &ChatMessage,
     lines: &[AnnotatedLine],

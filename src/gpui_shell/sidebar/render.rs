@@ -163,6 +163,13 @@ fn render_section_tabs(
         .px_2()
         .py_1()
         .min_h(font_state::header_row_min_height())
+        // `mx_1`: same corner-clash fix as `tabs::render_tab_bar`'s own
+        // header (its own doc comment has the full reasoning) -- smaller
+        // than that bar's `mx_2` since the sidebar's four tab labels are
+        // already width-constrained down to `MIN_SIDEBAR_WIDTH_PX`, and
+        // this card's own `rounded_lg` corner is small enough that 4px
+        // clears it.
+        .mx_1()
         .border_b_1()
         .border_color(to_rgba(colors.ui_border))
         .children(cells)
