@@ -1,5 +1,11 @@
 # System Map
 
+> This document describes `petruterm` — the wgpu/winit binary shipped from `master`. A second
+> binary, `gpui-petruterm`, exists only on the permanent (never-merged) `worktree-gpui-migration`
+> branch and shares `src/term`/`src/config`/`src/llm`/`src/platform` with this one, replacing only
+> the chrome/rendering layer (`src/app`, `src/ui`, `src/renderer` → `src/gpui_shell`). See
+> "gpui Chrome Binary" near the end of this file for its own architecture summary.
+
 ## High-Level Architecture
 
 ```
@@ -233,6 +239,55 @@ Stream complete → show [Run] [Edit] [Explain] actions
 ```
 
 ---
+
+## gpui Chrome Binary (`gpui-petruterm`, `worktree-gpui-migration` only)
+
+Replaces `src/app` + `src/ui` + `src/renderer` (winit event loop, hand-rolled wgpu chrome
+rendering) with [gpui](https://www.gpui.rs/) (Zed's retained-mode Rust UI framework) driving a
+real `Entity<GpuiShellRoot>`/`Render` tree instead of an imperative per-frame draw call.
+`alacritty_terminal` (`src/term`), Lua config (`src/config`), LLM/ACP (`src/llm`), and platform
+FFI (`src/platform`) are shared verbatim with the wgpu binary — this migration only ever touches
+the chrome/rendering layer.
+
+```
+GpuiShellRoot (src/gpui_shell/mod.rs + construct.rs)
+├── workspaces: WorkspaceManager      — tabs, panes, per-workspace state (workspace.rs)
+├── terminals: HashMap<usize, Rc<Terminal>>  — same Terminal/Pty as the wgpu binary
+├── sidebar: WorkspaceSidebar          — Workspaces/MCP/Skills/Steering sections (sidebar/)
+├── chat: ChatPanelView                — AI chat drawer, Provider + ACP backends (chat_panel/)
+├── ai_block: AiBlockView              — inline Ctrl+Space AI block (ai_block.rs)
+├── palette / search_bar / context_menu / info_overlay / toast — same-shaped state+render pairs
+└── config: Config                     — hot-reloaded, shared schema with the wgpu binary
+
+render() (render.rs, impl Render for GpuiShellRoot)
+  → terminal_card { tab_bar (tabs/) ; pane_area → pane_view::render_pane_tree }
+  → sidebar drawer (when visible, via render_sidebar.rs)
+  → chat panel drawer (when visible)
+  → status bar (status_bar/)
+  → overlays: palette, context menu, toast, info overlay (absolute-positioned)
+
+Own render frame is one `div()` tree per frame (gpui/Taffy flexbox layout), NOT the wgpu
+binary's `RoundedRectInstance` vertex-buffer pixel math — corners, borders, and pill shapes are
+real `rounded_lg()`/`border_1()` style calls, not hand-computed quads.
+```
+
+**Repaint model:** gpui has no cross-thread wake bridge from a background PTY-reader thread into
+its own entity-update mechanism, so `poll.rs` runs a `cx.spawn` loop on a ~33ms timer (gated on
+each terminal's `WakeupGate` so an idle tick is a no-op) that drains PTY events, refreshes the
+status bar's CWD/git-branch/exit-code/battery segments, and calls `cx.notify()` only when
+something actually changed. This is the same repair for the `gotcha_lost_pty_echo_wakeup` class
+of bug the wgpu binary hit on macOS, ported to gpui's own event model.
+
+**400-line module convention** is enforced hard here (more so than the wgpu binary's older
+code): every file in `src/gpui_shell/` is expected to stay under 400 lines, splitting into a
+`foo/{mod.rs, render.rs, ...}` directory when a single concern (e.g. tabs, sidebar, status bar,
+chat panel) outgrows one file.
+
+**Not yet built (deliberately, not gaps):** chat panel drag-to-resize (sidebar has it, via the
+shared `resize_handle.rs` custom `Element`; chat panel doesn't yet — no one has asked). InputShadow/
+ghost-text/syntax-highlighting/flag-hints (`src/term/input_shadow.rs`, `tokenizer.rs`, `flag_db.rs`)
+are real, shared, engine-agnostic code but were never wired into `gpui_shell` — confirmed gap,
+explicitly deprioritized by the user (their own shell's own suggestions cover it).
 
 ## Key External Crates
 

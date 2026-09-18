@@ -1,10 +1,25 @@
 # Active Context
 
-**Current Focus:** ninguno — sin tareas de feature abiertas.
-**Last Active:** 2026-07-25
-**Branch:** `master` (version 0.3.0)
-**Estado:** Phase 9 (UI Restyle) COMPLETA y mergeada a master. Phase 8 (ACP) COMPLETA y mergeada a master. GRAPH-ARCH-01 (decoupling de Config) COMPLETA y mergeada a master (2026-07-25). Deuda técnica: 3 items P3 abiertos (GRAPH-ARCH-01-A/B/C, ver TECHNICAL_DEBT.md) + 4 watch.
-**Próxima tarea:** decidir el siguiente foco. No hay trabajo de feature pendiente en cola; backlog P3 disponible si se quiere continuar con los loose ends de GRAPH-ARCH-01.
+**Current Focus (branch `worktree-gpui-migration`):** ninguno — sin tareas de feature abiertas.
+Sesión en dogfood activo: el usuario dirige el siguiente fix a partir de lo que ve corriendo en
+`/Applications/PetruTerm-gpui.app`, no hay backlog en cola.
+**Last Active:** 2026-09-17
+**Branch:** `worktree-gpui-migration` (worktree permanente, nunca se mergea a `master` — ver
+`.context/core/SESSION_STATE.md`). Todo lo de abajo en este archivo, salvo esta sección, describe
+el estado de `master` (el binario wgpu) a la fecha en que se escribió (2026-07-25) — sigue siendo
+la referencia arquitectónica del binario wgpu, pero **no** refleja el trabajo de esta branch.
+**Estado (branch gpui):** M0-M5d COMPLETOS (grid parity, chrome, sidebars, chat panel, command
+palette, ACP agent backend por defecto, inyección de contexto skills/MCP). TD-GPUI-01..06 +
+TD-GPUI-ACP resueltos. Sesión actual: pase de visual-polish (tarjetas flotantes, resize del
+sidebar, alineación de headers, color de tabs, widget de batería) — ver `SESSION_STATE.md` para
+el detalle commit-por-commit.
+**Próxima tarea:** ninguna en cola. Candidatos no solicitados aún (no empezar sin pedido
+explícito): resize del chat panel, gaps menores de paridad ACP/UI reportados en una auditoría
+previa.
+
+---
+
+## [Histórico, describe `master`/wgpu al 2026-07-25 — no confundir con el estado de la branch gpui]
 
 ## Phase 9 — UI Restyle — COMPLETA y MERGEADA a master (v0.3.0)
 
