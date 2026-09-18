@@ -15,7 +15,7 @@
 
 use std::rc::Rc;
 
-use gpui::Context;
+use gpui::{App, Context, ExternalPaths, Window};
 
 use super::{chat_panel, context_menu, pane_view, tabs, GpuiShellRoot};
 
@@ -261,6 +261,58 @@ pub(super) fn build_tab_right_click_callback(
             root.context_menu.position = position;
             root.context_menu.items = items;
             root.context_menu.visible = true;
+            cx.notify();
+        })
+        .ok();
+    })
+}
+
+/// Whole-window file-drop handler: dropped paths are written to the
+/// focused terminal's PTY, or appended to the chat composer if the AI
+/// panel is open. Mirrors the wgpu app's own `WindowEvent::DroppedFile`
+/// (`src/app/mod.rs`), which was gpui_shell's only gap here -- `Div::
+/// on_drop` is gpui's equivalent of that winit event (gpui translates the
+/// platform's native file-drop into its own drag-and-drop system, see
+/// `gpui::Window::dispatch_event`'s `PlatformInput::FileDrop` arm), it was
+/// just never wired up on this side.
+///
+/// winit delivers one `DroppedFile` event per file; gpui's `ExternalPaths`
+/// can carry several paths in a single drop, so (unlike the wgpu handler)
+/// each path is shell-quoted before joining -- an unquoted space-joined
+/// list would be ambiguous the moment either a path contains a space or
+/// more than one file is dropped at once.
+pub(super) type FileDropCallback = Rc<dyn Fn(&ExternalPaths, &mut Window, &mut App)>;
+
+pub(super) fn build_file_drop_callback(cx: &mut Context<GpuiShellRoot>) -> FileDropCallback {
+    let view = cx.entity().downgrade();
+    Rc::new(move |paths: &ExternalPaths, _window, cx| {
+        let joined = paths
+            .paths()
+            .iter()
+            .map(|p| super::acp_bridge::shell_quote(&p.to_string_lossy()))
+            .collect::<Vec<_>>()
+            .join(" ");
+        if joined.is_empty() {
+            return;
+        }
+        view.update(cx, |root, cx| {
+            if root.chat.is_visible() {
+                let mut new_text = root.chat.composer.read(cx).content().to_string();
+                if !new_text.is_empty() && !new_text.ends_with(' ') {
+                    new_text.push(' ');
+                }
+                new_text.push_str(&joined);
+                root.chat
+                    .composer
+                    .update(cx, |input, cx| input.set_content(new_text, cx));
+            } else {
+                let active = root.workspaces.active().tabs.active_index();
+                let focused_terminal_id =
+                    root.workspaces.active().tab_panes[active].focused_terminal;
+                if let Some(terminal) = root.terminals.get(&focused_terminal_id) {
+                    terminal.write_input(joined.as_bytes());
+                }
+            }
             cx.notify();
         })
         .ok();

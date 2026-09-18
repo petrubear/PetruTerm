@@ -140,6 +140,7 @@ impl Render for GpuiShellRoot {
         ) = render_callbacks::build_frame_callbacks(cx);
 
         let on_tab_right_click = render_callbacks::build_tab_right_click_callback(cx);
+        let on_file_drop = render_callbacks::build_file_drop_callback(cx);
 
         // Focus-border color: the active tab's own accent if it has one set,
         // else the theme's accent -- mirrors the wgpu app's own
@@ -379,6 +380,9 @@ impl Render for GpuiShellRoot {
         div()
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::on_key_down))
+            .on_drop::<gpui::ExternalPaths>(move |paths, window, cx| {
+                on_file_drop(paths, window, cx)
+            })
             .relative()
             .flex()
             .flex_col()

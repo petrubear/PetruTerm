@@ -130,8 +130,11 @@ impl GpuiShellRoot {
 /// (`src/app/mux/mod.rs:156-167`) rather than cross-wired -- `src/app/` is
 /// off-limits per this plan's own Global Constraints, and this is a tiny,
 /// pure, three-line-rule-exempt helper (it's the whole reason this
-/// function exists).
-fn shell_quote(s: &str) -> String {
+/// function exists). `pub(super)`: also reused by `render_callbacks`'s
+/// file-drop handler, which needs the same argv-safe quoting for dropped
+/// paths written into the terminal/composer -- both stay within
+/// `gpui_shell`, so this one is shared rather than tripled.
+pub(super) fn shell_quote(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
     out.push('\'');
     for c in s.chars() {
