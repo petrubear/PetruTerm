@@ -20,14 +20,14 @@ impl GpuiShellRoot {
     /// CWD (`cached_cwd`, kept live by the poll loop) rather than defaulting
     /// to the process's own directory.
     pub(super) fn split_focused(&mut self, dir: SplitDir) {
-        let (terminal, gate) = match spawn_terminal_at(80, 24, &self.config, self.cached_cwd.clone())
-        {
-            Ok(pair) => pair,
-            Err(e) => {
-                log::error!("gpui-shell: failed to spawn terminal for split: {e:#}");
-                return;
-            }
-        };
+        let (terminal, gate) =
+            match spawn_terminal_at(80, 24, &self.config, self.cached_cwd.clone()) {
+                Ok(pair) => pair,
+                Err(e) => {
+                    log::error!("gpui-shell: failed to spawn terminal for split: {e:#}");
+                    return;
+                }
+            };
         let terminal_id = self.next_terminal_id;
         self.next_terminal_id += 1;
         self.terminals.insert(terminal_id, terminal);
