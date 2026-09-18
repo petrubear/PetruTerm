@@ -105,6 +105,14 @@ pub(super) struct PaneRenderCx<'a> {
     /// unchanged (no per-leaf wrapping needed, since it carries no
     /// terminal id -- see `context_menu.rs`'s own doc comment on why).
     pub on_right_click: super::context_menu::RightClickCallback,
+    /// Border color for the focused pane when `pane_count > 1` -- the
+    /// active tab's own accent color, or the theme accent as a fallback.
+    /// Mirrors the wgpu app's `build_focus_border` (`src/app/frame.rs`).
+    pub focus_accent: [f32; 4],
+    /// Number of leaves in the tab currently being rendered (1 while
+    /// zoomed). The focus border only shows when there's more than one
+    /// pane to distinguish between -- see `render_leaf`.
+    pub pane_count: usize,
 }
 
 /// Walk `node` into a nested flex tree. The returned `Div` carries no
@@ -148,9 +156,31 @@ pub(super) fn render_leaf(terminal_id: usize, ctx: &PaneRenderCx) -> Div {
     let focus_cb = ctx.on_focus.clone();
     let on_focus: OnFocusCallback = Rc::new(move |window, cx| focus_cb(terminal_id, window, cx));
 
+    // Border is always reserved at 2px, only its color toggles between
+    // transparent and the focus accent -- never adding/removing the
+    // border itself. Taffy's box model gives a bordered div the same
+    // content-area shrink either way, so toggling the border on and off
+    // would nudge `bounds` (and therefore the PTY's winsize, via
+    // `fit_terminal` below) by 2px on every focus change. Toggling only
+    // the color keeps geometry constant across focus changes.
+    let is_focus_target = terminal_id == ctx.focused && ctx.pane_count > 1;
+    let border_color = if is_focus_target {
+        to_rgba(ctx.focus_accent)
+    } else {
+        Rgba {
+            r: 0.0,
+            g: 0.0,
+            b: 0.0,
+            a: 0.0,
+        }
+    };
+
     div()
         .flex()
         .size_full()
+        .border_2()
+        .border_color(border_color)
+        .rounded_lg()
         // A few pixels of inset on all four sides (requested live -- the
         // grid used to start flush against the terminal card's own edge/
         // border). Safe to add here rather than inside `TerminalGridElement`

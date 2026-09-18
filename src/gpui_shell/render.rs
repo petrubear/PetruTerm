@@ -141,6 +141,28 @@ impl Render for GpuiShellRoot {
 
         let on_tab_right_click = render_callbacks::build_tab_right_click_callback(cx);
 
+        // Focus-border color: the active tab's own accent if it has one set,
+        // else the theme's accent -- mirrors the wgpu app's own
+        // `build_focus_border` (src/app/frame.rs), which resolves the same
+        // fallback. `pane_count` collapses to 1 while zoomed (matching the
+        // wgpu app's `pane_infos.len()` there, since only one pane is ever
+        // visible), so the border check below stays a single `> 1` test
+        // instead of a separate zoomed-vs-not branch.
+        let focus_accent = self
+            .workspaces
+            .active()
+            .tabs
+            .active_tab()
+            .and_then(|t| t.accent_color)
+            .unwrap_or(self.config.colors.ui_accent);
+        let pane_count = if self.workspaces.active().zoomed_pane.is_some() {
+            1
+        } else {
+            self.workspaces.active().tab_panes[active_index]
+                .root
+                .leaf_count()
+        };
+
         let pane_ctx = pane_view::PaneRenderCx {
             terminals: &self.terminals,
             focused: self.workspaces.active().tab_panes[active_index].focused_terminal,
@@ -157,6 +179,8 @@ impl Render for GpuiShellRoot {
                 .visible
                 .then(|| (self.search_bar.matches.clone(), self.search_bar.current)),
             on_right_click,
+            focus_accent,
+            pane_count,
         };
         let panes = match self.workspaces.active().zoomed_pane {
             Some(terminal_id) => pane_view::render_leaf(terminal_id, &pane_ctx),
