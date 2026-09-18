@@ -503,6 +503,10 @@ impl ColorScheme {
 pub struct StatusBarColors {
     pub bar_bg: [f32; 4],
     pub fg_default: [f32; 4],
+    // Read by gpui_shell::status_bar::render (status-bar border color), which
+    // only exists in lib.rs's module tree -- main.rs's separate `mod config`
+    // compiles this struct too, where it's otherwise unread.
+    #[allow(dead_code)]
     pub fg_dim: [f32; 4],
     pub leader_active: [f32; 4],
     pub leader_resize: [f32; 4],

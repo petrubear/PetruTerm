@@ -156,8 +156,8 @@ impl StatusBar {
         let time_str = format_time();
         bar.right.push(StatusBarSegment {
             text: format!(" {time_str} "),
-            fg: colors.fg_dim,
-            bg: colors.bar_bg,
+            fg: colors.git_fg,
+            bg: colors.git_bg,
             kind: SegmentKind::Time,
         });
 
