@@ -9,7 +9,7 @@ use gpui::{Context, Focusable, Window};
 
 use super::leader::LeaderAction;
 use super::panes::{PaneForest, SplitDir};
-use super::{spawn_terminal, GpuiShellRoot};
+use super::{spawn_terminal, spawn_terminal_at, GpuiShellRoot};
 
 impl GpuiShellRoot {
     /// Execute one resolved leader-key action (`on_key_down`'s leader
@@ -23,13 +23,17 @@ impl GpuiShellRoot {
     ) {
         match action {
             LeaderAction::NewTab => {
-                let (terminal, gate) = match spawn_terminal(80, 24, &self.config) {
-                    Ok(pair) => pair,
-                    Err(e) => {
-                        log::error!("gpui-shell: failed to spawn terminal for new tab: {e:#}");
-                        return;
-                    }
-                };
+                // Inherits the currently focused pane's CWD (see
+                // `split_focused`'s doc comment) rather than defaulting to
+                // the process's own directory.
+                let (terminal, gate) =
+                    match spawn_terminal_at(80, 24, &self.config, self.cached_cwd.clone()) {
+                        Ok(pair) => pair,
+                        Err(e) => {
+                            log::error!("gpui-shell: failed to spawn terminal for new tab: {e:#}");
+                            return;
+                        }
+                    };
                 let terminal_id = self.next_terminal_id;
                 self.next_terminal_id += 1;
                 self.terminals.insert(terminal_id, terminal);

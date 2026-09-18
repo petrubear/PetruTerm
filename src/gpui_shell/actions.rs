@@ -10,15 +10,18 @@ use std::rc::Rc;
 use gpui::{App, Context};
 
 use super::panes::SplitDir;
-use super::{mouse, rasterize, spawn_terminal, GpuiShellRoot};
+use super::{mouse, rasterize, spawn_terminal_at, GpuiShellRoot};
 
 impl GpuiShellRoot {
     /// Spawn a terminal for a new pane and split the focused one around it.
     /// The new pane's real size is whatever taffy gives it on the next frame
     /// (`pane_view::fit_terminal` resizes the PTY to match), so the spawn
-    /// dimensions here are only a placeholder.
+    /// dimensions here are only a placeholder. Inherits the focused pane's
+    /// CWD (`cached_cwd`, kept live by the poll loop) rather than defaulting
+    /// to the process's own directory.
     pub(super) fn split_focused(&mut self, dir: SplitDir) {
-        let (terminal, gate) = match spawn_terminal(80, 24, &self.config) {
+        let (terminal, gate) = match spawn_terminal_at(80, 24, &self.config, self.cached_cwd.clone())
+        {
             Ok(pair) => pair,
             Err(e) => {
                 log::error!("gpui-shell: failed to spawn terminal for split: {e:#}");
