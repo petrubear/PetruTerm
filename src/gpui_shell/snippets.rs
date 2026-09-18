@@ -104,7 +104,7 @@ mod tests {
             }],
             ..Config::default()
         };
-        let mut word = "xyz".to_string();
+        let word = "xyz".to_string();
         // No terminal available in a unit test -- exercise only the
         // lookup half by checking the trigger search directly, matching
         // the pattern this session's other "logic without a live
