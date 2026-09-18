@@ -26,6 +26,7 @@ mod backend;
 mod composer;
 mod confirm;
 mod file_picker;
+mod header;
 pub(super) mod markdown;
 mod render;
 mod slash_command;

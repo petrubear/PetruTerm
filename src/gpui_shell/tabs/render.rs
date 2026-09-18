@@ -114,30 +114,44 @@ pub fn render_tab_bar(
             }
         })
         .collect();
-    div()
+    let content_row = div()
         .flex()
         .flex_row()
         .items_center()
         .gap_1()
+        // `px_2` here must equal `pane_view.rs`'s own leaf-wrapper `p_2` --
+        // that's what puts the first pill's own left edge directly above the
+        // terminal grid's own left edge (column 0), instead of the pill
+        // sitting further right than the prompt text below it (a live
+        // dogfood screenshot showed the mismatch directly). Nothing adds a
+        // margin on top of this padding: see `divider` below for why the
+        // border-bottom is a separate element instead of living here.
         .px_2()
         .py_1()
         .min_h(super::super::font_state::header_row_min_height())
-        // `mx_2` (not `w_full`): the card wrapping this bar rounds its own
-        // corners (`rounded_lg`, `render.rs`'s `terminal_card`), and a
-        // border-bottom running edge-to-edge would meet that curve at a
-        // sharp square notch -- clipping only touches pixels *within* the
-        // corner radius, and this row's own height already puts its border
-        // well below that band, so nothing clips it. Insetting the row
-        // (and so its border) by the same margin the card's radius spans
-        // lets the divider float clear of both rounded corners instead.
-        .mx_2()
         .flex_shrink_0()
-        .border_b_1()
-        .border_color(to_rgba(colors.ui_border))
         // Same fix as `status_bar::render_status_bar`: without an explicit
         // font, tab labels render in gpui's own default UI font instead of
         // the terminal grid's configured monospace face.
         .font_family(super::super::font_state::font_family())
         .text_size(gpui::px(super::super::font_state::font_size()))
-        .children(cells)
+        .children(cells);
+
+    // A separate element, not `content_row`'s own `border_b_1`: the card
+    // wrapping this bar rounds its own corners (`rounded_lg`, `render.rs`'s
+    // `terminal_card`), and a border spanning the row's full width would
+    // meet that curve at a sharp square notch (clipping only touches pixels
+    // *within* the corner radius, and this row sits well below that band).
+    // Insetting the border alone via `mx_2` lets it float clear of both
+    // corners *without* also pushing `content_row`'s own pills off the grid
+    // alignment above -- margin and padding on the very same element would
+    // have compounded instead.
+    let divider = div().mx_2().h(gpui::px(1.0)).bg(to_rgba(colors.ui_border));
+
+    div()
+        .flex()
+        .flex_col()
+        .flex_shrink_0()
+        .child(content_row)
+        .child(divider)
 }

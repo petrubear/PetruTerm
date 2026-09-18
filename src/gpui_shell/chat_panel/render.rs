@@ -1,5 +1,7 @@
 // gpui chrome migration (M3b Task 1): the chat panel's `div()` tree --
-// drawer frame, header, scrollable message list, composer row.
+// drawer frame, header, scrollable message list, composer row. The header
+// itself moved to `header.rs` in the alignment pass (2026-09-17) to keep
+// this file under the 400-line convention.
 //
 // `src/app/renderer/chat.rs` is the reference for *what* the wgpu build
 // draws (see its `build_panel_header`/`build_panel_messages`), not *how* --
@@ -7,20 +9,6 @@
 // flex elements here, the same "port the logic, rewrite the painting" split
 // `status_bar::render_status_bar` and `tabs::render_tab_bar` already went
 // through.
-//
-// Provider/model name (`build_panel_header`'s left label) IS shown here as
-// of Task 2: `render_chat_panel` takes an extra `&LlmConfig` (the caller
-// already has `&self.config.llm` on hand in `gpui_shell::render`) purely for
-// that label -- `ChatPanelView` itself doesn't need `LlmConfig` for anything
-// else, so this stays a render-time parameter rather than a field.
-//
-// The header's close affordance is a text hint, not a clickable icon: wiring
-// a real click handler needs a `cx.listener` built where `cx` is in scope
-// (`GpuiShellRoot::render`, the same place `tabs::render_tab_bar`'s
-// `on_select_tab` is built), which this function's fixed 2-argument
-// interface has no room for. `Leader a a` (Task 1) and `/q` (Task 2) are the
-// real close paths; a decorative "×" that silently did nothing on click
-// would be worse than no icon at all.
 
 use gpui::{
     div, prelude::*, px, App, Div, FontWeight, MouseButton, MouseDownEvent, ScrollHandle, Window,
@@ -36,6 +24,7 @@ use super::super::font_state;
 use super::super::pane_view::to_rgba;
 use super::composer::render_composer;
 use super::confirm::{render_agent_action_card, render_awaiting_confirm_card};
+use super::header::render_header;
 use super::markdown::render_line;
 use super::{ChatPanelView, MARKDOWN_WRAP_WIDTH};
 
@@ -90,94 +79,6 @@ pub fn render_chat_panel(
             on_explain_last_output,
         ))
         .child(render_composer(view, colors))
-}
-
-fn render_header(
-    panel: &ChatPanel,
-    llm: &LlmConfig,
-    acp_session: Option<&crate::llm::acp::AcpSession>,
-    colors: &ColorScheme,
-) -> impl IntoElement {
-    let status = header_status(panel);
-    let (icon_label, detail) = if let Some(session) = acp_session {
-        (
-            format!("\u{25c8} {}", session.display_name),
-            format!("agent:{}", session.agent_name),
-        )
-    } else {
-        let short_model = short_model_name(&llm.model);
-        (
-            format!("\u{2726} {short_model}"),
-            format!("{}:{}", llm.provider, llm.model),
-        )
-    };
-    div()
-        .flex()
-        .flex_row()
-        .items_center()
-        .justify_between()
-        .flex_shrink_0()
-        .px_3()
-        .py_2()
-        .min_h(font_state::header_row_min_height())
-        // Corner-clash fix -- see `tabs::render_tab_bar`'s doc comment.
-        .mx_2()
-        .border_b_1()
-        .border_color(to_rgba(colors.ui_border))
-        .font_family(font_state::font_family())
-        .text_size(px(font_state::font_size()))
-        .child(
-            div()
-                .flex()
-                .flex_row()
-                .items_center()
-                .gap_2()
-                .child(
-                    div()
-                        .text_color(to_rgba(colors.ui_accent))
-                        .child(icon_label),
-                )
-                .child(
-                    div()
-                        .text_color(to_rgba(colors.ui_muted))
-                        .child(format!("\u{2502} {detail}")),
-                )
-                .when(!status.is_empty(), |el| {
-                    el.child(div().text_color(to_rgba(colors.ui_muted)).child(status))
-                }),
-        )
-        .child(
-            div()
-                .text_color(to_rgba(colors.ui_muted))
-                .child("Leader a a to close"),
-        )
-}
-
-/// Strip a `provider/model:tag` name down to its bare model name -- mirrors
-/// the wgpu build's own `short_chat_header_model_name`
-/// (`src/app/renderer/mod.rs`), minus its char-count truncation: that exists
-/// to fit a fixed terminal-cell header width, which doesn't apply to gpui's
-/// proportional text layout, so the full (short) name is shown here instead
-/// of an 8-character-truncated one.
-fn short_model_name(model: &str) -> &str {
-    model
-        .rsplit('/')
-        .next()
-        .unwrap_or(model)
-        .rsplit(':')
-        .next()
-        .unwrap_or(model)
-}
-
-fn header_status(panel: &ChatPanel) -> String {
-    match &panel.state {
-        PanelState::Hidden | PanelState::Idle => String::new(),
-        PanelState::Loading => "loading…".to_string(),
-        PanelState::Streaming => "streaming…".to_string(),
-        PanelState::Error(msg) => format!("error: {msg}"),
-        PanelState::AwaitingConfirm => "awaiting confirmation".to_string(),
-        PanelState::ConfirmAction(_) => "confirm action".to_string(),
-    }
 }
 
 /// Slop, in pixels, for deciding the message list is "still at the bottom"

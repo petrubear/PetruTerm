@@ -155,22 +155,32 @@ fn render_section_tabs(
         })
         .collect();
 
-    div()
+    let content_row = div()
         .flex()
         .flex_row()
         .items_center()
         .flex_shrink_0()
+        // Must equal `sections.rs`'s own row/label inset (`px_2`/`mx_2`, both
+        // 8px) so the active tab's own pill edge lines up with the section
+        // content's text below it, instead of sitting further right (a live
+        // dogfood screenshot showed the mismatch directly).
         .px_2()
         .py_1()
         .min_h(font_state::header_row_min_height())
-        // `mx_1`: same corner-clash fix as `tabs::render_tab_bar`'s own
-        // header (its own doc comment has the full reasoning) -- smaller
-        // than that bar's `mx_2` since the sidebar's four tab labels are
-        // already width-constrained down to `MIN_SIDEBAR_WIDTH_PX`, and
-        // this card's own `rounded_lg` corner is small enough that 4px
-        // clears it.
-        .mx_1()
-        .border_b_1()
-        .border_color(to_rgba(colors.ui_border))
-        .children(cells)
+        .children(cells);
+
+    // Separate from `content_row`'s own padding for the same reason
+    // `tabs::render_tab_bar`'s own `divider` is -- see that function's doc
+    // comment. `mx_1` (not that bar's `mx_2`): this card's `rounded_lg`
+    // corner is small enough that 4px already clears it, and the sidebar's
+    // four tab labels are already width-constrained down to
+    // `MIN_SIDEBAR_WIDTH_PX`.
+    let divider = div().mx_1().h(px(1.0)).bg(to_rgba(colors.ui_border));
+
+    div()
+        .flex()
+        .flex_col()
+        .flex_shrink_0()
+        .child(content_row)
+        .child(divider)
 }

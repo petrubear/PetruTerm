@@ -94,7 +94,11 @@ pub fn render_workspaces_section(
                 .flex_row()
                 .items_center()
                 .justify_between()
-                .px_3()
+                // `px_2`, matching `render_browser_row`'s/this section's own
+                // row `mx_2` below -- a live dogfood screenshot showed a
+                // plain label at `px_3` sitting to the LEFT of the row
+                // pills' own edge (`mx_2`) instead of lining up with it.
+                .px_2()
                 .pb_2()
                 .text_size(px(10.5))
                 .child(
@@ -268,7 +272,9 @@ fn render_empty_section(message: &str, colors: &ColorScheme) -> Div {
         .flex_col()
         .flex_1()
         .min_h_0()
-        .px_3()
+        // `px_2`, matching every section's own row inset -- see
+        // `render_workspaces_section`'s label row for the full reasoning.
+        .px_2()
         .pt_4()
         .pb_2()
         .text_size(px(11.5))
