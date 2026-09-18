@@ -138,14 +138,6 @@ impl TabManager {
         }
     }
 
-    /// Returns the active tab's accent color, falling back to `default`.
-    pub fn active_accent(&self, default: [f32; 4]) -> [f32; 4] {
-        self.tabs
-            .get(self.active)
-            .and_then(|t| t.accent_color)
-            .unwrap_or(default)
-    }
-
     /// Rename the tab with the given id, wherever it currently sits and
     /// regardless of which tab is active. Returns whether a tab with that id
     /// was found. Used by `gpui_shell`'s rename flow, which pins its edit to

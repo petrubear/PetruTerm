@@ -63,7 +63,6 @@ pub fn render_tab_bar(
         .map(|(idx, tab)| {
             let is_active = idx == active_index;
             let is_renaming = rename.as_ref().is_some_and(|(id, _)| *id == tab.id);
-            let dot_color = to_rgba(tabs.active_accent(colors.ui_accent));
             let on_select = on_select.clone();
             let on_right_click = on_right_click.clone();
             let cell = div()
@@ -84,9 +83,19 @@ pub fn render_tab_bar(
                         on_right_click(idx, event.position, window, cx)
                     },
                 );
-            // Accent dot on the active tab only -- mirrors the mockup's
-            // "colored dot + label" pill rather than a full-width underline.
-            let cell = if is_active {
+            // Accent dot: always shown for the active tab (its own custom
+            // color, or the theme default); shown for an inactive tab only
+            // when it has its own custom color, matching the wgpu build's
+            // own underline (`src/app/renderer/overlay.rs`'s `tab_accent`/
+            // `accent_color.is_some()` split) -- a color assigned via the
+            // tab's right-click menu needs to stay visible at a glance
+            // without switching to that tab (reported live: the dot-only
+            // pass 1 rewrite dropped this, showing color for the active tab
+            // alone), while a plain tab with no assigned color doesn't get
+            // a decorative dot it never asked for.
+            let show_dot = is_active || tab.accent_color.is_some();
+            let cell = if show_dot {
+                let dot_color = to_rgba(tab.accent_color.unwrap_or(colors.ui_accent));
                 cell.child(
                     div()
                         .w(gpui::px(6.0))
