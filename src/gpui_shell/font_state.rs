@@ -6,7 +6,9 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 
-use cosmic_text::{fontdb, Attrs, Buffer, Family, FontSystem, Metrics, Shaping};
+use cosmic_text::{
+    fontdb, Attrs, Buffer, Family, FeatureTag, FontFeatures, FontSystem, Metrics, Shaping,
+};
 use gpui::{px, App, Pixels};
 
 use crate::config::schema::FontConfig;
@@ -65,6 +67,7 @@ pub fn reload_font_config(font_config: FontConfig, cx: &mut App) {
         state.family = new_family;
         state.size = font_config.size;
         state.line_height = font_config.line_height;
+        state.features = font_config.features.clone();
         state.primary_font_id = face_id;
         state.primary_face_ids = primary_face_ids;
         state.ft_cmap = ft_cmap;
@@ -78,6 +81,39 @@ pub fn reload_font_config(font_config: FontConfig, cx: &mut App) {
     crate::gpui_shell::rasterize::evict_all(cx);
 }
 
+/// OpenType features for terminal shaping: MonoLisa's `cv01`-`cv09` character
+/// variants (its `->`/`==`/`!=` ligatures live there, not in calt/liga -- per
+/// MonoLisa's specimen page) plus `config.font.features`. A configured tag
+/// overrides the baseline. Reads `FONT_SYSTEM`, so it must not be called from
+/// inside `with_font_system`.
+pub fn font_features() -> FontFeatures {
+    let configured = FONT_SYSTEM.with_borrow(|state| state.features.clone());
+    let mut features = FontFeatures::new();
+    for tag in [
+        b"cv01", b"cv02", b"cv03", b"cv04", b"cv05", b"cv06", b"cv07", b"cv08", b"cv09",
+    ] {
+        features.enable(FeatureTag::new(tag));
+    }
+    for (tag, value) in parse_features(&configured) {
+        features.set(FeatureTag::new(&tag), value);
+    }
+    features
+}
+
+/// Parses "tag" (= on) or "tag=value" entries; malformed entries are skipped.
+fn parse_features(entries: &[String]) -> Vec<([u8; 4], u32)> {
+    entries
+        .iter()
+        .filter_map(|e| {
+            let (tag, value) = match e.split_once('=') {
+                Some((t, v)) => (t.trim(), v.trim().parse().ok()?),
+                None => (e.trim(), 1),
+            };
+            Some((tag.as_bytes().try_into().ok()?, value))
+        })
+        .collect()
+}
+
 /// `FontSystem` + the real config values that feed shaping/metrics, cached
 /// together so a config reload (`reload_font_config`) has one place to
 /// update all of them consistently.
@@ -89,6 +125,8 @@ struct FontState {
     size: f32,
     /// Line height multiplier — real `config.font.line_height`.
     line_height: f32,
+    /// `config.font.features` ("tag" or "tag=value" strings).
+    features: Vec<String>,
     /// fontdb face ID of the configured primary font. Needed to build a
     /// corrected `CacheKey` when a PUA glyph has to be re-pointed at this
     /// face (see `PuaContext`).
@@ -180,6 +218,7 @@ thread_local! {
             family,
             size: font_config.size,
             line_height: font_config.line_height,
+            features: font_config.features.clone(),
             primary_font_id: face_id,
             primary_face_ids,
             ft_cmap,
@@ -335,4 +374,21 @@ pub(crate) fn with_font_system<R>(f: impl FnOnce(&mut FontSystem, &str, PuaConte
         };
         f(&mut state.font_system, &state.family, pua)
     })
+}
+
+#[cfg(test)]
+mod feature_tests {
+    use super::parse_features;
+
+    #[test]
+    fn parses_tag_and_tag_value() {
+        let got = parse_features(&["calt=1".into(), "ss01=0".into(), "liga".into()]);
+        assert_eq!(got, vec![(*b"calt", 1), (*b"ss01", 0), (*b"liga", 1)]);
+    }
+
+    #[test]
+    fn skips_malformed_entries() {
+        let got = parse_features(&["toolong=1".into(), "cv01=x".into(), "".into()]);
+        assert!(got.is_empty());
+    }
 }

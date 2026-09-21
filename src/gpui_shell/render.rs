@@ -8,6 +8,8 @@ use gpui::{
     div, ease_out_quint, prelude::*, px, Animation, AnimationExt as _, Context, Render, Window,
 };
 
+use crate::config::schema::TitleBarStyle;
+
 use super::pane_view::to_rgba;
 use super::{
     ai_block, chat_panel, context_menu, info_overlay, palette, pane_view, render_callbacks,
@@ -168,6 +170,7 @@ impl Render for GpuiShellRoot {
             terminals: &self.terminals,
             focused: self.workspaces.active().tab_panes[active_index].focused_terminal,
             colors: &self.config.colors,
+            translucent: self.config.window.is_translucent(),
             cell_width,
             cell_height,
             cursor_blink_on: self.cursor_blink_on,
@@ -377,6 +380,17 @@ impl Render for GpuiShellRoot {
                 ))
             });
 
+        // `title_bar_style = "none"` opens the window with a transparent
+        // full-size titlebar (see `bin/gpui_petruterm.rs`); clear the traffic
+        // lights so they don't sit on top of the chrome.
+        let title_inset = if self.config.window.title_bar_style == TitleBarStyle::None {
+            crate::app::TITLEBAR_HEIGHT
+        } else {
+            0.0
+        };
+        let mut root_bg = self.config.colors.background;
+        root_bg[3] = self.config.window.background_alpha();
+
         div()
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::on_key_down))
@@ -389,7 +403,8 @@ impl Render for GpuiShellRoot {
             .size_full()
             .gap(px(CARD_GAP_PX))
             .p(px(CARD_GAP_PX))
-            .bg(to_rgba(self.config.colors.background))
+            .pt(px(CARD_GAP_PX + title_inset))
+            .bg(to_rgba(root_bg))
             .child(middle_row)
             .when_some(status_bar_row, |el, bar| el.child(bar))
             .when(self.info_overlay.is_visible(), |el| {

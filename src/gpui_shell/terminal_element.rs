@@ -28,6 +28,10 @@ pub struct TerminalGridElement {
     pub cell_width: Pixels,
     pub cell_height: Pixels,
     pub colors: crate::config::schema::ColorScheme,
+    /// Window is translucent (`opacity < 1` or blur): skip the opaque base
+    /// fill so the root div's translucent background shows through instead
+    /// of stacking a second layer of alpha on top of it.
+    pub translucent: bool,
     pub is_active: bool,
     pub cursor_blink_on: bool,
     pub on_focus: OnFocusCallback,
@@ -112,8 +116,10 @@ impl Element for TerminalGridElement {
         // color) -- `rasterize::rasterize_grid` skips filling any cell whose
         // resolved background equals `colors.background` on the assumption
         // that this base fill already covers it, so the two must agree.
-        let [r, g, b, a] = self.colors.background;
-        window.paint_quad(fill(bounds, gpui::Rgba { r, g, b, a }));
+        if !self.translucent {
+            let [r, g, b, a] = self.colors.background;
+            window.paint_quad(fill(bounds, gpui::Rgba { r, g, b, a }));
+        }
 
         mouse::register_mouse_handlers(
             self.terminal.clone(),

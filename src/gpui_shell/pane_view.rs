@@ -88,6 +88,8 @@ pub(super) struct PaneRenderCx<'a> {
     /// solid-vs-hollow cursor.
     pub focused: usize,
     pub colors: &'a ColorScheme,
+    /// `config.window.is_translucent()`, forwarded to every leaf's grid element.
+    pub translucent: bool,
     pub cell_width: Pixels,
     pub cell_height: Pixels,
     pub cursor_blink_on: bool,
@@ -204,6 +206,7 @@ pub(super) fn render_leaf(terminal_id: usize, ctx: &PaneRenderCx) -> Div {
             cell_width,
             cell_height,
             colors: ctx.colors.clone(),
+            translucent: ctx.translucent,
             is_active: terminal_id == ctx.focused,
             cursor_blink_on: ctx.cursor_blink_on,
             on_focus,

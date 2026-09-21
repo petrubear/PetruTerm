@@ -1,7 +1,8 @@
 use gpui::{
     actions, prelude::*, px, size, App, Application, Bounds, KeyBinding, Menu, MenuItem,
-    WindowBounds, WindowOptions,
+    WindowBackgroundAppearance, WindowBounds, WindowOptions,
 };
+use petruterm::config::schema::{TitleBarStyle, WindowBlur};
 use petruterm::gpui_shell::{font_state, spawn_config_watcher, GpuiShellRoot};
 
 // gpui has no default app menu/Cmd+Q binding of its own (confirmed against
@@ -53,15 +54,39 @@ fn main() {
             items: vec![MenuItem::action("Quit", Quit)],
         }]);
 
-        let bounds = Bounds::centered(None, size(px(900.0), px(600.0)), cx);
+        let (width, height) = match (config.window.initial_width, config.window.initial_height) {
+            (Some(w), Some(h)) => (w as f32, h as f32),
+            _ => (900.0, 600.0),
+        };
+        let bounds = Bounds::centered(None, size(px(width), px(height)), cx);
+        let window_bounds = if config.window.start_maximized {
+            WindowBounds::Maximized(bounds)
+        } else {
+            WindowBounds::Windowed(bounds)
+        };
+        let window_background = if config.window.blur != WindowBlur::None {
+            WindowBackgroundAppearance::Blurred
+        } else if config.window.opacity < 1.0 {
+            WindowBackgroundAppearance::Transparent
+        } else {
+            WindowBackgroundAppearance::Opaque
+        };
+        let mut options = WindowOptions {
+            window_bounds: Some(window_bounds),
+            window_background,
+            ..Default::default()
+        };
+        // `Custom` and `Native` both keep the standard titlebar (this chrome
+        // draws no titlebar of its own). `None` drops the title and makes the
+        // titlebar transparent/full-size; the traffic lights stay, and
+        // `GpuiShellRoot` insets the chrome to clear them.
+        if config.window.title_bar_style == TitleBarStyle::None {
+            options.titlebar = None;
+        }
         let config = config.clone();
-        cx.open_window(
-            WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(bounds)),
-                ..Default::default()
-            },
-            move |_, cx| cx.new(move |cx| GpuiShellRoot::new(cx, config)),
-        )
+        cx.open_window(options, move |_, cx| {
+            cx.new(move |cx| GpuiShellRoot::new(cx, config))
+        })
         .unwrap();
         cx.activate(true);
     });

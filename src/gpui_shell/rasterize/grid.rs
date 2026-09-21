@@ -19,7 +19,7 @@ use alacritty_terminal::selection::SelectionRange;
 use alacritty_terminal::term::cell::Flags;
 
 use crate::ui::search_bar::SearchMatch;
-use cosmic_text::{Attrs, Buffer, Family, FeatureTag, FontFeatures, Shaping, SwashCache, Wrap};
+use cosmic_text::{Attrs, Buffer, Family, Shaping, SwashCache, Wrap};
 use gpui::{Pixels, RenderImage, Window};
 use image::{Frame, RgbaImage};
 
@@ -222,21 +222,11 @@ pub fn rasterize_grid(
             colors.background,
         );
 
+        let font_features = crate::gpui_shell::font_state::font_features();
         crate::gpui_shell::font_state::with_font_system(|font_system, actual_family, pua| {
             SWASH_CACHE.with_borrow_mut(|swash_cache| {
                 let metrics = cosmic_text::Metrics::new(font_size_px, cell_h_px);
                 let mut buffer = Buffer::new(font_system, metrics);
-
-                // MonoLisa gates its `->`/`==`/`!=`/`>=`-style ligatures
-                // behind OpenType Character Variants, NOT calt/liga/ss0x
-                // (confirmed via MonoLisa's own specimen page: "Arrows
-                // (cv08)", "Equal combinations (cv09)").
-                let mut font_features = FontFeatures::new();
-                for tag in [
-                    b"cv01", b"cv02", b"cv03", b"cv04", b"cv05", b"cv06", b"cv07", b"cv08", b"cv09",
-                ] {
-                    font_features.enable(FeatureTag::new(tag));
-                }
 
                 // Whole grid, ONE multi-line buffer: rows are joined with
                 // '\n' into a single span list and shaped/drawn in one pass

@@ -231,6 +231,24 @@ pub enum WindowBlur {
     Light,
 }
 
+impl WindowConfig {
+    /// Alpha of the window background: `opacity` when below 1.0, a fixed 0.82
+    /// when blur is on (so the vibrancy stays visible), otherwise fully opaque.
+    pub fn background_alpha(&self) -> f32 {
+        if self.opacity < 1.0 {
+            self.opacity
+        } else if self.blur != WindowBlur::None {
+            0.82
+        } else {
+            1.0
+        }
+    }
+
+    pub fn is_translucent(&self) -> bool {
+        self.opacity < 1.0 || self.blur != WindowBlur::None
+    }
+}
+
 impl Default for WindowConfig {
     fn default() -> Self {
         Self {
@@ -430,13 +448,7 @@ impl ColorScheme {
     /// falls back to 0.82 so the vibrancy behind the surface stays visible.
     pub fn clear_color(&self, window: &WindowConfig) -> wgpu::Color {
         let mut c = self.background_wgpu();
-        c.a = if window.opacity < 1.0 {
-            window.opacity as f64
-        } else if window.blur != WindowBlur::None {
-            0.82
-        } else {
-            1.0
-        };
+        c.a = window.background_alpha() as f64;
         c
     }
 
@@ -682,5 +694,17 @@ mod v4_tests {
         w.opacity = 0.2;
         c.apply_blur_translucency(&w);
         assert_eq!(c.ui_surface[3], 0.5);
+    }
+
+    #[test]
+    fn window_background_alpha() {
+        let mut w = WindowConfig::default();
+        assert_eq!(w.background_alpha(), 1.0);
+        assert!(!w.is_translucent());
+        w.blur = WindowBlur::Dark;
+        assert_eq!(w.background_alpha(), 0.82);
+        assert!(w.is_translucent());
+        w.opacity = 0.6;
+        assert_eq!(w.background_alpha(), 0.6);
     }
 }

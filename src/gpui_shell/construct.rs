@@ -36,6 +36,19 @@ impl GpuiShellRoot {
         // to keep this file under the 400-line convention.
         poll::spawn_poll_loop(cx);
 
+        // Mirrors the wgpu app's `CloseRequested` handler; every quit path
+        // (Cmd+Q, palette, last-tab close) goes through `cx.quit()`, so one
+        // app-quit hook covers them all.
+        cx.on_app_quit(|this, _cx| {
+            if this.config.workspaces.auto_save_on_exit {
+                if let Err(e) = this.save_active_workspace() {
+                    log::error!("save_active_workspace on quit: {e}");
+                }
+            }
+            std::future::ready(())
+        })
+        .detach();
+
         let mut workspaces = workspace::WorkspaceManager::new();
         workspaces.new_workspace("ws1");
         workspaces.active_mut().tabs.new_tab("zsh");
