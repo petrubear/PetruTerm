@@ -69,6 +69,8 @@ pub fn render_chat_panel(
             &view.panel,
             llm,
             view.acp_session.as_ref(),
+            view.acp_pending_connect.is_some(),
+            view.llm_init_error.as_deref(),
             colors,
         ))
         .child(render_message_list(

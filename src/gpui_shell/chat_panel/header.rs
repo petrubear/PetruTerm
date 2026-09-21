@@ -12,30 +12,57 @@
 
 use gpui::{div, prelude::*, px};
 
-use crate::config::schema::LlmConfig;
+use crate::config::llm_view::agent_display_name;
+use crate::config::schema::{LlmBackend, LlmConfig};
 use crate::llm::chat_panel::{ChatPanel, PanelState};
 
 use super::super::font_state;
 use super::super::pane_view::to_rgba;
 
+/// `agent_connecting`/`agent_error` distinguish, within `LlmBackend::Agent`,
+/// why `acp_session` is still `None` -- mirrors the wgpu build's own
+/// `build_panel_header` (`src/app/renderer/chat.rs`), which branches on
+/// `backend` first and never falls through to the provider label while in
+/// agent mode. This function used to branch on `acp_session.is_some()`
+/// alone, so it showed the raw `llm.provider`/`llm.model` (e.g. "openrouter")
+/// as if connected any time no session existed yet -- including while the
+/// ACP connect was still spawning, or had failed outright -- even with
+/// `backend = "agent"` configured correctly.
 pub(super) fn render_header(
     panel: &ChatPanel,
     llm: &LlmConfig,
     acp_session: Option<&crate::llm::acp::AcpSession>,
+    agent_connecting: bool,
+    agent_error: Option<&str>,
     colors: &crate::config::schema::ColorScheme,
 ) -> impl IntoElement {
     let status = header_status(panel);
-    let (icon_label, detail) = if let Some(session) = acp_session {
-        (
-            format!("\u{25c8} {}", session.display_name),
-            format!("agent:{}", session.agent_name),
-        )
-    } else {
-        let short_model = short_model_name(&llm.model);
-        (
-            format!("\u{2726} {short_model}"),
-            format!("{}:{}", llm.provider, llm.model),
-        )
+    let (icon_label, detail) = match llm.backend {
+        LlmBackend::Agent => {
+            if let Some(session) = acp_session {
+                (
+                    format!("\u{25c8} {}", session.display_name),
+                    format!("agent:{}", session.agent_name),
+                )
+            } else {
+                let name = agent_display_name(llm.agent.as_ref()).unwrap_or("agent");
+                let state = if agent_connecting {
+                    "connecting…".to_string()
+                } else if let Some(err) = agent_error {
+                    format!("error: {err}")
+                } else {
+                    "not connected".to_string()
+                };
+                (format!("\u{25c8} {name}"), format!("agent:{state}"))
+            }
+        }
+        LlmBackend::Provider => {
+            let short_model = short_model_name(&llm.model);
+            (
+                format!("\u{2726} {short_model}"),
+                format!("{}:{}", llm.provider, llm.model),
+            )
+        }
     };
     let content_row = div()
         .flex()
