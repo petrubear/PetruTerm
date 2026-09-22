@@ -44,6 +44,25 @@ pub fn leader_bindings_view(config: &Config) -> LeaderBindingsView {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct DirectBindingsView {
+    pub bindings: Vec<KeyBind>,
+}
+
+/// Every `config.keys` entry whose `mods` is NOT `"LEADER"` -- the direct
+/// (non-leader) keybind scheme used when `keybind_style = "normal"`.
+/// Mirrors `leader_bindings_view`'s own filter, inverted.
+pub fn direct_bindings_view(config: &Config) -> DirectBindingsView {
+    DirectBindingsView {
+        bindings: config
+            .keys
+            .iter()
+            .filter(|kb| !kb.mods.eq_ignore_ascii_case("LEADER"))
+            .cloned()
+            .collect(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -116,5 +135,37 @@ mod tests {
     #[test]
     fn parse_mods_empty_string_is_no_modifiers() {
         assert_eq!(parse_mods(""), Mods::default());
+    }
+
+    #[test]
+    fn direct_bindings_view_filters_out_leader_case_insensitive() {
+        let config = Config {
+            keys: vec![
+                kb("LEADER", "c", "NewTab"),
+                kb("CMD", "t", "NewTab"),
+                kb("CMD|SHIFT", "w", "CloseTab"),
+                kb("leader", "x", "ClosePane"),
+            ],
+            ..Config::default()
+        };
+        let view = direct_bindings_view(&config);
+        assert_eq!(view.bindings.len(), 2);
+        assert!(view
+            .bindings
+            .iter()
+            .any(|kb| kb.mods == "CMD" && kb.key == "t"));
+        assert!(view
+            .bindings
+            .iter()
+            .any(|kb| kb.mods == "CMD|SHIFT" && kb.key == "w"));
+    }
+
+    #[test]
+    fn direct_bindings_view_empty_when_all_leader() {
+        let config = Config {
+            keys: vec![kb("LEADER", "c", "NewTab")],
+            ..Config::default()
+        };
+        assert!(direct_bindings_view(&config).bindings.is_empty());
     }
 }
