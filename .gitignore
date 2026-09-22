@@ -79,3 +79,6 @@ dist/
 # graphify runtime/local state
 graphify-out/cost.json
 graphify-out/cache/
+
+# subagent-driven-development scratch workspace (ledgers, briefs, review packages)
+.superpowers/
