@@ -27,6 +27,11 @@ pub struct InputHandler {
     pub leader_timeout_ms: u64,
     /// Maps leader-key characters (e.g. "a", "%") → Action, built from `config.keys`.
     pub leader_map: HashMap<String, Action>,
+    /// Maps (modifier set, character) → Action for "normal" keybind style,
+    /// built from `config.keys`'s non-LEADER bindings. Empty (and inert)
+    /// under "tmux" style, since keybinds.lua's tmux table has no non-LEADER
+    /// entries.
+    pub direct_map: HashMap<(crate::config::keybind_view::Mods, String), Action>,
 
     // Mouse state
     pub mouse_pos: (f64, f64),
@@ -84,12 +89,24 @@ impl InputHandler {
             })
             .collect();
 
+        let direct_view = crate::config::keybind_view::direct_bindings_view(config);
+        let direct_map = direct_view
+            .bindings
+            .iter()
+            .filter_map(|kb| {
+                let action = kb.action.parse::<Action>().ok()?;
+                let mods = crate::config::keybind_view::parse_mods(&kb.mods);
+                Some(((mods, kb.key.clone()), action))
+            })
+            .collect();
+
         Self {
             modifiers: Modifiers::default(),
             leader_active: false,
             leader_deadline: None,
             leader_timeout_ms: config.leader.timeout_ms,
             leader_map,
+            direct_map,
             mouse_pos: (0.0, 0.0),
             mouse_left_pressed: false,
             mouse_dragged: false,

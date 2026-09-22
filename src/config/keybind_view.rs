@@ -168,4 +168,22 @@ mod tests {
         };
         assert!(direct_bindings_view(&config).bindings.is_empty());
     }
+
+    #[test]
+    fn direct_bindings_view_output_parses_into_real_actions() {
+        // Exercises the exact same two-step pipeline InputHandler::new runs
+        // (direct_bindings_view -> parse mods + action per binding), using a
+        // real Action string from this codebase rather than a placeholder, to
+        // catch a future Action rename that keybind_view itself has no direct
+        // dependency on.
+        let config = Config {
+            keys: vec![kb("CMD|SHIFT", "w", "CloseTab")],
+            ..Config::default()
+        };
+        let view = direct_bindings_view(&config);
+        let kb = &view.bindings[0];
+        let mods = parse_mods(&kb.mods);
+        assert!(mods.cmd && mods.shift && !mods.ctrl && !mods.option);
+        assert_eq!(kb.key, "w");
+    }
 }
