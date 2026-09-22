@@ -12,6 +12,7 @@ pub struct Config {
     pub max_fps: u32,
     pub leader: LeaderConfig,
     pub keys: Vec<KeyBind>,
+    pub keybind_style: KeybindStyle,
     pub snippets: Vec<SnippetConfig>,
     pub shell: String,
     pub shell_integration: bool,
@@ -94,6 +95,7 @@ impl Default for Config {
             max_fps: 60,
             leader: LeaderConfig::default(),
             keys: vec![],
+            keybind_style: KeybindStyle::default(),
             snippets: vec![],
             shell: std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into()),
             shell_integration: true,
@@ -555,6 +557,19 @@ impl Default for LeaderConfig {
     }
 }
 
+/// Which keybinding scheme is active: the default tmux-style leader-key
+/// scheme, or direct macOS Cmd-combos for users unfamiliar with tmux
+/// conventions. Set via `config.keybind_style` in `keybinds.lua`, which
+/// owns both `config.keys` tables and switches between them on this same
+/// property -- see `config/default/keybinds.lua`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KeybindStyle {
+    #[default]
+    Tmux,
+    Normal,
+}
+
 /// A single snippet entry, parsed from `config.snippets` in Lua.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnippetConfig {
@@ -709,5 +724,10 @@ mod v4_tests {
         assert!(w.is_translucent());
         w.opacity = 0.6;
         assert_eq!(w.background_alpha(), 0.6);
+    }
+
+    #[test]
+    fn keybind_style_defaults_to_tmux() {
+        assert_eq!(Config::default().keybind_style, KeybindStyle::Tmux);
     }
 }

@@ -6,7 +6,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
 
-use super::schema::{AcpAgentConfig, ColorScheme, Config, LlmBackend, TitleBarStyle};
+use super::schema::{AcpAgentConfig, ColorScheme, Config, KeybindStyle, LlmBackend, TitleBarStyle};
 
 fn parse_hex_linear(s: &str) -> [f32; 4] {
     let s = s.trim_start_matches('#');
@@ -371,6 +371,15 @@ fn inject_petruterm_global(lua: &Lua) -> LuaResult<()> {
         "RenameTab",
         "ToggleFullscreen",
         "Quit",
+        "ZoomPane",
+        "ClearAiContext",
+        "NewWorkspace",
+        "CloseWorkspace",
+        "RenameWorkspace",
+        "NextWorkspace",
+        "PrevWorkspace",
+        "SaveWorkspace",
+        "OpenSavedWorkspaces",
     ] {
         action.set(*name, *name)?;
     }
@@ -602,6 +611,13 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
                     .push(super::schema::KeyBind { mods, key, action });
             }
         }
+    }
+
+    if let Ok(style) = table.get::<String>("keybind_style") {
+        config.keybind_style = match style.as_str() {
+            "normal" | "Normal" => KeybindStyle::Normal,
+            _ => KeybindStyle::Tmux,
+        };
     }
 
     if let Ok(llm_table) = table.get::<LuaTable>("llm") {
