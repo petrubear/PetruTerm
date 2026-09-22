@@ -336,6 +336,37 @@ mod tests {
         }
     }
 
+    /// Overrides keybinds.lua's shipped `config.keybind_style = "tmux"` line
+    /// the same way a user editing their own copy of the file would, then
+    /// loads the real config.lua through the real Lua VM -- proving every
+    /// petruterm.action.* name the "normal" table uses is both in the
+    /// whitelist (lua.rs's `action.set` list) and a real Action::from_str
+    /// variant, not just present in the .lua source file.
+    #[test]
+    fn embedded_default_keybinds_normal_style_resolves_every_action() {
+        let normal_keybinds = DEFAULT_KEYBINDS.replacen(
+            "config.keybind_style = \"tmux\"",
+            "config.keybind_style = \"normal\"",
+            1,
+        );
+        let mut preloaded: Vec<(&str, &str)> = EMBEDDED_MODULES
+            .iter()
+            .filter(|(name, _)| *name != "keybinds")
+            .cloned()
+            .collect();
+        preloaded.push(("keybinds", normal_keybinds.as_str()));
+
+        let (config, _lua) =
+            lua::load_config_str(DEFAULT_CONFIG, "default/config.lua", &preloaded)
+                .expect("embedded default config with keybind_style=normal must load");
+        assert_eq!(config.keybind_style, schema::KeybindStyle::Normal);
+        assert_eq!(config.keys.len(), 23);
+        assert!(config
+            .keys
+            .iter()
+            .all(|kb| kb.action.parse::<crate::ui::palette::Action>().is_ok()));
+    }
+
     /// Regression test: `config.colors` set inline in `config.lua`/`ui.lua`
     /// must actually reach the parsed `Config` -- `table_to_config` used to
     /// never read the `colors` key at all (`config` starts as

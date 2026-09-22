@@ -112,8 +112,11 @@ impl std::str::FromStr for Action {
             "ExplainLastOutput" => Ok(Action::ExplainLastOutput),
             "FixLastError" => Ok(Action::FixLastError),
             "UndoLastWrite" => Ok(Action::UndoLastWrite),
+            "ClearAiContext" => Ok(Action::ClearAiContext),
             "ToggleStatusBar" => Ok(Action::ToggleStatusBar),
             "RenameTab" => Ok(Action::RenameTab),
+            "SaveWorkspace" => Ok(Action::SaveWorkspace),
+            "OpenSavedWorkspaces" => Ok(Action::OpenSavedWorkspaces),
             _ => Err(()),
         }
     }
