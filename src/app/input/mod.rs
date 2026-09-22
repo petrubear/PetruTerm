@@ -260,9 +260,92 @@ impl InputHandler {
             return;
         }
 
+        // ── Direct (non-leader) keybind dispatch — "normal" keybind style ──
+        // Inert under "tmux" style: direct_map is empty there (keybinds.lua's
+        // tmux table has no non-LEADER entries), so this never matches.
+        if let Key::Character(s) = &event.logical_key {
+            let mods = crate::config::keybind_view::Mods {
+                cmd,
+                shift,
+                ctrl,
+                option: self.modifiers.state().alt_key(),
+            };
+            if let Some(action) = self.direct_map.get(&(mods, s.to_string())).cloned() {
+                if let Some(rc) = render_ctx.as_mut() {
+                    ui.handle_palette_action(action, mux, rc, config, window, wakeup_proxy);
+                }
+                return;
+            }
+        }
+
+        // ── Hardcoded "normal"-only shortcuts ────────────────────────────
+        // Not config.keys entries: Cmd+B is a plain character but kept
+        // hardcoded to match the existing tmux-style sidebar toggle
+        // (`leader s` / `leader e e`), which is ALSO hardcoded, not
+        // config-driven, today. Cmd+Option/Ctrl+Arrow are Key::Named, never
+        // Key::Character, so they can't be config.keys entries at all (see
+        // this plan's "Corrections to the spec").
+        if config.keybind_style == crate::config::schema::KeybindStyle::Normal {
+            let option = self.modifiers.state().alt_key();
+            if cmd && !shift && !ctrl && !option {
+                if let Key::Character(s) = &event.logical_key {
+                    if s.as_str() == "b" {
+                        self.toggle_sidebar_requested = true;
+                        return;
+                    }
+                }
+            }
+            if cmd && (option || ctrl) && !shift {
+                use crate::ui::panes::FocusDir;
+                let dir_opt = match &event.logical_key {
+                    Key::Named(NamedKey::ArrowLeft) => Some(FocusDir::Left),
+                    Key::Named(NamedKey::ArrowRight) => Some(FocusDir::Right),
+                    Key::Named(NamedKey::ArrowUp) => Some(FocusDir::Up),
+                    Key::Named(NamedKey::ArrowDown) => Some(FocusDir::Down),
+                    _ => match &event.physical_key {
+                        PhysicalKey::Code(KeyCode::ArrowLeft) => Some(FocusDir::Left),
+                        PhysicalKey::Code(KeyCode::ArrowRight) => Some(FocusDir::Right),
+                        PhysicalKey::Code(KeyCode::ArrowUp) => Some(FocusDir::Up),
+                        PhysicalKey::Code(KeyCode::ArrowDown) => Some(FocusDir::Down),
+                        _ => None,
+                    },
+                };
+                if let Some(dir) = dir_opt {
+                    if option {
+                        // Cmd+Option+Arrow: move focus. No config.keys
+                        // equivalent exists for this today either (tmux
+                        // style uses h/j/k/l, not arrows).
+                        if let Some(rc) = render_ctx.as_mut() {
+                            ui.handle_palette_action(
+                                Action::FocusPane(dir),
+                                mux,
+                                rc,
+                                config,
+                                window,
+                                wakeup_proxy,
+                            );
+                        }
+                    } else {
+                        // Cmd+Ctrl+Arrow: resize. No resize_mode tracking
+                        // needed here (unlike the leader+Option+Arrow path
+                        // above) -- Cmd+Ctrl held is itself the complete,
+                        // repeatable trigger; there's no leader state to
+                        // stay latched past.
+                        mux.cmd_adjust_pane_ratio(dir, 0.05);
+                        self.pane_ratio_adjusted = true;
+                    }
+                    return;
+                }
+            }
+        }
+
         // ── Leader key activation — checked BEFORE panel/palette handlers so that
         // Ctrl+B always activates the leader even when the AI panel is focused.
-        if ctrl && !shift && !cmd {
+        if ctrl
+            && !shift
+            && !cmd
+            && config.keybind_style == crate::config::schema::KeybindStyle::Tmux
+        {
             if let Key::Character(s) = &event.logical_key {
                 if s.as_str() == config.leader.key.as_str() {
                     self.leader_active = true;
