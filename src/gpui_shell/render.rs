@@ -380,13 +380,17 @@ impl Render for GpuiShellRoot {
                 ))
             });
 
-        // `title_bar_style = "none"` opens the window with a transparent
-        // full-size titlebar (see `bin/gpui_petruterm.rs`); clear the traffic
-        // lights so they don't sit on top of the chrome.
-        let title_inset = if self.config.window.title_bar_style == TitleBarStyle::None {
-            crate::app::TITLEBAR_HEIGHT
-        } else {
-            0.0
+        // `None` and `Custom` both open the window with a transparent
+        // full-size titlebar (see `bin/gpui_petruterm.rs`) -- `None` drops it
+        // entirely, `Custom` keeps the native drag region/traffic lights but
+        // makes it transparent so they float on the app's own background.
+        // Either way the content view extends under it, so clear the traffic
+        // lights the same way in both cases: don't let the chrome render on
+        // top of them. `Native` keeps the opaque system titlebar, which
+        // already reserves this space itself -- no inset needed.
+        let title_inset = match self.config.window.title_bar_style {
+            TitleBarStyle::None | TitleBarStyle::Custom => crate::app::TITLEBAR_HEIGHT,
+            TitleBarStyle::Native => 0.0,
         };
         let mut root_bg = self.config.colors.background;
         root_bg[3] = self.config.window.background_alpha();

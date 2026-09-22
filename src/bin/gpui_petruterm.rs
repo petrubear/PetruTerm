@@ -1,6 +1,6 @@
 use gpui::{
     actions, prelude::*, px, size, App, Application, Bounds, KeyBinding, Menu, MenuItem,
-    WindowBackgroundAppearance, WindowBounds, WindowOptions,
+    TitlebarOptions, WindowBackgroundAppearance, WindowBounds, WindowOptions,
 };
 use petruterm::config::schema::{TitleBarStyle, WindowBlur};
 use petruterm::gpui_shell::{font_state, spawn_config_watcher, GpuiShellRoot};
@@ -76,12 +76,27 @@ fn main() {
             window_background,
             ..Default::default()
         };
-        // `Custom` and `Native` both keep the standard titlebar (this chrome
+        // `Native` keeps the standard opaque system titlebar (this chrome
         // draws no titlebar of its own). `None` drops the title and makes the
         // titlebar transparent/full-size; the traffic lights stay, and
-        // `GpuiShellRoot` insets the chrome to clear them.
-        if config.window.title_bar_style == TitleBarStyle::None {
-            options.titlebar = None;
+        // `GpuiShellRoot` insets the chrome to clear them. `Custom` keeps the
+        // titlebar (native drag region + traffic lights, unlike `None`) but
+        // makes it transparent too, so the traffic lights float on the app's
+        // own themed background instead of a separate opaque bar -- matching
+        // what the wgpu binary's own Custom mode already does via raw AppKit
+        // calls (`App::apply_macos_custom_titlebar`), but through gpui's own
+        // first-class `appears_transparent` option instead. Same
+        // `GpuiShellRoot` inset as `None` (below) applies here too, since a
+        // transparent titlebar also extends the content view full-size.
+        match config.window.title_bar_style {
+            TitleBarStyle::None => options.titlebar = None,
+            TitleBarStyle::Custom => {
+                options.titlebar = Some(TitlebarOptions {
+                    appears_transparent: true,
+                    ..Default::default()
+                })
+            }
+            TitleBarStyle::Native => {}
         }
         let config = config.clone();
         cx.open_window(options, move |_, cx| {
