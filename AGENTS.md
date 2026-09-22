@@ -130,6 +130,10 @@ the full phase history.
 
 Leader key: `Ctrl+F` (timeout 1000ms)
 
+Two keybind styles are available via `config.keybind_style` in `keybinds.lua` (default
+`"tmux"`, shown below). `"normal"` gives direct macOS Cmd-combos instead — see
+`config/default/keybinds.lua`'s own "normal" table for the full list.
+
 | Keybind                | Action                                     |
 | ---------------------- | ------------------------------------------ |
 | `Cmd+C / Cmd+V`        | Copy / paste                               |
