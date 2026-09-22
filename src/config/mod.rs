@@ -111,17 +111,22 @@ pub fn load() -> Result<(Config, mlua::Lua)> {
     }
     // Always ensure all config files exist (idempotent — skips files already present).
     ensure_default_configs(&dir)?;
-    install_shell_integration(&dir)?;
 
     update_managed_configs(&dir);
 
-    if path.exists() {
+    let (config, lua) = if path.exists() {
         log::info!("Loading config: {}", path.display());
-        lua::load_config(&path)
+        lua::load_config(&path)?
     } else {
         log::warn!("Config file not found; using built-in defaults");
-        lua::load_config_str(DEFAULT_CONFIG, "default/config.lua", EMBEDDED_MODULES)
+        lua::load_config_str(DEFAULT_CONFIG, "default/config.lua", EMBEDDED_MODULES)?
+    };
+
+    if config.shell_integration {
+        install_shell_integration(&dir)?;
     }
+
+    Ok((config, lua))
 }
 
 /// Reload the config (called by hot-reload watcher).

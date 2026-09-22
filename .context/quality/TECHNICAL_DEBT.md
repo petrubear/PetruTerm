@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-09-17
-**Open Items:** 3
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 3 | **gpui M5/M3:** 0 (TD-GPUI-01..06 + ACP todos RESUELTOS, 2026-09-17) | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 4
+**Last Updated:** 2026-09-22
+**Open Items:** 0
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0 (GRAPH-ARCH-01-A/B/C todos cerrados, 2026-09-22) | **gpui M5/M3:** 0 (TD-GPUI-01..06 + ACP todos RESUELTOS, 2026-09-17) | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 4
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -146,11 +146,11 @@ GRAPH-ARCH-01 — COMPLETA (2026-07-25). Loose ends: GRAPH-ARCH-01-A/B/C (backlo
 
 ## P3 — Prioridad baja / Backlog
 
-**GRAPH-ARCH-01-A** — ABIERTO (2026-07-25). `LlmRuntimeView.provider_cfg` (`src/config/llm_view.rs`) re-exporta el `LlmConfig` completo (incluyendo `api_key: Option<SecretString>`, `base_url`, `context_lines`, `features`, `ui`) en vez de solo `provider`/`model`, que es todo lo que sus consumidores actuales leen (`src/app/renderer/chat.rs::build_panel_header`, `src/app/ui/providers.rs`). Esto reintroduce el mismo alcance amplio de `Config` que la vista debía eliminar — en particular, expone `api_key` a través de una vista consumida por el renderer. Señalado por la revisión final de la segunda tanda de GRAPH-ARCH-01. Fix sugerido: reducir `provider_cfg` a los dos campos usados, o separar un `LlmProviderView` más angosto.
+**GRAPH-ARCH-01-A** — CERRADO COMO NO-ACCIONABLE (2026-09-22). Reinvestigado: `provider_cfg` **no** puede reducirse a `provider`/`model`. `src/app/ui/mod.rs:313` y `src/app/ui/providers.rs:88` pasan `&view.provider_cfg` completo a `crate::llm::build_provider()`, cuyos `from_config()` (openrouter/ollama/lmstudio/copilot) leen `api_key`, `base_url` y otros campos según el provider — no solo los dos que `build_panel_header` usa. El hallazgo original de 2026-07-25 no había rastreado ese call site. `api_key` viaja a través de la vista porque el consumidor real (`build_provider`) lo necesita; no es scope creep. Sin fix — la premisa era incorrecta.
 
-**GRAPH-ARCH-01-B** — ABIERTO (2026-07-25). Existe una tercera copia de la lógica de derivación de nombre de agente (`display_name` → basename de `command` → `command`) en `src/llm/acp/mod.rs:50-58`, además de las dos que ya comparten el helper `agent_display_name()` (`src/config/llm_view.rs`). No cuenta contra el cierre del dominio LLM porque toma `&AcpAgentConfig` directamente en vez de `&Config`, pero es la misma regla escrita una tercera vez. Fix sugerido: adaptar esa llamada para reusar `agent_display_name()` (necesita un `String` propio ahí, a diferencia de los otros dos sitios).
+**GRAPH-ARCH-01-B** — RESUELTO (2026-09-22). `src/llm/acp/mod.rs::AcpSession::connect` ahora llama `agent_display_name(Some(cfg))` (import de `crate::config::llm_view`) para derivar `display_name`, en vez de reimplementar el fallback `display_name → basename`. `agent_name` (basename puro, campo separado del struct) se sigue calculando aparte porque su semántica es distinta (siempre basename, nunca el display_name custom). `cargo check`/`clippy -D warnings`/`cargo test --bin petruterm` (152 tests) limpios en ambos binarios.
 
-**GRAPH-ARCH-01-C** — ABIERTO (2026-07-25). `config.shell_integration` (schema + parseado por el loader de Lua, `src/config/lua.rs:523-524`) no se lee en ningún punto de `src/` para activar/desactivar nada — `install_shell_integration()` (`src/config/mod.rs:112`) se llama incondicionalmente. O es un knob muerto que debería eliminarse, o falta el gate que lo respete. Encontrado durante el survey sitewide de campos de `Config` de GRAPH-ARCH-01; no bloqueaba ese trabajo porque tiene 0 call-sites de lectura (no hay duplicación que resolver), pero merece una decisión.
+**GRAPH-ARCH-01-C** — RESUELTO (2026-09-22). `install_shell_integration()` ahora está gateado por `config.shell_integration` en `src/config/mod.rs::load()`. Requirió reordenar `load()`: el config se parsea (`lua::load_config`/`load_config_str`) **antes** de decidir si instalar shell integration, en vez de instalar incondicionalmente antes de tener el `Config` parseado (el orden original no podía leer el campo porque el parseo pasaba después). `reload()` no llamaba `install_shell_integration()` — sin cambios ahí. Decisión del usuario: "wire it up" en vez de eliminar el knob.
 
 **AUDIT-DEP-01** — WATCH (2026-07-25). `cargo audit` ignora `RUSTSEC-2026-0192` (`ttf-parser` 0.25.1, unmaintained, sin versión parcheada) en `.cargo/audit.toml`. A diferencia de los demás ignores de este archivo, SÍ es alcanzable en macOS: llega vía `fontdb 0.23.0 → cosmic-text → petruterm`, usado para parseo de metadata/familia de fuentes (no shaping — el shaper de cosmic-text, `harfrust`, ya depende de `skrifa`, la alternativa que la propia advisory recomienda). `fontdb` 0.23.0 sigue siendo su última release y no ha migrado su parseo interno a `skrifa` todavía, así que no hay nada que actualizar o parchear de nuestro lado. Quitar el ignore cuando `fontdb` adopte `skrifa` upstream.
 
@@ -340,5 +340,5 @@ Phase 9: COMPLETA, verificada y MERGEADA a master (2026-07-03, v0.3.0) — TD-P9
 GRAPH-ARCH-01: COMPLETA (2026-07-25) — LLM domain + keys/leader view + font/max_fps consolidation, todo en master.
 Migración gpui: COMPLETA (2026-09-17) — TD-GPUI-01..06 + TD-GPUI-ACP RESUELTOS, mergeada a master (2026-09-17, gpui-petruterm 1.0.0).
 Watch: AUDIT-CLEAN-02, AUDIT-PERF-10, TD-P9-07, AUDIT-DEP-01
-Backlog abierto (P3): GRAPH-ARCH-01-A, GRAPH-ARCH-01-B, GRAPH-ARCH-01-C
+Backlog abierto (P3): ninguno. GRAPH-ARCH-01-A cerrado no-accionable, GRAPH-ARCH-01-B/C resueltos (2026-09-22).
 ```

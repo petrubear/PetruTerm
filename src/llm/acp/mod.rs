@@ -11,6 +11,7 @@ use anyhow::Result;
 use parking_lot::Mutex;
 use tokio::sync::{mpsc, oneshot};
 
+use crate::config::llm_view::agent_display_name;
 use crate::config::schema::AcpAgentConfig;
 use crate::llm::chat_panel::AiEvent;
 
@@ -61,10 +62,9 @@ impl AcpSession {
             .and_then(|n| n.to_str())
             .unwrap_or(&cfg.command)
             .to_string();
-        let display_name = cfg
-            .display_name
-            .clone()
-            .unwrap_or_else(|| agent_name.clone());
+        let display_name = agent_display_name(Some(cfg))
+            .unwrap_or(&agent_name)
+            .to_string();
 
         let (prompt_tx, prompt_rx) = mpsc::channel::<PromptMsg>(4);
         let (ready_tx, ready_rx) = oneshot::channel::<Result<()>>();
