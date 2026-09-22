@@ -1,5 +1,6 @@
 use anyhow::{anyhow, bail, Result};
 use cosmic_text::{fontdb, FontSystem};
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use crate::config::schema::FontConfig;
@@ -87,7 +88,8 @@ pub fn build_font_system(
         face_index,
     );
 
-    let font_system = FontSystem::new_with_locale_and_db("en-US".to_string(), db);
+    let mut font_system = FontSystem::new_with_locale_and_db("en-US".to_string(), db);
+    register_variable_weights(&mut font_system, &actual_family);
     Ok((
         font_system,
         actual_family,
@@ -95,6 +97,71 @@ pub fn build_font_system(
         font_location.path,
         face_index,
     ))
+}
+
+/// Weights offered for variable faces.
+const VARIABLE_WEIGHTS: [u16; 9] = [100, 200, 300, 400, 500, 600, 700, 800, 900];
+
+/// Base family of a Nerd Font patch: "MonoLisaCode Nerd Font Mono" -> "MonoLisaCode".
+fn base_family(family: &str) -> Option<&str> {
+    let i = family.to_ascii_lowercase().find(" nerd font")?;
+    Some(&family[..i])
+}
+
+/// Makes variable-weight faces selectable at every weight in their `wght` range,
+/// under `family`.
+///
+/// cosmic-text only selects a face whose fontdb weight equals the requested one,
+/// and fontdb registers a variable font once, at its default weight -- so a Bold
+/// request skips a variable family and falls through to the platform fallback
+/// (Menlo on macOS). Registering extra faces for the same file lets the request
+/// match, and cosmic-text then applies the `wght` axis itself.
+///
+/// Sources are `family`'s own variable faces plus those of its non-Nerd-Font
+/// base family: Nerd Font patches are usually static (no bold), so bold has to
+/// come from the base font. A (style, weight) that `family` already provides is
+/// never replaced, so the patched regular/italic faces (with their icons) stay.
+fn register_variable_weights(font_system: &mut FontSystem, family: &str) {
+    let names: Vec<&str> = std::iter::once(family).chain(base_family(family)).collect();
+    let in_family = |f: &fontdb::FaceInfo, name: &str| {
+        f.families.iter().any(|(n, _)| n.eq_ignore_ascii_case(name))
+    };
+    let sources: Vec<fontdb::FaceInfo> = font_system
+        .db()
+        .faces()
+        .filter(|f| names.iter().any(|n| in_family(f, n)))
+        .cloned()
+        .collect();
+    let mut provided: HashSet<(fontdb::Style, u16)> = font_system
+        .db()
+        .faces()
+        .filter(|f| in_family(f, family))
+        .map(|f| (f.style, f.weight.0))
+        .collect();
+
+    for src in sources {
+        let Some(font) = font_system.get_font(src.id, src.weight) else {
+            continue;
+        };
+        let Some((min, max)) = font
+            .as_swash()
+            .variations()
+            .find_by_tag(u32::from_be_bytes(*b"wght"))
+            .map(|v| (v.min_value(), v.max_value()))
+        else {
+            continue;
+        };
+        for weight in VARIABLE_WEIGHTS {
+            if !(min..=max).contains(&f32::from(weight)) || !provided.insert((src.style, weight)) {
+                continue;
+            }
+            let mut info = src.clone();
+            info.id = fontdb::ID::dummy();
+            info.weight = fontdb::Weight(weight);
+            info.families = vec![(family.to_string(), fontdb::Language::English_UnitedStates)];
+            font_system.db_mut().push_face_info(info);
+        }
+    }
 }
 
 /// Locates the user-selected font for LCD AA and sets font_path in the config.
@@ -124,4 +191,19 @@ pub fn locate_font_for_lcd(font_config: &mut FontConfig) {
         .lock()
         .insert(font_config.family.clone(), path.clone());
     font_config.font_path = path;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::base_family;
+
+    #[test]
+    fn strips_nerd_font_suffix() {
+        assert_eq!(base_family("MonoLisaCode Nerd Font"), Some("MonoLisaCode"));
+        assert_eq!(
+            base_family("JetBrainsMono Nerd Font Mono"),
+            Some("JetBrainsMono")
+        );
+        assert_eq!(base_family("Menlo"), None);
+    }
 }

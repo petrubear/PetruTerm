@@ -244,6 +244,9 @@ impl WindowConfig {
         }
     }
 
+    // Read by gpui_shell::render, which only exists in lib.rs's module tree --
+    // main.rs's separate `mod config` compiles this impl too, where it's unread.
+    #[allow(dead_code)]
     pub fn is_translucent(&self) -> bool {
         self.opacity < 1.0 || self.blur != WindowBlur::None
     }
