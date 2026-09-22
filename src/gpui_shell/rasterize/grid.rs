@@ -300,7 +300,7 @@ pub fn rasterize_grid(
         // gpui's sprite atlas stores images as BGRA with straight alpha
         // (verified against gpui 0.2.2's `elements/img.rs` decode path,
         // which does the same swap for plain RGBA-decoded images).
-        for pixel in rgba_image.chunks_exact_mut(4) {
+        for pixel in rgba_image.as_chunks_mut::<4>().0 {
             pixel.swap(0, 2);
         }
 
