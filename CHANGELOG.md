@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.2] — 2026-09-22
+
+### Added
+- Bold text now renders at its real weight on variable-font families patched with Nerd Font icons (e.g. MonoLisaCode Nerd Font) instead of silently falling back to Regular or a platform substitute.
+
+### Fixed
+- `gpui-petruterm`'s `Custom` titlebar is now transparent, matching the wgpu binary: native traffic lights float on the app's own themed background instead of a separate opaque system bar.
+- `config.shell_integration` now actually gates shell-integration install (was parsed but never read).
+
+---
+
 ## [1.0.1] — 2026-09-17
 
 ### Fixed
