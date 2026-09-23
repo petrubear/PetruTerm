@@ -267,7 +267,7 @@ impl Render for GpuiShellRoot {
                 self.exit_code.cache,
                 self.workspaces.active().zoomed_pane.is_some(),
                 self.config.status_bar.style.clone(),
-                self.battery.cache,
+                self.battery.cache.map(|s| (s.percent, s.on_battery)),
                 &sb_colors,
             );
             status_bar::render_status_bar(&bar, &sb_colors)

@@ -1629,7 +1629,7 @@ impl App {
                 let active = match self.config.battery_saver {
                     BatterySaverMode::Always => true,
                     BatterySaverMode::Never => false,
-                    BatterySaverMode::Auto => status.on_battery,
+                    BatterySaverMode::Auto => status.on_battery || status.low_power_mode,
                 };
                 let changed = self.battery_saver_active != active
                     || self

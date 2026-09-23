@@ -1,6 +1,12 @@
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BatteryStatus {
     pub on_battery: bool,
     pub percent: u8,
+    /// macOS system-wide Low Power Mode (`NSProcessInfo.isLowPowerModeEnabled`)
+    /// -- distinct from `on_battery`: a laptop can have it on while plugged
+    /// in (e.g. thermal/user choice), which `on_battery` alone would miss
+    /// for `BatterySaverMode::Auto`. Always `false` on non-macOS.
+    pub low_power_mode: bool,
 }
 
 /// Query the current battery status. Returns None on non-macOS or desktop (no battery).
@@ -99,9 +105,12 @@ mod macos {
                     let current = cfdict_i32(desc, "Current Capacity").unwrap_or(0);
                     let max = cfdict_i32(desc, "Max Capacity").unwrap_or(100).max(1);
                     let percent = ((current as f32 / max as f32) * 100.0).clamp(0.0, 100.0) as u8;
+                    let low_power_mode =
+                        objc2_foundation::NSProcessInfo::processInfo().isLowPowerModeEnabled();
                     Some(BatteryStatus {
                         on_battery,
                         percent,
+                        low_power_mode,
                     })
                 } else {
                     None

@@ -24,7 +24,7 @@ mod exit_code;
 mod git;
 mod render;
 
-pub use battery::{poll_battery, BatteryState};
+pub use battery::{poll_battery, resolve_battery_saver_active, BatteryState};
 pub use exit_code::ExitCodeState;
 pub use git::{poll_git_branch, GitBranchState};
 pub use render::render_status_bar;
