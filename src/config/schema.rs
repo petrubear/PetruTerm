@@ -439,6 +439,7 @@ impl ColorScheme {
         scheme
     }
 
+    #[cfg(test)]
     pub fn dracula_pro() -> Self {
         fn hex(s: &str) -> [f32; 4] {
             let s = s.trim_start_matches('#');
