@@ -60,7 +60,7 @@ pub struct StatusBarConfig {
     pub position: StatusBarPosition,
     pub style: StatusBarStyle,
     /// Run `git status --porcelain` to show dirty indicator (`*`) next to branch name.
-    /// Disabled by default: costs an extra subprocess every 5 s on top of `git branch`.
+    /// Costs an extra subprocess every 5 s on top of `git branch`.
     pub git_dirty_check: bool,
 }
 
@@ -69,8 +69,8 @@ impl Default for StatusBarConfig {
         Self {
             enabled: true,
             position: StatusBarPosition::Bottom,
-            style: StatusBarStyle::Plain,
-            git_dirty_check: false,
+            style: StatusBarStyle::Powerline,
+            git_dirty_check: true,
         }
     }
 }
@@ -86,9 +86,9 @@ pub enum StatusBarPosition {
 #[serde(rename_all = "snake_case")]
 pub enum StatusBarStyle {
     /// Plain text separators: ` › ` between left segments, ` │ ` between right segments.
-    #[default]
     Plain,
     /// Nerd Font powerline arrows:  (U+E0B0) for left,  (U+E0B2) for right.
+    #[default]
     Powerline,
 }
 
@@ -96,12 +96,12 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             font: FontConfig::default(),
-            colors: ColorScheme::dracula_pro(),
+            colors: ColorScheme::petru_dark(),
             window: WindowConfig::default(),
-            input_syntax_highlight: true,
-            input_ghost_text: true,
+            input_syntax_highlight: false,
+            input_ghost_text: false,
             status_bar: StatusBarConfig::default(),
-            scrollback_lines: 5_000,
+            scrollback_lines: 10_000,
             enable_scroll_bar: true,
             max_fps: 60,
             gpu_preference: GpuPreference::default(),
@@ -149,10 +149,10 @@ pub enum GpuPreference {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum NotificationStyle {
-    /// Render a GPU overlay toast inside the terminal window (default).
-    #[default]
+    /// Render a GPU overlay toast inside the terminal window.
     Toast,
-    /// Deliver via macOS Notification Center (requires notification permission).
+    /// Deliver via macOS Notification Center (requires notification permission) (default).
+    #[default]
     Native,
 }
 
@@ -164,7 +164,7 @@ pub struct NotificationsConfig {
 impl Default for NotificationsConfig {
     fn default() -> Self {
         Self {
-            style: NotificationStyle::Toast,
+            style: NotificationStyle::Native,
         }
     }
 }
@@ -201,11 +201,11 @@ pub struct FontConfig {
 impl Default for FontConfig {
     fn default() -> Self {
         Self {
-            family: "JetBrainsMono Nerd Font Mono".into(),
-            size: 15.0,
+            family: "MonolisaCode Nerd Font".into(),
+            size: 16.0,
             line_height: 1.4,
             features: vec!["calt=1".into(), "liga=1".into(), "dlig=1".into()],
-            lcd_antialiasing: false,
+            lcd_antialiasing: true,
             font_path: None,
         }
     }
@@ -264,10 +264,10 @@ impl Default for WindowConfig {
             start_maximized: true,
             title_bar_style: TitleBarStyle::Custom,
             padding: Padding {
-                left: 20,
-                right: 20,
+                left: 10,
+                right: 10,
                 top: 5, // gap below the titlebar; the titlebar height itself is added internally
-                bottom: 10,
+                bottom: 5,
             },
             opacity: 1.0,
             blur: WindowBlur::None,
@@ -385,6 +385,58 @@ impl ColorScheme {
                 1.0,
             ];
         }
+    }
+
+    /// PetruTheme Dark -- the shipped default (mirrors config/default/ui.lua).
+    /// `ui_border` is left to `derive_ui_colors`, like the Lua default does.
+    pub fn petru_dark() -> Self {
+        fn hex(s: &str) -> [f32; 4] {
+            let s = s.trim_start_matches('#');
+            let r = u8::from_str_radix(&s[0..2], 16).unwrap_or(0) as f32 / 255.0;
+            let g = u8::from_str_radix(&s[2..4], 16).unwrap_or(0) as f32 / 255.0;
+            let b = u8::from_str_radix(&s[4..6], 16).unwrap_or(0) as f32 / 255.0;
+            [r, g, b, 1.0]
+        }
+        let [r, g, b, _] = hex("#0c0e11");
+        let mut scheme = Self {
+            foreground: hex("#eef0f2"),
+            background: hex("#13171b"),
+            cursor_bg: hex("#fc9783"),
+            cursor_fg: hex("#eef0f2"),
+            cursor_border: hex("#fc9783"),
+            selection_bg: hex("#3b4754"),
+            selection_fg: hex("#ccd1d7"),
+            ansi: [
+                hex("#3b4754"),
+                hex("#fc83a5"),
+                hex("#8dfc83"),
+                hex("#fcd583"),
+                hex("#83b1fc"),
+                hex("#fc83dc"),
+                hex("#83fce8"),
+                hex("#ccd1d7"),
+            ],
+            brights: [
+                hex("#4c5b6c"),
+                hex("#fdabc2"),
+                hex("#b2fdab"),
+                hex("#fde2ab"),
+                hex("#abcafd"),
+                hex("#fdabe7"),
+                hex("#abfdef"),
+                hex("#e3e6e9"),
+            ],
+            ui_accent: hex("#b983fc"),
+            ui_surface: hex("#0c0e11"),
+            ui_surface_active: hex("#3b4754"),
+            ui_surface_hover: hex("#1f262d"),
+            ui_muted: hex("#a4adb7"),
+            ui_success: hex("#8dfc83"),
+            ui_overlay: [r, g, b, 0xf2 as f32 / 255.0],
+            ui_border: [0.0; 4],
+        };
+        scheme.derive_ui_colors();
+        scheme
     }
 
     pub fn dracula_pro() -> Self {

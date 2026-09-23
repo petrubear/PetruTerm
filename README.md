@@ -134,7 +134,7 @@ return config
 | `config.font_size`        | number   | `16`                                                                   | Font size in points.                                                                                                 |
 | `config.font_line_height` | number   | `1.4`                                                                  | Line-height multiplier.                                                                                              |
 | `config.font_features`    | string[] | `{"calt=1","liga=1","dlig=1"}`                                         | HarfBuzz OpenType feature tags.                                                                                      |
-| `config.lcd_antialiasing` | bool     | `false`                                                                | Enable FreeType LCD subpixel antialiasing (`petruterm` wgpu binary only).                                            |
+| `config.lcd_antialiasing` | bool     | `true`                                                                 | Enable FreeType LCD subpixel antialiasing (`petruterm` wgpu binary only).                                            |
 
 ```lua
 config.font         = petruterm.font("Monolisa Nerd Font, JetBrainsMono Nerd Font Mono")
@@ -191,7 +191,7 @@ config.colors = {
 | Key               | Type        | Default                                  | Description                                                                                                                          |
 | ----------------- | ----------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `title_bar_style` | string      | `"custom"`                               | `"custom"` — transparent title bar, draggable content area (macOS). `"native"` — standard OS title bar. `"none"` — fully borderless. |
-| `padding`         | table       | `{left=20, right=20, top=5, bottom=10}`  | Inner padding in physical pixels. With `"custom"`, `top` is the gap below the titlebar; the titlebar height is added internally.     |
+| `padding`         | table       | `{left=10, right=10, top=5, bottom=5}`    | Inner padding in physical pixels. With `"custom"`, `top` is the gap below the titlebar; the titlebar height is added internally.     |
 | `start_maximized` | bool        | `true`                                   | Launch maximized.                                                                                                                    |
 | `initial_width`   | number\|nil | `nil`                                    | Initial window width in pixels (overrides `start_maximized`).                                                                        |
 | `initial_height`  | number\|nil | `nil`                                    | Initial window height in pixels.                                                                                                     |
@@ -218,7 +218,7 @@ When `blur` is set (or `opacity < 1.0`), panel and sidebar backgrounds (`ui_surf
 | ---------------------------- | ------ | ---------- | ------------------------------------------------------------ |
 | `config.status_bar.enabled`  | bool   | `true`     | Show the status bar. Also togglable via command palette.     |
 | `config.status_bar.position` | string | `"bottom"` | `"bottom"` or `"top"`.                                       |
-| `config.status_bar.style`    | string | `"plain"`  | `"plain"` text separators or `"powerline"` Nerd Font arrows. |
+| `config.status_bar.style`    | string | `"powerline"` | `"plain"` text separators or `"powerline"` Nerd Font arrows. |
 
 The status bar shows (left to right): **leader mode indicator** (turns purple when active), **current directory**, **git branch** (with `*` if dirty), and on the right: **last exit code** (only when non-zero, in red) and **date/time**.
 
@@ -235,11 +235,11 @@ config.status_bar = {
 
 | Key                                 | Type   | Default       | Description                                                                                                                  |
 | ----------------------------------- | ------ | ------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `config.scrollback_lines`           | number | `5000`        | Maximum scrollback buffer depth per pane.                                                                                    |
+| `config.scrollback_lines`           | number | `10000`       | Maximum scrollback buffer depth per pane.                                                                                    |
 | `config.enable_scroll_bar`          | bool   | `true`        | Show the 6 px scroll bar on the right edge when scrollback is active.                                                        |
 | `config.max_fps`                    | number | `60`          | Target render frame rate.                                                                                                    |
 | `config.gpu_preference`             | string | `"low_power"` | GPU selection preference: `"high_performance"`, `"low_power"`, or `"none"`.                                                  |
-| `config.status_bar.git_dirty_check` | bool   | `false`       | Poll `git status --porcelain` for a dirty marker in the status bar.                                                          |
+| `config.status_bar.git_dirty_check` | bool   | `true`        | Poll `git status --porcelain` for a dirty marker in the status bar.                                                          |
 | `config.battery_saver`              | string | `"auto"`      | Battery saver policy: `"auto"`, `"always"`, or `"never"`.                                                                    |
 
 ```lua
@@ -524,7 +524,7 @@ security find-generic-password -s PetruTerm -a GITHUB_COPILOT_OAUTH_TOKEN -w
 
 | Key                        | Type   | Default   | Description                                            |
 | --------------------------- | ------ | --------- | ---------------------------------------------------------- |
-| `config.notifications.style` | string | `"toast"` | `"toast"` — in-app toast notifications. `"native"` — macOS Notification Center. |
+| `config.notifications.style` | string | `"native"` | `"toast"` — in-app toast notifications. `"native"` — macOS Notification Center. |
 
 ```lua
 config.notifications = { style = "native" }
