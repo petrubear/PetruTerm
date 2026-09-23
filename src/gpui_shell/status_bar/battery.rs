@@ -1,16 +1,5 @@
-// gpui chrome migration (post-M5 dogfood): the battery widget, reported
-// live as missing from gpui_shell's status bar even though `StatusBar::
-// build` (this module's own parent) has always accepted a `battery`
-// parameter and rendered it -- `render.rs`'s call site just hardcoded
-// `None`. `src/platform/battery.rs` (IOKit FFI, `BatteryStatus { on_battery,
-// percent }`) is already binary-agnostic; this only wires it into
-// gpui_shell's own poll loop and caches the result the same way `git.rs`
-// caches a git-branch fetch.
-//
-// Unlike git branch, no async bridge is needed: `platform::battery::query()`
-// is a synchronous, local IOKit call (no subprocess, no blocking I/O), the
-// same reason the wgpu build's own `poll_low_freq_tasks`
-// (`src/app/mod.rs:1614`) calls it directly rather than spawning it.
+// The battery widget's poll/cache state. `platform::battery::query()` is a
+// synchronous local IOKit call, so no async bridge is needed.
 
 use std::time::{Duration, Instant};
 

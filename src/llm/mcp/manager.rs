@@ -7,8 +7,8 @@ use super::config::McpConfig;
 
 /// Manages all active MCP server connections for a workspace session.
 ///
-/// Lifecycle: created in `UiManager`, started when the AI panel opens,
-/// stopped when the app exits (Drop kills child processes via `kill_on_drop`).
+/// Lifecycle: created and started at startup (when `llm.enabled`), and rebuilt
+/// on config reload.
 #[derive(Default)]
 pub struct McpManager {
     clients: HashMap<String, McpClient>,
@@ -74,7 +74,6 @@ impl McpManager {
     }
 
     /// All raw tool definitions (used for display / palette).
-    #[allow(dead_code)]
     pub fn all_tools(&self) -> Vec<(String, &McpTool)> {
         self.clients
             .iter()
@@ -98,12 +97,6 @@ impl McpManager {
         client.call_tool(tool_name, arguments).await
     }
 
-    /// True if at least one server is connected.
-    #[allow(dead_code)]
-    pub fn is_active(&self) -> bool {
-        !self.clients.is_empty()
-    }
-
     /// Returns the server name that owns `tool_name`, or `None` if not found.
     pub fn server_for_tool(&self, tool_name: &str) -> Option<&str> {
         self.tool_routes.get(tool_name).map(String::as_str)
@@ -112,12 +105,6 @@ impl McpManager {
     /// Number of currently connected MCP servers.
     pub fn connected_count(&self) -> usize {
         self.clients.len()
-    }
-
-    /// Server names currently connected.
-    #[allow(dead_code)]
-    pub fn server_names(&self) -> Vec<&str> {
-        self.clients.keys().map(String::as_str).collect()
     }
 
     /// Tools exposed by a specific server. Returns empty slice if not connected.

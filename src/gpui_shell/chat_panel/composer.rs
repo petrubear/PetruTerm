@@ -1,8 +1,5 @@
-// gpui chrome migration: the chat panel's composer row -- attached-file
-// chips, the file-picker popup, and the text-input row itself. Split out of
-// `render.rs` (M5a Task 3) to reclaim headroom under the 400-line convention
-// after that task's header change (`◈`/`✦` backend distinction) pushed
-// `render.rs` over it -- purely a file-boundary move, no behavior change.
+// The chat panel's composer row: attached-file chips, the file-picker
+// popup, and the text-input row.
 
 use gpui::{div, prelude::*, px, IntoElement};
 

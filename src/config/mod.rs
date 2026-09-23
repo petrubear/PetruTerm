@@ -9,7 +9,7 @@ pub use schema::Config;
 use anyhow::Result;
 use std::path::PathBuf;
 
-/// Default config source embedded in the binary.
+// Default config sources embedded in the binary.
 const DEFAULT_SYSTEM_PROMPT: &str = include_str!("../../config/default/system/system_prompt.md");
 const DEFAULT_CONFIG: &str = include_str!("../../config/default/config.lua");
 const DEFAULT_UI: &str = include_str!("../../config/default/ui.lua");
@@ -143,15 +143,14 @@ pub fn reload() -> Result<(Config, mlua::Lua)> {
 /// Auto-update managed config files whose bundled version is newer than the installed one.
 ///
 /// Only files that include a `-- petruterm-config-version: N` line are managed.
-/// User-customizable files (ui.lua, perf.lua, llm.lua) are intentionally NOT versioned
-/// so this function never overwrites them.
+/// All other default files are intentionally NOT versioned so this function never
+/// overwrites them.
 fn update_managed_configs(dir: &std::path::Path) {
     let managed: &[(&str, &str)] = &[("keybinds.lua", DEFAULT_KEYBINDS)];
     for (name, bundled) in managed {
         let dest = dir.join(name);
         let needs_update = if dest.exists() {
-            // Read only the first 256 bytes — the version tag is always in the first line
-            // so we never read the whole file just to compare a version number (TD-036).
+            // The version tag sits in the file header, so the first 256 bytes suffice.
             let bundled_ver = extract_lua_version(bundled);
             let existing_ver = read_first_bytes(&dest, 256)
                 .and_then(|s| extract_lua_version(&s).map(|v| v.to_owned()));
@@ -190,17 +189,11 @@ fn extract_lua_version(content: &str) -> Option<&str> {
 /// so user customisations are never overwritten. Safe to call on every launch.
 fn ensure_default_configs(dir: &std::path::Path) -> Result<()> {
     let files: &[(&str, &str)] = &[
-        (
-            "config.lua",
-            include_str!("../../config/default/config.lua"),
-        ),
-        ("ui.lua", include_str!("../../config/default/ui.lua")),
-        ("perf.lua", include_str!("../../config/default/perf.lua")),
-        (
-            "keybinds.lua",
-            include_str!("../../config/default/keybinds.lua"),
-        ),
-        ("llm.lua", include_str!("../../config/default/llm.lua")),
+        ("config.lua", DEFAULT_CONFIG),
+        ("ui.lua", DEFAULT_UI),
+        ("perf.lua", DEFAULT_PERF),
+        ("keybinds.lua", DEFAULT_KEYBINDS),
+        ("llm.lua", DEFAULT_LLM),
         ("snippets.lua", DEFAULT_SNIPPETS),
         ("notifications.lua", DEFAULT_NOTIFICATIONS),
     ];
@@ -287,13 +280,8 @@ mod tests {
     use super::*;
     use schema::LlmBackend;
 
-    /// Regression test for the embedded default config actually parsing
-    /// through the real Lua VM -- `include_str!` only checks the file
-    /// exists at compile time, not that its Lua is valid or that mlua's
-    /// deserialization matches `AcpAgentConfig`'s real field names. Caught
-    /// exactly the kind of default-config typo this test guards against
-    /// once already (a stray field name mismatch would panic here with a
-    /// deserialization error, not silently no-op).
+    /// The embedded default config must parse through the real Lua VM
+    /// (`include_str!` only checks that the file exists).
     #[test]
     fn embedded_default_config_sets_agent_backend() {
         let (config, _lua) =
@@ -312,14 +300,8 @@ mod tests {
         );
     }
 
-    /// Regression test for every bundled theme actually parsing through the
-    /// real Lua VM -- `include_str!` (used to seed these into
-    /// ~/.config/petruterm/themes/) only checks the file exists at compile
-    /// time, not that its Lua is valid or that `table_to_color_scheme`
-    /// accepts its shape (e.g. an `ansi`/`brights` array short by one entry
-    /// would silently zero-fill rather than error, but a genuine Lua syntax
-    /// error would only ever surface the first time a user opened the
-    /// palette's theme switcher).
+    /// Every bundled theme must parse through the real Lua VM; a syntax error
+    /// would otherwise only surface when a user opens the theme switcher.
     #[test]
     fn bundled_themes_all_parse() {
         let dir = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/themes"));
@@ -366,16 +348,7 @@ mod tests {
             .all(|kb| kb.action.parse::<crate::ui::palette::Action>().is_ok()));
     }
 
-    /// Regression test: `config.colors` set inline in `config.lua`/`ui.lua`
-    /// must actually reach the parsed `Config` -- `table_to_config` used to
-    /// never read the `colors` key at all (`config` starts as
-    /// `Config::default()` and nothing set `.colors` before this test was
-    /// added), so every user customization of it was silently ignored and
-    /// the app always rendered `ColorScheme::default()`'s hardcoded values
-    /// instead. Invisible for as long as the shipped default `ui.lua`
-    /// happened to hardcode those same values a second time -- caught only
-    /// once a real theme swap (a background genuinely different from the
-    /// Rust-side default) produced no visible change at all.
+    /// Inline `config.colors` in config.lua/ui.lua must reach the parsed Config.
     #[test]
     fn inline_config_colors_are_applied() {
         let src = r##"
@@ -403,6 +376,17 @@ mod tests {
         assert_ne!(
             config.colors.background,
             schema::ColorScheme::dracula_pro().background
+        );
+    }
+
+    #[test]
+    fn notifications_style_is_parsed() {
+        let src = r#"return { notifications = { style = "native" } }"#;
+        let (config, _lua) = lua::load_config_str(src, "test/config.lua", &[])
+            .expect("notifications config must load");
+        assert_eq!(
+            config.notifications.style,
+            schema::NotificationStyle::Native
         );
     }
 }

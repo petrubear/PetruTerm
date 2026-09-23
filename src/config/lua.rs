@@ -1,12 +1,15 @@
 use anyhow::Result;
-use dirs;
 use mlua::prelude::*;
 use mlua::StdLib;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
 
-use super::schema::{AcpAgentConfig, ColorScheme, Config, KeybindStyle, LlmBackend, TitleBarStyle};
+use super::schema::{
+    AcpAgentConfig, BatterySaverMode, ColorScheme, Config, GpuPreference, KeyBind, KeybindStyle,
+    LlmBackend, NotificationStyle, SnippetConfig, StatusBarPosition, StatusBarStyle, TitleBarStyle,
+    WindowBlur,
+};
 
 fn parse_hex_linear(s: &str) -> [f32; 4] {
     let s = s.trim_start_matches('#');
@@ -27,20 +30,17 @@ fn parse_hex_linear(s: &str) -> [f32; 4] {
 /// Stdlib available to user config scripts.
 ///
 /// Includes `os` (for `os.getenv`) and `package` (for `require`).
-/// `io`, `debug`, and `load` are excluded to limit the attack surface —
-/// user configs don't need arbitrary file I/O or dynamic code loading.
-/// Note: `os.execute` is still available here because this is user-controlled
-/// config, not third-party plugins. Phase 4 plugins will use a stricter sandbox.
+/// `io` and `debug` are excluded -- user configs don't need arbitrary file I/O.
+/// `load_config` additionally removes `os.execute` and `os.exit`.
 fn config_stdlib() -> StdLib {
     StdLib::TABLE | StdLib::STRING | StdLib::MATH | StdLib::OS | StdLib::PACKAGE
 }
 
 /// Load and evaluate a Lua config file, returning a resolved Config.
 ///
-/// Bytecode cache: compiled Lua is stored at `~/.cache/petruterm/lua-bc/{hash}.luac`.
-/// The cache is reused when its mtime is >= the source file's mtime.
-/// On any error reading or writing the cache the loader silently falls back to
-/// compiling from source, so this is always a transparent optimisation.
+/// Bytecode cache: compiled Lua is stored under `~/.cache/petruterm/lua-bc/` (see
+/// `bytecode_cache_path`), keyed by source path and content hash. On any error reading
+/// or writing the cache the loader falls back to compiling from source.
 pub fn load_config(path: &Path) -> Result<(Config, Lua)> {
     evict_stale_lua_cache();
     let lua = Lua::new_with(config_stdlib(), LuaOptions::default())
@@ -346,33 +346,19 @@ fn inject_petruterm_global(lua: &Lua) -> LuaResult<()> {
     // petruterm.action — table of action name strings.
     // Each key maps to itself so Lua can write `petruterm.action.NewTab`
     // and get the string "NewTab" that Rust then resolves via Action::from_str.
+    // Keep in sync with `Action::from_str` (src/ui/palette/actions.rs).
     let action = lua.create_table()?;
     for name in &[
-        "CommandPalette",
-        "ToggleAiPanel",
-        "ToggleAiMode", // legacy alias kept for compatibility
-        "FocusAiPanel",
-        "ExplainLastOutput",
-        "ToggleStatusBar",
-        "FixLastError",
-        "UndoLastWrite",
-        "SplitHorizontal",
-        "SplitVertical",
-        "ActivatePane",
-        "ClosePane",
-        "FocusPaneLeft",
-        "FocusPaneRight",
-        "FocusPaneUp",
-        "FocusPaneDown",
+        // Config
+        "OpenConfigFile",
+        "ReloadConfig",
+        // Tabs
         "NewTab",
         "CloseTab",
         "NextTab",
         "PrevTab",
         "RenameTab",
-        "ToggleFullscreen",
-        "Quit",
-        "ZoomPane",
-        "ClearAiContext",
+        // Workspaces
         "NewWorkspace",
         "CloseWorkspace",
         "RenameWorkspace",
@@ -380,6 +366,30 @@ fn inject_petruterm_global(lua: &Lua) -> LuaResult<()> {
         "PrevWorkspace",
         "SaveWorkspace",
         "OpenSavedWorkspaces",
+        // Panes
+        "SplitHorizontal",
+        "SplitVertical",
+        "ClosePane",
+        "ZoomPane",
+        "FocusPaneLeft",
+        "FocusPaneRight",
+        "FocusPaneUp",
+        "FocusPaneDown",
+        // Overlays / window
+        "CommandPalette",
+        "ToggleStatusBar",
+        "ToggleFullscreen",
+        "Quit",
+        // AI
+        "ToggleAiPanel",
+        "ToggleAiMode", // legacy alias for ToggleAiPanel
+        "FocusAiPanel",
+        "EnableAiFeatures",
+        "DisableAiFeatures",
+        "ExplainLastOutput",
+        "FixLastError",
+        "UndoLastWrite",
+        "ClearAiContext",
     ] {
         action.set(*name, *name)?;
     }
@@ -476,9 +486,11 @@ fn inject_require_path(lua: &Lua, config_path: &Path) -> LuaResult<()> {
 ///
 /// We pick out keys we understand and leave unknown keys alone so user
 /// config can include extra fields without breaking anything.
+/// Keys are read in the same order as the `Config` struct (grouped by default Lua file).
 fn table_to_config(table: LuaTable) -> LuaResult<Config> {
     let mut config = Config::default();
 
+    // ── ui.lua ────────────────────────────────────────────────────────────────
     if let Ok(font) = table.get::<LuaTable>("font") {
         if let Ok(family) = font.get::<String>("family") {
             config.font.family = family;
@@ -492,19 +504,12 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
     } else if let Ok(family) = table.get::<String>("font") {
         config.font.family = family;
     }
-
     if let Ok(size) = table.get::<f32>("font_size") {
         config.font.size = size;
     }
-
     if let Ok(lh) = table.get::<f32>("font_line_height") {
         config.font.line_height = lh;
     }
-
-    if let Ok(lcd) = table.get::<bool>("lcd_antialiasing") {
-        config.font.lcd_antialiasing = lcd;
-    }
-
     if let Ok(features) = table.get::<LuaTable>("font_features") {
         let mut fs = Vec::new();
         for pair in features.sequence_values::<String>() {
@@ -512,58 +517,23 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
         }
         config.font.features = fs;
     }
-
-    if let Ok(lines) = table.get::<u32>("scrollback_lines") {
-        config.scrollback_lines = lines;
+    if let Ok(lcd) = table.get::<bool>("lcd_antialiasing") {
+        config.font.lcd_antialiasing = lcd;
     }
 
-    if let Ok(scroll) = table.get::<bool>("enable_scroll_bar") {
-        config.enable_scroll_bar = scroll;
-    }
-
-    if let Ok(fps) = table.get::<u32>("max_fps") {
-        config.max_fps = fps;
-    }
-
-    if let Ok(shell) = table.get::<String>("shell") {
-        config.shell = shell;
-    }
-
-    if let Ok(si) = table.get::<bool>("shell_integration") {
-        config.shell_integration = si;
-    }
-
-    if let Ok(v) = table.get::<bool>("input_ghost_text") {
-        config.input_ghost_text = v;
-    }
-
-    if let Ok(v) = table.get::<bool>("input_syntax_highlight") {
-        config.input_syntax_highlight = v;
+    if let Ok(colors_table) = table.get::<LuaTable>("colors") {
+        config.colors = table_to_color_scheme(colors_table)?;
     }
 
     if let Ok(win) = table.get::<LuaTable>("window") {
-        if let Ok(b) = win.get::<bool>("borderless") {
-            config.window.borderless = b;
-        }
-        if let Ok(m) = win.get::<bool>("start_maximized") {
-            config.window.start_maximized = m;
-        }
-        if let Ok(o) = win.get::<f32>("opacity") {
-            config.window.opacity = o;
-        }
-        // blur = "dark" | "light" | false/nil (Phase 9 V-2).
-        if let Ok(blur) = win.get::<String>("blur") {
-            config.window.blur = match blur.as_str() {
-                "dark" | "Dark" => crate::config::schema::WindowBlur::Dark,
-                "light" | "Light" => crate::config::schema::WindowBlur::Light,
-                _ => crate::config::schema::WindowBlur::None,
-            };
-        }
         if let Ok(w) = win.get::<u32>("initial_width") {
             config.window.initial_width = Some(w);
         }
         if let Ok(h) = win.get::<u32>("initial_height") {
             config.window.initial_height = Some(h);
+        }
+        if let Ok(m) = win.get::<bool>("start_maximized") {
+            config.window.start_maximized = m;
         }
         if let Ok(style) = win.get::<String>("title_bar_style") {
             config.window.title_bar_style = match style.as_str() {
@@ -586,8 +556,80 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
                 config.window.padding.bottom = b;
             }
         }
+        if let Ok(o) = win.get::<f32>("opacity") {
+            config.window.opacity = o;
+        }
+        // blur = "dark" | "light" | false/nil.
+        if let Ok(blur) = win.get::<String>("blur") {
+            config.window.blur = match blur.as_str() {
+                "dark" | "Dark" => WindowBlur::Dark,
+                "light" | "Light" => WindowBlur::Light,
+                _ => WindowBlur::None,
+            };
+        }
     }
 
+    if let Ok(v) = table.get::<bool>("input_syntax_highlight") {
+        config.input_syntax_highlight = v;
+    }
+    if let Ok(v) = table.get::<bool>("input_ghost_text") {
+        config.input_ghost_text = v;
+    }
+
+    if let Ok(sb_table) = table.get::<LuaTable>("status_bar") {
+        if let Ok(e) = sb_table.get::<bool>("enabled") {
+            config.status_bar.enabled = e;
+        }
+        if let Ok(p) = sb_table.get::<String>("position") {
+            config.status_bar.position = match p.as_str() {
+                "top" | "Top" => StatusBarPosition::Top,
+                _ => StatusBarPosition::Bottom,
+            };
+        }
+        if let Ok(s) = sb_table.get::<String>("style") {
+            config.status_bar.style = match s.as_str() {
+                "powerline" | "Powerline" => StatusBarStyle::Powerline,
+                _ => StatusBarStyle::Plain,
+            };
+        }
+        // Set from perf.lua.
+        if let Ok(d) = sb_table.get::<bool>("git_dirty_check") {
+            config.status_bar.git_dirty_check = d;
+        }
+    }
+
+    // ── perf.lua ──────────────────────────────────────────────────────────────
+    if let Ok(lines) = table.get::<u32>("scrollback_lines") {
+        config.scrollback_lines = lines;
+    }
+    if let Ok(scroll) = table.get::<bool>("enable_scroll_bar") {
+        config.enable_scroll_bar = scroll;
+    }
+    if let Ok(fps) = table.get::<u32>("max_fps") {
+        config.max_fps = fps;
+    }
+    if let Ok(gp) = table.get::<String>("gpu_preference") {
+        config.gpu_preference = match gp.as_str() {
+            "high_performance" | "HighPerformance" => GpuPreference::HighPerformance,
+            "none" | "None" => GpuPreference::None,
+            _ => GpuPreference::LowPower,
+        };
+    }
+    if let Ok(bs) = table.get::<String>("battery_saver") {
+        config.battery_saver = match bs.as_str() {
+            "always" | "Always" => BatterySaverMode::Always,
+            "never" | "Never" => BatterySaverMode::Never,
+            _ => BatterySaverMode::Auto,
+        };
+    }
+
+    // ── keybinds.lua ──────────────────────────────────────────────────────────
+    if let Ok(style) = table.get::<String>("keybind_style") {
+        config.keybind_style = match style.as_str() {
+            "normal" | "Normal" => KeybindStyle::Normal,
+            _ => KeybindStyle::Tmux,
+        };
+    }
     if let Ok(leader_table) = table.get::<LuaTable>("leader") {
         if let Ok(k) = leader_table.get::<String>("key") {
             config.leader.key = k;
@@ -599,60 +641,33 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
             config.leader.timeout_ms = t;
         }
     }
-
+    if let Ok(kb_table) = table.get::<LuaTable>("keyboard") {
+        if let Ok(v) = kb_table.get::<bool>("option_as_meta") {
+            config.keyboard.option_as_meta = v;
+        }
+    }
     if let Ok(keys_table) = table.get::<LuaTable>("keys") {
         for entry in keys_table.sequence_values::<LuaTable>().flatten() {
             let mods: String = entry.get("mods").unwrap_or_default();
             let key: String = entry.get("key").unwrap_or_default();
             let action: String = entry.get("action").unwrap_or_default();
             if !mods.is_empty() && !key.is_empty() && !action.is_empty() {
-                config
-                    .keys
-                    .push(super::schema::KeyBind { mods, key, action });
+                config.keys.push(KeyBind { mods, key, action });
             }
         }
     }
 
-    if let Ok(style) = table.get::<String>("keybind_style") {
-        config.keybind_style = match style.as_str() {
-            "normal" | "Normal" => KeybindStyle::Normal,
-            _ => KeybindStyle::Tmux,
-        };
-    }
-
+    // ── llm.lua ───────────────────────────────────────────────────────────────
     if let Ok(llm_table) = table.get::<LuaTable>("llm") {
         if let Ok(e) = llm_table.get::<bool>("enabled") {
             config.llm.enabled = e;
         }
-        if let Ok(p) = llm_table.get::<String>("provider") {
-            config.llm.provider = p;
-        }
-        if let Ok(m) = llm_table.get::<String>("model") {
-            config.llm.model = m;
-        }
-        if let Ok(k) = llm_table.get::<String>("api_key") {
-            config.llm.api_key = Some(k.into());
-        }
-        if let Ok(u) = llm_table.get::<String>("base_url") {
-            config.llm.base_url = Some(u);
-        }
-        if let Ok(c) = llm_table.get::<u32>("context_lines") {
-            config.llm.context_lines = c;
-        }
-
-        if let Ok(ui_table) = llm_table.get::<LuaTable>("ui") {
-            if let Ok(w) = ui_table.get::<u16>("width_cols") {
-                config.llm.ui.width_cols = w;
-            }
-        }
-
         if let Ok(b) = llm_table.get::<String>("backend") {
             config.llm.backend = match b.as_str() {
                 "agent" | "Agent" => LlmBackend::Agent,
                 _ => LlmBackend::Provider,
             };
         }
-
         if let Ok(agent_table) = llm_table.get::<LuaTable>("agent") {
             let command: String = agent_table.get("command").unwrap_or_default();
             if !command.is_empty() {
@@ -677,15 +692,33 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
                 });
             }
         }
+        if let Ok(p) = llm_table.get::<String>("provider") {
+            config.llm.provider = p;
+        }
+        if let Ok(m) = llm_table.get::<String>("model") {
+            config.llm.model = m;
+        }
+        if let Ok(k) = llm_table.get::<String>("api_key") {
+            config.llm.api_key = Some(k.into());
+        }
+        if let Ok(u) = llm_table.get::<String>("base_url") {
+            config.llm.base_url = Some(u);
+        }
+        if let Ok(ui_table) = llm_table.get::<LuaTable>("ui") {
+            if let Ok(w) = ui_table.get::<u16>("width_cols") {
+                config.llm.ui.width_cols = w;
+            }
+        }
     }
 
+    // ── snippets.lua ──────────────────────────────────────────────────────────
     if let Ok(snippets_table) = table.get::<LuaTable>("snippets") {
         for entry in snippets_table.sequence_values::<LuaTable>().flatten() {
             let name: String = entry.get("name").unwrap_or_default();
             let body: String = entry.get("body").unwrap_or_default();
             let trigger: Option<String> = entry.get("trigger").ok();
             if !name.is_empty() && !body.is_empty() {
-                config.snippets.push(super::schema::SnippetConfig {
+                config.snippets.push(SnippetConfig {
                     name,
                     body,
                     trigger,
@@ -694,76 +727,30 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
         }
     }
 
-    if let Ok(sb_table) = table.get::<LuaTable>("status_bar") {
-        if let Ok(e) = sb_table.get::<bool>("enabled") {
-            config.status_bar.enabled = e;
-        }
-        if let Ok(p) = sb_table.get::<String>("position") {
-            config.status_bar.position = match p.as_str() {
-                "top" | "Top" => crate::config::schema::StatusBarPosition::Top,
-                _ => crate::config::schema::StatusBarPosition::Bottom,
+    // ── notifications.lua ─────────────────────────────────────────────────────
+    if let Ok(n_table) = table.get::<LuaTable>("notifications") {
+        if let Ok(s) = n_table.get::<String>("style") {
+            config.notifications.style = match s.as_str() {
+                "native" | "Native" => NotificationStyle::Native,
+                _ => NotificationStyle::Toast,
             };
         }
-        if let Ok(s) = sb_table.get::<String>("style") {
-            config.status_bar.style = match s.as_str() {
-                "powerline" | "Powerline" => crate::config::schema::StatusBarStyle::Powerline,
-                _ => crate::config::schema::StatusBarStyle::Plain,
-            };
-        }
-        if let Ok(d) = sb_table.get::<bool>("git_dirty_check") {
-            config.status_bar.git_dirty_check = d;
-        }
     }
 
-    if let Ok(bs) = table.get::<String>("battery_saver") {
-        config.battery_saver = match bs.as_str() {
-            "always" | "Always" => crate::config::schema::BatterySaverMode::Always,
-            "never" | "Never" => crate::config::schema::BatterySaverMode::Never,
-            _ => crate::config::schema::BatterySaverMode::Auto,
-        };
+    // ── config.lua ────────────────────────────────────────────────────────────
+    if let Ok(shell) = table.get::<String>("shell") {
+        config.shell = shell;
     }
-
-    if let Ok(gp) = table.get::<String>("gpu_preference") {
-        config.gpu_preference = match gp.as_str() {
-            "high_performance" | "HighPerformance" => {
-                crate::config::schema::GpuPreference::HighPerformance
-            }
-            "none" | "None" => crate::config::schema::GpuPreference::None,
-            _ => crate::config::schema::GpuPreference::LowPower,
-        };
+    if let Ok(si) = table.get::<bool>("shell_integration") {
+        config.shell_integration = si;
     }
-
-    if let Ok(kb_table) = table.get::<LuaTable>("keyboard") {
-        if let Ok(v) = kb_table.get::<bool>("option_as_meta") {
-            config.keyboard.option_as_meta = v;
-        }
-    }
-
     if let Ok(ws_table) = table.get::<LuaTable>("workspaces") {
         if let Ok(v) = ws_table.get::<bool>("auto_save_on_exit") {
             config.workspaces.auto_save_on_exit = v;
         }
-        if let Ok(v) = ws_table.get::<bool>("auto_save_on_switch") {
-            config.workspaces.auto_save_on_switch = v;
-        }
     }
 
-    // `config.colors` was never actually read here -- `config` starts as
-    // `Config::default()` and nothing before this point touched `.colors`,
-    // so every `config.lua`/`ui.lua` customization of it was silently
-    // ignored and the app always rendered `ColorScheme::default()`'s
-    // hardcoded Dracula Pro values instead. Invisible until now because the
-    // shipped default `ui.lua` happens to hardcode those exact same values
-    // a second time -- a user picking a *different* theme by editing
-    // `config.colors` directly (as opposed to the palette's "Switch Theme",
-    // which goes through the separate, already-correct `load_theme()`/
-    // `table_to_color_scheme()` path for standalone theme files) got no
-    // visible change at all.
-    if let Ok(colors_table) = table.get::<LuaTable>("colors") {
-        config.colors = table_to_color_scheme(colors_table)?;
-    }
-
-    // V-4: soften the chrome surfaces when the window is translucent/blurred.
+    // Soften the chrome surfaces when the window is translucent/blurred.
     config.colors.apply_blur_translucency(&config.window);
 
     Ok(config)

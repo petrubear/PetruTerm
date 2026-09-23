@@ -8,14 +8,8 @@ impl UiManager {
     /// Reload MCP servers from disk config. Creates a fresh McpManager, starts all
     /// servers, and replaces the Arc. Called on hot-reload of mcp.json (D-5).
     pub fn reload_mcp(&mut self, cwd: &std::path::Path) {
-        // Behavior preserved exactly: on a `load_merged` `Err` (global config
-        // failed to load), this returns early WITHOUT touching
-        // `self.mcp_manager` -- a broken hot-reload keeps whatever MCP
-        // servers were already running, same as the original early-return
-        // this replaces. This differs deliberately from `UiManager::new`'s
-        // own call site above (Step 3), which treats the same error as
-        // "start with zero MCP servers" -- that's correct there because
-        // there's no prior state to preserve at construction time.
+        // On load_merged error, keep the currently running MCP servers (unlike
+        // startup, which starts with none).
         let trusted = crate::llm::mcp::trust::is_trusted(cwd);
         let cfg = match mcp_config::load_merged(cwd, trusted) {
             Ok(c) => c,
@@ -80,8 +74,8 @@ impl UiManager {
         }
     }
 
-    /// TD-020: Re-wire the LLM provider and panel width from a fresh config.
-    /// Call this on every config reload (both hot-reload and palette-triggered).
+    /// Provider-backend half of `rewire_backend`: re-wire the LLM provider and
+    /// panel width from a fresh config. Not called directly on reload.
     pub fn rewire_llm_provider(&mut self, config: &Config) {
         let view = crate::config::llm_view::llm_runtime_view(config);
         (self.llm_provider, self.llm_init_error) = if view.enabled {

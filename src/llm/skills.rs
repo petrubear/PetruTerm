@@ -41,10 +41,11 @@ impl SkillManager {
         }
     }
 
-    /// Return the skill explicitly named in `query` (e.g. "use skill git-helper ..."),
-    /// or the best fuzzy match against skill descriptions, or `None`.
+    /// Return the first skill whose name appears anywhere in `query`
+    /// (case-insensitive substring; the word "skill" is not required), else the
+    /// best fuzzy match against skill descriptions, else `None`.
     pub fn match_query(&self, query: &str) -> Option<&SkillMeta> {
-        // Explicit name match: "skill <name>" or "el skill <name>" anywhere in query.
+        // Name match: case-insensitive substring anywhere in the query.
         let lower = query.to_lowercase();
         for skill in &self.skills {
             let needle = skill.name.to_lowercase();
@@ -89,7 +90,7 @@ impl SkillManager {
         Ok(body)
     }
 
-    /// All loaded skill metadata (for `/skill` listing).
+    /// All loaded skill metadata (for `/skills` listing).
     pub fn skills(&self) -> &[SkillMeta] {
         &self.skills
     }

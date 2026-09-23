@@ -1,13 +1,5 @@
-// gpui chrome migration (M3d Task 3 post-review split): the sidebar's own
-// keyboard-navigation dispatch -- moving the per-section cursor and
-// activating the cursor's row. Split out of `input.rs` for the 400-line
-// convention: `input.rs` grew to 456 lines once M3d Task 3's sidebar guard
-// and these two methods landed on top of it (the same failure class M3c's
-// `actions.rs` hit -- see that file's own history). Task 4 adds three more
-// methods here (`sidebar_open_mcp_at`/`sidebar_open_skill_at`/
-// `sidebar_open_steering_at`) and fills in these two methods' Mcp/Skills/
-// Steering arms, keeping the growth contained to this file instead of
-// re-inflating `input.rs`.
+// The sidebar's keyboard navigation: moving the per-section cursor and
+// activating the cursor's row.
 
 use gpui::{Context, KeyDownEvent, Window};
 
@@ -21,9 +13,8 @@ impl GpuiShellRoot {
     ///
     /// `ToggleWorkspaceSidebar`'s dispatch arm (`leader_dispatch.rs`) is the
     /// only place that moves focus TO this handle via the keyboard; clicking
-    /// a row or section tab (Task 4 / M3d Task 3's own section-tab clicks)
-    /// must do the same explicitly, same fix `TextInput::on_mouse_down`
-    /// needed in M3a.
+    /// a row or section tab must do the same explicitly, same as
+    /// `TextInput::on_mouse_down`.
     pub(super) fn handle_sidebar_focused_key(
         &mut self,
         event: &KeyDownEvent,
@@ -51,12 +42,9 @@ impl GpuiShellRoot {
     }
 
     /// Move the highlighted row within whichever section is active by
-    /// `delta` (`+1`/`-1`). Only the Workspaces arm does anything yet --
-    /// arrow-nav there switches immediately, same as a click (see this
-    /// plan's Global Constraints on why that section's cursor IS its active
-    /// index, unlike the wgpu reference's decoupled highlight-then-Enter).
-    /// The other three arms are Task 4's to fill in, once their sections
-    /// have real lists to move a cursor over.
+    /// `delta` (`+1`/`-1`). In Workspaces, arrow-nav switches immediately,
+    /// same as a click (that section's cursor IS its active index); the
+    /// MCP/Skills/Steering arms move their own cursors.
     pub(super) fn sidebar_move_cursor(&mut self, delta: i32, cx: &mut Context<Self>) {
         match self.sidebar.active_section() {
             sidebar::SidebarSection::Workspaces => {

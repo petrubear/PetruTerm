@@ -1,16 +1,16 @@
-# Graph Report - PetruTerm  (2026-09-22)
+# Graph Report - PetruTerm  (2026-09-23)
 
 ## Corpus Check
-- 238 files · ~402,362 words
+- 238 files · ~392,658 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 3489 nodes · 6698 edges · 206 communities (197 shown, 9 thin omitted)
+- 3466 nodes · 6638 edges · 199 communities (189 shown, 10 thin omitted)
 - Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 159 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `4d55293b`
+- Built from commit: `a53e07f2`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -152,12 +152,9 @@
 - SearchBar
 - snapshot.rs
 - GpuiShellRoot
-- build_shaping_spans
 - M4 — Remaining Surfaces: Design
 - build_frame_callbacks
-- Rect
 - .new
-- workspace_snapshot.rs
 - .open_terminal_for_acp
 - M5a — ACP Agent Backend & Tool-Calling Design
 - spawn_acp_connect
@@ -165,21 +162,17 @@
 - M5d — Prompt Context Injection (Skills, Steering, Shell Context, MCP) Design
 - .size
 - .run_ai_query
-- PaletteAction
 - .handle_sidebar_focused_key
 - snippets.rs
 - GpuiShellRoot
 - M5a — ACP Agent Backend & Tool-Calling Implementation Plan
 - M5d — Prompt Context Injection Implementation Plan
-- Action
 - AppMenu
-- draw_glyphs
 - .maybe_handle_search_key
 - status_bar/battery.rs
 - full_grid_text
 - M5c — Palette & Context-Menu Feature Completion Implementation Plan
 - M5b — Chat Composer Extras Design
-- .new
 - UiManager
 - .maybe_handle_palette_key
 - .spawn
@@ -210,22 +203,22 @@
 3. `UiManager` - 64 edges
 4. `FontConfig` - 54 edges
 5. `Terminal` - 53 edges
-6. `Mux` - 52 edges
+6. `Mux` - 51 edges
 7. `App` - 50 edges
 8. `ChatPanel` - 50 edges
 9. `GpuRenderer` - 50 edges
-10. `RenderContext` - 41 edges
+10. `RenderContext` - 40 edges
 
 ## Surprising Connections (you probably didn't know these)
+- `bench_upload_bytes_comparison()` --calls--> `account_terminal_uploads()`  [INFERRED]
+  benches/build_instances.rs → src/renderer/upload.rs
+- `bench_upload_bytes_comparison()` --calls--> `merge_upload_ranges()`  [INFERRED]
+  benches/build_instances.rs → src/renderer/upload.rs
 - `Phase 4 Plugin Ecosystem Focus` --conceptually_related_to--> `Phase 9 UI Restyle Complete`  [AMBIGUOUS]
   AGENTS.md → .context/core/ACTIVE_CONTEXT.md
 - `make_shaper()` --references--> `FontConfig`  [EXTRACTED]
   benches/build_instances.rs → src/config/schema.rs
 - `make_shaper()` --references--> `TextShaper`  [EXTRACTED]
-  benches/build_instances.rs → src/font/shaper.rs
-- `build_row_vertices()` --references--> `FontConfig`  [EXTRACTED]
-  benches/build_instances.rs → src/config/schema.rs
-- `build_row_vertices()` --references--> `TextShaper`  [EXTRACTED]
   benches/build_instances.rs → src/font/shaper.rs
 
 ## Import Cycles
@@ -239,35 +232,39 @@
 - **Planning and Specification Backbone** — context_specs_build_phases_document, context_specs_build_phases_archive_document, context_specs_term_specs_document [INFERRED 0.75]
 - **Release Artifact Chain** — github_workflows_release_document, changelog_document, readme_document [INFERRED 0.65]
 
-## Communities (206 total, 9 thin omitted)
+## Communities (199 total, 10 thin omitted)
+
+### Community 0 - "Src Config"
+Cohesion: 0.12
+Nodes (17): App, blink_only_render(), blink_overlay_slot(), build_all_pane_instances(), production_overlay_upload_plan_keeps_cursor_first_and_terminal_ranges_separate(), production_upload_fallback_requests_full_rebuild_for_all_visible_rows(), ActiveEventLoop, Duration (+9 more)
 
 ### Community 1 - "Src App"
 Cohesion: 0.12
-Nodes (9): ChatPanel, ContextMenu, Instant, JoinHandle, Mux, PathBuf, Sender, Vec (+1 more)
+Nodes (10): ChatPanel, ContextMenu, EventLoopProxy, Instant, JoinHandle, Mux, PathBuf, Sender (+2 more)
 
 ### Community 2 - "Src Term"
 Cohesion: 0.06
 Nodes (37): command_end_deactivates(), command_start_deactivates(), ctrl_u_clears_before_cursor(), InputShadow, insert(), kill_word(), kill_word_at_start(), kill_word_trailing_spaces() (+29 more)
 
 ### Community 3 - "Src Llm"
-Cohesion: 0.05
-Nodes (45): GpuiShellRoot, InfoOverlay, Context, Default, KeyDownEvent, ScrollHandle, Self, String (+37 more)
+Cohesion: 0.16
+Nodes (10): char_chunks(), ChatPanel, Path, PathBuf, String, Vec, scan_dir(), scan_files() (+2 more)
 
 ### Community 4 - "Src Llm"
 Cohesion: 0.08
 Nodes (36): BufWriter, ChildStdin, ChildStdout, mcp_overlay_content(), String, dispatch_response(), extract_tool_result_text(), extract_tool_result_text_content_blocks() (+28 more)
 
 ### Community 5 - "Src Font"
-Cohesion: 0.18
-Nodes (13): AttrsList, build_attr_list(), is_pua(), Attrs, Device, FontSystem, PathBuf, Rc (+5 more)
+Cohesion: 0.09
+Nodes (32): AttrsList, LayoutGlyph, LruCache, Metrics, build_attr_list(), glyph_to_cache_key(), has_ligature_chars(), is_pua() (+24 more)
 
 ### Community 6 - "Src Font"
 Cohesion: 0.13
 Nodes (12): LcdAtlasEntry, LcdCacheEntry, LcdGlyphAtlas, Device, HashMap, Option, Queue, Result (+4 more)
 
 ### Community 7 - "Src Ui"
-Cohesion: 0.20
-Nodes (8): drag_split_ratio(), find_rect(), FocusDir, PaneManager, PaneNode, remove_leaf(), Box, Option
+Cohesion: 0.21
+Nodes (21): AnnotatedLine, BlockKind, code_fence_syntax_highlight(), emit_list_item(), fence_state_carries_across_calls(), find_close(), headings(), highlight_code() (+13 more)
 
 ### Community 8 - "Src Term"
 Cohesion: 0.10
@@ -283,35 +280,35 @@ Nodes (16): 1. Instrument the existing path, 2. Coalesce event-loop work, 3. Pro
 
 ### Community 11 - "Src App"
 Cohesion: 0.12
-Nodes (14): AiPollResult, classify_llm_error(), Arc, EventLoopProxy, Receiver, RenderContext, Result, Runtime (+6 more)
+Nodes (13): AiPollResult, classify_llm_error(), Arc, Receiver, RenderContext, Result, Runtime, Self (+5 more)
 
 ### Community 12 - "Src Term"
 Cohesion: 0.20
 Nodes (16): EventListener, OnceLock, RawFd, pty_write_all(), PtyEvent, PtyEventProxy, reader_loop(), Arc (+8 more)
 
 ### Community 13 - "Src Renderer"
-Cohesion: 0.09
-Nodes (19): PresentMode, GpuRenderer, make_main_atlas_bind_group(), render_outcome_requires_rebuild(), RenderOutcome, Arc, BindGroup, Buffer (+11 more)
+Cohesion: 0.08
+Nodes (20): PresentMode, GpuRenderer, make_main_atlas_bind_group(), render_outcome_requires_rebuild(), RenderOutcome, Arc, BindGroup, Buffer (+12 more)
 
 ### Community 14 - "Src Llm"
-Cohesion: 0.11
-Nodes (26): agent_display_name(), Option, AcpAgentConfig, Vec, AcpSession, build_acp_agent(), PromptMsg, AcpAgent (+18 more)
+Cohesion: 0.13
+Nodes (21): AcpSession, build_acp_agent(), PromptMsg, AcpAgent, JoinHandle, McpServer, Path, Result (+13 more)
 
 ### Community 16 - "Src Ui"
-Cohesion: 0.09
-Nodes (13): Option, String, SidebarState, label_format_and_truncation(), Default, Into, Option, Self (+5 more)
+Cohesion: 0.06
+Nodes (17): Self, section_prev_cycles_backward_and_wraps(), SidebarSection, WorkspaceSidebar, Option, String, SidebarState, label_format_and_truncation() (+9 more)
 
 ### Community 17 - "Src Term"
-Cohesion: 0.06
-Nodes (24): Cell, CursorShape, Dimensions, F, last_terminal_lines_for(), block_output_text_for(), GpuiShellRoot, row_text_and_absolute_row() (+16 more)
+Cohesion: 0.08
+Nodes (17): Cell, CursorShape, F, last_terminal_lines_for(), CursorInfo, process_cwd(), Arc, FairMutex (+9 more)
 
 ### Community 18 - "Src App"
 Cohesion: 0.11
-Nodes (20): ApplicationHandler, SeparatorDragState, App, Arc, Drop, EventLoopProxy, HashMap, InfoOverlay (+12 more)
+Nodes (19): ApplicationHandler, App, Arc, Drop, EventLoopProxy, HashMap, InfoOverlay, Instant (+11 more)
 
 ### Community 19 - "Src Llm"
-Cohesion: 0.14
-Nodes (22): OnceCell, RequestBuilder, CachedJwt, CopilotProvider, CopilotTokenResponse, DeviceCodeResponse, keychain_load(), keychain_save() (+14 more)
+Cohesion: 0.15
+Nodes (21): OnceCell, RequestBuilder, CachedJwt, CopilotProvider, CopilotTokenResponse, DeviceCodeResponse, keychain_load(), keychain_save() (+13 more)
 
 ### Community 20 - "Src Config"
 Cohesion: 0.19
@@ -322,12 +319,12 @@ Cohesion: 0.17
 Nodes (11): File Map, Global Constraints, Task 1: Adding baseline performance counters, Task 2: Coalescing PTY wakeups and event-loop drains, Task 3: Propagating explicit dirty rows and revisions, Task 4: Storing terminal instances in stable row slots, Task 5: Adding merged GPU range uploads, Task 6: Proving equivalence and fallback behavior (+3 more)
 
 ### Community 22 - "Benches Build Instances.rs"
-Cohesion: 0.07
-Nodes (50): fit_terminal(), PaneRenderCx, render_leaf(), render_pane_tree(), render_split(), Bounds, Div, HashMap (+42 more)
+Cohesion: 0.06
+Nodes (53): list_saved_workspaces(), load_workspace(), PaneNodeSnapshot, Box, Option, PathBuf, Result, String (+45 more)
 
 ### Community 23 - "Src App"
-Cohesion: 0.10
-Nodes (20): Event, FromStr, InputHandler, ActiveEventLoop, EventLoopProxy, HashMap, Instant, KeyEvent (+12 more)
+Cohesion: 0.13
+Nodes (16): Event, InputHandler, ActiveEventLoop, EventLoopProxy, HashMap, Instant, KeyEvent, Modifiers (+8 more)
 
 ### Community 24 - "Src App"
 Cohesion: 0.22
@@ -342,7 +339,7 @@ Cohesion: 0.11
 Nodes (25): AGENTS Guide, Phase 4 Plugin Ecosystem Focus, Changelog, CLAUDE Instructions, System Map, Active Context, Phase 9 UI Restyle Complete, Session State (+17 more)
 
 ### Community 27 - "Src Llm"
-Cohesion: 0.13
+Cohesion: 0.14
 Nodes (8): App, Option, String, Option, PathBuf, Self, String, ShellContext
 
 ### Community 28 - "Src Ui"
@@ -358,40 +355,40 @@ Cohesion: 0.18
 Nodes (16): collect_skill_files(), extract_body(), extract_body_basic(), parse_frontmatter(), parse_frontmatter_basic(), parse_skill_file(), Option, Path (+8 more)
 
 ### Community 31 - "Src Renderer"
-Cohesion: 0.07
-Nodes (28): AnsiColor, Result, String, Vec, Queue, Result, AtlasEntry, AtlasError (+20 more)
+Cohesion: 0.08
+Nodes (24): Queue, Result, AtlasEntry, AtlasError, ColorAtlas, dummy_entry(), dummy_key(), evict_cold_keeps_all_when_all_warm() (+16 more)
 
 ### Community 32 - "Src Llm"
 Cohesion: 0.10
 Nodes (6): ActionPayload, AgentAction, parse_action_from_response(), Option, String, PanelState
 
 ### Community 33 - "Src Llm"
-Cohesion: 0.22
-Nodes (15): build_provider(), infer_context_window(), parse_agent_response(), parse_sse_chunk(), parse_usage(), Arc, Option, Result (+7 more)
+Cohesion: 0.19
+Nodes (16): Value, build_provider(), ChatRole, infer_context_window(), parse_agent_response(), parse_sse_chunk(), parse_usage(), Arc (+8 more)
 
 ### Community 34 - "Src Renderer"
-Cohesion: 0.08
-Nodes (26): brighten(), build_usage_hint(), calculate_row_hash(), colors_approx_eq(), GridVisualState, pack_color(), RenderContext, resolve_span_fg() (+18 more)
+Cohesion: 0.11
+Nodes (14): GridVisualState, RenderContext, RowCache, RowCacheEntry, Arc, Color, HashMap, HashSet (+6 more)
 
 ### Community 35 - "Src App"
-Cohesion: 0.11
-Nodes (18): NamedColor, resolve_line_fg(), RenderContext, ContextMenu, InfoOverlay, Option, StatusBar, ColorScheme (+10 more)
+Cohesion: 0.17
+Nodes (8): RenderContext, ContextMenu, InfoOverlay, Option, StatusBar, FontConfig, PathBuf, Tab
 
 ### Community 36 - "Src Llm"
 Cohesion: 0.15
 Nodes (15): AgentRequest, ApiMessage, build_api_messages(), ChatRequest, OpenAICompatProvider, ApiMessage, Client, Option (+7 more)
 
 ### Community 37 - "Src Llm"
-Cohesion: 0.22
-Nodes (8): AgentTool, execute_tool(), Option, Path, String, Value, Vec, ToolCall
+Cohesion: 0.23
+Nodes (9): AgentStepResult, AgentTool, execute_tool(), Option, Path, String, Value, Vec (+1 more)
 
 ### Community 38 - "Src App"
-Cohesion: 0.18
-Nodes (16): Flags, blend_pixel(), inverse_and_selection_compose(), inverse_flag_swaps_fg_bg(), plain_cell_resolves_fg_bg_unswapped(), resolve_cell_colors(), AnsiColor, FxHashMap (+8 more)
+Cohesion: 0.05
+Nodes (51): Flags, CachedFrame, evict_all(), evict_terminal(), App, Arc, RenderImage, attrs_for() (+43 more)
 
 ### Community 39 - "Src Llm"
-Cohesion: 0.22
-Nodes (11): command_returns_none_on_empty_panel(), command_returns_none_when_only_tool_lines(), command_strips_done_tool_line(), command_strips_in_progress_tool_line(), command_strips_markdown_fence_after_tool_lines(), command_strips_multiple_tool_lines(), command_without_tool_lines_unchanged(), panel_with_assistant() (+3 more)
+Cohesion: 0.20
+Nodes (15): command_returns_none_on_empty_panel(), command_returns_none_when_only_tool_lines(), command_strips_done_tool_line(), command_strips_in_progress_tool_line(), command_strips_markdown_fence_after_tool_lines(), command_strips_multiple_tool_lines(), command_without_tool_lines_unchanged(), header_action_for_col() (+7 more)
 
 ### Community 40 - "Src Llm"
 Cohesion: 0.15
@@ -403,15 +400,15 @@ Nodes (19): App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId
 
 ### Community 42 - "Src Llm"
 Cohesion: 0.07
-Nodes (26): ai_block_body(), ai_block_hint(), AiBlockView, GpuiShellRoot, render_ai_block(), App, Arc, Context (+18 more)
+Nodes (24): ai_block_body(), ai_block_hint(), AiBlockView, GpuiShellRoot, App, Arc, Context, Entity (+16 more)
 
 ### Community 43 - "Src App"
 Cohesion: 0.29
 Nodes (6): Global Constraints, GRAPH-ARCH-01 Remaining Domains Slice Implementation Plan, Self-Review, Task 1: Add `LeaderBindingsView` and migrate its two consumers, Task 2: Consolidate the duplicated scaled-font-with-LCD-fixup sequence, Task 3: Consolidate the duplicated `max_fps` interval formula
 
 ### Community 44 - "Src Llm"
-Cohesion: 0.18
-Nodes (5): MouseScrollDelta, PhysicalPosition, ActiveEventLoop, WindowEvent, WindowId
+Cohesion: 0.14
+Nodes (8): ElementState, MouseButton, MouseScrollDelta, PhysicalPosition, ActiveEventLoop, KeyEvent, WindowEvent, WindowId
 
 ### Community 45 - "Src App"
 Cohesion: 0.30
@@ -458,8 +455,8 @@ Cohesion: 0.32
 Nodes (8): BindGroupLayout, CellPipeline, CellPipelineBgAware, CellPipelineLcd, Device, RenderPipeline, Self, TextureFormat
 
 ### Community 57 - "WakeupGate"
-Cohesion: 0.18
-Nodes (22): render_composer(), ChatPanelView, IntoElement, render_agent_action_card(), render_awaiting_confirm_card(), render_confirm_card(), render_diff_line(), IntoElement (+14 more)
+Cohesion: 0.31
+Nodes (12): render_chat_panel(), render_message(), render_message_body_lines(), render_message_list(), render_pill(), ChatPanel, ChatPanelView, ChatPillCallback (+4 more)
 
 ### Community 58 - "Src Font"
 Cohesion: 0.35
@@ -478,20 +475,20 @@ Cohesion: 0.23
 Nodes (9): RecommendedWatcher, ConfigWatcher, Duration, Option, Path, PathBuf, Receiver, Result (+1 more)
 
 ### Community 62 - "Src App"
-Cohesion: 0.12
-Nodes (20): closing_a_background_workspace_after_active_leaves_active_index_unchanged(), closing_a_background_workspace_before_active_keeps_the_same_workspace_active(), closing_an_unknown_workspace_id_is_refused(), closing_the_active_workspace_clamps_to_the_new_last_index(), closing_the_only_remaining_workspace_is_refused(), new_workspace_creates_and_activates_it(), next_and_prev_workspace_wrap_around(), rename_workspace_by_id_renames_a_non_active_workspace_and_leaves_active_alone() (+12 more)
+Cohesion: 0.11
+Nodes (21): PaneForest, closing_a_background_workspace_after_active_leaves_active_index_unchanged(), closing_a_background_workspace_before_active_keeps_the_same_workspace_active(), closing_an_unknown_workspace_id_is_refused(), closing_the_active_workspace_clamps_to_the_new_last_index(), closing_the_only_remaining_workspace_is_refused(), new_workspace_creates_and_activates_it(), next_and_prev_workspace_wrap_around() (+13 more)
 
 ### Community 63 - "Src Llm"
-Cohesion: 0.44
-Nodes (5): ChatMessage, ChatRole, Into, Self, String
+Cohesion: 0.50
+Nodes (4): ChatMessage, Into, Self, String
 
 ### Community 64 - "Scripts Gen Icon.swift"
 Cohesion: 0.31
 Nodes (8): CGColor, CGFloat, CoreGraphics, Foundation, ImageIO, hex(), srgb(), UInt32
 
 ### Community 65 - "AcpAgentConfig"
-Cohesion: 0.33
-Nodes (5): llm_runtime_view(), llm_runtime_view_agent_path_requires_agent_config(), llm_runtime_view_preserves_backend_agent_and_ui_width(), llm_runtime_view_preserves_provider_defaults(), LlmRuntimeView
+Cohesion: 0.12
+Nodes (16): agent_display_name(), llm_runtime_view(), llm_runtime_view_agent_path_requires_agent_config(), llm_runtime_view_preserves_backend_agent_and_ui_width(), llm_runtime_view_preserves_provider_defaults(), LlmRuntimeView, Option, AcpAgentConfig (+8 more)
 
 ### Community 66 - ".handle_mouse_button"
 Cohesion: 0.13
@@ -502,8 +499,8 @@ Cohesion: 0.39
 Nodes (7): is_trusted(), Option, Path, PathBuf, Result, trust(), trust_file()
 
 ### Community 68 - "shaper.rs"
-Cohesion: 0.08
-Nodes (17): gpui_shell_actions(), Vec, render_command_palette(), Entity, IntoElement, TextInput, built_in_actions(), PaletteAction (+9 more)
+Cohesion: 0.13
+Nodes (9): render_command_palette(), Entity, IntoElement, TextInput, CommandPalette, Option, SkimMatcherV2, String (+1 more)
 
 ### Community 69 - "Config Default"
 Cohesion: 0.40
@@ -514,7 +511,7 @@ Cohesion: 0.15
 Nodes (17): full_and_incremental_row_storage_are_equivalent(), layout_geometry_changes_require_rebuild(), lcd_slots_track_their_own_lengths(), row_slots_are_non_overlapping_and_bounded(), row_storage_equivalent(), RowSlot, RowWriteError, Option (+9 more)
 
 ### Community 71 - "Src Renderer"
-Cohesion: 0.17
+Cohesion: 0.16
 Nodes (21): config_dir(), config_path(), ensure_default_configs(), extract_lua_version(), extract_version(), install_shell_integration(), list_themes(), load() (+13 more)
 
 ### Community 72 - "Src I18n.rs"
@@ -530,16 +527,16 @@ Cohesion: 1.00
 Nodes (3): PetruTerm App Icon, Cursor Block, Terminal Prompt Chevron
 
 ### Community 87 - "Src App"
-Cohesion: 0.18
-Nodes (7): LcdCursorPatch, OverlayUploadPlan, production_cursor_builder_and_overlay_upload_state_are_connected(), RenderContext, RenderOverlayState, Mux, Option
+Cohesion: 0.13
+Nodes (11): LcdCursorPatch, OverlayUploadPlan, production_cursor_builder_and_overlay_upload_state_are_connected(), RenderContext, RenderOverlayState, AnsiColor, Mux, Option (+3 more)
 
 ### Community 88 - "Src Font"
 Cohesion: 0.08
 Nodes (23): Architecture, Architecture decision: port the pane-tree algorithms, replace the rect math with taffy flex, Explicitly out of scope / not being built, File organization, gpui Chrome Migration — Design, Guiding principles, Input handling, Leader-key chorded dispatch (+15 more)
 
 ### Community 92 - "LcdGlyphAtlas"
-Cohesion: 0.06
-Nodes (35): App, blink_only_render(), blink_overlay_slot(), build_all_pane_instances(), production_overlay_upload_plan_keeps_cursor_first_and_terminal_ranges_separate(), production_upload_fallback_requests_full_rebuild_for_all_visible_rows(), ActiveEventLoop, Duration (+27 more)
+Cohesion: 0.11
+Nodes (18): BuildDamage, capacity_overflow_is_deferred_to_the_originating_terminal(), deferred_terminal_rebuilds_are_removed_when_state_is_cleared(), DirtyRows, full_damage_covers_requested_rows(), FullRebuildTrigger, pending_full_rebuild_applies_to_every_terminal_built_in_the_frame(), production_build_contract_consumes_every_full_rebuild_trigger() (+10 more)
 
 ### Community 93 - "shaper.rs"
 Cohesion: 0.24
@@ -558,8 +555,8 @@ Cohesion: 0.29
 Nodes (6): Global Constraints, GRAPH-ARCH-01 LLM Domain Closure Slice Implementation Plan, Self-Review, Task 1: Add `agent_display_name` helper to the LLM view module, Task 2: Migrate `handle_slash_command`'s `"model"` and `"agent"` arms to the view, Task 3: Deduplicate `build_panel_header`'s agent-name derivation
 
 ### Community 97 - ".rasterize_lcd_to_atlas"
-Cohesion: 0.12
-Nodes (4): Self, section_prev_cycles_backward_and_wraps(), SidebarSection, WorkspaceSidebar
+Cohesion: 0.15
+Nodes (14): NamedColor, ColorScheme, render_composer(), ChatPanelView, IntoElement, render_info_overlay(), IntoElement, render_toast() (+6 more)
 
 ### Community 98 - "String"
 Cohesion: 0.22
@@ -578,7 +575,7 @@ Cohesion: 0.20
 Nodes (9): Global Constraints, M2 — Core Chrome Implementation Plan, M2 Exit Criteria, Task 1: Pane tree — port algorithms onto a rect-cache instead of cached `Rect`, Task 2: Tabs — `TabManager` port + tab bar UI, `GpuiShellRoot` restructured to be tab-indexed, Task 3: Multi-pane rendering via taffy flex, separator drag, zoom, click-to-focus/click-to-switch-tab, Task 4: Leader-key chorded dispatch, Task 5: Status bar (+1 more)
 
 ### Community 102 - "cfdict_str"
-Cohesion: 0.24
+Cohesion: 0.26
 Nodes (9): context_block_empty(), context_block_with_files(), read_md_files(), Option, Path, Self, String, Vec (+1 more)
 
 ### Community 103 - "keybind_view.rs"
@@ -590,40 +587,40 @@ Cohesion: 0.20
 Nodes (8): arrow_key_to_focus_dir(), GpuiShellRoot, Context, FocusDir, KeyDownEvent, Option, Self, Window
 
 ### Community 105 - ".handle_redraw"
-Cohesion: 0.20
-Nodes (7): FreeTypeCmapLookup, Drop, FT_Face, FT_Library, Option, Path, Self
+Cohesion: 0.18
+Nodes (19): fit_terminal(), PaneRenderCx, render_leaf(), render_pane_tree(), render_split(), Bounds, Div, HashMap (+11 more)
 
 ### Community 106 - "RenamePrompt"
-Cohesion: 0.36
-Nodes (4): FT_Bitmap, Option, Queue, Vec
+Cohesion: 0.18
+Nodes (10): Config, gpui_shell_actions(), Vec, String, try_expand_snippet(), built_in_actions(), PaletteAction, Option (+2 more)
 
 ### Community 107 - "shaping.rs"
 Cohesion: 0.53
 Nodes (9): bench_shape_line_ascii(), bench_shape_line_ascii_cached(), bench_shape_line_ligatures(), bench_shape_line_ligatures_cached(), bench_shape_line_unicode(), make_colors(), make_shaper(), Criterion (+1 more)
 
 ### Community 108 - "Mux"
-Cohesion: 0.15
-Nodes (17): FnMut, SelectionRange, drain_pty_events(), eventloop_wakeup(), production_pty_drain_preserves_payload_and_special_events_across_budget(), PtyEventBatch, Arc, EventLoopProxy (+9 more)
+Cohesion: 0.28
+Nodes (8): eventloop_wakeup(), EventLoopProxy, Option, PathBuf, Result, Self, SplitDir, Wakeup
 
 ### Community 109 - "gpu.rs"
-Cohesion: 0.19
-Nodes (11): LruCache, Metrics, CellStyle, has_ligature_chars(), Buffer, HashSet, String, SwashCache (+3 more)
+Cohesion: 0.18
+Nodes (9): GpuiShellRoot, InfoOverlay, Context, Default, KeyDownEvent, ScrollHandle, Self, String (+1 more)
 
 ### Community 110 - "resolve_color"
-Cohesion: 0.05
-Nodes (37): StatusBarColors, clears_cache_when_exit_code_returns_to_zero(), ExitCodeState, loads_nonzero_exit_code_and_skips_reload_when_mtime_unchanged(), Option, Path, PathBuf, SystemTime (+29 more)
+Cohesion: 0.06
+Nodes (36): StatusBarColors, clears_cache_when_exit_code_returns_to_zero(), ExitCodeState, loads_nonzero_exit_code_and_skips_reload_when_mtime_unchanged(), Option, Path, PathBuf, SystemTime (+28 more)
 
 ### Community 111 - "run_session"
 Cohesion: 0.20
 Nodes (9): Global Constraints, M1b Exit Criteria, M1b (Grid Parity) Implementation Plan, Task 1: Split `font_state.rs` out of `terminal_element.rs`, Task 2: ANSI colors (fg/bg + bold/italic) + `rasterize.rs` extraction, Task 3: Cursor shapes + blink, Task 4: `mouse.rs` — click-drag selection, copy, click-to-focus, Task 5: Mouse-report passthrough (+1 more)
 
 ### Community 112 - "Pty"
-Cohesion: 0.14
-Nodes (26): FnOnce, collect_primary_face_ids(), compute_cell_size(), font_family(), font_features(), font_size(), FontState, header_row_min_height() (+18 more)
+Cohesion: 0.11
+Nodes (30): FnOnce, FreeTypeCmapLookup, Drop, FT_Face, FT_Library, collect_primary_face_ids(), compute_cell_size(), font_family() (+22 more)
 
 ### Community 113 - "UploadRange"
-Cohesion: 0.13
-Nodes (9): bench_upload_bytes_comparison(), Result, validate_upload_range(), account_terminal_uploads(), merge_upload_ranges(), Vec, TerminalUploadAccounting, upload_ranges_bytes() (+1 more)
+Cohesion: 0.22
+Nodes (7): validate_upload_range(), account_terminal_uploads(), merge_upload_ranges(), Vec, TerminalUploadAccounting, upload_ranges_bytes(), UploadRange
 
 ### Community 114 - "translate_key"
 Cohesion: 0.44
@@ -642,32 +639,32 @@ Cohesion: 0.18
 Nodes (12): fetch_git_branch(), GitBranchState, poll_git_branch(), recover_stuck_in_flight(), Duration, Instant, Option, Path (+4 more)
 
 ### Community 118 - "RenderContext"
-Cohesion: 0.33
-Nodes (6): LayoutGlyph, glyph_to_cache_key(), CacheKey, ID, ShapedGlyph, should_use_lcd()
+Cohesion: 0.21
+Nodes (13): brighten(), build_usage_hint(), calculate_row_hash(), colors_approx_eq(), pack_color(), resolve_line_fg(), resolve_span_fg(), ChatPanel (+5 more)
 
 ### Community 119 - "run_session"
 Cohesion: 0.31
 Nodes (8): AcpAgent, McpServer, PathBuf, Receiver, Result, Sender, Vec, run_session()
 
 ### Community 120 - "AppMenu"
-Cohesion: 0.19
-Nodes (12): HighlightStyle, char_range_to_byte_range(), heading_size(), render_line(), Div, Option, Pixels, span_highlight() (+4 more)
+Cohesion: 0.25
+Nodes (10): HighlightStyle, char_range_to_byte_range(), heading_size(), render_line(), Div, Option, Pixels, span_highlight() (+2 more)
 
 ### Community 121 - "TermSize"
 Cohesion: 0.25
 Nodes (15): active_skill_continues_when_no_new_match(), attached_file_content_is_injected_with_header(), attached_file_over_cap_gets_truncated(), build_prompt_addendum(), empty_managers_produce_no_skill_or_steering_text(), matching_skill_gets_injected_and_recorded(), no_match_and_no_active_skill_leaves_matched_skill_none(), PromptAddendum (+7 more)
 
 ### Community 122 - "spawn_acp_connect"
-Cohesion: 0.19
-Nodes (13): to_u8_rgba(), fill_cell_backgrounds(), rasterize_grid(), Arc, CellColorStyle, Option, Pixels, Rc (+5 more)
+Cohesion: 0.40
+Nodes (9): render_ai_block(), Div, render_agent_action_card(), render_awaiting_confirm_card(), render_confirm_card(), render_diff_line(), IntoElement, Rgba (+1 more)
 
 ### Community 123 - "Config"
-Cohesion: 0.13
-Nodes (10): home_str(), Mux, restore_pane_recursive(), RestorePaneContext, EventLoopProxy, Result, String, TabManager (+2 more)
+Cohesion: 0.07
+Nodes (31): home_str(), Mux, restore_pane_recursive(), RestorePaneContext, EventLoopProxy, Result, String, TabManager (+23 more)
 
 ### Community 124 - ".handle_redraw"
-Cohesion: 0.36
-Nodes (20): apply_row_offset(), bench_build_frame_dirty_rows(), bench_build_frame_hit(), bench_build_frame_hit_large_par(), bench_build_frame_hit_large_serial(), bench_build_frame_miss(), bench_build_row_hit(), bench_build_row_miss() (+12 more)
+Cohesion: 0.34
+Nodes (21): apply_row_offset(), bench_build_frame_dirty_rows(), bench_build_frame_hit(), bench_build_frame_hit_large_par(), bench_build_frame_hit_large_serial(), bench_build_frame_miss(), bench_build_row_hit(), bench_build_row_miss() (+13 more)
 
 ### Community 125 - ".dispatch_leader_action"
 Cohesion: 0.29
@@ -690,16 +687,16 @@ Cohesion: 0.14
 Nodes (17): App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId, IntoElement, LayoutId (+9 more)
 
 ### Community 130 - "gpu.rs"
-Cohesion: 0.12
-Nodes (5): Mux, FocusDir, HashMap, TabManager, WorkspaceData
+Cohesion: 0.09
+Nodes (9): Mux, Arc, FocusDir, HashMap, SearchMatch, TabManager, VecDeque, Workspace (+1 more)
 
 ### Community 131 - "render_line"
 Cohesion: 0.31
 Nodes (4): RenamePrompt, Key, Option, String
 
 ### Community 132 - "Self"
-Cohesion: 0.10
-Nodes (27): blur_translucency_only_when_translucent(), ChatUiConfig, Config, GpuPreference, KeybindStyle, KeyboardConfig, LeaderConfig, LlmBackend (+19 more)
+Cohesion: 0.09
+Nodes (20): BatterySaverMode, blur_translucency_only_when_translucent(), ChatUiConfig, GpuPreference, KeybindStyle, KeyboardConfig, NotificationsConfig, NotificationStyle (+12 more)
 
 ### Community 133 - "M3b — AI Chat Panel Implementation Plan"
 Cohesion: 0.20
@@ -734,40 +731,32 @@ Cohesion: 0.14
 Nodes (21): render_browser_row(), render_empty_section(), render_mcp_section(), render_skills_section(), render_steering_section(), render_workspaces_section(), AnyElement, App (+13 more)
 
 ### Community 141 - "FreeTypeLcdRasterizer"
-Cohesion: 0.15
-Nodes (13): FreeTypeLcdRasterizer, LcdPixelMode, Device, Drop, FT_Face, FT_Library, HashMap, Mutex (+5 more)
+Cohesion: 0.13
+Nodes (16): FT_Bitmap, FreeTypeLcdRasterizer, Device, Drop, FT_Face, FT_Library, HashMap, Mutex (+8 more)
 
 ### Community 142 - "Column"
-Cohesion: 0.23
-Nodes (10): Column, Line, cell_in_selection(), String, SelectionType, filter_matches(), push_search_match(), SearchMatch (+2 more)
+Cohesion: 0.17
+Nodes (14): Column, Line, String, block_output_text_for(), GpuiShellRoot, row_text_and_absolute_row(), Option, String (+6 more)
 
 ### Community 143 - "leader.rs"
-Cohesion: 0.16
-Nodes (14): kb(), KeyBind, build_leader_map(), build_leader_map_matches_default_keybinds_lua(), kb(), LeaderAction, Error, FocusDir (+6 more)
+Cohesion: 0.22
+Nodes (4): InfoOverlay, Self, String, Vec
 
 ### Community 144 - ".collect_grid_cells_for"
-Cohesion: 0.27
-Nodes (10): FlagHintOverlay, GhostOverlay, AnsiColor, FxHashMap, Option, SearchMatch, Vec, search_highlight_at() (+2 more)
+Cohesion: 0.19
+Nodes (17): FnMut, SelectionRange, cell_in_selection(), drain_pty_events(), FlagHintOverlay, GhostOverlay, production_pty_drain_preserves_payload_and_special_events_across_budget(), PtyEventBatch (+9 more)
 
 ### Community 145 - "spawn_terminal_at"
-Cohesion: 0.20
-Nodes (12): PaneForest, GpuiShellRoot, Context, Self, Window, Arc, Option, PathBuf (+4 more)
+Cohesion: 0.17
+Nodes (14): GpuiShellRoot, Context, Self, GpuiShellRoot, Context, Self, Window, Arc (+6 more)
 
 ### Community 146 - "SearchBar"
 Cohesion: 0.17
 Nodes (6): Option, String, Vec, SearchBar, SearchMatch, truncated_count_label_shows_plus_suffix()
 
-### Community 147 - "snapshot.rs"
-Cohesion: 0.25
-Nodes (15): list_saved_workspaces(), load_workspace(), PaneNodeSnapshot, Box, Option, PathBuf, Result, String (+7 more)
-
 ### Community 148 - "GpuiShellRoot"
 Cohesion: 0.22
 Nodes (5): GpuiShellRoot, App, Context, Self, SplitDir
-
-### Community 149 - "build_shaping_spans"
-Cohesion: 0.22
-Nodes (9): attrs_for(), Attrs, FontFeatures, build_shaping_spans(), Attrs, CellColorStyle, FontFeatures, String (+1 more)
 
 ### Community 150 - "M4 — Remaining Surfaces: Design"
 Cohesion: 0.14
@@ -776,14 +765,6 @@ Nodes (13): 1. Scope, 2. What's reusable vs. new, 3. M4a — Command Palette, 4.
 ### Community 151 - "build_frame_callbacks"
 Cohesion: 0.19
 Nodes (13): FileDropCallback, build_file_drop_callback(), build_frame_callbacks(), build_tab_right_click_callback(), ChatPillCallback, Context, ContextActionCallback, ContextMenuCloseCallback (+5 more)
-
-### Community 152 - "Rect"
-Cohesion: 0.26
-Nodes (13): adjust_parent_split(), collect_leaf_infos_impl(), collect_separators_impl(), contains_leaf(), next_node_id(), PaneInfo, PanePad, PaneSeparator (+5 more)
-
-### Community 154 - "workspace_snapshot.rs"
-Cohesion: 0.18
-Nodes (7): next_node_id(), GpuiShellRoot, home_str(), Context, Result, Self, String
 
 ### Community 155 - ".open_terminal_for_acp"
 Cohesion: 0.23
@@ -813,17 +794,13 @@ Nodes (7): main(), quit(), App, spawn_config_watcher(), Context, GpuiShellRoot, 
 Cohesion: 0.47
 Nodes (5): GpuiShellRoot, Context, Self, String, Window
 
-### Community 162 - "PaletteAction"
-Cohesion: 0.31
-Nodes (3): ElementState, MouseButton, KeyEvent
-
 ### Community 163 - ".handle_sidebar_focused_key"
 Cohesion: 0.35
 Nodes (5): GpuiShellRoot, Context, KeyDownEvent, Self, Window
 
 ### Community 164 - "snippets.rs"
-Cohesion: 0.20
-Nodes (6): GpuiShellRoot, Context, KeyDownEvent, Self, String, try_expand_snippet()
+Cohesion: 0.40
+Nodes (4): GpuiShellRoot, Context, KeyDownEvent, Self
 
 ### Community 165 - "GpuiShellRoot"
 Cohesion: 0.36
@@ -837,17 +814,9 @@ Nodes (9): Exit Criteria, Global Constraints, M5a — ACP Agent Backend & Tool-C
 Cohesion: 0.20
 Nodes (9): Global Constraints, M5d — Prompt Context Injection Implementation Plan, Manual testing checklist (spec §8, reproduce after all 6 tasks land), Task 1: The shared prompt-context builder, Task 2: MCP config consolidation, Task 3: ACP session wiring — native `mcp_servers`, Task 4: wgpu — MCP config consolidation + `mcp_servers` wiring, Task 5: wgpu — prompt-context wiring in `submit_ai_query` (+1 more)
 
-### Community 168 - "Action"
-Cohesion: 0.32
-Nodes (6): CachedFrame, evict_all(), evict_terminal(), App, Arc, RenderImage
-
 ### Community 169 - "AppMenu"
-Cohesion: 0.20
-Nodes (8): Menu, MenuEvent, MenuId, AppMenu, Option, Self, Vec, Submenu
-
-### Community 170 - "draw_glyphs"
-Cohesion: 0.32
-Nodes (7): draw_glyphs(), Buffer, CellColorStyle, FontSystem, RgbaImage, SwashCache, Vec
+Cohesion: 0.29
+Nodes (6): Menu, MenuId, AppMenu, Self, Vec, Submenu
 
 ### Community 171 - ".maybe_handle_search_key"
 Cohesion: 0.27
@@ -855,7 +824,7 @@ Nodes (6): GpuiShellRoot, App, Context, KeyDownEvent, Self, Window
 
 ### Community 172 - "status_bar/battery.rs"
 Cohesion: 0.13
-Nodes (18): c_void, BatterySaverMode, BatteryState, does_not_poll_before_ttl_expires(), poll_battery(), polls_again_once_ttl_expires(), resolve_battery_saver_active(), Duration (+10 more)
+Nodes (17): c_void, BatteryState, does_not_poll_before_ttl_expires(), poll_battery(), polls_again_once_ttl_expires(), resolve_battery_saver_active(), Duration, Instant (+9 more)
 
 ### Community 173 - "full_grid_text"
 Cohesion: 0.24
@@ -868,10 +837,6 @@ Nodes (8): Exit Criteria, Global Constraints, M5c — Palette & Context-Menu Fea
 ### Community 175 - "M5b — Chat Composer Extras Design"
 Cohesion: 0.22
 Nodes (8): 1. Overview, 2. Global Constraints, 3. Task 1 -- `Leader a e` / `Leader a f` + palette entries, 4. Task 2 -- Suggestion pills (zero-state + post-response), 5. Task 3 -- File attachment picker, 6. Deferred (recorded, not reopened for reconsideration here), 7. Manual testing required (cannot be verified from the agent sandbox), M5b — Chat Composer Extras Design
-
-### Community 176 - ".new"
-Cohesion: 0.50
-Nodes (3): GpuiShellRoot, Context, Self
 
 ### Community 177 - "UiManager"
 Cohesion: 0.31
@@ -902,8 +867,8 @@ Cohesion: 0.36
 Nodes (7): header_status(), render_header(), ChatPanel, IntoElement, Option, String, short_model_name()
 
 ### Community 184 - ".dispatch_palette_action"
-Cohesion: 0.25
-Nodes (6): convert_focus_dir(), GpuiShellRoot, Context, FocusDir, Self, Window
+Cohesion: 0.12
+Nodes (14): FromStr, MenuEvent, Option, convert_focus_dir(), GpuiShellRoot, Context, FocusDir, Self (+6 more)
 
 ### Community 185 - ".begin_tab_rename"
 Cohesion: 0.57
@@ -926,8 +891,8 @@ Cohesion: 0.29
 Nodes (6): Exit Criteria, Global Constraints, M5b — Chat Composer Extras Implementation Plan, Task 1: `Leader a e` / `Leader a f` + palette entries, Task 2: Suggestion pills (zero-state + post-response), Task 3: File attachment picker
 
 ### Community 190 - "keybind_view.rs"
-Cohesion: 0.18
-Nodes (15): direct_bindings_view(), direct_bindings_view_filters_out_leader_case_insensitive(), direct_bindings_view_output_parses_into_real_actions(), DirectBindingsView, leader_bindings_view(), leader_bindings_view_carries_leader_key(), leader_bindings_view_filters_to_leader_mods_only_case_insensitive(), LeaderBindingsView (+7 more)
+Cohesion: 0.09
+Nodes (29): direct_bindings_view(), direct_bindings_view_filters_out_leader_case_insensitive(), direct_bindings_view_output_parses_into_real_actions(), DirectBindingsView, kb(), leader_bindings_view(), leader_bindings_view_carries_leader_key(), leader_bindings_view_filters_to_leader_mods_only_case_insensitive() (+21 more)
 
 ### Community 191 - ".handle_slash_command"
 Cohesion: 0.33
@@ -940,10 +905,6 @@ Nodes (6): GpuiShellRoot, Context, Duration, Into, Self, String
 ### Community 193 - "M4d — Toasts Implementation Plan"
 Cohesion: 0.33
 Nodes (5): Exit Criteria, Global Constraints, M4d — Toasts Implementation Plan, Task 1: Toast state, render, and poll-tick auto-expiry, Task 2: Wire config-reload as the toast's first real trigger
-
-### Community 194 - "String"
-Cohesion: 0.27
-Nodes (6): header_action_for_col(), header_action_label(), header_actions_start_col(), HeaderAction, Option, String
 
 ### Community 196 - ".write_key_to_terminal"
 Cohesion: 0.40
@@ -962,24 +923,24 @@ Nodes (4): render_search_bar(), Entity, IntoElement, TextInput
   .context/core/ACTIVE_CONTEXT.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **278 isolated node(s):** `@modelcontextprotocol/server-filesystem`, `@modelcontextprotocol/server-fetch`, `build_pgo.sh script`, `ci-local.sh script`, `RUSTFLAGS` (+273 more)
+- **277 isolated node(s):** `@modelcontextprotocol/server-filesystem`, `@modelcontextprotocol/server-fetch`, `build_pgo.sh script`, `ci-local.sh script`, `RUSTFLAGS` (+272 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **9 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **10 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **What is the exact relationship between `Phase 9 UI Restyle Complete` and `Phase 4 Plugin Ecosystem Focus`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **Why does `Config` connect `Self` to `Src App`, `Src App`, `Src Term`, `Src Renderer`, `Src Llm`, `leader.rs`, `spawn_terminal_at`, `Src App`, `Src Term`, `Src Config`, `Src App`, `spawn_acp_connect`, `Src Llm`, `Src Renderer`, `Src Renderer`, `Src App`, `snippets.rs`, `Src Llm`, `status_bar/battery.rs`, `Src App`, `.new`, `UiManager`, `.spawn`, `.dispatch_palette_action`, `keybind_view.rs`, `AcpAgentConfig`, `shaper.rs`, `Src Renderer`, `Src App`, `LcdGlyphAtlas`, `Mux`, `Config`, `build_font_system`?**
-  _High betweenness centrality (0.295) - this node is a cross-community bridge._
-- **Why does `ColorScheme` connect `Src App` to `Src Config`, `Src Term`, `Self`, `to_rgba`, `sections.rs`, `Src Config`, `Benches Build Instances.rs`, `Src Ui`, `Src Renderer`, `Src App`, `Src App`, `Src Llm`, `Src App`, `render_header`, `WakeupGate`, `shaper.rs`, `render_search_bar`, `Src App`, `String`, `resolve_color`, `AppMenu`, `spawn_acp_connect`?**
-  _High betweenness centrality (0.134) - this node is a cross-community bridge._
-- **Why does `GpuiShellRoot` connect `Src Llm` to `Self`, `Src Llm`, `Src Term`, `pty_schedule.rs`, `leader.rs`, `Src Term`, `SearchBar`, `Benches Build Instances.rs`, `Src App`, `Src Llm`, `Src Llm`, `Src Llm`, `status_bar/battery.rs`, `Src App`, `shaper.rs`, `.rasterize_lcd_to_atlas`, `cfdict_str`, `resolve_color`, `CellVertex`?**
-  _High betweenness centrality (0.084) - this node is a cross-community bridge._
+- **Why does `Config` connect `RenamePrompt` to `Src Config`, `Src App`, `Self`, `Src App`, `Src Term`, `Src Renderer`, `.collect_grid_cells_for`, `spawn_terminal_at`, `Src App`, `Src Term`, `Src Config`, `Src App`, `spawn_acp_connect`, `Src Llm`, `Src Renderer`, `Src App`, `Src Llm`, `Src App`, `UiManager`, `.spawn`, `keybind_view.rs`, `Src App`, `AcpAgentConfig`, `shaper.rs`, `Src Renderer`, `Src App`, `.rasterize_lcd_to_atlas`, `Mux`, `RenderContext`, `Config`, `build_font_system`?**
+  _High betweenness centrality (0.324) - this node is a cross-community bridge._
+- **Why does `ColorScheme` connect `.rasterize_lcd_to_atlas` to `Src Term`, `Src Llm`, `Self`, `to_rgba`, `sections.rs`, `Src Config`, `Src Ui`, `Src App`, `Src App`, `Src App`, `Src Llm`, `Src App`, `render_header`, `WakeupGate`, `shaper.rs`, `render_search_bar`, `Src App`, `String`, `.handle_redraw`, `RenamePrompt`, `resolve_color`, `RenderContext`, `AppMenu`, `spawn_acp_connect`?**
+  _High betweenness centrality (0.147) - this node is a cross-community bridge._
+- **Why does `Terminal` connect `Src Term` to `gpu.rs`, `Src Term`, `Src App`, `Src Term`, `Src App`, `.handle_redraw`, `RenamePrompt`, `Src App`, `full_grid_text`, `Column`, `Pty`, `Src Term`, `spawn_terminal_at`, `Src Llm`?**
+  _High betweenness centrality (0.087) - this node is a cross-community bridge._
 - **What connects `@modelcontextprotocol/server-filesystem`, `@modelcontextprotocol/server-fetch`, `build_pgo.sh script` to the rest of the system?**
-  _278 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _277 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `Src Config` be split into smaller, more focused modules?**
+  _Cohesion score 0.12043010752688173 - nodes in this community are weakly interconnected._
 - **Should `Src App` be split into smaller, more focused modules?**
-  _Cohesion score 0.12162162162162163 - nodes in this community are weakly interconnected._
-- **Should `Src Term` be split into smaller, more focused modules?**
-  _Cohesion score 0.06240084611316764 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.11740890688259109 - nodes in this community are weakly interconnected._

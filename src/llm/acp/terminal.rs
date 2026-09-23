@@ -23,6 +23,7 @@ pub enum AcpTerminalRequest {
         pane_id: usize,
         tx: oneshot::Sender<i32>,
     },
-    /// Agent called `terminal/kill` or `terminal/release` — close the pane.
+    /// Agent called `terminal/kill` - close the pane. `terminal/release` is a
+    /// no-op and does not send this.
     Kill { pane_id: usize },
 }

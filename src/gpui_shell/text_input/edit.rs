@@ -1,10 +1,7 @@
-// gpui chrome migration (M3a Task 1): `TextInput`'s editing and mouse
-// methods, split out of `mod.rs` for the 400-line convention.
-//
-// Ported from gpui 0.2.2's own examples/input.rs, plus two behavioral
-// changes to `on_mouse_down` -- it stops propagation and explicitly focuses
-// the field -- see `mod.rs`'s header for the full port note and all six
-// adaptations.
+// `TextInput`'s editing and mouse methods. Ported from gpui 0.2.2's own
+// examples/input.rs, plus two behavioral changes to `on_mouse_down` -- it
+// stops propagation and explicitly focuses the field -- see `mod.rs`'s
+// header for the full list of adaptations.
 
 use gpui::{
     ClipboardItem, Context, EntityInputHandler, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
@@ -95,13 +92,13 @@ impl TextInput {
         // recoverable.
         window.focus(&self.focus_handle);
 
-        // Fifth deliberate adaptation from gpui's own `examples/input.rs`
-        // (see `mod.rs`'s header for the other four): that example's input
+        // Deliberate adaptation from gpui's own `examples/input.rs` (see
+        // `mod.rs`'s header for the full list): that example's input
         // has no clickable ancestor, so it never needed to stop this click
         // going anywhere else. Every real consumer here does -- the tab bar
         // hosts this editor inside a cell whose own `on_mouse_down` switches
-        // tabs (`render.rs`'s `on_select_tab`), and the M3b chat input and
-        // file-picker query will sit inside clickable chrome too. gpui's
+        // tabs (`render.rs`'s `on_select_tab`), and the chat input and
+        // file-picker query sit inside clickable chrome too. gpui's
         // bubble phase runs innermost-first and propagates by default
         // (`App::stop_propagation`'s own doc), so without this, a click made
         // to place the cursor mid-edit reaches this handler AND then bubbles

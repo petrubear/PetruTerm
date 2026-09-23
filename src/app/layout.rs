@@ -36,8 +36,8 @@ impl App {
         }
     }
 
-    /// Update the GPU uniform padding to account for the tab bar (or lack thereof).
-    /// Call whenever tab count crosses the 1<->2 boundary, or on initial setup.
+    /// Recompute the grid origin (padding + titlebar/tab bar + sidebar + inset).
+    /// Called on tab-count 1<->2, sidebar toggle, config reload and startup.
     pub(super) fn apply_tab_bar_padding(&mut self) {
         if let Some(rc) = &mut self.render_ctx {
             let title_h = if self.config.window.title_bar_style == TitleBarStyle::Custom {
@@ -241,7 +241,7 @@ impl App {
     /// change to the render loop's geometry must be reflected here (TD-P9-02).
     pub(super) fn hit_test_tab_bar(&self, x_px: f64) -> Option<usize> {
         let tabs = self.mux.tabs.tabs();
-        // The renderer only draws individual pills when there are 2+ tabs.
+        // The renderer only draws individual tabs when there are 2+ tabs.
         if tabs.len() <= 1 {
             return None;
         }

@@ -44,7 +44,6 @@ pub(super) async fn run_session(
     let tc_output = term_ctx.clone();
     let tc_wait = term_ctx.clone();
     let tc_kill = term_ctx.clone();
-    let tc_release = term_ctx.clone();
 
     let mut ready_tx = Some(ready_tx);
 
@@ -282,7 +281,6 @@ pub(super) async fn run_session(
         // ── terminal/release — pane stays visible, user closes manually ───────
         .on_receive_request(
             async move |_req: ReleaseTerminalRequest, responder, _cx| {
-                let _ = tc_release; // suppress unused warning — release is a no-op
                 let _ = responder.respond(ReleaseTerminalResponse::new());
                 Ok(())
             },

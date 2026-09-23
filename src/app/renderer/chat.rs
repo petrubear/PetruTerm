@@ -50,8 +50,8 @@ impl RenderContext {
         }
 
         // ── Colors (from active theme) ────────────────────────────────────────
-        // R-5: the panel is a floating surface with its own tone, distinct from
-        // the terminal background behind it.
+        // The panel tone is carried by the background rect; cell bgs stay
+        // transparent so the rect shows through.
         let actual_panel_bg = config.colors.ui_surface;
         let panel_bg = [0.0; 4]; // transparent
 
@@ -678,11 +678,11 @@ impl RenderContext {
         }
 
         // Use pre-wrapped lines from the cache (TD-PERF-05).
-        // ensure_wrap_cache() is called in mod.rs before this function runs.
+        // ensure_wrap_cache() is called in frame.rs before this function runs.
         let user_accent = [0.20, 0.60, 0.98, 1.0]; // Blue accent for user
         let asst_accent = [0.306, 0.788, 0.690, 1.0]; // Teal/green accent for AI
 
-        // W-1: full-width message background tints (15% warm for user, 10% cool for assistant).
+        // W-1: full-width message background tints (15% user_fg (cyan) tint for user, 10% teal for assistant).
         // V-4: inherit the panel surface alpha so message rows stay in sync with a
         // translucent panel under blur (no opaque bands over the vibrancy).
         let b = actual_panel_bg;
@@ -709,7 +709,6 @@ impl RenderContext {
                 crate::llm::ChatRole::User => (user_fg, Some(user_accent), user_bg),
                 crate::llm::ChatRole::Assistant => (asst_fg, Some(asst_accent), asst_bg),
                 crate::llm::ChatRole::System => continue,
-                crate::llm::ChatRole::Tool(_) => continue,
             };
             let prefix = "        "; // 8 spaces — keeps msg_inner_w (sub 8) correct
             let prefix_len = 8usize;

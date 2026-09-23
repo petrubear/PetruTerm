@@ -39,8 +39,7 @@ pub enum PtyEvent {
     ClipboardStore(String),
     /// OSC 52 read — read clipboard, apply formatter, write result to PTY.
     ClipboardLoad(std::sync::Arc<dyn Fn(&str) -> String + Send + Sync + 'static>),
-    /// Terminal parser response that must be forwarded to the shell process.
-    #[allow(dead_code)]
+    /// Synthetic bytes to write to the PTY (e.g. OSC 52 clipboard-load reply).
     PtyWrite(String),
     /// OSC 133 semantic prompt marker.
     Osc133(Osc133Marker),
@@ -212,9 +211,9 @@ impl Pty {
         let child_thread = std::thread::Builder::new()
             .name("pty-child".into())
             .spawn(move || {
-                // Blocking wait for child exit.
+                // Blocking wait for child exit. The closure owns `child`, but
+                // we call waitpid directly to get the raw exit status.
                 let code = {
-                    // We only have a &Child here (via id), so use waitpid.
                     let mut status: libc::c_int = 0;
                     unsafe {
                         libc::waitpid(child_pid_libc, &mut status, 0);
@@ -226,7 +225,7 @@ impl Pty {
                     }
                 };
                 log::info!("PTY child exited with code {code}");
-                drop(child); // explicit: ensures child is cleaned up
+                drop(child);
                 let _ = tx_clone2.try_send(PtyEvent::Exit(code));
                 if wakeup_gate_clone2.signal() {
                     wakeup_clone2();
@@ -274,29 +273,18 @@ impl Pty {
         }
     }
 
-    /// Cleanly shut down the PTY: close master fd, signal child, join threads.
+    /// Cleanly shut down the PTY: SIGHUP the child's process group, join the
+    /// reader/child threads, then close the master fd.
     pub fn shutdown(&mut self) {
-        // Order matters. SIGHUP the child FIRST so the shell exits and its
-        // slave-side PTY closes; that makes the reader's blocking
-        // `read(master_fd)` return EIO and the reader loop break. Only after the
-        // reader thread has joined (no longer touching the fd) do we close the
-        // master.
+        // Order matters: closing the master while the reader thread is blocked
+        // in `read(master_fd)` deadlocks on macOS/BSD (`close()` waits for the
+        // in-flight `read()`, which only returns once the slave side closes).
+        // SIGHUP first so the shell exits and the reader sees EIO.
         //
-        // Closing the master *before* the reader has stopped deadlocks on
-        // macOS/BSD: `close()` blocks until the in-flight `read()` on the same
-        // fd completes, but that `read()` cannot complete until the slave closes
-        // — which needs the SIGHUP we would otherwise send afterwards.
-        //
-        // `killpg`, not `kill` (TD-GPUI-01): `spawn_shell`'s `pre_exec` already
-        // calls `setsid()`, so `child_pid_libc` is also the new session's pgid.
-        // A plain `kill` only reached the shell itself -- a descendant that
-        // outlives it without calling `setsid()` of its own (`sleep 300 &
-        // disown`, a `nohup`ed dev server) keeps a slave-side fd open, so
-        // `read(master_fd)` never sees EIO and the join below never returns.
-        // `killpg` reaches every process still in that group, closing the
-        // common case. It does not reach a descendant that detached into its
-        // own session or is ignoring SIGHUP -- that residual is accepted, not
-        // fixed here (see `Drop`'s own doc comment).
+        // `killpg`, not `kill`: `spawn_shell`'s `pre_exec` calls `setsid()`, so
+        // `child_pid_libc` is also the pgid, and this reaches descendants still
+        // in the shell's group. A descendant that detached into its own session
+        // or ignores SIGHUP can still block the join (TD-GPUI-01).
         unsafe {
             libc::killpg(self.child_pid_libc, libc::SIGHUP);
         }
@@ -315,26 +303,15 @@ impl Pty {
     /// (e.g. through an `Rc<Terminal>`, which can't produce the `&mut Pty`
     /// `shutdown()` needs).
     ///
-    /// Calling this before a `Terminal`/`Pty` is dropped is no longer
-    /// load-bearing against the `close()`-vs-`read()` deadlock: `Drop for
-    /// Pty` runs the full `shutdown()` sequence itself now (see its own doc
-    /// comment), so it sends SIGHUP and joins the reader before closing the
-    /// master. It is still worth calling, because it signals the shell
-    /// *before* the drop rather than during it -- giving the shell a head
-    /// start on exiting and the reader a head start on noticing EOF, which
-    /// keeps `Drop`'s own `reader_thread.join()` short. That join runs on
-    /// whatever thread drops the `Pty` -- the UI thread, for both binaries
-    /// -- so every millisecond it blocks is a frozen window.
+    /// Not required before drop (`Drop` runs the full `shutdown()`), but
+    /// signalling early keeps the drop-time reader join short; that join runs
+    /// on the UI thread.
     ///
-    /// Only `gpui_shell` calls this today (`petruterm`'s own `cmd_close_pane`
-    /// gets `&mut Terminal` through `Mux`'s `Vec<Option<Terminal>>` and can
-    /// call the full `shutdown()` instead) -- `#[allow(dead_code)]` because
-    /// cargo's dead-code lint is evaluated per binary target, and the
-    /// `petruterm` (wgpu) binary's own call graph never reaches this method.
+    /// Only `gpui_shell` calls this, hence the allow: the `petruterm` binary
+    /// never reaches it.
     #[allow(dead_code)]
     pub fn request_exit(&self) {
-        // `killpg`, matching `shutdown()`'s own TD-GPUI-01 fix -- same reasoning:
-        // `child_pid_libc` is the session's pgid (`setsid()` in `spawn_shell`).
+        // `killpg`, same reasoning as `shutdown()`.
         unsafe {
             libc::killpg(self.child_pid_libc, libc::SIGHUP);
         }
@@ -350,36 +327,10 @@ impl Pty {
 
 impl Drop for Pty {
     fn drop(&mut self) {
-        // Must run the full SIGHUP-then-join-then-close sequence, not a bare
-        // `close_master()`: whenever the child is still alive, closing the
-        // master while the reader thread sits in `read()` on that same fd
-        // deadlocks on macOS/BSD -- the deadlock `shutdown()`'s own comment
-        // describes, which this impl was previously walking straight into.
-        //
-        // It only ever surfaced on a path that drops a Pty whose shell is
-        // still running. Typing `exit` never hit it (the shell is already
-        // gone, so the reader has already broken out on EIO and `close()`
-        // returns immediately), which is why it stayed hidden until Cmd+Q
-        // and last-tab `Leader &` -- both of which reach `cx.quit()`, and so
-        // drop every live Terminal without signalling its shell first --
-        // hung the whole app at teardown.
-        //
-        // `master_fd < 0` means `shutdown()` already ran; skip, rather than
-        // re-`kill` a pid the OS may since have recycled.
-        //
-        // STILL NOT a complete fix (TD-GPUI-01, narrowed 2026-09-17):
-        // `shutdown()` now `killpg`s the whole session/pgid instead of just the
-        // direct child (`spawn_shell`'s `pre_exec` already `setsid()`s the
-        // child, so `child_pid_libc` doubles as the pgid) -- this covers the
-        // common case named above (`sleep 300 & disown`, a plain `nohup`ed
-        // job: neither calls its own `setsid()`, so both stay in the shell's
-        // group and now get SIGHUP'd too). The join is still unbounded, so a
-        // descendant that detaches into its own session, or that ignores
-        // SIGHUP outright, still wedges it -- now inside `Drop`, where no
-        // caller can guard against it. Closing that last sliver needs a
-        // bounded join with an fd-close fallback, a further behavior change to
-        // shared code the wgpu binary also runs; left for a future pass if it
-        // ever surfaces in practice.
+        // Runs the full `shutdown()` sequence if it has not run yet
+        // (`master_fd < 0` means it already did). A bare `close_master()` would
+        // deadlock on macOS while the reader is blocked in `read()`.
+        // Known gap (TD-GPUI-01): the reader join is unbounded.
         if self.master_fd >= 0 {
             self.shutdown();
         }
@@ -462,7 +413,8 @@ unsafe fn spawn_shell(
     cmd.arg("-l");
 
     // Connect stdin/stdout/stderr to the slave PTY.
-    // We dup slave_fd for stdout and stderr to avoid double-close.
+    // stdin/stdout get dups of slave_fd; stderr takes slave_fd itself, so
+    // nothing is closed twice.
     let stdin_fd = libc::dup(slave_fd);
     let stdout_fd = libc::dup(slave_fd);
     if stdin_fd < 0 || stdout_fd < 0 {

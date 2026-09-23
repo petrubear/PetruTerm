@@ -401,7 +401,7 @@ impl RenderContext {
     /// Emit the cursor vertex for the focused terminal pane.
     ///
     /// Must be called AFTER `build_instances` for all panes and BEFORE any overlay
-    /// instances so that `content_end` accurately marks the cell/cursor boundary.
+    /// instances so the cursor lands after all cell instances.
     /// Stores a blink-on template in `cursor_vertex_template` for the fast blink path.
     #[allow(clippy::too_many_arguments)]
     pub fn build_cursor_instance(

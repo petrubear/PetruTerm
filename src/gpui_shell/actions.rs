@@ -1,9 +1,5 @@
-// gpui chrome migration (M2 Task 5b): pane/tab/workspace lifecycle actions --
-// splitting, closing, reaping, zooming, and workspace switching.
-// `dispatch_leader_action` (`leader_dispatch.rs`) and the tab/workspace
-// rename flows (`rename.rs`) were split out of this file post-M3c-Task-4 for
-// the 400-line convention; this file itself was originally split out of
-// `mod.rs` for the same reason.
+// Pane/tab/workspace lifecycle actions: splitting, closing, reaping,
+// zooming, and workspace switching.
 
 use std::rc::Rc;
 
@@ -45,7 +41,7 @@ impl GpuiShellRoot {
 
     /// Close the focused pane and reap its terminal. A no-op when it's the
     /// tab's last pane (`PaneForest::close_focused` refuses that case --
-    /// closing the last pane is closing the tab, which is Task 4's job).
+    /// closing the last pane is closing the tab: use `CloseTab`).
     pub(super) fn close_focused_pane(&mut self, cx: &mut App) {
         let active = self.workspaces.active().tabs.active_index();
         let Some(closed) = self.workspaces.active_mut().tab_panes[active].close_focused() else {
@@ -67,9 +63,9 @@ impl GpuiShellRoot {
 
     /// Auto-close a pane whose shell process has already exited on its own
     /// (typing `exit`, `Ctrl+D`, the shell crashing) -- detected via
-    /// `PtyEvent::Exit` on `Pty::rx`, drained by the poll loop in `new()`.
-    /// Mirrors the wgpu app's own `Mux::close_terminal` (src/app/mux/mod.rs)
-    /// in full now that Task 4 gives us tab-closing machinery: multi-pane
+    /// `PtyEvent::Exit` on `Pty::rx`, drained by the poll loop (`poll.rs`).
+    /// Mirrors the wgpu app's own `Mux::close_terminal` (src/app/mux/mod.rs):
+    /// multi-pane
     /// tabs just lose the one pane; a tab whose exited pane was its last
     /// one is closed entirely via `close_tab_at`, which quits the app
     /// outright if that was also the app's last tab (see its own doc
@@ -118,7 +114,7 @@ impl GpuiShellRoot {
     /// background tab's last pane can exit while a different tab is
     /// focused) and reap every leaf terminal it owned. Quits the whole app
     /// via `cx.quit()` instead when `tab_idx` is the app's only remaining
-    /// tab: gpui_shell's `render()` indexes `self.tab_panes[active_index]`
+    /// tab: gpui_shell's `render()` indexes `workspaces.active().tab_panes[active_index]`
     /// unconditionally, so leaving zero tabs open is not a state this app
     /// can render at all -- matching the wgpu app's own behavior for the
     /// equivalent situation (`frame.rs`'s `if self.close_exited_terminals(
@@ -128,7 +124,7 @@ impl GpuiShellRoot {
     ///
     /// `signal_shells`: `true` sends every leaf's shell a SIGHUP first (the
     /// user explicitly closing a tab whose shells may still be alive,
-    /// `LeaderAction::CloseTab`'s own prior behavior); `false` skips it
+    /// `LeaderAction::CloseTab`); `false` skips it
     /// (`on_terminal_exited`, whose sole leaf is already known dead).
     /// Returns whether a tab was actually closed (false only if `tab_idx`
     /// didn't name a real tab -- quitting the app counts as "closed").
@@ -153,8 +149,7 @@ impl GpuiShellRoot {
             // its active tab's pane tree unconditionally) -- so closing a
             // workspace's last tab closes the WORKSPACE, unless it's also
             // the app's last workspace, in which case there is nowhere left
-            // to fall back to and the whole app quits (unchanged from this
-            // function's pre-M3c behavior for the single-workspace case).
+            // to fall back to and the whole app quits.
             if self.workspaces.len() <= 1 {
                 cx.quit();
                 return true;
@@ -204,9 +199,8 @@ impl GpuiShellRoot {
 
     /// Close the workspace at `ws_idx` entirely (every tab, every pane).
     /// Refuses (returns `false`) if it's the app's only workspace or
-    /// `ws_idx` doesn't name a real one -- `close_tab_at` above is the only
-    /// caller until Task 3 adds `LeaderAction::CloseWorkspace` and Task 4
-    /// adds the sidebar's "x" button, both of which call this directly.
+    /// `ws_idx` doesn't name a real one. Called from `close_tab_at` above,
+    /// `LeaderAction::CloseWorkspace`, and the sidebar's "x" button.
     pub(super) fn close_workspace_at(
         &mut self,
         ws_idx: usize,
@@ -287,7 +281,7 @@ impl GpuiShellRoot {
     }
 
     /// Switch to the workspace at `idx`. The only path any workspace switch
-    /// (keyboard here, a sidebar row click in Task 4) should go through --
+    /// (keyboard or a sidebar row click) should go through --
     /// centralizes clearing `tab_rename`, which every switch must do: a tab
     /// id is only unique WITHIN its own workspace's `TabManager` (each has
     /// its own counter starting at 0), so a rename left open across a

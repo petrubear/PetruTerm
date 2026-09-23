@@ -1,5 +1,4 @@
-// gpui chrome migration (M2 Task 5b): `impl Render for GpuiShellRoot`.
-// Split out of `mod.rs` for the 400-line convention.
+// `impl Render for GpuiShellRoot`: the window's full element tree.
 
 use std::rc::Rc;
 use std::time::Duration;
@@ -16,19 +15,14 @@ use super::{
     search_bar, status_bar, tabs, toast, GpuiShellRoot,
 };
 
-/// Duration of the drawer's opening grow animation (Step 3). Closing is
+/// Duration of the drawer's opening grow animation. Closing is
 /// instant -- see this file's own `render()` doc comment on the animated
 /// child for why gpui 0.2.2's `Animation`/`with_animation` only gets this
 /// one direction for free.
 const CHAT_PANEL_OPEN_ANIM: Duration = Duration::from_millis(180);
 
 /// Outer window padding and the gap between floating "cards" (sidebar,
-/// terminal, chat panel, status bar) -- the floating-card visual language
-/// adopted in the visual-polish pass 2 rewrite (2026-09-17), matching the
-/// approved mockup's own margin/gap rhythm. Before this pass every region
-/// rendered edge-to-edge/full-bleed against the window and against each
-/// other (confirmed wrong live, against a real screenshot vs. the mockup --
-/// not merely under-styled).
+/// terminal, chat panel, status bar).
 ///
 /// `pub(super)` (not private): `render_sidebar.rs`'s own drag handle floats
 /// over exactly this gap rather than adding its own width beside it -- see
@@ -38,12 +32,12 @@ pub(super) const CARD_GAP_PX: f32 = 10.0;
 impl Render for GpuiShellRoot {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // Runs before the focus-reclaim guard below: dispatching a
-        // confirmed palette action (Task 3's `dispatch_palette_action`) can
+        // confirmed palette action (`dispatch_palette_action`) can
         // itself change `self.palette.is_visible()` this same frame, and
         // the guard needs to see that change to correctly reclaim focus
         // for the terminal without a one-frame lag. `CommandPalette::
         // confirm()` (called from `palette_query`'s `cx.subscribe`
-        // callback, `mod.rs`) already closes the palette itself before
+        // callback, `construct.rs`) already closes the palette itself before
         // this ever fires, so no explicit close call is needed here.
         if let Some(action) = self.pending_palette_action.take() {
             self.dispatch_palette_action(action, window, cx);
@@ -69,21 +63,18 @@ impl Render for GpuiShellRoot {
         self.drive_search_query(cx);
 
         // Search: run the query if dirty, scroll to the current match if
-        // needed. See `search_bar.rs`'s own doc comment on `drive_search`
-        // for the full reasoning (moved there to keep this file under the
-        // 400-line convention).
+        // needed. See `search_bar.rs`'s own doc comment on `drive_search`.
         self.drive_search();
 
-        // Skipped while a child owns focus. This runs every frame, and the
-        // poll loop repaints at ~30Hz, so focusing unconditionally would tear
-        // focus away from the rename editor ~30 times a second and make it
-        // look like typing does nothing.
+        // Skipped while a child owns focus. render() runs on every notify,
+        // so focusing unconditionally would tear focus away from the rename
+        // editor on every repaint and make it look like typing does nothing.
         //
         // Each composer's half of this guard is keyed on `composer_focused`
         // (`is_focused(window)`), NOT on `is_visible()`: the panel/block can
         // be open while the terminal holds focus (the user clicked back into
         // it), and a visibility-keyed guard would then rip focus away from
-        // the terminal ~30 times a second. The `!is_visible() ||` half
+        // the terminal on every repaint. The `!is_visible() ||` half
         // handles the opposite gap: a composer-side `/q` or Enter-after-
         // `Done` close runs inside a `cx.subscribe` callback with no
         // `Window`, so it can't call `window.focus` -- `composer_focused`
@@ -128,9 +119,8 @@ impl Render for GpuiShellRoot {
             rects.separators.clear();
         }
 
-        // See `render_callbacks.rs`'s own doc comment for why these five
-        // are built in one place (moved there to keep this file under the
-        // 400-line convention) and why each holds a WEAK handle.
+        // See `render_callbacks.rs`'s own doc comment for why each holds a
+        // WEAK handle.
         let (
             on_focus,
             on_drag,
@@ -205,7 +195,7 @@ impl Render for GpuiShellRoot {
                 //
                 // Guarded on the clicked tab's id, not merely
                 // `tab_rename.is_some()`: the renaming tab's cell is padded
-                // (`tabs.rs`'s `.px_2().py_1()`) around a `size_full()`
+                // (`tabs/render.rs`'s `.px_2().py_1()`) around a `size_full()`
                 // `TextInput`, so its hitbox is bigger than the field's --
                 // clicking that padding (a natural "put the cursor at the
                 // start" miss) still lands on THIS listener for the SAME
@@ -266,7 +256,6 @@ impl Render for GpuiShellRoot {
                 self.git_branch.cache.as_deref(),
                 self.exit_code.cache,
                 self.workspaces.active().zoomed_pane.is_some(),
-                self.config.status_bar.style.clone(),
                 self.battery.cache.map(|s| (s.percent, s.on_battery)),
                 &sb_colors,
             );
@@ -275,12 +264,11 @@ impl Render for GpuiShellRoot {
 
         // Middle row: the pane tree plus, when open, the chat panel drawer --
         // flex siblings in a row (this div's default flex direction), NOT a
-        // manually computed viewport split (§3.3: no `resize_terminals_
+        // manually computed viewport split (no `resize_terminals_
         // for_panel` port). `pane_view.rs`'s `fit_terminal`/
         // `on_children_prepainted` already resize each PTY to whatever box
         // taffy hands it, so the terminal reflowing when the drawer opens or
-        // closes is just a consequence of this layout, not code this task
-        // has to write.
+        // closes is just a consequence of this layout.
         //
         // The drawer only gets an ANIMATED width on open: gpui 0.2.2's
         // `AnimationElement` (`with_animation`) restarts its clock from
@@ -306,7 +294,7 @@ impl Render for GpuiShellRoot {
             self.chat.sync_markdown_cache();
         }
 
-        // The pane area is `.relative()` so the inline AI block (M3b Task 3)
+        // The pane area is `.relative()` so the inline AI block
         // can anchor an `.absolute().bottom_0()` overlay to it -- a `div()`
         // overlay over the focused pane's own area, not the wgpu build's
         // bottom-`AI_BLOCK_ROWS`-of-the-grid pixel math (`chat.rs:1430-

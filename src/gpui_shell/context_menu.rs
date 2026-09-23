@@ -1,13 +1,8 @@
-// gpui chrome migration (M4c Task 1): the right-click context menu's own
-// state and action dispatch. `crate::ui::context_menu::{ContextAction,
-// ContextMenuItem}` are pure data (no wgpu/coordinate coupling) and are
-// reused directly -- `ContextMenu` itself is NOT reused: its `open()`/
-// `hit_test()`/`col`/`row` are built around the wgpu build's manual
-// terminal-cell hit-testing (a custom rect renderer over grid cells),
-// which has no equivalent in gpui_shell. This file's own `ContextMenu`
-// is a genuinely new, minimal type: visible + a real pixel position +
-// the item list, rendered as real clickable `div()`s (Task 2/3) the same
-// way every other list this migration has built already works.
+// The right-click context menu's state and action dispatch. Reuses the pure
+// data types `crate::ui::context_menu::{ContextAction, ContextMenuItem}`,
+// but not `ContextMenu` itself (built around the wgpu build's cell
+// hit-testing): this file's `ContextMenu` is visible + a pixel position +
+// the item list, rendered as clickable `div()`s.
 
 use std::rc::Rc;
 
@@ -28,16 +23,12 @@ use super::GpuiShellRoot;
 /// pixel point (the click that opened it), not a terminal-cell coordinate.
 #[derive(Default)]
 pub struct ContextMenu {
-    #[allow(dead_code)]
     pub visible: bool,
-    #[allow(dead_code)]
     pub position: Point<Pixels>,
-    #[allow(dead_code)]
     pub items: Vec<ContextMenuItem>,
 }
 
 impl ContextMenu {
-    #[allow(dead_code)]
     pub fn close(&mut self) {
         self.visible = false;
     }
@@ -45,8 +36,7 @@ impl ContextMenu {
 
 /// Called with the click's real window-space pixel position on a right
 /// mouse-down over the terminal grid. No terminal id: Copy/Paste/Clear all
-/// operate on the globally-active terminal (this file's own doc comment
-/// has the reasoning), the same scoping the wgpu build's own
+/// operate on the globally-active terminal, the same scoping the wgpu build's own
 /// `Mux::active_terminal()`-based menu already uses.
 pub(super) type RightClickCallback = Rc<dyn Fn(Point<Pixels>, usize, usize, &mut Window, &mut App)>;
 
@@ -54,16 +44,13 @@ pub(super) type RightClickCallback = Rc<dyn Fn(Point<Pixels>, usize, usize, &mut
 pub type ContextActionCallback =
     Rc<dyn Fn(&crate::ui::context_menu::ContextAction, &mut Window, &mut App)>;
 
-/// Called when a click lands outside the menu (`on_mouse_down_out`, Step 2).
+/// Called when a click lands outside the menu (`on_mouse_down_out`).
 pub type ContextMenuCloseCallback = Rc<dyn Fn(&mut Window, &mut App)>;
 
 /// Register the terminal grid's own right-click handler -- a new,
 /// independent `window.on_mouse_event` registration alongside (not
 /// replacing) `mouse::register_mouse_handlers`'s existing left-click/drag/
-/// scroll handling in `terminal_element.rs`'s `paint()`. Deliberately NOT
-/// added to `mouse.rs` itself (874 lines already, well over this project's
-/// 400-line convention from pre-existing work) -- this keeps that
-/// pre-existing overshoot from growing worse for no reason.
+/// scroll handling in `terminal_element.rs`'s `paint()`.
 pub(super) fn register_right_click(
     bounds: Bounds<Pixels>,
     cell_width: Pixels,
@@ -97,7 +84,7 @@ pub(super) fn register_right_click(
 /// outside itself. `on_mouse_down_out` fires during the CAPTURE phase and
 /// does NOT call `cx.stop_propagation()`, so the outside click that closed
 /// this menu still reaches whatever it actually landed on (the terminal, a
-/// different tab) afterward -- unlike M4a's palette or M3d's
+/// different tab) afterward -- unlike the palette or
 /// `InfoOverlay`, both genuine blocking modals with a `stop_propagation`-
 /// backed backdrop.
 pub fn render_context_menu(
@@ -170,12 +157,8 @@ pub fn render_context_menu(
 }
 
 impl GpuiShellRoot {
-    /// Run one confirmed context-menu action. `ContextAction`'s remaining
-    /// variants (`CopyLastCommand`, `Separator`, `Label`) are never
-    /// constructed by this milestone's own item lists yet -- no arm needed
-    /// for them here, `_ => {}` covers anything unreachable in practice the
-    /// same way M4a's palette dispatch does.
-    #[allow(dead_code)]
+    /// Run one confirmed context-menu action. CopyLastCommand is never
+    /// built by the gpui menu; Separator/Label are filtered out at render.
     pub(super) fn dispatch_context_action(
         &mut self,
         action: ContextAction,

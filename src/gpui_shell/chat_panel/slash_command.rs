@@ -1,10 +1,4 @@
-// gpui chrome migration: chat panel slash-command dispatch. Split out of
-// `stream.rs` for the 400-line convention -- the M5d follow-up that made
-// `/skills`/`/mcp` report real state (ported from `src/app/ui/providers.rs`)
-// pushed `stream.rs` to 421 lines; this self-contained chunk (only touches
-// `self.chat`/`self.config`/`self.skill_manager`/`self.mcp_manager`/
-// `self.tokio_rt`, no private helpers from `stream.rs` itself) was the
-// cleanest thing to move out untouched.
+// Chat panel slash-command dispatch.
 
 use gpui::Context;
 
@@ -15,13 +9,9 @@ use super::super::GpuiShellRoot;
 impl GpuiShellRoot {
     /// Slash-command dispatch. Ported from `src/app/ui/providers.rs`'s
     /// `handle_slash_command` (straight string dispatch plus
-    /// `messages.push`) minus: the ACP reconnect its `/agent` branch does
-    /// (no ACP session here to reconnect); and the `wakeup_proxy` parameter
-    /// (the winit wake has no gpui equivalent and none is needed here
-    /// either). `/skills`/`/mcp` now report `skill_manager`/`mcp_manager`'s
-    /// real state (M5d follow-up) -- both are already wired into the
-    /// prompt pipeline (`build_prompt_addendum`), this just surfaces the
-    /// same state as text.
+    /// `messages.push`) minus the `wakeup_proxy` parameter (the winit wake
+    /// has no gpui equivalent). `/skills`/`/mcp` report `skill_manager`/
+    /// `mcp_manager`'s real state.
     pub(super) fn handle_slash_command(&mut self, input: &str, cx: &mut Context<Self>) {
         let trimmed = input.trim_start_matches('/');
         let (cmd, args) = trimmed

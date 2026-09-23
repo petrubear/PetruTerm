@@ -153,10 +153,10 @@ fn search_grid(grid: &[Vec<char>], history: i32, query: &str) -> Vec<SearchMatch
             continue;
         }
         for col in 0..=row_lower.len() - query_len {
-            if row_lower[col..col + query_len] == query_chars[..] {
-                if push_search_match(&mut matches, grid_row, col, query_len) {
-                    return matches;
-                }
+            if row_lower[col..col + query_len] == query_chars[..]
+                && push_search_match(&mut matches, grid_row, col, query_len)
+            {
+                return matches;
             }
         }
     }

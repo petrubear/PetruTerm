@@ -11,7 +11,6 @@ pub enum AgentTool {
 }
 
 impl AgentTool {
-    #[allow(dead_code)]
     pub fn name(&self) -> &'static str {
         match self {
             AgentTool::ReadFile => "read_file",
@@ -137,12 +136,6 @@ impl AgentTool {
             })
             .map(|t| t.to_openai_spec())
             .collect()
-    }
-
-    /// Spec array ready to include in the API request (all built-ins, no filtering).
-    #[allow(dead_code)]
-    pub fn all_specs() -> Vec<Value> {
-        Self::all().iter().map(|t| t.to_openai_spec()).collect()
     }
 
     /// Returns true if `name` is a built-in tool handled by `execute_tool`.

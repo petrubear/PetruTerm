@@ -5,11 +5,10 @@ pub enum BlockKind {
     Normal,
     Heading(u8),
     CodeBlock,
+    // `indent` is read only by gpui_shell; main.rs's mod tree never reads it.
     #[allow(dead_code)]
     ListItem {
         indent: u8,
-        ordered: bool,
-        number: u32,
     },
 }
 
@@ -185,11 +184,7 @@ fn emit_list_item(
         let (display, spans) = parse_inline(&raw_with_prefix);
         out.push(AnnotatedLine {
             display,
-            kind: BlockKind::ListItem {
-                indent,
-                ordered,
-                number,
-            },
+            kind: BlockKind::ListItem { indent },
             spans,
         });
     }
@@ -271,7 +266,7 @@ fn parse_inline(raw: &str) -> (String, Vec<(usize, usize, SpanKind)>) {
     (display, spans)
 }
 
-// Find the first occurrence of `needle` (as chars) in `haystack`, returning the index before it.
+// Find the first occurrence of `needle` (as chars) in `haystack`, returning its start index.
 fn find_close(haystack: &[char], needle: &str) -> Option<usize> {
     let needle_chars: Vec<char> = needle.chars().collect();
     let nlen = needle_chars.len();
@@ -481,9 +476,7 @@ mod tests {
     fn code_fence_syntax_highlight() {
         let md = "```rust\nfn main() {\n    let x = 42;\n}\n```";
         let lines = parse(md);
-        assert!(lines
-            .iter()
-            .all(|l| matches!(l.kind, BlockKind::CodeBlock { .. })));
+        assert!(lines.iter().all(|l| matches!(l.kind, BlockKind::CodeBlock)));
         // "fn" and "let" should produce Keyword spans
         let kw_line = lines.iter().find(|l| l.display.contains("fn")).unwrap();
         assert!(kw_line
@@ -512,7 +505,7 @@ mod tests {
         assert!(state.in_fence);
         assert!(lines1
             .iter()
-            .all(|l| matches!(l.kind, BlockKind::CodeBlock { .. })));
+            .all(|l| matches!(l.kind, BlockKind::CodeBlock)));
         let lines2 = parse_markdown("{\n}\n```", 80, &mut state);
         assert!(!state.in_fence);
         assert!(lines2.iter().any(|l| l.display.contains('}')));

@@ -1,7 +1,5 @@
-// Row-range coalescing already lives in `merge_upload_ranges`
-// (src/renderer/upload.rs), which is what the live GPU upload path actually
-// uses. DirtyRows only needs O(1) membership tracking, not a second
-// sort-and-coalesce implementation.
+// DirtyRows tracks membership only; range coalescing is done by
+// renderer::upload::merge_upload_ranges.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) struct DirtyRows {
     rows: std::collections::HashSet<usize>,
@@ -51,7 +49,6 @@ impl DirtyRows {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum FullRebuildTrigger {
     TerminalResize,
@@ -65,7 +62,6 @@ pub(crate) enum FullRebuildTrigger {
     SurfaceReconfiguration,
 }
 
-#[allow(dead_code)]
 pub(crate) fn rows_for_full_rebuild(_trigger: FullRebuildTrigger, row_count: usize) -> DirtyRows {
     DirtyRows::full_rebuild(row_count)
 }
@@ -158,15 +154,6 @@ impl RowRevisionMap {
         self.ensure_len(row + 1);
         self.next = self.next.wrapping_add(1);
         self.revisions[row] = self.next;
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn mark_all(&mut self, row_count: usize) {
-        self.ensure_len(row_count);
-        for row in 0..row_count {
-            self.next = self.next.wrapping_add(1);
-            self.revisions[row] = self.next;
-        }
     }
 
     pub(crate) fn revision(&self, row: usize) -> u64 {

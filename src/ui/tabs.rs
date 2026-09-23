@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 /// Max glyph width of a tab pill label.
 pub const TAB_LABEL_MAX_CHARS: usize = 18;
 
@@ -8,8 +6,8 @@ pub const TAB_LABEL_MAX_CHARS: usize = 18;
 /// [`TAB_LABEL_MAX_CHARS`].
 ///
 /// Shared by the tab-bar renderer (`build_tab_bar_instances`) and the click
-/// hit-test (`hit_test_tab_bar`) so both agree on each pill's column width —
-/// they diverged before, which made tab clicks land on the wrong tab (TD-P9-02).
+/// hit-test (`hit_test_tab_bar`) so both agree on each tab's column width
+/// (TD-P9-02).
 pub fn tab_display_label(
     title: &str,
     index: usize,
@@ -28,8 +26,6 @@ pub fn tab_display_label(
 pub struct Tab {
     pub id: usize,
     pub title: String,
-    /// Index into the pane tree (one pane tree per tab).
-    pub pane_tree_id: usize,
     /// Optional accent color override. None → use theme ui_accent.
     pub accent_color: Option<[f32; 4]>,
 }
@@ -54,11 +50,9 @@ impl TabManager {
     pub fn new_tab(&mut self, title: impl Into<String>) -> usize {
         let id = self.next_id;
         self.next_id += 1;
-        let pane_tree_id = id; // 1:1 mapping for now
         self.tabs.push(Tab {
             id,
             title: title.into(),
-            pane_tree_id,
             accent_color: None,
         });
         self.active = self.tabs.len() - 1;
@@ -107,14 +101,6 @@ impl TabManager {
         if let Some(tab) = self.tabs.get_mut(idx) {
             tab.accent_color = color;
         }
-    }
-
-    /// Returns the active tab's accent color, falling back to `default`.
-    pub fn active_accent(&self, default: [f32; 4]) -> [f32; 4] {
-        self.tabs
-            .get(self.active)
-            .and_then(|t| t.accent_color)
-            .unwrap_or(default)
     }
 
     /// Rename the active tab.

@@ -1,13 +1,6 @@
-// gpui chrome migration (M5c Task 1): command-block state and the
-// output-text helper. `crate::term::{Block, BlockManager}` (src/term/
-// blocks.rs) is already engine-agnostic -- ported from Mux's own
-// block_output_text (src/app/mux/mod.rs:583-604) with the Mux lookup
-// dropped in favor of taking a `&Terminal` directly.
-//
-// `GpuiShellRoot`'s own `block_managers` sidecar (mod.rs) exists because
-// `Terminal.block_manager` itself has no interior mutability -- see this
-// plan's own Global Constraints for why reusing that field directly
-// doesn't compile through `Rc<Terminal>`.
+// Command-block state and the output-text helper. `GpuiShellRoot`'s
+// `block_managers` sidecar exists because `Terminal.block_manager` has no
+// interior mutability, so it can't be mutated through `Rc<Terminal>`.
 
 use crate::term::{BlockManager, Terminal};
 
@@ -53,8 +46,7 @@ fn block_output_text_for(
     }))
 }
 
-/// One grid read serving both this task's own block-detection and Task
-/// 3's link detection: `row`'s visible text (ported from `Mux::viewport_
+/// One grid read serving both block detection and link detection: `row`'s visible text (ported from `Mux::viewport_
 /// row_text`, `src/app/mux/mod.rs:558-578`, adapted to take `&Terminal`
 /// directly) AND that row's "absolute row from top of buffer" (the same
 /// coordinate space `Block::prompt_row`/`output_start`/`output_end` use,

@@ -1,8 +1,5 @@
-// gpui chrome migration (M3c Task 4 / M3d Task 3): the sidebar drawer's
-// outer frame -- fixed width, background, section-tab row -- plus dispatch
-// to whichever section's body (`sections.rs`) is active. Section bodies
-// themselves moved to `sections.rs` in M3d Task 3 to keep this file
-// focused and under the 400-line convention as Task 4 adds three more.
+// The sidebar drawer's outer frame -- width, background, section-tab row --
+// plus dispatch to the active section's body (`sections.rs`).
 
 use std::rc::Rc;
 
@@ -40,8 +37,7 @@ pub use super::sections::{
 pub type SectionSelectCallback = Rc<dyn Fn(&SidebarSection, &mut Window, &mut App)>;
 
 /// Every render-time input the sidebar needs, bundled the same way
-/// `pane_view::PaneRenderCx` bundles the pane tree's -- Task 4 adds the
-/// MCP/Skills/Steering fields to this same struct.
+/// `pane_view::PaneRenderCx` bundles the pane tree's.
 pub struct SidebarRenderCx<'a> {
     pub workspaces: &'a WorkspaceManager,
     pub colors: &'a ColorScheme,
@@ -162,8 +158,7 @@ fn render_section_tabs(
         .flex_shrink_0()
         // Must equal `sections.rs`'s own row/label inset (`px_2`/`mx_2`, both
         // 8px) so the active tab's own pill edge lines up with the section
-        // content's text below it, instead of sitting further right (a live
-        // dogfood screenshot showed the mismatch directly).
+        // content's text below it, instead of sitting further right.
         .px_2()
         .py_1()
         .min_h(font_state::header_row_min_height())

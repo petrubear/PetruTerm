@@ -47,15 +47,14 @@ pub struct AtlasEntry {
 
 /// GPU glyph texture atlas with epoch-based LRU eviction.
 ///
-/// Glyphs are packed into a single RGBA texture using a shelf-based algorithm.
-/// New glyphs are rasterized by the font shaper and uploaded here on demand.
+/// Glyphs are packed into a single R8Unorm (grayscale mask) texture using a
+/// shelf-based algorithm. New glyphs are rasterized by the font shaper and
+/// uploaded here on demand.
 ///
 /// ## Eviction strategy
-/// Each `AtlasEntry` carries a `last_used` epoch counter. Callers must call
-/// `touch(key)` when a glyph is used in a frame to keep it warm. When the
-/// atlas is 90% full (`try_evict_cold()` returns true), the atlas is rebuilt
-/// from scratch keeping only warm entries — the caller must re-upload those.
-/// As a last resort, `clear()` resets everything.
+/// Each `AtlasEntry` carries a `last_used` epoch counter, refreshed by
+/// `get_and_touch(key)` on every cache hit. `evict_cold()` only drops stale
+/// map entries; physical atlas space is reclaimed only by `clear()`.
 pub struct GlyphAtlas {
     texture: wgpu::Texture,
     view: wgpu::TextureView,
@@ -74,7 +73,7 @@ pub struct GlyphAtlas {
 }
 
 impl GlyphAtlas {
-    /// Atlas texture side length. 4096×4096 @ 4 bytes = 64 MiB — comfortable on modern GPUs.
+    /// Atlas texture side length. 4096x4096 @ 1 byte (R8) = 16 MiB.
     pub const SIZE: u32 = 4096;
     const PADDING: u32 = 1;
 

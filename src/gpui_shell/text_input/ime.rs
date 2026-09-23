@@ -1,11 +1,8 @@
-// gpui chrome migration (M3a Task 1): `TextInput`'s IME support --
-// `EntityInputHandler`, the UTF-16/grapheme-boundary helpers it relies on
-// (UTF-16 conversion is the IME boundary: macOS's IME speaks UTF-16, Rust
-// strings are UTF-8), and their unit tests. Split out of `mod.rs` for the
-// 400-line convention.
-//
-// Ported unchanged in behavior from gpui 0.2.2's own examples/input.rs --
-// see `mod.rs`'s header for the full port note and the four adaptations.
+// `TextInput`'s IME support -- `EntityInputHandler`, the UTF-16/grapheme-
+// boundary helpers it relies on (macOS's IME speaks UTF-16, Rust strings are
+// UTF-8), and their unit tests. Ported unchanged in behavior from gpui
+// 0.2.2's own examples/input.rs -- see `mod.rs`'s header for the
+// adaptations.
 
 use std::ops::Range;
 

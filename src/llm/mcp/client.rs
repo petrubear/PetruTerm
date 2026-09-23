@@ -51,7 +51,7 @@ enum OutboundMsg {
 /// Client for a single MCP server process.
 ///
 /// Owns the background IO task that drives stdin/stdout communication.
-/// Drop triggers `kill_on_drop` on the child process.
+/// Does not own the child process handle.
 pub struct McpClient {
     pub name: String,
     pub tools: Vec<McpTool>,

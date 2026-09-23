@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use crate::renderer::cell::CellVertex;
 
 /// WGSL shader source for terminal cell rendering.
@@ -203,7 +202,8 @@ fn fs_bg(in: VertexOut) -> @location(0) vec4<f32> {
 "#;
 
 /// WGSL shader for LCD subpixel AA (TD-026c).
-/// Includes CELL_SHADER code plus group 2 bindings for LCD atlas and fs_lcd entry point.
+/// Standalone copy of the CELL_SHADER code (keep in sync) plus group 2 LCD
+/// atlas bindings and the fs_lcd entry point.
 const LCD_SHADER: &str = r#"
 struct CellUniforms {
     cell_size:     vec2<f32>,
@@ -370,6 +370,8 @@ pub struct CellPipeline {
 /// Background-aware glyph pipeline variant (TD-026b).
 /// Does gamma-correct blend in shader (linear space), outputs non-premultiplied color.
 pub struct CellPipelineBgAware {
+    // Never read; only its bind group layouts are used (by the LCD pass).
+    #[allow(dead_code)]
     pub pipeline: wgpu::RenderPipeline,
     pub uniform_bind_group_layout: wgpu::BindGroupLayout,
     pub atlas_bind_group_layout: wgpu::BindGroupLayout,
@@ -444,12 +446,8 @@ impl CellPipeline {
             immediate_size: 0,
         });
 
-        // Blend state for the glyph pass (One / OneMinusSrcAlpha).
-        // Shader outputs either vec4(0) for near-transparent pixels (pass-through)
-        // or vec4(gamma_blended_rgb, 1.0) for visible pixels (full replace).
-        // Both cases work correctly with this blend equation:
-        //   alpha=0 → 0 + 1*dst = dst  (bg pass colour visible, no fringing)
-        //   alpha=1 → rgb + 0*dst = rgb (gamma-correct blend replaces bg)
+        // Blend state for the glyph pass (One / OneMinusSrcAlpha): fs_main
+        // outputs premultiplied alpha over the already-drawn bg pass.
         let blend = wgpu::BlendState {
             color: wgpu::BlendComponent {
                 src_factor: wgpu::BlendFactor::One,
@@ -616,9 +614,14 @@ impl CellPipelineBgAware {
 /// Reads 3×-resolution LCD glyphs from a separate atlas and blends per-channel
 /// against the cell background in linear space.
 pub struct CellPipelineLcd {
+    // Never read: bg is drawn by CellPipeline, and groups 0/1 bind via
+    // CellPipelineBgAware's layouts.
+    #[allow(dead_code)]
     pub bg_pipeline: wgpu::RenderPipeline,
     pub lcd_pipeline: wgpu::RenderPipeline,
+    #[allow(dead_code)]
     pub uniform_bind_group_layout: wgpu::BindGroupLayout,
+    #[allow(dead_code)]
     pub atlas_bind_group_layout: wgpu::BindGroupLayout,
     pub lcd_atlas_bind_group_layout: wgpu::BindGroupLayout,
 }

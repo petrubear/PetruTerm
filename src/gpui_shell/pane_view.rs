@@ -1,8 +1,5 @@
-// gpui chrome migration (M2): walks one tab's `PaneTree` (see `panes.rs`)
-// into nested taffy flex `div()`s and renders each leaf's live terminal.
-//
-// This is the piece that replaces the wgpu app's manual recursive rect
-// subdivision (`src/ui/panes.rs`'s `PaneNode::layout`): a `Split` becomes a
+// Walks one tab's `PaneTree` (see `panes/mod.rs`) into nested taffy flex
+// `div()`s and renders each leaf's live terminal. A `Split` becomes a
 // flex row/column whose first child carries `flex_basis(relative(ratio))`,
 // and taffy computes every pixel rect from there. Anything that still needs
 // real pixel geometry after the fact -- `focus_dir`'s center-point search,
@@ -13,7 +10,7 @@
 // Two deliberate design choices worth knowing before editing:
 //
 // 1. `RectCache.separators[node_id]` holds the SPLIT CONTAINER's bounds, not
-//    the thin separator strip's own. `panes.rs`'s `drag_split_ratio` computes
+//    the thin separator strip's own. `panes/geometry.rs`'s `drag_split_ratio` computes
 //    `(mouse_x - sep_x) / sep_w`; with the separator's own ~6px width in the
 //    denominator that formula is nonsense (any pointer more than a few px
 //    from the strip clamps straight to 0.1/0.9). The container's origin and
@@ -45,9 +42,8 @@ use super::panes::{PaneTree, RectCache, SplitDir};
 use super::separator::SeparatorElement;
 use super::terminal_element::TerminalGridElement;
 
-// Re-exported so `render.rs`'s existing `pane_view::is_dragging_separator()`
-// call site keeps working unchanged -- the function itself moved to
-// `separator.rs` (M4b Task 3 review) alongside the drag state it reads.
+// Re-exported for `render.rs`'s `pane_view::is_dragging_separator()` call;
+// defined in `separator.rs` alongside the drag state it reads.
 pub(super) use super::separator::is_dragging_separator;
 
 /// Thickness of the separator strip between two panes -- the wider grab
@@ -67,7 +63,7 @@ pub(super) type PaneFocusCallback = Rc<dyn Fn(usize, &mut Window, &mut App)>;
 pub(super) type SeparatorDragCallback = Rc<dyn Fn(u32, Point<Pixels>, &mut Window, &mut App)>;
 
 /// `ColorScheme`'s `[f32; 4]` RGBA -> gpui's own color type. Shared with
-/// `mod.rs`'s tab bar so the chrome and the pane tree read the same theme
+/// `tabs/render.rs`'s tab bar so the chrome and the pane tree read the same theme
 /// tokens the same way.
 pub(super) fn to_rgba(color: [f32; 4]) -> Rgba {
     Rgba {
@@ -84,8 +80,8 @@ pub(super) fn to_rgba(color: [f32; 4]) -> Rgba {
 /// cheap clones (`Rc<Terminal>`, `Rc<RefCell<RectCache>>`, callback `Rc`s).
 pub(super) struct PaneRenderCx<'a> {
     pub terminals: &'a HashMap<usize, Rc<Terminal>>,
-    /// The active tab's `PaneForest::focused_terminal` -- drives each leaf's
-    /// solid-vs-hollow cursor.
+    /// The active tab's `PaneForest::focused_terminal` -- drives which leaf
+    /// draws a cursor, gets search matches, and gets the focus border.
     pub focused: usize,
     pub colors: &'a ColorScheme,
     /// `config.window.is_translucent()`, forwarded to every leaf's grid element.
@@ -99,7 +95,7 @@ pub(super) struct PaneRenderCx<'a> {
     pub on_focus: PaneFocusCallback,
     pub on_drag: SeparatorDragCallback,
     /// Active search matches for the focused pane, threaded to whichever
-    /// leaf's `terminal_id == focused` (M4b Task 3) -- every other leaf
+    /// leaf's `terminal_id == focused` -- every other leaf
     /// gets `None`.
     pub search: Option<(Vec<SearchMatch>, usize)>,
     /// Opens the context menu on a right-click anywhere in the pane area --

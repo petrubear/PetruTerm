@@ -1,23 +1,9 @@
-// gpui chrome migration (M2): pane-split tree. Ported from src/ui/panes.rs's
-// PaneNode/PaneManager -- the tree-mutation ALGORITHMS (split/close/
-// focus_dir/adjust_ratio/drag_split_ratio) are ported as-is, since they're
-// real domain logic, not rendering code. What does NOT port is the tree's
-// own cached `Rect` field and PaneNode::layout's manual recursive rect
-// subdivision: gpui's Div is backed by a real taffy flexbox engine, so
-// render() walks this tree into nested flex divs (Split -> div().flex_row()/
-// .flex_col() with flex_basis(relative(ratio)) on each child) and lets
-// taffy compute rects instead. Anything that still needs a leaf's or a
-// separator's pixel rect (focus_dir's center-point search, adjust_ratio,
-// drag_split_ratio) reads it from RectCache (Step 4), populated by each
-// frame's own paint pass, not from a field on the tree.
-//
-// Split (Task 6a) under the 400-line convention: this file keeps the tree
-// structure itself (`PaneTree`/`PaneForest` and their split/close mutation
-// logic); `geometry` holds `RectCache` and the pixel-rect-driven operations
-// (`focus_dir`, `adjust_ratio`, `drag_separator`).
-
-// Not wired into render()/mouse handling yet (Task 3 does that).
-#![allow(dead_code)]
+// Pane-split tree (`PaneTree`/`PaneForest` and their split/close mutation
+// logic), ported from src/ui/panes.rs's algorithms. The tree stores no rects:
+// render() walks it into nested taffy flex divs, and anything needing a
+// leaf's or separator's pixel rect (focus_dir, adjust_ratio,
+// drag_split_ratio) reads it from `RectCache` (`geometry.rs`), populated by
+// each frame's paint pass.
 
 mod geometry;
 

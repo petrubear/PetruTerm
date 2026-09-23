@@ -1,10 +1,5 @@
-// gpui chrome migration (M4b Task 3 review): the pane separator's own
-// custom `Element` -- split out of `pane_view.rs` for the 400-line
-// convention (Task 3's own search-highlighting additions pushed it to 408
-// lines). Fully self-contained: nothing in `pane_view.rs` reaches inside
-// `SeparatorElement` itself, only calls its constructor via `pane_view::
-// separator`'s own builder function, which stays in `pane_view.rs`
-// alongside `SEPARATOR_PX` (the grab-strip's width, used by that builder).
+// The pane separator's custom `Element`. Its builder (`pane_view::separator`)
+// and `SEPARATOR_PX` live in `pane_view.rs`.
 
 use gpui::{
     fill, point, prelude::*, px, relative, size, App, Bounds, DispatchPhase, ElementId,

@@ -1,7 +1,4 @@
-// gpui chrome migration (M3c post-Task-4 split): the tab-rename and
-// workspace-rename inline editor flows. Split out of `actions.rs` for the
-// 400-line convention -- `actions.rs` grew past 400 lines once M3c's three
-// workspace tasks landed on top of it. Pure code motion: no logic changed.
+// The tab-rename and workspace-rename inline editor flows.
 
 use gpui::{AppContext, Context, Focusable, Window};
 

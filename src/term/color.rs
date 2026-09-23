@@ -1,7 +1,8 @@
 use crate::config::schema::ColorScheme;
 use alacritty_terminal::vte::ansi::{Color as AnsiColor, NamedColor};
 
-/// Resolve an alacritty terminal color to linear RGBA f32.
+/// Resolve an alacritty terminal color to sRGB-encoded RGBA f32 in [0,1]
+/// (same space as `ColorScheme`).
 ///
 /// Named/Indexed colors map to the active theme palette.
 /// Spec colors are passed through directly (already sRGB).
@@ -39,7 +40,7 @@ fn resolve_named(name: NamedColor, scheme: &ColorScheme) -> [f32; 4] {
         NamedColor::Foreground => scheme.foreground,
         NamedColor::Background => scheme.background,
         NamedColor::Cursor => scheme.cursor_bg,
-        // Dim variants — use normal colors at reduced alpha.
+        // Dim variants - normal colors with RGB scaled by 0.6.
         NamedColor::DimBlack => dim(scheme.ansi[0]),
         NamedColor::DimRed => dim(scheme.ansi[1]),
         NamedColor::DimGreen => dim(scheme.ansi[2]),

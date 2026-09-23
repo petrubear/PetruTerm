@@ -1,21 +1,9 @@
-// gpui chrome migration (M1b): mouse-driven interaction for the terminal
-// grid -- click-drag selection, click-to-focus for split panes, and (later
-// tasks in this plan) mouse-report passthrough and scrollbar drag. Each
-// `TerminalGridElement` owns its own mouse handling, registered fresh every
-// `paint()` call and scoped to that element's own `bounds` -- mirrors how
-// the element already owns cursor/text painting math scoped to its own
-// bounds, and avoids tracking child-element bounds in the parent `div` just
-// for hit-testing (gpui's flex layout doesn't expose child bounds until
-// paint completes).
-//
-// Split into this directory (TD-GPUI-03, 2026-09-17): the single `mouse.rs`
-// this replaces had grown to 875 lines. `click_state.rs` holds the per-
-// terminal click/drag/scroll state machine, `geometry.rs` the pure pixel/
-// cell/scrollbar geometry helpers; this file keeps the public API surface
-// (`register_mouse_handlers`, `format_mouse_report`, `OnFocusCallback`,
-// `SCROLLBAR_PX`) plus re-exports so every external `mouse::...` call site
-// (`actions.rs`, `context_menu.rs`, `terminal_element.rs`, `pane_view.rs`)
-// keeps working unchanged. Pure code motion throughout: no logic changed.
+// Mouse-driven interaction for the terminal grid: click-drag selection,
+// click-to-focus for split panes, mouse-report passthrough, scrollbar drag and
+// the scroll wheel. Each `TerminalGridElement` registers its own handlers
+// fresh every `paint()`, scoped to its own `bounds`. `click_state.rs` holds
+// the per-terminal click/drag/scroll state machine, `geometry.rs` the pure
+// pixel/cell/scrollbar geometry helpers.
 
 use std::rc::Rc;
 
@@ -49,9 +37,9 @@ pub const SCROLLBAR_PX: Pixels = px(6.0);
 /// automatically by gpui after paint -- must be called fresh every
 /// `paint()`, per `Window::on_mouse_event`'s own contract). Handles
 /// click-drag selection, click-to-focus, scrollbar-thumb drag, and the
-/// scroll wheel; mouse-report passthrough (Task 5) and scrollbar-drag
-/// (this task) are checked before selection so neither also starts a
-/// selection or forwards to the remote program.
+/// scroll wheel; mouse-report passthrough and scrollbar-drag are checked
+/// before selection so neither also starts a selection or forwards to the
+/// remote program.
 ///
 /// None of this module's `write_input` call sites (mouse-report passthrough,
 /// below) are gated on `GpuiShellRoot::tab_rename`, and that's deliberate,
@@ -99,10 +87,8 @@ pub fn register_mouse_handlers(
                 y_to_display_offset(event.position.y, bounds, cell_height, rows, history_size);
             // `Terminal::scroll_display`'s delta convention is positive =
             // toward history, negative = toward the live bottom (verified
-            // against alacritty_terminal's own `Term::scroll_display` --
-            // `Terminal::scroll_display`'s own doc comment has this
-            // backwards, matching a pre-existing wrong comment this task
-            // doesn't touch). `target - offset`, not `offset - target`: the
+            // against alacritty_terminal's own `Term::scroll_display`).
+            // `target - offset`, not `offset - target`: the
             // wgpu app's own two scroll-to-position call sites both negate
             // the same `offset - target` difference for exactly this reason
             // (src/app/mod.rs's scroll handler, src/app/frame.rs's search
@@ -254,7 +240,7 @@ pub fn register_mouse_handlers(
         scroll_terminal.scroll_display(line_delta);
         // Without this, an idle-prompt wheel-scroll doesn't repaint until
         // the poll loop's own next incidental notify (up to 530ms later) --
-        // the same class of lag Task 4's mouse-down/move comments describe.
+        // the same class of lag the mouse-down/move comments describe.
         window.refresh();
     });
 

@@ -233,7 +233,7 @@ impl CopilotProvider {
         // flow via `spawn_blocking` the first time LLM features are used — keeping
         // the winit event loop and app startup fully responsive.
         if let Some(token) = resolve_github_token_non_blocking(config) {
-            // Safety: cell is newly created and we hold the only Arc reference here.
+            // Cannot fail: the cell is fresh and not yet shared.
             let _ = github_token.set(token);
         }
 

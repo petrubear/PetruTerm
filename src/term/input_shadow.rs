@@ -7,7 +7,8 @@ use winit::keyboard::{Key, NamedKey};
 /// Updated in parallel with PTY writes — does NOT replace them.
 ///
 /// Lifecycle: active = true between OSC 133-A (PromptStart) and OSC 133-B (CommandStart).
-/// Reset on Ctrl+C, Ctrl+U, Esc, and deactivated on CommandStart / CommandEnd.
+/// Cleared on Ctrl+C (which also deactivates) and Esc; Ctrl+U/K/W edit it.
+/// Deactivated on history navigation (Up/Down) and on CommandStart / CommandEnd.
 pub struct InputShadow {
     /// Text typed since the last PromptStart, kept in sync with shell line-editor state.
     pub buf: String,

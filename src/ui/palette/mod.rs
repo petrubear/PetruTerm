@@ -10,7 +10,7 @@ use crate::config::Config;
 
 /// Command palette state machine.
 pub struct CommandPalette {
-    /// All registered actions (built-in + plugin-registered in Phase 3).
+    /// All registered actions (built-ins + snippets).
     all_actions: Vec<PaletteAction>,
     /// When Some, palette is in custom-items mode (e.g. branch picker).
     /// Filter operates on this list instead of `all_actions`.
@@ -150,15 +150,6 @@ impl CommandPalette {
         if !self.visible {
             self.results = self.all_actions.clone();
         } else {
-            self.filter();
-        }
-    }
-
-    /// Register an additional action (used by plugins in Phase 3).
-    #[allow(dead_code)]
-    pub fn register(&mut self, action: PaletteAction) {
-        self.all_actions.push(action);
-        if self.visible {
             self.filter();
         }
     }

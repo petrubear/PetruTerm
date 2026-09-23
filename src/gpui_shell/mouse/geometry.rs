@@ -1,7 +1,5 @@
-// gpui chrome migration (TD-GPUI-03 split): pure pixel/cell/scrollbar
-// geometry helpers `register_mouse_handlers` builds on. Split out of the
-// single `mouse.rs` (M1b) for the 400-line convention -- pure code motion,
-// no logic changed.
+// Pure pixel/cell/scrollbar geometry helpers `register_mouse_handlers`
+// builds on.
 
 use alacritty_terminal::selection::SelectionType;
 use gpui::{Bounds, Pixels, Point};

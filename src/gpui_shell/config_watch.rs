@@ -1,6 +1,5 @@
-// gpui chrome migration (M2 Task 5b): config-reload watcher thread + the
-// cross-thread hand-off statics `GpuiShellRoot`'s poll loop (`poll.rs`)
-// drains each tick. Split out of `mod.rs` for the 400-line convention.
+// Config-reload watcher thread + the cross-thread hand-off statics
+// `GpuiShellRoot`'s poll loop (`poll.rs`) drains each tick.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -22,7 +21,7 @@ pub(super) static CONFIG_CHANGED: AtomicBool = AtomicBool::new(false);
 /// bridge in this version (see `spawn_terminal`'s doc comment), so pushing
 /// data directly into gpui from this thread isn't an option.
 ///
-/// Call exactly once, at startup (`main()`, alongside `terminal_element::
+/// Call exactly once, at startup (`main()`, alongside `font_state::
 /// set_font_config`) — not from `GpuiShellRoot::new`. `PENDING_CONFIG_RELOAD`/
 /// `CONFIG_CHANGED` are process-global statics; a second call (e.g. one per
 /// window, if this app ever opens more than one) would spawn a second

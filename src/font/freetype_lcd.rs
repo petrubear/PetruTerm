@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use freetype::freetype as ft;
 use parking_lot::Mutex;
 use std::cell::RefCell;
@@ -17,35 +16,11 @@ pub struct LcdAtlasEntry {
     pub bearing_y: i32,
 }
 
-fn srgb8_to_linear(c: u8) -> f32 {
-    let c = c as f32 / 255.0;
-    if c <= 0.04045 {
-        c / 12.92
-    } else {
-        ((c + 0.055) / 1.055).powf(2.4)
-    }
-}
-
-fn linear8_to_srgb(c: f32) -> u8 {
-    let c = c.clamp(0.0, 1.0);
-    if c <= 0.0031308 {
-        (c * 12.92 * 255.0).round() as u8
-    } else {
-        ((1.055 * c.powf(1.0 / 2.4) - 0.055) * 255.0).round() as u8
-    }
-}
-
 pub struct FreeTypeLcdRasterizer {
     library: ft::FT_Library,
     face: ft::FT_Face,
     cache: Mutex<HashMap<u64, LcdAtlasEntry>>,
     lcd_atlas: Rc<RefCell<LcdGlyphAtlas>>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum LcdPixelMode {
-    Horizontal,
-    Vertical,
 }
 
 impl FreeTypeLcdRasterizer {
@@ -193,11 +168,6 @@ impl FreeTypeLcdRasterizer {
         Some(entry)
     }
 
-    pub fn rasterize_char(&mut self, c: char, queue: &wgpu::Queue) -> Option<LcdAtlasEntry> {
-        let glyph_id = self.get_glyph_index(c)?;
-        self.rasterize(glyph_id, queue)
-    }
-
     /// Clear the rasterizer's local glyph cache.
     ///
     /// Must be called whenever `LcdGlyphAtlas::clear()` is called, since the
@@ -234,16 +204,6 @@ impl FreeTypeLcdRasterizer {
         }
 
         rgba
-    }
-
-    pub fn get_glyph_index(&self, c: char) -> Option<u32> {
-        let char_code = c as ft::FT_ULong;
-        let idx = unsafe { ft::FT_Get_Char_Index(self.face, char_code) };
-        if idx == 0 {
-            None
-        } else {
-            Some(idx)
-        }
     }
 }
 

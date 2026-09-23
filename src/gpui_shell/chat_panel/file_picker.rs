@@ -1,9 +1,5 @@
-// gpui chrome migration (M5b Task 3): the composer's file attachment
-// picker -- async directory scan + fuzzy filter + attach/detach, all
-// driven through already-ported, already-pure ChatPanel/picker.rs
-// methods (src/llm/chat_panel/picker.rs). Mirrors UiManager::
-// open_file_picker_async/poll_file_scan (src/app/ui/mod.rs:650-680)
-// exactly, minus the winit-specific bits neither needs.
+// The composer's file attachment picker: async directory scan + fuzzy
+// filter + attach/detach, driven through `ChatPanel`'s picker methods.
 
 use std::path::PathBuf;
 

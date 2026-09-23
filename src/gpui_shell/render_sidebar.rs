@@ -1,13 +1,5 @@
-// gpui chrome migration (M3d Task 4 post-review split): builds the
-// already-open-animated workspace sidebar drawer element. Split out of
-// `render.rs`'s own `render()` for the 400-line convention -- `render.rs`
-// grew to 418 lines once Task 4's three new sidebar-section callbacks
-// (MCP/Skills/Steering open handlers) landed on top of Tasks 1-3's own
-// growth, the same failure class M3c's `actions.rs` and M3d's own
-// `input.rs` (see that file's own post-Task-3 doc comment) both hit.
-//
-// Called only from `render()`'s `middle_row` construction, inside
-// `.when(self.sidebar.is_visible(), ...)`.
+// Builds the workspace sidebar drawer element. Called only from `render()`'s
+// `middle_row` construction, inside `.when(self.sidebar.is_visible(), ...)`.
 
 use std::rc::Rc;
 use std::time::Duration;
@@ -22,9 +14,7 @@ use super::sidebar::render::{MAX_SIDEBAR_WIDTH_PX, MIN_SIDEBAR_WIDTH_PX};
 use super::sidebar::SidebarSection;
 use super::GpuiShellRoot;
 
-/// Same duration the drawer's own opening grow animation has used since
-/// M3c Task 4 -- kept here (not re-exported from `render.rs`) since this is
-/// now the only place that reads it.
+/// Duration of the drawer's opening grow animation.
 const SIDEBAR_OPEN_ANIM: Duration = Duration::from_millis(180);
 
 impl GpuiShellRoot {
@@ -127,8 +117,7 @@ impl GpuiShellRoot {
         // version doubled the visual space between the sidebar and the
         // terminal card (handle width + the row's own gap + both cards' own
         // borders), visibly wider than every other card-to-card gap in the
-        // window. A live dogfood screenshot boxed the mismatch directly:
-        // this keeps every gap in the layout the same width, with nothing
+        // window. This keeps every gap in the layout the same width, with nothing
         // added on top.
         let drag_view = cx.entity().downgrade();
         let on_drag: resize_handle::ResizeDragCallback = Rc::new(move |position, _window, cx| {

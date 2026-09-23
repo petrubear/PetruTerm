@@ -1,8 +1,6 @@
-// gpui chrome migration (M0 foundation spike + M1a foundation fixes): live
-// terminal rendering root. Owns one or more `term::Terminal` instances and renders them through
-// `TerminalGridElement` (see `terminal_element.rs`). Keyboard input is
-// forwarded from gpui's key-down events straight to the PTY via `key_map`'s
-// full key-event mapping.
+// gpui-petruterm's root view: owns every `term::Terminal`, the workspace/
+// tab/pane model and all chrome state, and renders terminals through
+// `TerminalGridElement` (`terminal_element.rs`).
 
 mod acp_bridge;
 mod actions;
@@ -70,14 +68,12 @@ use crate::ui::palette::{Action, CommandPalette};
 use crate::ui::search_bar::SearchBar;
 use leader::LeaderAction;
 
-/// The `Render` root view for the gpui-petruterm spike window.
+/// The `Render` root view of the gpui-petruterm window.
 pub struct GpuiShellRoot {
-    /// One workspace per named group of tabs+panes+zoom-state (M3c) --
-    /// mirrors `Mux`'s workspace layer (`src/app/mux/mod.rs`) conceptually;
-    /// see `workspace.rs`'s own doc comment for why the on-disk shape
-    /// differs. `terminals`/`wakeup_gates` below stay flat, keyed by
-    /// terminal id, since ids are already globally unique across every
-    /// workspace and the poll loop wants one map to walk (design doc §3.6).
+    /// One workspace per named group of tabs+panes+zoom-state.
+    /// `terminals`/`wakeup_gates` below stay flat, keyed by terminal id,
+    /// since ids are globally unique across every workspace and the poll
+    /// loop wants one map to walk.
     workspaces: workspace::WorkspaceManager,
     /// terminal_id -> live Terminal handle. A tab's PaneForest only stores
     /// usize ids (matching src/ui/panes.rs's own design); this map is where
@@ -111,35 +107,31 @@ pub struct GpuiShellRoot {
     leader_active: bool,
     /// Set when `leader_active` flips true; cleared (by the poll loop, or by
     /// the next keystroke consuming the chord) once it's no longer needed.
-    /// Checked against `Instant::now()` each poll tick -- see `new()`'s
-    /// `cx.spawn` loop -- so a leader press with no follow-up key expires on
-    /// its own after `config.leader.timeout_ms`.
+    /// Checked against `Instant::now()` each poll tick (`poll.rs`), so a
+    /// leader press with no follow-up key expires on its own after
+    /// `config.leader.timeout_ms`.
     leader_deadline: Option<std::time::Instant>,
     /// True from a `Leader Option+Arrow` resize until a keystroke arrives
     /// with Option no longer held (or a non-arrow key) -- lets repeated
     /// arrow presses keep resizing without re-pressing the leader each time,
     /// matching `src/app/input/mod.rs`'s own `resize_mode` field.
     resize_mode: bool,
-    /// Set when a two-key leader sub-prefix (currently only `a`, for AI
-    /// actions) has been entered -- the wgpu build's own
-    /// `src/app/input/mod.rs` shape (`leader_prefix: Option<char>`), mirrored
-    /// here since `Leader a a` (M3b) is gpui_shell's first chord longer than
-    /// one key. `leader_active`/`leader_deadline` stay re-armed while this is
-    /// `Some` so the second key gets the same timeout as the first.
+    /// Set when a two-key leader sub-prefix has been entered: `a` (AI),
+    /// `W` (workspace) or `e` (sidebar). `leader_active`/`leader_deadline`
+    /// stay re-armed while this is `Some` so the second key gets the same
+    /// timeout as the first.
     leader_prefix: Option<char>,
     /// Single-key leader dispatch table, built once from `config.keys`'s
     /// `LEADER`-scoped bindings (`leader::build_leader_map`). Rebuilt
     /// wholesale on every config reload alongside the rest of `self.config`.
     leader_map: HashMap<String, LeaderAction>,
-    /// Owned outright by `GpuiShellRoot` -- mirrors the wgpu app's own
-    /// `tokio_rt` field placement on its `App`/`Mux` struct exactly (see
-    /// this task's design ledger) rather than inventing a new pattern.
-    /// `status_bar::poll_git_branch` spawns onto this each poll tick.
+    /// Owned outright by `GpuiShellRoot`, like the wgpu app's own
+    /// `tokio_rt`. `status_bar::poll_git_branch` spawns onto this each
+    /// poll tick.
     tokio_rt: tokio::runtime::Runtime,
     /// Cached CWD of the active tab's focused terminal (status bar's CWD
-    /// segment). Refreshed once per poll tick rather than every `render()`
-    /// call -- see `new()`'s `cx.spawn` block for why a tick-based refresh
-    /// was chosen over instrumenting every focus-changing call site.
+    /// segment). Refreshed once per poll tick (`poll.rs`) rather than on
+    /// every `render()` or focus-changing call site.
     cached_cwd: Option<std::path::PathBuf>,
     /// Git-branch fetch/cache state for the status bar's GitBranch segment.
     git_branch: status_bar::GitBranchState,
@@ -175,10 +167,8 @@ pub struct GpuiShellRoot {
     /// Sidebar's keyboard-focus identity (distinct from root focus_handle).
     sidebar_focus_handle: FocusHandle,
     /// Live sidebar width, user-adjustable via the drag handle on its right
-    /// edge (`resize_handle.rs`) -- requested after the fixed 220px width
-    /// was reported unusable at anything short of a maximized window.
-    /// `sidebar::render::DEFAULT_SIDEBAR_WIDTH_PX` is only the starting
-    /// value now, not a compile-time constant every render reads.
+    /// edge (`resize_handle.rs`). `sidebar::render::DEFAULT_SIDEBAR_WIDTH_PX`
+    /// is only the starting value.
     sidebar_width_px: f32,
     /// The AI chat panel -- one global drawer, not one per pane (see
     /// `chat_panel/mod.rs`'s doc comment on why the wgpu build's
@@ -190,7 +180,7 @@ pub struct GpuiShellRoot {
     /// channel).
     ai_block: ai_block::AiBlockView,
     /// Skill metadata loaded from `~/.config/petruterm/skills/` (+ project-
-    /// local, if trusted) at startup -- read directly by M3d's sidebar.
+    /// local, if trusted) at startup -- read directly by the sidebar.
     skill_manager: SkillManager,
     /// Steering-file content loaded the same way, at the same time.
     steering_manager: SteeringManager,
@@ -200,17 +190,15 @@ pub struct GpuiShellRoot {
     /// async task, same as the wgpu build's own `mcp_manager` field.
     mcp_manager: Arc<McpManager>,
     /// The read-only content popup every sidebar row's activation opens
-    /// (Task 4) -- see `info_overlay.rs`'s own doc comment for why it's
+    /// -- see `info_overlay.rs`'s own doc comment for why it's
     /// modal and why that makes its `is_visible()` guard correct.
     info_overlay: info_overlay::InfoOverlay,
     /// The command palette's own state (query, filtered results, selected
     /// index, visibility) -- `crate::ui::palette::CommandPalette`, used
-    /// directly rather than copied, the same relationship M3b/M3d
-    /// established for `ChatPanel`/`SkillManager`/`McpManager`. `gpui_shell`
-    /// always opens it via `open_with_items(..)` with its own filtered list
-    /// (`palette_dispatch.rs`, Task 3) rather than `open()`'s unfiltered
-    /// `all_actions` -- several of the wgpu build's own actions have no
-    /// `gpui_shell` equivalent yet (see the M4 spec's §7 deferred list).
+    /// directly rather than copied. `gpui_shell` opens it via
+    /// `open_with_items(..)` with its own filtered list
+    /// (`palette_dispatch.rs`) since some wgpu actions have no `gpui_shell`
+    /// equivalent.
     palette: CommandPalette,
     /// The palette's query input -- a single persistent `TextInput` entity
     /// (unlike tab/workspace rename, which build a fresh one per edit; the
@@ -220,19 +208,19 @@ pub struct GpuiShellRoot {
     /// `"TextInput"` key context (`text_input/mod.rs`'s
     /// `register_key_bindings`) and consumed by gpui's action-dispatch
     /// before they ever reach `on_key_down`'s bubble listener -- the
-    /// `cx.subscribe` callback below (Step 4) is how this struct reacts to
-    /// them instead.
+    /// `cx.subscribe` callback in `construct.rs` is how this struct reacts
+    /// to them instead.
     palette_query: gpui::Entity<text_input::TextInput>,
     /// Set when the palette confirms an action with no `Window` in hand
     /// (`cx.subscribe` callback) -- `render()`'s own top drains and
-    /// dispatches it every frame. Same constraint M3b's chat `/q` close hit.
+    /// dispatches it every frame. Same constraint the chat `/q` close has.
     pending_palette_action: Option<Action>,
     /// In-terminal text search (`Cmd+F`) -- `crate::ui::search_bar::
     /// SearchBar`, reused directly; drives real GPU-paint highlighting too.
     search_bar: SearchBar,
     /// The search query's own persistent `TextInput` entity -- same
     /// "cleared and refocused on each open, not rebuilt" shape as the
-    /// palette's `palette_query` (M4a).
+    /// palette's `palette_query`.
     search_query: gpui::Entity<text_input::TextInput>,
     /// The right-click context menu's own state -- see `context_menu.rs`'s
     /// own doc comment for why this isn't a reuse of `ContextMenu`.
@@ -243,12 +231,11 @@ pub struct GpuiShellRoot {
     pending_agent_action: Option<crate::llm::agent_action::AgentAction>,
     /// Exit code of a terminal that has been reaped, keyed by the id it
     /// had while alive -- `self.terminals` no longer has an entry for it
-    /// by the time this map is read. Mirrors `Mux::terminal_exit_codes`.
+    /// by the time this map is read. Unbounded: never pruned.
     terminal_exit_codes: HashMap<usize, i32>,
     /// Final grid contents of a reaped terminal, captured just before its
-    /// last `Rc<Terminal>` is dropped. Mirrors `Mux::terminal_final_
-    /// output`; bounded the same way (oldest evicted past a small cap) so
-    /// a long session with many closed panes can't grow this unboundedly.
+    /// last `Rc<Terminal>` is dropped. Capped at a small size; past the cap
+    /// an arbitrary entry (HashMap order, not the oldest) is evicted.
     terminal_final_output: HashMap<usize, String>,
     /// ACP `terminal/wait_for_exit` requests still waiting on a terminal
     /// that hasn't exited yet -- resolved on a later poll tick once
@@ -257,7 +244,7 @@ pub struct GpuiShellRoot {
     pending_acp_wait_for_exit: Vec<(usize, tokio::sync::oneshot::Sender<i32>)>,
     /// A confirmed `ConfirmDisplay::Run` command, drained at the top of
     /// `render()` (no `Window` where it's set). Mirrors `pending_agent_
-    /// action`'s own placement (Task 1).
+    /// action`'s own placement.
     pending_pty_run: Option<String>,
 }
 

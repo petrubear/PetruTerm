@@ -1,26 +1,5 @@
-// gpui chrome migration (M3b Task 2, extended by M5a Task 5): streaming both
-// the direct-provider LLM response and the ACP agent's `AiEvent` stream into
-// the chat panel, plus composer submit and slash-command dispatch.
-//
-// M5a Task 5 wired `submit`'s ACP branch (`AcpSession::try_send_prompt`) and
-// `drain_events`'s `AiEvent::ToolStatus` handler. Still deliberately NOT
-// here (see the M3b plan's Scope): the remaining confirm-prompt surfaces
-// that exist only to gate a tool call (`AiEvent::ConfirmWrite`/`ConfirmRun`/
-// `UndoState`, and `ChatPanel::resolve_action_yes`/`resolve_action_no` for
-// inline actions) -- completed in Task 6. `SkillManager`/`McpManager`/
-// `SteeringManager`/`ShellContext` are likewise not wired: `/skills` and
-// `/mcp` report their real (always empty) state below rather than
-// pretending to a manager that doesn't exist, and the system message sent
-// with every direct-provider query is just `crate::config::load_system_
-// prompt()` -- no steering-file block, no skill-match injection, no
-// shell-context paragraph, no attached-file content, all of which need one
-// of those managers to produce.
-//
-// The wgpu build's `submit_ai_query` (`src/app/ui/mod.rs:794`) takes a
-// `cwd: PathBuf` purely to sandbox tool execution (`execute_tool`'s
-// `canon.starts_with(cwd)` check). `submit` below has no tools to sandbox,
-// so it takes no `cwd` -- a deliberate narrowing of the plan's sketched
-// `submit(&mut self, cwd, tokio_rt, cx)` signature, not an oversight.
+// Streams provider/ACP `AiEvent`s into the panel; composer submit builds a
+// `PromptAddendum` from skills/steering.
 
 use gpui::{Context, Entity};
 
@@ -39,8 +18,7 @@ const AI_POLL_CAP: usize = 64;
 
 impl ChatPanelView {
     /// Submit the current panel input to the ACP agent (if connected) or
-    /// the configured direct provider otherwise -- see this module's doc
-    /// comment for what's still deliberately excluded from both paths.
+    /// the configured direct provider otherwise.
     pub fn submit(
         &mut self,
         addendum: crate::llm::prompt_context::PromptAddendum,
@@ -206,7 +184,7 @@ impl ChatPanelView {
 impl GpuiShellRoot {
     /// Wired once, from `ChatPanelView::new`, onto the composer's
     /// `TextInputEvent` stream -- the same `cx.subscribe` shape
-    /// `begin_tab_rename` uses for the tab-rename editor (`actions.rs`).
+    /// `begin_tab_rename` uses for the tab-rename editor (`rename.rs`).
     pub(super) fn on_composer_event(
         &mut self,
         _composer: Entity<TextInput>,

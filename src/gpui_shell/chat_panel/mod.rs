@@ -1,26 +1,9 @@
-// gpui chrome migration (M3b Task 1): the AI chat panel's gpui presentation.
-//
-// `crate::llm::chat_panel::ChatPanel` (919 lines, 12 passing tests, zero
-// winit/wgpu references) already holds every bit of the panel's *logic* --
-// conversation history, input editing, prompt history, markdown wrap
-// caching. It is used here directly, unmodified: this module only adds the
-// gpui-side presentation state (`composer`, `visible`) and the `div()` tree
-// (`render.rs`) that paints it, replacing every line of
-// `src/app/renderer/chat.rs`'s pixel math -- the same "port the logic,
-// rewrite the painting" split `status_bar`/`tabs` already went through (see
-// `status_bar/mod.rs`'s header comment).
-//
-// Per the M3 design's §1, there is ONE global panel, not one per pane -- the
-// wgpu build's `panel_id`/`set_active_terminal` plumbing is dead code
-// (`set_active_terminal` is an empty function; `active_panel_id()` returns a
-// hardcoded `0`) and is deliberately not reproduced here.
-//
-// M3b Task 2 (`stream.rs`) adds streaming and slash commands on top of
-// Task 1's shell: the LLM provider, the AI event channel, and the composer's
-// `TextInputEvent` subscription all live on this struct too, so `submit`/
-// `drain_events` (consumed by `input.rs`'s composer-submit path and
-// `poll.rs`'s drain tick) have everything they need without reaching back
-// into `GpuiShellRoot` for anything but `config`/`tokio_rt` at the call site.
+// The AI chat panel's gpui presentation. `crate::llm::chat_panel::ChatPanel`
+// holds the panel's logic (history, input, markdown wrap caching); this
+// module adds the gpui state (`composer`, `visible`, provider, event
+// channel) and the `div()` tree (`render.rs`). There is ONE global panel,
+// not one per pane. Composer submit goes through the `cx.subscribe` hook
+// in `stream.rs` (`on_composer_event`); `poll.rs` drains events.
 
 mod backend;
 mod composer;
@@ -58,8 +41,8 @@ const MARKDOWN_WRAP_WIDTH: usize = 100_000;
 
 /// Bounded channel capacity for the AI event stream -- same shape as the
 /// wgpu build's own `crossbeam_channel::bounded(256)` (`src/app/ui/mod.rs`),
-/// minus the `(panel_id, event)` tuple: per the M3 design's §3.5 there is one
-/// global panel, so a bare `AiEvent` is all `stream.rs`'s channel carries.
+/// minus the `(panel_id, event)` tuple: there is one global panel, so a
+/// bare `AiEvent` is all `stream.rs`'s channel carries.
 const AI_CHANNEL_CAP: usize = 256;
 
 /// Cap on `undo_stack`'s size -- oldest entry evicted past this, matching
@@ -81,26 +64,24 @@ pub struct ChatPanelView {
     pub panel: ChatPanel,
     pub composer: Entity<TextInput>,
     visible: bool,
-    /// The active direct-provider backend (Task 2), rebuilt by
+    /// The active direct-provider backend, rebuilt by
     /// `rewire_provider` at construction, on `/model`, and on config
     /// hot-reload (`poll.rs`). `None` with `llm_init_error` set describes
     /// why: disabled in config, or `build_provider` failed (e.g. a missing
     /// API key) -- mirrors the wgpu build's own `llm_provider`/
     /// `llm_init_error` pair (`src/app/ui/mod.rs`), just owned here instead
-    /// of on the shell root, since `submit`'s plan-specified signature
-    /// (`&mut self, tokio_rt, cx` -- see `stream.rs`) has no room to receive
-    /// it as a parameter.
+    /// of on the shell root.
     llm_provider: Option<Arc<dyn LlmProvider>>,
     llm_init_error: Option<String>,
-    /// Streaming event channel -- see `stream.rs`'s doc comment for why this
-    /// is a bare `AiEvent` rather than the wgpu build's `(panel_id, event)`.
+    /// Streaming event channel -- see `AI_CHANNEL_CAP` for why this is a
+    /// bare `AiEvent` rather than the wgpu build's `(panel_id, event)`.
     ai_tx: crossbeam_channel::Sender<AiEvent>,
     ai_rx: crossbeam_channel::Receiver<AiEvent>,
     /// The in-flight streaming task, if any -- aborted when a new query is
     /// submitted (`stream.rs::submit`), mirroring the wgpu build's own
     /// `streaming_handle.abort()` (TD-MEM-12).
     in_flight: Option<tokio::task::JoinHandle<()>>,
-    /// The file picker's async directory-scan channel (Task 3) -- see
+    /// The file picker's async directory-scan channel -- see
     /// `file_picker.rs`'s `open_file_picker_async`/`poll_file_scan`.
     file_scan_rx: Option<crossbeam_channel::Receiver<Vec<std::path::PathBuf>>>,
     /// Oneshot channel to answer the ACP agent's own `session/
@@ -119,16 +100,11 @@ pub struct ChatPanelView {
     acp_pending_connect:
         Option<tokio::sync::oneshot::Receiver<Result<crate::llm::acp::AcpSession, String>>>,
     /// Sender half of the ACP terminal-request bridge -- cloned into each
-    /// ACP prompt's `try_send_prompt` call (Task 5) as `terminal_tx`. The
+    /// ACP prompt's `try_send_prompt` call as `terminal_tx`. The
     /// receiver half is drained by `GpuiShellRoot::handle_acp_terminal_
     /// requests` (`acp_bridge.rs`), called from `poll.rs`'s own tick.
     /// `tokio::sync::mpsc`, not `crossbeam_channel` -- `AcpSession::try_
     /// send_prompt` requires this exact channel type.
-    /// `#[allow(dead_code)]`: not yet read anywhere -- Task 5's `submit()`
-    /// is the first consumer, cloning this into `try_send_prompt`'s own
-    /// `terminal_tx` parameter. Same "field exists ahead of its consumer"
-    /// shape Task 2's `terminal_output_text`/`terminal_exit_code` used.
-    #[allow(dead_code)]
     pub(super) acp_terminal_tx:
         tokio::sync::mpsc::Sender<crate::llm::acp::terminal::AcpTerminalRequest>,
     /// `pub(super)`, not private, despite the doc comment above describing
@@ -158,7 +134,7 @@ impl ChatPanelView {
         let composer = cx.new(|cx| TextInput::new(cx, &config.colors, "", "Ask anything…"));
         // Wired here, once, rather than per-render: the same `cx.subscribe`
         // shape `begin_tab_rename` uses for the tab-rename editor
-        // (`actions.rs`), just set up at construction instead of on demand,
+        // (`rename.rs`), just set up at construction instead of on demand,
         // since the composer (unlike a rename editor) lives for the whole
         // session. `cx`'s type parameter is `GpuiShellRoot` here (this
         // constructor is called from `GpuiShellRoot::new`, passing the same
@@ -196,17 +172,15 @@ impl ChatPanelView {
 
     /// Whether the composer `TextInput` currently holds gpui's global
     /// window focus. Used by `render.rs`'s per-frame focus guard -- keyed on
-    /// this, never on `is_visible()`, per M3a's own Critical fix (see that
-    /// module's `tab_rename` guard and its doc comment for why a
-    /// state-keyed guard froze the whole app: clicking the terminal moves
-    /// gpui focus to the root while a visibility/open flag stays set, and a
-    /// guard keyed on the flag would then never hand focus back).
+    /// this, never on `is_visible()`: clicking the terminal moves gpui
+    /// focus to the root while a visibility flag stays set, so a guard
+    /// keyed on the flag would never hand focus back.
     pub fn composer_focused(&self, window: &Window, cx: &App) -> bool {
         self.composer.focus_handle(cx).is_focused(window)
     }
 
     /// Open the drawer and focus the composer, or close it. Closing does
-    /// NOT move focus anywhere -- the caller (`actions.rs`'s leader
+    /// NOT move focus anywhere -- the caller (`leader_dispatch.rs`'s leader
     /// dispatch) does that, the same division of labor `end_tab_rename`
     /// uses: this method only owns the panel's own state, not who owns
     /// keyboard focus afterward.
@@ -223,7 +197,7 @@ impl ChatPanelView {
 
     /// Close the panel without touching window focus at all -- unlike
     /// `toggle`'s close branch (equivalent otherwise), this is reachable
-    /// from `stream.rs`'s `/q` handler, which runs inside the composer's
+    /// from `slash_command.rs`'s `/q` handler, which runs inside the composer's
     /// `cx.subscribe` callback and is handed no `Window`. That leaves the
     /// composer's `FocusHandle` reporting stale "focused" state (gpui's own
     /// `FocusId::is_focused` is just `window.focus == Some(id)` -- nothing
@@ -232,7 +206,7 @@ impl ChatPanelView {
     /// why `render.rs`'s per-frame guard checks `!is_visible()` first: it
     /// reclaims root focus on the very next frame regardless of what
     /// `composer_focused` still (incorrectly) claims. `Leader a a`'s close
-    /// path (`actions.rs`) calls this too, then immediately fixes focus
+    /// path (`leader_dispatch.rs`, via `toggle`) calls this too, then fixes focus
     /// itself since it DOES have a `Window` -- that inline fix and this
     /// guard are redundant with each other by design, not a gap in either.
     pub fn close(&mut self, cx: &mut Context<GpuiShellRoot>) {
@@ -246,8 +220,7 @@ impl ChatPanelView {
     /// hot-reload (`poll.rs`) -- mirrors the wgpu build's own
     /// `rewire_llm_provider` (`src/app/ui/providers.rs`), minus the
     /// `panel_width_cols`/`system_prompt`/skill-and-steering-manager reload
-    /// that call also does: none of those exist on this shell (see
-    /// `stream.rs`'s doc comment on what Task 2 deliberately doesn't wire).
+    /// that call also does.
     pub fn rewire_provider(&mut self, llm_config: &LlmConfig) {
         (self.llm_provider, self.llm_init_error) = if llm_config.enabled {
             match crate::llm::build_provider(llm_config) {

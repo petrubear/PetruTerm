@@ -2,36 +2,44 @@ use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 
 /// Top-level resolved configuration. All Lua config values are deserialized into this.
+/// Fields are grouped by the default Lua file that sets them.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
+    // ui.lua
     pub font: FontConfig,
-    pub window: WindowConfig,
     pub colors: ColorScheme,
+    pub window: WindowConfig,
+    /// Colorize the command being typed based on token type.
+    /// Set to `false` if you use zsh-syntax-highlighting or similar.
+    pub input_syntax_highlight: bool,
+    /// Show history-based ghost text after the cursor while typing.
+    /// Set to `false` if you use zsh-autosuggestions or fish shell -- they
+    /// already provide this feature and the two will conflict visually.
+    pub input_ghost_text: bool,
+    pub status_bar: StatusBarConfig,
+    // perf.lua
     pub scrollback_lines: u32,
     pub enable_scroll_bar: bool,
     pub max_fps: u32,
-    pub leader: LeaderConfig,
-    pub keys: Vec<KeyBind>,
-    pub keybind_style: KeybindStyle,
-    pub snippets: Vec<SnippetConfig>,
-    pub shell: String,
-    pub shell_integration: bool,
-    /// Show history-based ghost text after the cursor while typing (I-3).
-    /// Set to `false` if you use zsh-autosuggestions or fish shell — they
-    /// already provide this feature and the two will conflict visually.
-    pub input_ghost_text: bool,
-    /// Colorize the command being typed based on token type (I-2).
-    /// Set to `false` if you use zsh-syntax-highlighting or similar.
-    pub input_syntax_highlight: bool,
-    pub llm: LlmConfig,
-    pub status_bar: StatusBarConfig,
-    pub keyboard: KeyboardConfig,
-    pub battery_saver: BatterySaverMode,
     /// GPU power preference used when selecting the wgpu adapter at startup.
     /// `"high_performance"` prefers the discrete GPU; `"low_power"` prefers the
-    /// integrated GPU. Has no effect at runtime — requires a restart to apply.
+    /// integrated GPU. Has no effect at runtime -- requires a restart to apply.
     pub gpu_preference: GpuPreference,
+    pub battery_saver: BatterySaverMode,
+    // keybinds.lua
+    pub keybind_style: KeybindStyle,
+    pub leader: LeaderConfig,
+    pub keyboard: KeyboardConfig,
+    pub keys: Vec<KeyBind>,
+    // llm.lua
+    pub llm: LlmConfig,
+    // snippets.lua
+    pub snippets: Vec<SnippetConfig>,
+    // notifications.lua
     pub notifications: NotificationsConfig,
+    // config.lua
+    pub shell: String,
+    pub shell_integration: bool,
     pub workspaces: WorkspacesConfig,
 }
 
@@ -88,25 +96,25 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             font: FontConfig::default(),
-            window: WindowConfig::default(),
             colors: ColorScheme::dracula_pro(),
+            window: WindowConfig::default(),
+            input_syntax_highlight: true,
+            input_ghost_text: true,
+            status_bar: StatusBarConfig::default(),
             scrollback_lines: 5_000,
             enable_scroll_bar: true,
             max_fps: 60,
-            leader: LeaderConfig::default(),
-            keys: vec![],
+            gpu_preference: GpuPreference::default(),
+            battery_saver: BatterySaverMode::default(),
             keybind_style: KeybindStyle::default(),
+            leader: LeaderConfig::default(),
+            keyboard: KeyboardConfig::default(),
+            keys: vec![],
+            llm: LlmConfig::default(),
             snippets: vec![],
+            notifications: NotificationsConfig::default(),
             shell: std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into()),
             shell_integration: true,
-            input_ghost_text: true,
-            input_syntax_highlight: true,
-            llm: LlmConfig::default(),
-            status_bar: StatusBarConfig::default(),
-            keyboard: KeyboardConfig::default(),
-            battery_saver: BatterySaverMode::default(),
-            gpu_preference: GpuPreference::default(),
-            notifications: NotificationsConfig::default(),
             workspaces: WorkspacesConfig::default(),
         }
     }
@@ -164,14 +172,12 @@ impl Default for NotificationsConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkspacesConfig {
     pub auto_save_on_exit: bool,
-    pub auto_save_on_switch: bool,
 }
 
 impl Default for WorkspacesConfig {
     fn default() -> Self {
         Self {
             auto_save_on_exit: true,
-            auto_save_on_switch: false,
         }
     }
 }
@@ -186,8 +192,6 @@ pub struct FontConfig {
     pub line_height: f32,
     /// HarfBuzz OpenType feature tags, e.g. ["calt=1", "liga=1", "dlig=1"].
     pub features: Vec<String>,
-    /// Fallback font families tried in order when a glyph is not found.
-    pub fallbacks: Vec<String>,
     /// Enable LCD subpixel antialiasing (FreeType LCD mode, 3× horizontal resolution).
     pub lcd_antialiasing: bool,
     /// Font file path for LCD AA. None means LCD AA is disabled or font couldn't be located.
@@ -201,7 +205,6 @@ impl Default for FontConfig {
             size: 15.0,
             line_height: 1.4,
             features: vec!["calt=1".into(), "liga=1".into(), "dlig=1".into()],
-            fallbacks: vec!["Noto Color Emoji".into()],
             lcd_antialiasing: false,
             font_path: None,
         }
@@ -210,14 +213,13 @@ impl Default for FontConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WindowConfig {
-    pub borderless: bool,
     pub initial_width: Option<u32>,
     pub initial_height: Option<u32>,
     pub start_maximized: bool,
     pub title_bar_style: TitleBarStyle,
     pub padding: Padding,
     pub opacity: f32,
-    /// macOS window vibrancy/blur behind the content (Phase 9 V-2).
+    /// macOS window vibrancy/blur behind the content.
     #[serde(default)]
     pub blur: WindowBlur,
 }
@@ -257,7 +259,6 @@ impl WindowConfig {
 impl Default for WindowConfig {
     fn default() -> Self {
         Self {
-            borderless: false,
             initial_width: None,
             initial_height: None,
             start_maximized: true,
@@ -265,7 +266,7 @@ impl Default for WindowConfig {
             padding: Padding {
                 left: 20,
                 right: 20,
-                top: 5, // titlebar (TITLEBAR_HEIGHT=30) handles traffic lights clearance
+                top: 5, // gap below the titlebar; the titlebar height itself is added internally
                 bottom: 10,
             },
             opacity: 1.0,
@@ -324,7 +325,7 @@ pub struct ColorScheme {
     /// Separators and secondary text. Default: foreground at 35% alpha.
     #[serde(default)]
     pub ui_muted: [f32; 4],
-    /// Positive indicators ("yes" confirm, success). Default: ansi[2] (green).
+    /// Positive indicators ("yes" confirm, success). Default: ansi[2] (green, 0-indexed).
     #[serde(default)]
     pub ui_success: [f32; 4],
     /// Semi-transparent background for toasts and modals. Default: background at 0.95 alpha.
@@ -448,7 +449,7 @@ impl ColorScheme {
         }
     }
 
-    /// Surface clear color honoring window translucency (Phase 9 V-1).
+    /// Surface clear color honoring window translucency.
     /// Alpha comes from `window.opacity`; if opacity is 1.0 but blur is enabled,
     /// falls back to 0.82 so the vibrancy behind the surface stays visible.
     pub fn clear_color(&self, window: &WindowConfig) -> wgpu::Color {
@@ -457,7 +458,7 @@ impl ColorScheme {
         c
     }
 
-    /// V-4: when the window is translucent (blur enabled or `opacity < 1`), drop
+    /// When the window is translucent (blur enabled or `opacity < 1`), drop
     /// the alpha of the chrome card surfaces so the vibrancy / wallpaper filters
     /// subtly through panels, sidebar, palette and menus. Terminal translucency
     /// is handled separately by [`clear_color`]. Borders, selection/active fills
@@ -601,7 +602,7 @@ pub enum LlmBackend {
     Agent,
 }
 
-/// Configuration for an ACP agent process (Phase 8).
+/// Configuration for an ACP agent process.
 /// `command` is the executable (e.g. `"claude"`, `"codex"`, absolute path).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AcpAgentConfig {
@@ -629,8 +630,6 @@ pub struct LlmConfig {
     #[serde(skip_serializing)]
     pub api_key: Option<SecretString>,
     pub base_url: Option<String>,
-    pub context_lines: u32,
-    pub features: LlmFeatures,
     pub ui: ChatUiConfig,
 }
 
@@ -644,8 +643,6 @@ impl Default for LlmConfig {
             model: "meta-llama/llama-3.1-8b-instruct:free".into(),
             api_key: None,
             base_url: None,
-            context_lines: 50,
-            features: LlmFeatures::default(),
             ui: ChatUiConfig::default(),
         }
     }
@@ -659,25 +656,6 @@ pub struct ChatUiConfig {
 impl Default for ChatUiConfig {
     fn default() -> Self {
         Self { width_cols: 55 }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LlmFeatures {
-    pub nl_to_command: bool,
-    pub explain_output: bool,
-    pub fix_last_error: bool,
-    pub context_chat: bool,
-}
-
-impl Default for LlmFeatures {
-    fn default() -> Self {
-        Self {
-            nl_to_command: true,
-            explain_output: true,
-            fix_last_error: true,
-            context_chat: true,
-        }
     }
 }
 

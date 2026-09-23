@@ -1,23 +1,7 @@
-// gpui chrome migration (M2 Task 5): status bar segments + rendering, plus
-// the two small pieces of async/mtime-gated state (git branch, exit code)
-// the wgpu app keeps on its own `App`/`UiManager` structs but that live
-// directly on `GpuiShellRoot` here (see this task's own design ledger in
-// `task-5-report.md` for why).
-//
-// `StatusBar`/`StatusBarSegment`/`SegmentKind`/`StatusBar::build`/
-// `truncate_path`/`format_time` below are a verbatim port of
-// `src/ui/status_bar.rs`, minus the pixel-column math
-// (`click_kind`/`left_sep_width`/`right_sep_width`) `render_status_bar`
-// below replaces with real gpui `div()`s -- the same simplification
-// `tabs::render_tab_bar` already got over the wgpu tab bar's own pixel math.
-//
-// Split (Task 6a) under the 400-line convention: this file keeps the
-// segment/`StatusBar` types + `truncate_path`/`format_time`; `git` holds the
-// git-branch async bridge, `exit_code` holds `ExitCodeState`, `battery`
-// holds `BatteryState` (added later, once the widget itself was ported --
-// see that file's own doc comment), and `render` holds `render_status_bar`.
-// Re-exported below so every caller keeps using `status_bar::{...}` paths
-// unchanged.
+// Status bar segments (`StatusBar::build`, ported from
+// `src/ui/status_bar.rs`) plus the async/mtime-gated state behind them.
+// `git` holds the git-branch async bridge, `exit_code` `ExitCodeState`,
+// `battery` `BatteryState`, and `render` `render_status_bar`.
 
 mod battery;
 mod exit_code;
@@ -31,7 +15,7 @@ pub use render::render_status_bar;
 
 use rust_i18n::t;
 
-use crate::config::schema::{StatusBarColors, StatusBarStyle};
+use crate::config::schema::StatusBarColors;
 
 /// Which logical widget a status bar segment represents.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -54,24 +38,12 @@ pub struct StatusBarSegment {
 }
 
 /// Assembled status bar with left and right segment groups.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct StatusBar {
     /// Segments shown on the left.
     pub left: Vec<StatusBarSegment>,
     /// Segments shown on the right.
     pub right: Vec<StatusBarSegment>,
-    /// Visual style: plain text separators or Nerd Font powerline arrows.
-    pub style: StatusBarStyle,
-}
-
-impl Default for StatusBar {
-    fn default() -> Self {
-        Self {
-            left: vec![],
-            right: vec![],
-            style: StatusBarStyle::Plain,
-        }
-    }
 }
 
 impl StatusBar {
@@ -94,14 +66,10 @@ impl StatusBar {
         git_branch: Option<&str>,
         last_exit_code: Option<i32>,
         pane_zoomed: bool,
-        style: StatusBarStyle,
         battery: Option<(u8, bool)>,
         colors: &StatusBarColors,
     ) -> Self {
-        let mut bar = StatusBar {
-            style,
-            ..StatusBar::default()
-        };
+        let mut bar = StatusBar::default();
 
         // ── Left segments ────────────────────────────────────────────────────
 

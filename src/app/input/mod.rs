@@ -64,8 +64,8 @@ pub struct InputHandler {
     /// at the top of every key press. `app/mod.rs` reads it to arm the PTY-echo
     /// grace window only when a write actually happened, instead of on every key.
     pub pty_written: bool,
-    /// Pane resize mode: activated by <leader>+Option+Arrow. While active, any
-    /// arrow key (with or without Option) continues resizing. Any other key exits.
+    /// Pane resize mode: activated by <leader>+Option+Arrow. Arrows keep resizing
+    /// while Option is held; cleared when Option is released.
     pub resize_mode: bool,
     /// Rolling buffer of printable chars sent to the PTY since the last Enter/Ctrl-C.
     /// Used only for snippet Tab-trigger matching — cleared on newline, backspace trims.
@@ -289,13 +289,8 @@ impl InputHandler {
         }
 
         // ── Hardcoded "normal"-only shortcuts ────────────────────────────
-        // Not config.keys entries: Cmd+B is a plain character but kept
-        // hardcoded to match the existing tmux-style sidebar toggle
-        // (`leader s` / `leader e e`), which is ALSO hardcoded, not
-        // config-driven, today. Cmd+Option/Ctrl+Arrow are Key::Named, never
-        // Key::Character, so they can't be config.keys entries at all
-        // (arrow keys arrive as Key::Named, never Key::Character, and
-        // KeyBind.key only ever matches a character).
+        // Hardcoded, not config.keys: Cmd+B mirrors the hardcoded tmux-style
+        // sidebar toggle, and arrow keys are Key::Named, which KeyBind can't match.
         if config.keybind_style == crate::config::schema::KeybindStyle::Normal {
             if cmd && !shift && !ctrl && !option {
                 if let Key::Character(s) = &event.logical_key {
@@ -350,7 +345,7 @@ impl InputHandler {
         }
 
         // ── Leader key activation — checked BEFORE panel/palette handlers so that
-        // Ctrl+B always activates the leader even when the AI panel is focused.
+        // Ctrl+<leader.key> always activates the leader even when the AI panel is focused.
         if ctrl
             && !shift
             && !cmd
@@ -370,7 +365,7 @@ impl InputHandler {
         // ── Leader key dispatch ───────────────────────────────────────────────
         if self.leader_active {
             // Modifier key presses (Shift, Ctrl, Alt, Super) must not consume the
-            // leader — otherwise pressing e.g. ^B % (which requires Shift) would
+            // leader — otherwise pressing e.g. ^F % (which requires Shift) would
             // have the Shift keydown event silently discard the pending leader.
             if matches!(
                 &event.logical_key,
@@ -517,7 +512,7 @@ impl InputHandler {
                     return;
                 }
 
-                // Enter prefix mode for 'a' (AI) and 'e' (explorer).
+                // Enter prefix mode for 'a' (AI), 'e' (explorer) and 'W' (workspace).
                 match s.as_str() {
                     "a" | "e" | "W" => {
                         let prefix = s.chars().next().unwrap();

@@ -1,14 +1,8 @@
-// gpui chrome migration (M4a Task 3): the command palette's real action
-// list and dispatch table -- replaces Task 2's 3-item `interim_actions`.
-// Every `Action` variant NOT listed in either function here is one this
-// milestone's own spec (docs/superpowers/specs/2026-09-07-gpui-m4-
-// remaining-surfaces-design.md, §7) explicitly defers: no gpui_shell
-// equivalent exists yet (snippets, saved workspaces, git-branch picker,
-// theme picker, M3b's already-deferred AI actions, command-block/hover-
-// link-dependent actions). `gpui_shell_actions` and `dispatch_
-// palette_action` below are two views of the same "which actions does
-// gpui_shell support" boundary and must be kept in sync by construction --
-// every variant filtered IN here has a real arm below, and vice versa.
+// The command palette's action list and dispatch table. Not handled in
+// gpui_shell: theme picker, Enable/DisableAiFeatures, ClearAiContext,
+// TrustLocalMcp, GitCheckout. `gpui_shell_actions` and
+// `dispatch_palette_action` must stay in sync: every variant filtered in
+// has a real arm below.
 
 use gpui::{Context, Window};
 
@@ -20,7 +14,7 @@ use super::leader::LeaderAction;
 use super::GpuiShellRoot;
 
 /// Build the palette's item list for `gpui_shell`: the wgpu build's own
-/// `built_in_actions(config)`, filtered down to variants this milestone's
+/// `built_in_actions(config)`, filtered down to variants
 /// `dispatch_palette_action` actually handles. Called fresh on every open
 /// (matches `CommandPalette::open()`'s own "rebuild from `all_actions`"
 /// behavior for the has-a-dispatch-target case).
@@ -68,7 +62,7 @@ pub(super) fn gpui_shell_actions(config: &Config) -> Vec<PaletteAction> {
 
 /// Convert the wgpu-native `crate::ui::panes::FocusDir` (what `Action::
 /// FocusPane` carries) to `gpui_shell`'s own, structurally identical but
-/// separately defined, `panes::FocusDir` (M2) -- the two are parallel
+/// separately defined, `panes::FocusDir` -- the two are parallel
 /// types, not the same one, matching this codebase's established "mirror,
 /// don't wrap" relationship for anything ported from `Mux`/`src/ui/`.
 fn convert_focus_dir(dir: crate::ui::panes::FocusDir) -> super::panes::FocusDir {
@@ -81,8 +75,7 @@ fn convert_focus_dir(dir: crate::ui::panes::FocusDir) -> super::panes::FocusDir 
 }
 
 impl GpuiShellRoot {
-    /// Run one confirmed palette action -- the real dispatch table, per the
-    /// M4 spec's §3 mapping. Replaces Task 2's 3-arm interim version.
+    /// Run one confirmed palette action.
     pub(super) fn dispatch_palette_action(
         &mut self,
         action: Action,
@@ -131,9 +124,7 @@ impl GpuiShellRoot {
             // exists) -- `FocusAiPanel` falls back to the same behavior as
             // `ToggleAiPanel` itself, which already opens-and-focuses when
             // closed via `self.chat.toggle` (`leader_dispatch.rs`'s own
-            // `ToggleAiPanel` arm). Not a perfect "focus without toggle"
-            // semantic if the panel is already open, but inventing a new
-            // entry point is out of this task's scope.
+            // `ToggleAiPanel` arm), so an already-open panel closes.
             Action::FocusAiPanel => {
                 self.dispatch_leader_action(LeaderAction::ToggleAiPanel, window, cx)
             }
@@ -209,11 +200,9 @@ impl GpuiShellRoot {
             }
             Action::ExplainLastOutput => self.explain_last_output(window, cx),
             Action::FixLastError => self.fix_last_error(window, cx),
-            // Every other variant is filtered out of `gpui_shell_actions`
-            // (see its own doc comment) -- unreachable in practice, kept as
-            // an explicit no-op rather than a `panic!`/`unreachable!()`
-            // since a stale `CommandPalette::results` entry surviving a
-            // hot-reload race is a cosmetic miss, not a crash-worthy one.
+            // Variants filtered out of `gpui_shell_actions` land here as a
+            // no-op. Reachable: the branch picker (`branch_picker.rs`) emits
+            // `GitCheckout`, which is not handled yet.
             _ => {}
         }
     }

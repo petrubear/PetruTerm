@@ -120,8 +120,10 @@ mod tests {
 
     #[test]
     fn truncated_count_label_shows_plus_suffix() {
-        let mut search = SearchBar::default();
-        search.query = "err".to_string();
+        let mut search = SearchBar {
+            query: "err".to_string(),
+            ..Default::default()
+        };
         search.set_matches(
             vec![SearchMatch {
                 grid_line: 0,

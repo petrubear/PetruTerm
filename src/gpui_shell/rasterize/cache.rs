@@ -1,6 +1,4 @@
-// gpui chrome migration (TD-GPUI-03 split): the per-terminal GPU sprite-atlas
-// frame cache. Split out of the single `rasterize.rs` (M1b) for the
-// 400-line convention -- pure code motion, no logic changed.
+// The per-terminal GPU sprite-atlas frame cache.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -10,14 +8,12 @@ use gpui::{App, RenderImage};
 
 // Caches the last rasterized frame per terminal (keyed by `Rc<Terminal>`'s
 // heap address — stable for the terminal's lifetime, and distinct per
-// split pane). Without this, `rasterize_grid` (driven by the ~30Hz
-// repaint poll in `gpui_shell/mod.rs`) would mint a brand-new
-// `RenderImage` — and therefore a brand-new globally-unique `ImageId`
-// (gpui 0.2.2's `assets.rs` static counter) — on every single paint, and
-// gpui's Metal sprite atlas is insert-only: nothing prunes an entry
-// except an explicit `window.drop_image(...)` call. That leaked one
-// full-grid GPU texture per paint, unbounded (measured: 598MB -> 2.52GB
-// RSS in 17s, idle, one terminal — the M0 leak). Caching the previous
+// split pane). Without this, `rasterize_grid` (driven by every repaint)
+// would mint a brand-new `RenderImage` -- and therefore a brand-new
+// globally-unique `ImageId` -- on every single paint, and gpui's Metal
+// sprite atlas is insert-only: nothing prunes an entry except an explicit
+// `window.drop_image(...)` call, so it would leak one full-grid GPU
+// texture per paint. Caching the previous
 // frame and explicitly dropping it before inserting the next bounds the
 // atlas to one live texture per terminal, and skipping the
 // rasterize+upload entirely when the grid content hasn't changed also
@@ -52,13 +48,9 @@ pub fn evict_all(cx: &mut App) {
 /// Drop ONE terminal's cached frame and its GPU sprite-atlas entry, for a
 /// pane that is going away.
 ///
-/// `evict_all` (font reload) and the same-key replacement inside
-/// `rasterize_grid` were the only two things that ever pruned `LAST_IMAGE`,
-/// and neither fires when a pane closes — so every closed pane used to
-/// strand one full-grid texture in gpui's insert-only Metal atlas for the
-/// rest of the session. That is the M0 leak this cache exists to prevent
-/// (see `LAST_IMAGE`'s doc comment), just at pane granularity instead of
-/// per-paint: unreachable until M2 made panes and tabs closable at all.
+/// Neither `evict_all` nor the same-key replacement inside `rasterize_grid`
+/// fires when a pane closes, so without this a closed pane would strand
+/// one full-grid texture in gpui's insert-only atlas.
 ///
 /// `terminal_key` is the `Rc<Terminal>` heap address, so the caller MUST
 /// call this while it still holds that `Rc` — once the last handle drops,

@@ -1,12 +1,6 @@
-// M5d: the shared, engine-agnostic prompt-context builder -- skill-match
-// instructions, steering-file rules, shell context, and attached-file
-// contents, built once and consumed two ways: the direct-provider path
-// appends `.text` to its system message; the ACP path prepends it to the
-// user's own prompt text, since ACP has no system-message concept (see
-// the M5d spec's Section 3). Ported verbatim from the wgpu build's own
-// inline logic in `submit_ai_query` (`src/app/ui/mod.rs`, the block
-// building `system_text` from steering/skill/shell-context/attached
-// files) -- this is a pure extraction, not new logic.
+//! Shared prompt-context builder (steering rules, matched skill, shell context,
+//! attached files). The provider path appends `.text` to the system message; the
+//! ACP path prepends it to the user prompt (ACP has no system role).
 
 use std::path::PathBuf;
 
@@ -15,16 +9,13 @@ use crate::llm::skills::SkillManager;
 use crate::llm::steering::SteeringManager;
 
 /// Cap on a single attached file's injected content, and on the combined
-/// total across all attached files (TD-030, ported verbatim).
-#[allow(dead_code)]
+/// total across all attached files (TD-030).
 const MAX_FILE_BYTES: usize = 512 * 1024;
-#[allow(dead_code)]
 const MAX_TOTAL_BYTES: usize = 1024 * 1024;
 
 /// Extra context text to inject alongside a user's query. Empty `text`
 /// means nothing applied -- callers skip appending/prepending in that
 /// case rather than adding a stray blank block.
-#[allow(dead_code)]
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct PromptAddendum {
     pub text: String,
@@ -33,7 +24,6 @@ pub struct PromptAddendum {
     pub matched_skill: Option<String>,
 }
 
-#[allow(dead_code)]
 pub fn build_prompt_addendum(
     skill_manager: &SkillManager,
     steering_manager: &SteeringManager,

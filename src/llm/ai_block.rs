@@ -1,4 +1,4 @@
-/// Number of terminal rows reserved for the inline AI overlay.
+/// Number of bottom terminal rows the inline AI overlay covers.
 pub const AI_BLOCK_ROWS: usize = 4;
 
 /// State machine for the inline AI overlay.

@@ -1,9 +1,7 @@
-// gpui chrome migration (post-M5 dogfood): a draggable vertical edge for
-// resizing a fixed-width panel (the workspace sidebar, first user) --
-// requested live after the sidebar's 220px fixed width was reported
-// unusable at anything short of a maximized window.
+// A draggable vertical edge for resizing a fixed-width panel (the workspace
+// sidebar).
 //
-// Mirrors `pane_view.rs`'s own `SeparatorElement`/`DRAGGING_SEPARATOR`
+// Mirrors `separator.rs`'s own `SeparatorElement`/`DRAGGING_SEPARATOR`
 // almost exactly, and for the same reason that file's own doc comment
 // gives: `Div`'s `on_mouse_move`/`on_mouse_up` listeners are hover-gated,
 // and the pointer leaves a few-pixel-wide strip within the first frame of
@@ -106,16 +104,12 @@ impl Element for ResizeHandleElement {
         _cx: &mut App,
     ) {
         // The grab-line only paints while it's actually being grabbed or
-        // hovered -- a permanent 1px line down the sidebar's edge, live at
-        // every window size, read as a stray rule cutting the UI in half
-        // rather than an affordance ("necesito que desaparezca"). The
-        // handle's hit area (this whole strip, sized by the caller's own
-        // wrapping div, via `on_mouse_event` below) still exists everywhere:
-        // only the visible feedback is
-        // conditional. Cheap poll-loop repaints already run at ~30Hz, so
-        // this needs no extra `window.refresh()` to catch a hover starting
-        // or ending -- the next tick just repaints with a fresh
-        // `mouse_position()` read.
+        // hovered; a permanent line reads as a stray rule. The hit area
+        // (this whole strip, via `on_mouse_event` below) always exists:
+        // only the visible feedback is conditional. Hover is read from
+        // `mouse_position()` at paint time; this element requests no
+        // repaint on hover change and the poll loop only notifies on
+        // activity, so hover feedback can lag until the next repaint.
         let dragging = DRAGGING.with(|d| d.get());
         let hovered = bounds.contains(&window.mouse_position());
         if dragging || hovered {

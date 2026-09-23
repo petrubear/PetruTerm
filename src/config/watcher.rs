@@ -38,9 +38,10 @@ impl ConfigWatcher {
         })
     }
 
-    /// Non-blocking check for pending change events. Returns the first changed path if any.
+    /// Non-blocking check for pending change events. The channel has capacity 1
+    /// and the watcher uses `try_send`, so this returns the first path changed
+    /// since the last poll; later events before the next poll are dropped.
     pub fn poll(&self) -> Option<PathBuf> {
-        // Drain all events, return the last one (or first unique path seen)
         let mut changed = None;
         while let Ok(path) = self.rx.try_recv() {
             changed = Some(path);
@@ -49,6 +50,7 @@ impl ConfigWatcher {
     }
 
     /// Blocking wait for a change event, with timeout.
+    // gpui-petruterm only (gpui_shell/config_watch.rs); main.rs's mod tree never calls it.
     #[allow(dead_code)]
     pub fn wait_timeout(&self, timeout: Duration) -> Option<PathBuf> {
         self.rx.recv_timeout(timeout).ok()

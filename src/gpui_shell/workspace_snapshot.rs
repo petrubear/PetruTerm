@@ -1,11 +1,6 @@
-// gpui chrome migration (M5c Task 5): build/restore a WorkspaceSnapshot
-// (crate::app::mux::snapshot -- already engine-agnostic, reused
-// verbatim) against gpui_shell's OWN Workspace/PaneTree types, since
-// gpui_shell doesn't use Mux at all. Mirrors Mux::build_workspace_
-// snapshot/snapshot_pane_node (src/app/mux/workspace.rs:194-260) and
-// Mux::restore_workspace/restore_pane_recursive (:273-340), minus the
-// winit::event_loop::EventLoopProxy parameter -- gpui_shell's own
-// spawn_terminal_at has no such dependency.
+// Build/restore a `WorkspaceSnapshot` (crate::app::mux::snapshot) against
+// gpui_shell's own Workspace/PaneTree types. Mirrors
+// `Mux::build_workspace_snapshot`/`restore_workspace`.
 
 use std::path::PathBuf;
 

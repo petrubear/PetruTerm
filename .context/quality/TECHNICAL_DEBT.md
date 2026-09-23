@@ -1,10 +1,19 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-09-22
-**Open Items:** 0
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0 (GRAPH-ARCH-01-A/B/C todos cerrados, 2026-09-22) | **gpui M5/M3:** 0 (TD-GPUI-01..06 + ACP todos RESUELTOS, 2026-09-17) | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 4
+**Last Updated:** 2026-09-23
+**Open Items:** 10 (AUDIT-BUG-01..10, ver abajo)
+**Critical (P0):** 0 | **P1:** 2 | **P2:** 3 | **P3:** 5 (AUDIT-BUG-01..10, 2026-09-23) | **gpui M5/M3:** 0 (TD-GPUI-01..06 + ACP todos RESUELTOS, 2026-09-17) | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 4
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
+
+> **AUDIT-BUG-01..10 — abiertos (2026-09-23).** Encontrados durante un pase de limpieza de
+> comentarios/dead-code (settings sin ordenar, claves muertas, comentarios engañosos) hecho con
+> varios subagentes en paralelo, cada uno auditando y luego corrigiendo comentarios en un área
+> del código. Los agentes tenían instrucción explícita de NO tocar comportamiento — cuando un
+> comentario resultaba estar describiendo un bug real en vez de estar simplemente desactualizado,
+> lo dejaron documentado con precisión pero sin arreglar el código, y el bug quedó reportado aquí
+> en vez de silenciarse. Ver [[project_phase9_ui_restyle]] no aplica; esta limpieza no tiene
+> memoria propia todavía.
 
 > **GRAPH-ARCH-01 — COMPLETA (2026-07-25).** LLM domain fully migrated to `LlmRuntimeView`/`agent_display_name` (commits `64fc452`, `44a11d5`, `e7aa9e0`, `3034407`, `2ba80d6`). A full sitewide survey of every remaining `Config` field then found and closed 3 more real cases: `keys`+`leader.key` → `LeaderBindingsView` (`ee736f0`), duplicated font clone/scale/LCD-fixup sequence → `RenderContext::locate_scaled_font` (`0205e60`), duplicated `max_fps` interval formula → `App::frame_interval` (`944ea2e`). Every other `Config` field (`window`, `colors`, `snippets`, `status_bar`, `scrollback_lines`, `enable_scroll_bar`, `shell`, `shell_integration`, `input_ghost_text`, `input_syntax_highlight`, `keyboard`, `battery_saver`, `gpu_preference`, `notifications`, `workspaces`) was surveyed and confirmed thin/single-consumer — correctly left unwrapped, not missed. No further Config-extraction slices are queued. Three small non-blocking loose ends surfaced during review are tracked below as `GRAPH-ARCH-01-A/B/C`.
 
@@ -92,6 +101,25 @@ GRAPH-ARCH-01 — COMPLETA (2026-07-25). Loose ends: GRAPH-ARCH-01-A/B/C (backlo
 
 ## P1 — Alta prioridad
 
+**AUDIT-BUG-01** — ABIERTO (2026-09-23). `McpClient::connect()` (`src/llm/mcp/client.rs`) spawnea
+el proceso del servidor MCP con `.kill_on_drop(true)`, pero el `tokio::process::Child` es una
+variable local de la función y nunca se guarda en el struct. Se dropea en cuanto `connect()`
+retorna, lo que mata el proceso del servidor justo después del handshake `initialize` y
+`tools/list`. Resultado: cualquier `call_tool` posterior falla porque el proceso ya no corre.
+Rompe silenciosamente el tool-calling del backend "provider" y el listado de tools de la sidebar
+para cualquier servidor MCP configurado. Fix: guardar el `Child` en `McpClient` (nuevo campo,
+p.ej. `_child: tokio::process::Child`) para que el `kill_on_drop` se dispare solo cuando el
+cliente real se dropea.
+
+**AUDIT-BUG-02** — ABIERTO (2026-09-23). `ShellContext::load()` (`src/llm/shell_context.rs`) lee
+únicamente el archivo global legado `shell-context.json`. La integración de shell actual
+(`scripts/shell-integration.zsh`, v2) escribe solo archivos por-PID (`shell-context-$$.json`);
+nada escribe ya el archivo global. Como resultado, el contexto de shell (CWD, último comando,
+exit code) que se supone se inyecta en cada query de AI nunca llega — la función que todos los
+call sites llaman (`app/ui/mod.rs`, `gpui_shell/ai_block.rs`, `gpui_shell/ai_actions.rs`,
+`llm/prompt_context.rs`) siempre encuentra el archivo global ausente. Fix: cambiar esos call
+sites a `load_for_pid`, que sí lee el archivo correcto.
+
 **AUDIT-PERF-08** — RESUELTO (2026-05-22). `GpuRenderer::render()` re-bindea `uniform_bind_group`, `atlas_bind_group` y `instance_buffer` para `bg_pipeline` y `cell_pipeline` tanto en main como en overlay aunque los recursos no cambian dentro del mismo render pass. `src/renderer/gpu.rs:448-457, 477-486`. Esto aumenta validación del driver, tráfico de comandos GPU y CPI del render loop; conviene encapsular el draw en un helper que haga bind una sola vez por bloque.
 
 **AUDIT-PERF-09** — RESUELTO (2026-05-22). `try_word_cached_shape()` duplica tres veces la reconstrucción de `ShapedGlyph`, repite `colors.get(abs_col).copied().unwrap_or(...)` por glifo y aloca `dummy_colors` + `String` por palabra con cache miss. `src/font/shaper.rs:656-748`. Es hot path puro de shaping: eleva allocs, empeora locality de CPU/cache y sube el CPI en frames con texto nuevo.
@@ -117,6 +145,31 @@ GRAPH-ARCH-01 — COMPLETA (2026-07-25). Loose ends: GRAPH-ARCH-01-A/B/C (backlo
 ---
 
 ## P2 — Prioridad media
+
+**AUDIT-BUG-03** — ABIERTO (2026-09-23). El binario `gpui-petruterm` ignora
+`config.keybind_style` por completo (`src/gpui_shell` no tiene grep hits para ese campo ni para
+`direct_bindings_view`); siempre usa el esquema de leader tmux-style, aunque el usuario haya
+puesto `keybind_style = "normal"` en `keybinds.lua`. Además, varias acciones que el wgpu binary sí
+soporta faltan en el dispatch de gpui: `LeaderAction::try_from` no tiene rama para
+`"FocusAiPanel"` (así que `Leader A` cae al sub-prefijo AI en vez de mover foco), y
+`ClearAiContext` (`Leader a c`) y `NewWorkspace`/`SaveWorkspace`/`OpenSavedWorkspaces` bajo el
+prefijo `W` (`Leader W n/s/L`) no están cableados en `gpui_shell/input.rs`. AGENTS.md y README ya
+documentan estas brechas como "wgpu binary only"; queda pendiente decidir si se portan a gpui o se
+aceptan como diferencia permanente entre binarios.
+
+**AUDIT-BUG-04** — ABIERTO (2026-09-23). En `gpui_shell/palette_dispatch.rs`, elegir una rama en
+el selector de branches (`branch_picker.rs`) emite `Action::GitCheckout(b)`, que no está
+manejado por el filtro de acciones del palette ni por `dispatch_palette_action` — cae al brazo
+`_ => {}`. Resultado: seleccionar una rama en el picker de gpui no hace nada. El binario wgpu sí
+lo maneja (`app/ui/mod.rs:1592`). Fix: agregar el brazo `GitCheckout` al dispatch de gpui (llamar
+al mismo helper de checkout que ya existe para el binario wgpu, o portar su lógica).
+
+**AUDIT-BUG-05** — ABIERTO (2026-09-23). `UiManager::remove_terminal_state` (wgpu binary,
+`src/app/ui/mod.rs`) ignora el `_tid` que recibe y aborta el stream de chat AI en curso cada vez
+que se cierra *cualquier* terminal, no solo el que originó la query. Cerrar una pestaña o pane
+sin relación con una conversación de AI activa interrumpe esa conversación. Fix: comparar el id
+del terminal cerrado contra el id que originó el stream actual antes de abortar (o eliminar el
+parámetro si en la práctica solo hay un stream posible a la vez y documentar por qué).
 
 **AUDIT-ENERGY-05** — RESUELTO (2026-05-22). `poll_low_freq_tasks()` en `impl App` extrae battery poll + git poll (74 líneas) de `about_to_wait()`. Este último queda en 217 líneas, enfocado en scheduling/wakeup. `about_to_wait` sigue siendo llamado por winit pero ya no mezcla lógica de baja frecuencia con la de scheduling.
 
@@ -145,6 +198,47 @@ GRAPH-ARCH-01 — COMPLETA (2026-07-25). Loose ends: GRAPH-ARCH-01-A/B/C (backlo
 ---
 
 ## P3 — Prioridad baja / Backlog
+
+**AUDIT-BUG-06** — ABIERTO (2026-09-23). En `src/app/mux/mod.rs` (`cmd_close_tab` y alrededores),
+las tres etiquetas de `FullRebuildTrigger` pasadas a `rows_for_full_rebuild` no corresponden a lo
+que realmente disparó el rebuild: el cambio de selección/búsqueda pasa `ThemeColorChange`,
+`force_full` pasa `PaneGeometryChange`, y `TermDamage::Full` pasa `TerminalResize`. No causa un
+bug visible (el rebuild ocurre igual), pero cualquier métrica o log que agrupe por trigger da
+lecturas engañosas. Fix: pasar la etiqueta que de verdad describe cada call site.
+
+**AUDIT-BUG-07** — ABIERTO (2026-09-23). `src/config/watcher.rs::poll()` usa un canal de
+capacidad 1 con `try_send`: si un cambio en `.json` (p.ej. `mcp.json`) llega justo después de un
+cambio en `.lua` y antes del siguiente poll, el evento `.json` se descarta silenciosamente
+(`app_state.rs` separa el manejo de `.lua` vs `.json` a partir de este único path). El usuario
+puede editar dos archivos de config casi a la vez y ver que solo uno de los dos se recarga. Fix:
+usar una cola pequeña (o un `HashSet` de paths pendientes) en vez de un slot de capacidad 1.
+
+**AUDIT-BUG-08** — ABIERTO (2026-09-23). En `gpui_shell/terminal_output.rs`, el cache
+`terminal_final_output` se topa a `MAX_FINAL_OUTPUT_ENTRIES` evictando
+`.keys().next()` de un `HashMap` — orden arbitrario, no FIFO (a diferencia de `Mux`, que usa un
+`VecDeque` para el mismo propósito). `terminal_exit_codes` en el mismo archivo no tiene cap
+alguno y crece sin límite mientras la app corre. Impacto bajo en sesiones normales (crece con el
+número de terminales cerrados, no con el tiempo), pero diverge del comportamiento documentado
+("mirrors Mux") y puede acumular memoria en sesiones muy largas con muchas pestañas. Fix: usar un
+`VecDeque` para eviction FIFO real y aplicar el mismo cap a `terminal_exit_codes`.
+
+**AUDIT-BUG-09** — ABIERTO (2026-09-23). Varios hints de keybind en
+`src/ui/palette/actions.rs` (`built_in_actions`, líneas ~192, ~262-285, ~302-310) están
+hardcodeados como strings literales (`"^F z"`, `"^F W n"`, etc.) en vez de derivarse de
+`config.leader.key` como hace el resto de `built_in_actions`. Si el usuario cambia su leader key
+en `keybinds.lua`, estos hints del command palette quedan desactualizados y muestran la tecla
+vieja. Adicionalmente, los hints con prefijo `W` (`^F W n/s/L`) corresponden a acciones que ni
+siquiera funcionan en el binario gpui (ver AUDIT-BUG-03), así que ahí el hint es doblemente
+engañoso. Fix: construir estos hints a partir de `leader_label` como el resto de la función.
+
+**AUDIT-BUG-10** — ABIERTO (2026-09-23). En `gpui_shell/resize_handle.rs`, el hover sobre un
+separador de panes no dispara ningún `window.refresh()` propio; el comentario decía (antes de
+esta limpieza) que "el poll loop ya repinta a ~30Hz", pero el poll loop solo llama `cx.notify()`
+cuando algo relevante cambió (gate, blink, etc.) — no hay un repaint periódico incondicional. En
+la práctica el feedback visual del hover puede tardar hasta el próximo blink (o no llegar nunca
+si el blink está apagado en modo battery-saver). Impacto cosmético, bajo. Fix: disparar un
+refresh explícito al entrar/salir del hover, o confirmar con perfiles reales que el lag es
+imperceptible y cerrar como no-accionable.
 
 **GRAPH-ARCH-01-A** — CERRADO COMO NO-ACCIONABLE (2026-09-22). Reinvestigado: `provider_cfg` **no** puede reducirse a `provider`/`model`. `src/app/ui/mod.rs:313` y `src/app/ui/providers.rs:88` pasan `&view.provider_cfg` completo a `crate::llm::build_provider()`, cuyos `from_config()` (openrouter/ollama/lmstudio/copilot) leen `api_key`, `base_url` y otros campos según el provider — no solo los dos que `build_panel_header` usa. El hallazgo original de 2026-07-25 no había rastreado ese call site. `api_key` viaja a través de la vista porque el consumidor real (`build_provider`) lo necesita; no es scope creep. Sin fix — la premisa era incorrecta.
 
@@ -340,5 +434,6 @@ Phase 9: COMPLETA, verificada y MERGEADA a master (2026-07-03, v0.3.0) — TD-P9
 GRAPH-ARCH-01: COMPLETA (2026-07-25) — LLM domain + keys/leader view + font/max_fps consolidation, todo en master.
 Migración gpui: COMPLETA (2026-09-17) — TD-GPUI-01..06 + TD-GPUI-ACP RESUELTOS, mergeada a master (2026-09-17, gpui-petruterm 1.0.0).
 Watch: AUDIT-CLEAN-02, AUDIT-PERF-10, TD-P9-07, AUDIT-DEP-01
-Backlog abierto (P3): ninguno. GRAPH-ARCH-01-A cerrado no-accionable, GRAPH-ARCH-01-B/C resueltos (2026-09-22).
+Backlog abierto (P3): AUDIT-BUG-06..10. GRAPH-ARCH-01-A cerrado no-accionable, GRAPH-ARCH-01-B/C resueltos (2026-09-22).
+Abierto sin resolver (2026-09-23): AUDIT-BUG-01..10 (ver arriba) — P1: 01,02 | P2: 03,04,05 | P3: 06,07,08,09,10.
 ```

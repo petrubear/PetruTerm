@@ -35,10 +35,8 @@ fn spawn_acp_connect(
 ) -> tokio::sync::oneshot::Receiver<Result<crate::llm::acp::AcpSession, String>> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     rt.spawn(async move {
-        // MCP config loading is real (blocking) file I/O -- done inside this
-        // spawned task, not before `rt.spawn`, so `spawn_acp_connect` itself
-        // stays non-blocking for its caller (the UI thread), per its own
-        // existing doc comment.
+        // MCP config loading is blocking file I/O; done here so the caller
+        // (UI thread) never blocks.
         let mcp_servers = if mcp_enabled {
             let trusted = crate::llm::mcp::trust::is_trusted(&cwd);
             mcp_config::load_merged(&cwd, trusted)
@@ -168,7 +166,7 @@ impl RenamePrompt {
     }
 }
 
-// Manages UI overlays: command palette, context menu, per-pane chat panels, and the inline AI block.
+// Manages UI overlays: command palette, context menu, the workspace chat panel, and the inline AI block.
 pub struct UiManager {
     pub palette: CommandPalette,
     pub context_menu: ContextMenu,
@@ -190,7 +188,7 @@ pub struct UiManager {
     /// Error from the last `build_provider` call, shown to the user when llm_provider is None.
     pub(super) llm_init_error: Option<String>,
     pub tokio_rt: tokio::runtime::Runtime,
-    /// TD-019: channel carries (panel_id, event) so tokens always reach the originating panel.
+    /// Chat event channel. panel_id is always 0 (single workspace chat panel).
     pub ai_tx: Sender<(usize, AiEvent)>,
     pub ai_rx: Receiver<(usize, AiEvent)>,
 
@@ -199,9 +197,9 @@ pub struct UiManager {
     pub(super) pending_confirm_tx: Option<tokio::sync::oneshot::Sender<bool>>,
     /// Undo stack: (path, original_content) pairs, newest first.
     pub undo_stack: VecDeque<(PathBuf, String)>,
-    /// A confirmed run_command to forward to the active PTY. Consumed by app.rs.
+    /// A confirmed run_command to forward to the active PTY. Consumed by App::flush_pending_pty_run (frame.rs).
     pub pending_pty_run: Option<String>,
-    /// A confirmed inline agent action waiting to be dispatched (A-3). Consumed by app.rs.
+    /// A confirmed inline agent action waiting to be dispatched. Consumed by App::flush_pending_agent_action (frame.rs).
     pub pending_agent_action: Option<crate::llm::agent_action::AgentAction>,
 
     // ── Status bar data ───────────────────────────────────────────────────────
@@ -366,10 +364,7 @@ impl UiManager {
         // Skip MCP entirely when LLM is disabled — no AI panel, no tool calls (AUDIT-ENERGY-03).
         let mcp_manager = if view.enabled {
             let mut mgr = McpManager::new();
-            // Behavior preserved exactly: if `std::env::current_dir()` fails, or
-            // `load_merged` returns `Err` (global config failed to load), `mgr`
-            // stays empty -- the whole inner block is simply skipped, same as
-            // the original nested `if let Ok(...)` chain this replaces.
+            // If current_dir() or load_merged fails, start with no MCP servers.
             if let Ok(cwd) = std::env::current_dir() {
                 let trusted = crate::llm::mcp::trust::is_trusted(&cwd);
                 if let Ok(cfg) = mcp_config::load_merged(&cwd, trusted) {
@@ -475,7 +470,7 @@ impl UiManager {
         &mut self.chat_panel
     }
 
-    /// Drop streaming state for a closed terminal (TD-MEM-20). Safe to call with any id.
+    /// Abort the in-flight chat stream, regardless of the terminal id.
     pub fn remove_terminal_state(&mut self, _tid: usize) {
         if let Some(h) = self.streaming_handle.take() {
             h.abort();
@@ -497,8 +492,7 @@ impl UiManager {
     // ── AI event polling ──────────────────────────────────────────────────────
 
     /// Poll streaming tokens for the chat panel. Returns true if content changed.
-    /// TD-019: routes each event to the panel that originated the request (by panel_id),
-    /// not the currently active panel — so tab-switching during streaming is safe.
+    /// All events go to the single workspace chat panel (panel_id is always 0).
     pub fn poll_ai_events(&mut self) -> AiPollResult {
         let mut result = AiPollResult::default();
         let mut count = 0;
@@ -928,9 +922,7 @@ impl UiManager {
                         return;
                     }
                     Ok((AgentStepResult::Text(text), usage)) => {
-                        // No tool calls — stream the final response normally by
-                        // building a fresh stream from the completed messages.
-                        // For simplicity, send the text as a single token.
+                        // No tool calls: emit the final text as a single Token, then Done.
                         if let Some(u) = usage {
                             let _ = tx.send((
                                 panel_id,
@@ -1517,7 +1509,7 @@ impl UiManager {
                     let _ = w.request_inner_size(winit::dpi::PhysicalSize::new(0u32, 0u32));
                 }
             }
-            Action::ToggleAiPanel | Action::ToggleAiMode => {
+            Action::ToggleAiPanel => {
                 let terminal_id = mux.focused_terminal_id();
                 if self.panel().is_visible() {
                     self.close_panel();

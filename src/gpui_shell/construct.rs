@@ -1,7 +1,4 @@
-// gpui chrome migration (M5a final review): `GpuiShellRoot::new` extracted
-// from `mod.rs` to reclaim headroom under the 400-line convention --
-// accumulated overshoot from M5a Tasks 1-4, each individually justified but
-// never fixed until this final pass. Pure move, no behavior change.
+// `GpuiShellRoot::new`.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -32,8 +29,7 @@ impl GpuiShellRoot {
         let terminal_id = 0;
 
         // See `poll::spawn_poll_loop`'s doc comment for what this loop does
-        // and why (M0/M1a repaint-reliability); its body was extracted there
-        // to keep this file under the 400-line convention.
+        // and why.
         poll::spawn_poll_loop(cx);
 
         // Mirrors the wgpu app's `CloseRequested` handler; every quit path
@@ -72,9 +68,9 @@ impl GpuiShellRoot {
         // Same construction pattern as the wgpu app's own `tokio_rt` field
         // on its `App`/`Mux` struct (`src/app/ui/mod.rs`) -- hoisted into
         // its own binding, rather than built inline in the `Self { .. }`
-        // literal below (M3c's shape), because MCP startup needs to
+        // literal below, because MCP startup needs to
         // `.block_on()` it before the struct exists, and `ChatPanelView::
-        // new` (M5a) needs it too, to spawn an initial ACP connect when
+        // new` needs it too, to spawn an initial ACP connect when
         // `config.llm.backend == Agent`.
         let tokio_rt = tokio::runtime::Runtime::new().expect("Failed to build tokio runtime");
         let chat = chat_panel::ChatPanelView::new(cx, &config, &tokio_rt);
@@ -83,7 +79,7 @@ impl GpuiShellRoot {
         let palette_query =
             cx.new(|cx| text_input::TextInput::new(cx, &config.colors, "", "Type a command..."));
         // Set up once, for the widget's whole lifetime -- `palette_query` is
-        // a persistent entity (Step 2's own doc comment), not rebuilt per
+        // a persistent entity, not rebuilt per
         // open like a rename editor, so this subscription only needs
         // creating once too.
         cx.subscribe(&palette_query, |this, _input, event, cx| {

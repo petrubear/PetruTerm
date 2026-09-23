@@ -88,11 +88,8 @@ use crate::font::CellStyle;
 /// ever increments.
 const MAX_CLOSED_TERMINALS: usize = 100;
 
-/// Wrap a real winit `EventLoopProxy<()>` into `term::pty::Wakeup`, the
-/// event-loop-agnostic closure type `Terminal::new`/`Pty::spawn` accept.
-/// `Mux`'s own public API keeps taking `EventLoopProxy<()>` directly (this
-/// wrapping happens only at the `Terminal::new` boundary) so nothing above
-/// this module needs to change.
+/// Wrap a winit `EventLoopProxy<()>` into the event-loop-agnostic
+/// `term::Wakeup` closure that `Terminal::new` accepts.
 fn eventloop_wakeup(proxy: EventLoopProxy<()>) -> crate::term::Wakeup {
     Arc::new(move || {
         let _ = proxy.send_event(());
@@ -169,9 +166,9 @@ fn shell_quote(s: &str) -> String {
 
 /// Manages multiple terminal instances, tabs, panes, and workspaces.
 pub struct Mux {
-    /// Active workspace's tab manager (direct field — all existing callers unchanged).
+    /// Active workspace's tab manager.
     pub tabs: TabManager,
-    /// Active workspace's pane managers — one per tab (direct field).
+    /// Active workspace's pane managers, one per tab.
     pub panes: Vec<PaneManager>,
     pub terminals: Vec<Option<Terminal>>, // indexed by terminal_id
     pub next_terminal_id: usize,
@@ -272,7 +269,6 @@ impl Mux {
         self.terminals.get(tid)?.as_ref()
     }
 
-    #[allow(dead_code)]
     pub fn active_terminal_mut(&mut self) -> Option<&mut Terminal> {
         let tid = self.focused_terminal_id();
         self.terminals.get_mut(tid)?.as_mut()
@@ -514,45 +510,6 @@ impl Mux {
         self.tabs.is_empty()
     }
 
-    #[allow(dead_code)]
-    pub fn collect_grid_cells(&self) -> Vec<(String, Vec<(AnsiColor, AnsiColor)>)> {
-        let Some(terminal) = self.active_terminal() else {
-            return vec![];
-        };
-
-        terminal.with_term(|term| {
-            let rows = term.screen_lines();
-            let cols = term.columns();
-            let display_offset = term.grid().display_offset() as i32;
-            let sel_range = term.selection.as_ref().and_then(|s| s.to_range(term));
-            let mut result = Vec::with_capacity(rows);
-
-            for row in 0..rows {
-                let mut text = String::with_capacity(cols);
-                let mut colors = Vec::with_capacity(cols);
-                let grid_line = Line(row as i32 - display_offset);
-
-                for col in 0..cols {
-                    let cell = &term.grid()[grid_line][Column(col)];
-                    text.push(if cell.c == '\0' { ' ' } else { cell.c });
-                    let (fg, bg) = if cell.flags.contains(Flags::INVERSE) {
-                        (cell.bg, cell.fg)
-                    } else {
-                        (cell.fg, cell.bg)
-                    };
-                    let (fg, bg) = if cell_in_selection(grid_line, Column(col), &sel_range) {
-                        (bg, fg)
-                    } else {
-                        (fg, bg)
-                    };
-                    colors.push((fg, bg));
-                }
-                result.push((text, colors));
-            }
-            result
-        })
-    }
-
     /// Read the text of the viewport row at position `row` (0 = top of visible area).
     /// Accounts for scrollback display offset so the result matches what the user sees.
     pub fn viewport_row_text(&self, row: usize) -> String {
@@ -769,15 +726,8 @@ impl Mux {
         }
     }
 
-    /// TD-017: Close the active tab and clean up its pane tree and all owned terminals.
-    ///
-    /// No-op if only one tab remains (TD-GPUI-02) -- same "refuse to close the last
-    /// container" convention `cmd_close_workspace` already uses for the last workspace,
-    /// rather than this binary's `Action::CloseTab` cascading into an app quit the way
-    /// gpui_shell's `close_tab_at` does. Without this guard, `Leader &` on the last tab
-    /// emptied `self.tabs`/`self.panes` outright: nothing panics (every consumer of
-    /// `active_terminal()` already handles `None`), but the window is left rendering an
-    /// empty, unusable chrome with no way back in except quitting externally.
+    /// Close the active tab and its terminals. No-op on the last tab (same rule
+    /// as cmd_close_workspace).
     pub fn cmd_close_tab(&mut self) {
         if self.tabs.tab_count() <= 1 {
             return;
@@ -1155,58 +1105,6 @@ impl Mux {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{drain_pty_events, PTY_EVENT_WORK_BUDGET};
-    use crate::term::{Osc133Marker, PtyEvent};
-    use crossbeam_channel::unbounded;
-
-    #[test]
-    fn production_pty_drain_preserves_payload_and_special_events_across_budget() {
-        let (tx, rx) = unbounded();
-        for _ in 0..PTY_EVENT_WORK_BUDGET {
-            tx.send(PtyEvent::DataReady(1)).unwrap();
-        }
-        tx.send(PtyEvent::PtyWrite("payload".to_string())).unwrap();
-        tx.send(PtyEvent::Exit(17)).unwrap();
-        tx.send(PtyEvent::Osc133(Osc133Marker::PromptStart))
-            .unwrap();
-        tx.send(PtyEvent::ScreenCleared).unwrap();
-
-        let mut work = 0;
-        let mut first = Vec::new();
-        let first_pending = drain_pty_events(&rx, &mut work, PTY_EVENT_WORK_BUDGET, |event| {
-            first.push(event)
-        });
-
-        assert!(first_pending);
-        assert_eq!(first.len(), PTY_EVENT_WORK_BUDGET);
-        assert!(first
-            .iter()
-            .all(|event| matches!(event, PtyEvent::DataReady(_))));
-
-        work = 0;
-        let mut second = Vec::new();
-        let second_pending = drain_pty_events(&rx, &mut work, PTY_EVENT_WORK_BUDGET, |event| {
-            second.push(event)
-        });
-
-        assert!(!second_pending);
-        assert!(second
-            .iter()
-            .any(|event| { matches!(event, PtyEvent::PtyWrite(payload) if payload == "payload") }));
-        assert!(second
-            .iter()
-            .any(|event| matches!(event, PtyEvent::Exit(17))));
-        assert!(second
-            .iter()
-            .any(|event| { matches!(event, PtyEvent::Osc133(Osc133Marker::PromptStart)) }));
-        assert!(second
-            .iter()
-            .any(|event| matches!(event, PtyEvent::ScreenCleared)));
-    }
-}
-
 fn cell_in_selection(line: Line, col: Column, sel_range: &Option<SelectionRange>) -> bool {
     let Some(range) = sel_range else { return false };
     if range.is_block {
@@ -1258,4 +1156,56 @@ fn syntax_highlight_at(
     let g = (rgba[1] * 255.0).round() as u8;
     let b = (rgba[2] * 255.0).round() as u8;
     Some(AnsiColor::Spec(Rgb { r, g, b }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{drain_pty_events, PTY_EVENT_WORK_BUDGET};
+    use crate::term::{Osc133Marker, PtyEvent};
+    use crossbeam_channel::unbounded;
+
+    #[test]
+    fn production_pty_drain_preserves_payload_and_special_events_across_budget() {
+        let (tx, rx) = unbounded();
+        for _ in 0..PTY_EVENT_WORK_BUDGET {
+            tx.send(PtyEvent::DataReady(1)).unwrap();
+        }
+        tx.send(PtyEvent::PtyWrite("payload".to_string())).unwrap();
+        tx.send(PtyEvent::Exit(17)).unwrap();
+        tx.send(PtyEvent::Osc133(Osc133Marker::PromptStart))
+            .unwrap();
+        tx.send(PtyEvent::ScreenCleared).unwrap();
+
+        let mut work = 0;
+        let mut first = Vec::new();
+        let first_pending = drain_pty_events(&rx, &mut work, PTY_EVENT_WORK_BUDGET, |event| {
+            first.push(event)
+        });
+
+        assert!(first_pending);
+        assert_eq!(first.len(), PTY_EVENT_WORK_BUDGET);
+        assert!(first
+            .iter()
+            .all(|event| matches!(event, PtyEvent::DataReady(_))));
+
+        work = 0;
+        let mut second = Vec::new();
+        let second_pending = drain_pty_events(&rx, &mut work, PTY_EVENT_WORK_BUDGET, |event| {
+            second.push(event)
+        });
+
+        assert!(!second_pending);
+        assert!(second
+            .iter()
+            .any(|event| { matches!(event, PtyEvent::PtyWrite(payload) if payload == "payload") }));
+        assert!(second
+            .iter()
+            .any(|event| matches!(event, PtyEvent::Exit(17))));
+        assert!(second
+            .iter()
+            .any(|event| { matches!(event, PtyEvent::Osc133(Osc133Marker::PromptStart)) }));
+        assert!(second
+            .iter()
+            .any(|event| matches!(event, PtyEvent::ScreenCleared)));
+    }
 }

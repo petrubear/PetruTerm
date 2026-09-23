@@ -1,49 +1,19 @@
-// gpui chrome migration (M3b Task 3): the inline `Ctrl+Space` AI block.
+// The inline `Ctrl+Space` AI block. `crate::llm::ai_block::AiBlock` holds
+// the state machine (`Hidden -> Typing -> Loading -> Streaming ->
+// Done/Error`); this adds its own one-line composer and its own streaming
+// channel, never shared with `ChatPanelView` (a stream landing in one would
+// be consumed by the other's poll-drain).
 //
-// `crate::llm::ai_block::AiBlock` (118 lines, `Hidden -> Typing -> Loading ->
-// Streaming -> Done/Error`) is engine-agnostic and used here directly,
-// unmodified -- same "use it, don't copy it" rule Task 1/2 followed for
-// `ChatPanel`. It is a genuinely separate surface from the chat panel: its
-// own state machine, its own one-line composer, its own streaming channel
-// (never `ChatPanelView`'s -- the two drawers can be open independently and
-// must not share a `Sender`/`Receiver` pair or a stream landing in one would
-// be silently consumed by the other's poll-drain).
-//
-// Two things this module builds in from the start rather than discovering
-// via a dogfood report, per the M3b Task 3 brief:
-//
-// 1. Focus guard keyed on real focus, never on visibility. `composer_focused`
-//    below is `is_focused(window)`, mirroring `ChatPanelView::composer_
-//    focused` -- the same M3a Critical (a visibility-keyed guard freezes the
-//    app once focus moves) applies here identically. `input.rs`'s
-//    top-of-function guard and `render.rs`'s per-frame refocus guard both
-//    key on this, never on `is_visible()` alone.
-//
-// 2. A provider stream error is never overwritten by an unconditional `Done`
-//    sent after the loop -- see `submit`'s `errored` flag below, the same
-//    fix commit 3fdf2fb applied to `ChatPanelView::submit` (`stream.rs`).
-//    NOTE: the *original* wgpu build's `submit_ai_block_query`
-//    (`src/app/ui/mod.rs:1280`) still has this exact bug -- found while
-//    porting, not fixed there (out of scope, matches established practice
-//    for wgpu-side gaps found mid-port).
-//
-// Error recovery: `AiBlock` has no `dismiss_error`-equivalent (unlike
-// `ChatPanel`). It doesn't need one -- `close()` already resets `state` all
-// the way to `Hidden`, strictly more recovery than a dismiss that just clears
-// the error. `TextInputEvent::Cancel` (Escape) calls `close` unconditionally,
-// mirroring the wgpu build's own Escape handler (`src/app/input/mod.rs`:
-// `Key::Named(NamedKey::Escape) => ui.ai_block.close()`, reached in every
-// state including `Error`).
-//
-// No-`Window` dismiss path: YES, unlike the chat panel's `/q` (which exists
-// because of a slash-command layer this surface has no equivalent of).
-// Enter after the response is `Done` runs the resolved command and closes
-// the block (`run_ai_block_command` below), reached through the composer's
-// `cx.subscribe` callback (`on_ai_block_composer_event`), which gpui hands
-// no `Window`. So `close` follows `ChatPanelView::close`'s division of
-// labor: it only clears state, and `render.rs`'s per-frame guard
-// (`!is_visible() || ...`) reclaims root focus next frame regardless of what
-// the composer's stale `FocusHandle` still claims.
+// - Focus guard keyed on real focus, never on visibility:
+//   `composer_focused` is `is_focused(window)`; `input.rs`'s guard and
+//   `render.rs`'s per-frame refocus guard both key on it.
+// - A provider stream error is never overwritten by an unconditional `Done`
+//   sent after the loop -- see `submit`'s `errored` flag.
+// - Escape (`TextInputEvent::Cancel`) calls `close` unconditionally, which
+//   resets `state` to `Hidden` in every state including `Error`.
+// - Enter after `Done` runs the command and closes the block from the
+//   composer's `cx.subscribe` callback, which has no `Window`; `close` only
+//   clears state and `render.rs`'s guard reclaims root focus next frame.
 
 use std::sync::Arc;
 
@@ -118,7 +88,7 @@ impl AiBlockView {
     }
 
     /// Open the block and focus the composer, or close it. Closing does NOT
-    /// move focus anywhere -- the caller (`input.rs`'s `Ctrl+Space` handler)
+    /// move focus anywhere -- the caller (`standalone_keys.rs`'s `toggle_ai_block`)
     /// does that, same division of labor `ChatPanelView::toggle` uses.
     pub fn toggle(&mut self, window: &mut Window, cx: &mut Context<GpuiShellRoot>) {
         if self.block.is_visible() {
@@ -298,7 +268,7 @@ impl GpuiShellRoot {
     /// Write the block's resolved command to the focused pane's PTY and
     /// close. Ported from the wgpu build's `run_ai_block_command`
     /// (`src/app/ui/mod.rs:1338`) minus its `Mux` lookup -- this shell keys
-    /// terminals by id directly (`self.terminals`/`self.tab_panes`).
+    /// terminals by id directly (`self.terminals`/`workspaces.active().tab_panes`).
     fn run_ai_block_command(&mut self, cx: &mut Context<Self>) {
         if let Some(cmd) = self.ai_block.block.command_to_run() {
             let mut data = cmd.into_bytes();

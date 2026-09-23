@@ -26,11 +26,6 @@ impl SteeringManager {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn count(&self) -> usize {
-        self.files.len()
-    }
-
     pub fn files(&self) -> &[(String, String)] {
         &self.files
     }

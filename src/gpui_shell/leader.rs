@@ -1,33 +1,12 @@
-// gpui chrome migration (M2 Task 4): leader-key chorded dispatch.
-//
-// `LeaderAction` is a deliberately narrower type than the wgpu app's own
-// `Action` enum (`src/ui/palette/actions.rs`) -- it covers exactly the
-// eleven leader-key actions ported so far (tabs, splits, pane focus/zoom/
-// close, plus M3b's `ToggleAiPanel`). The 'e' (explorer) and 'W' (workspace)
-// leader sub-prefixes and the command palette itself are still out of scope.
-//
-// `leader_map` (built once in `GpuiShellRoot::new` via `build_leader_map`)
-// is the data-driven half: it turns `config.keys`'s `LEADER`-scoped
-// `KeyBind`s (via `config::keybind_view::leader_bindings_view`) into this
-// enum, the same string-matching shape as `Action::from_str`
-// (`src/ui/palette/actions.rs:71-113`).
-//
-// M3b adds `ToggleAiPanel`, the milestone this doc comment used to say would
-// add AI/workspace/sidebar sub-prefixes. It is NOT seeded into
-// `leader_map` the way `ZoomPane`'s "z" is: `Leader a a` is a two-key
-// sub-prefix chord (`a` then `a`), and this map is keyed by a single string.
-// `input.rs`'s leader dispatch handles the `a`-prefix continuation directly,
-// constructing `LeaderAction::ToggleAiPanel` itself rather than looking it up
-// here. `TryFrom<&str>` still parses the string for consistency with every
-// other variant (and in case a future config surface ever needs to name it),
-// but nothing in this milestone calls it that way.
+// `LeaderAction`: every leader-chord action gpui_shell dispatches. Single-key
+// ones come from config via `build_leader_map`; the `a`/`e`/`W` sub-prefixes
+// are handled in `input.rs`.
 
 use super::panes::FocusDir;
 use crate::config::schema::KeyBind;
 use std::collections::HashMap;
 
-/// One leader-key action this milestone supports. See this module's doc
-/// comment for why the set stops here.
+/// One leader-key action gpui_shell supports.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LeaderAction {
     NewTab,
@@ -90,14 +69,9 @@ impl TryFrom<&str> for LeaderAction {
 /// Build the single-key leader dispatch table from `config.keys`'s
 /// `LEADER`-scoped bindings (`leader_bindings_view(config).bindings`).
 ///
-/// `Leader z` (zoom) is seeded in unconditionally: unlike every other
-/// binding here, it has no `{ mods = "LEADER", key = "z", ... }` entry in
-/// `config/default/keybinds.lua` -- the wgpu app dispatches it as a
-/// hardcoded single key too (`src/app/input/mod.rs`'s `s.as_str() == "z"`
-/// branch), not through its own config-driven `leader_map`. Seeded via
-/// `entry().or_insert` rather than an unconditional `insert` so a future
-/// config binding for "z" (should one ever be added) overrides this
-/// default instead of racing it based on map-insertion order.
+/// `z` (ZoomPane), `w` (NewWorkspace) and `s` (ToggleWorkspaceSidebar) are
+/// seeded as defaults via `entry().or_insert`, so a config binding for
+/// the same key overrides them.
 pub fn build_leader_map(bindings: &[KeyBind]) -> HashMap<String, LeaderAction> {
     let mut map = HashMap::new();
     for kb in bindings {

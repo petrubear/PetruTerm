@@ -1,12 +1,6 @@
-// gpui chrome migration (M5b Task 1): "explain last output" / "fix last
-// error" -- the two AI-query builders `Leader a e`/`Leader a f`, the
-// command palette, and (Task 2) the suggestion pills all funnel into.
-//
-// Both real call sites (input.rs's 'a'-prefix leader continuation,
-// palette_dispatch.rs's dispatch_palette_action, and Task 2's pill
-// on_mouse_down callbacks) already have a real `&mut Window` in hand --
-// unlike M5c's `SendToChat`, neither method here needs the deferred
-// pending_*-drained-at-render() pattern.
+// "Explain last output" / "fix last error": the AI-query builders that
+// `Leader a e`/`Leader a f`, the command palette, and the suggestion pills
+// funnel into. Every caller has a real `&mut Window`.
 
 use gpui::{Context, Window};
 
@@ -17,7 +11,7 @@ use super::GpuiShellRoot;
 
 impl GpuiShellRoot {
     /// `Leader a e` / palette "Explain Last Output" / the zero-state and
-    /// post-response "Explain command"/"Explain more" pills (Task 2).
+    /// post-response "Explain command"/"Explain more" pills.
     pub(super) fn explain_last_output(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let output = self.last_terminal_lines(30);
         if output.is_empty() {
@@ -28,7 +22,7 @@ impl GpuiShellRoot {
     }
 
     /// `Leader a f` / palette "Fix Last Error" / the zero-state and
-    /// post-response "Fix last error" pills (Task 2).
+    /// post-response "Fix last error" pills.
     pub(super) fn fix_last_error(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let output = self.last_terminal_lines(30);
         let ctx = ShellContext::load();
@@ -59,7 +53,7 @@ impl GpuiShellRoot {
             self.chat.toggle(window, cx);
         }
         // Same call-site restructuring as `stream.rs`'s `handle_chat_
-        // composer_submit` (M5d Task 6): `ChatPanelView::submit` can't reach
+        // composer_submit`: `ChatPanelView::submit` can't reach
         // `skill_manager`/`steering_manager` itself, so the addendum is
         // built here, where both are in scope on `GpuiShellRoot`.
         let addendum = crate::llm::prompt_context::build_prompt_addendum(
@@ -150,8 +144,8 @@ impl GpuiShellRoot {
     /// Read the bottom `n` visible terminal rows of the focused pane,
     /// joined with `\n`, trimmed. Ported from `Mux::last_terminal_lines`
     /// (`src/app/mux/mod.rs:611-627`), adapted to read the focused
-    /// `Terminal` directly (same adaptation style M5c's `blocks.rs::
-    /// row_text_and_absolute_row` already used for a sibling grid read).
+    /// `Terminal` directly (same style as `blocks.rs`'s
+    /// `row_text_and_absolute_row`).
     pub(super) fn last_terminal_lines(&self, n: usize) -> String {
         let active_ws = self.workspaces.active();
         let active_tid = active_ws.tab_panes[active_ws.tabs.active_index()].focused_terminal;

@@ -1,8 +1,5 @@
-// gpui chrome migration (M3d Task 3): per-section list bodies for the
-// sidebar drawer. Workspaces (this task, moved out of `render.rs` to keep
-// that file focused and under the 400-line convention as Task 4 adds three more)
-// is the only one implemented here yet; Task 4 adds Mcp/Skills/Steering to this
-// same file.
+// Per-section list bodies for the sidebar drawer: Workspaces, MCP, Skills,
+// Steering.
 
 use std::rc::Rc;
 
@@ -95,9 +92,8 @@ pub fn render_workspaces_section(
                 .items_center()
                 .justify_between()
                 // `px_2`, matching `render_browser_row`'s/this section's own
-                // row `mx_2` below -- a live dogfood screenshot showed a
-                // plain label at `px_3` sitting to the LEFT of the row
-                // pills' own edge (`mx_2`) instead of lining up with it.
+                // row `mx_2` below, so the label lines up with the row
+                // pills' own edge.
                 .px_2()
                 .pb_2()
                 .text_size(px(10.5))
@@ -122,7 +118,7 @@ pub fn render_workspaces_section(
 /// One row per connected MCP server (sorted by name, matching the wgpu
 /// build's own sidebar render order in `src/app/mod.rs`'s `open_sidebar_
 /// info_overlay`), showing its connected tool count. `cursor` highlights
-/// the keyboard-nav row (Task 3's `sidebar_move_cursor`); clicking a row
+/// the keyboard-nav row (`sidebar_move_cursor`); clicking a row
 /// opens it directly regardless of the cursor.
 pub fn render_mcp_section(
     mcp: &McpManager,

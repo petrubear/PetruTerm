@@ -17,7 +17,7 @@ pub struct McpServerConfig {
 }
 
 /// Map of server name → server config.
-/// This is the public surface consumed by D-2 (McpClient).
+/// Consumed by `McpManager::start_all` and `to_acp_servers`.
 pub type McpConfig = HashMap<String, McpServerConfig>;
 
 /// Internal: mirrors the top-level JSON structure `{ "mcpServers": { ... } }`.
@@ -69,17 +69,9 @@ pub fn load_local(cwd: &Path) -> Result<McpConfig> {
     parse_file(&local_path).with_context(|| format!("Failed to parse {}", local_path.display()))
 }
 
-/// Load MCP config merged from global + project-local sources, matching the
-/// merge policy three call sites (two in the wgpu binary, one in gpui_shell)
-/// previously each duplicated inline. Global config always loads; local
-/// config is included only when `trusted` is true. On a `load_global`
-/// failure, returns `Err` (callers decide how to degrade — some treat this
-/// as "keep whatever was already running," others as "connect with zero
-/// MCP servers," which is why this doesn't collapse the error internally).
-/// A `load_local` failure is logged and does not fail the whole call — the
-/// global-only config is still returned, matching the more lenient of the
-/// three call sites this consolidates.
-#[allow(dead_code)]
+/// Global config plus, when trusted, project-local `.petruterm/mcp.json` (local
+/// wins). A global load error returns `Err`; a local load error is logged and
+/// ignored.
 pub fn load_merged(cwd: &Path, trusted: bool) -> Result<McpConfig> {
     let mut cfg = load_global()?;
     let local_path = cwd.join(".petruterm/mcp.json");
@@ -103,9 +95,8 @@ pub fn load_merged(cwd: &Path, trusted: bool) -> Result<McpConfig> {
 /// Map this project's own MCP config shape to the ACP protocol's server
 /// list, for `NewSessionRequest::mcp_servers` -- the ACP agent connects to
 /// and calls these servers' tools itself. This project's own `McpManager`
-/// (used only for the direct-provider tool-calling path) is entirely
-/// separate and untouched by this mapping.
-#[allow(dead_code)]
+/// (used by the direct-provider tool-calling path and for tool listings) is
+/// entirely separate and untouched by this mapping.
 pub fn to_acp_servers(config: &McpConfig) -> Vec<agent_client_protocol::schema::McpServer> {
     config
         .iter()

@@ -41,7 +41,6 @@ fn make_shaper() -> (TextShaper, FontConfig) {
         line_height: 1.2,
         lcd_antialiasing: false,
         features: vec![],
-        fallbacks: vec![],
         font_path: None,
     };
 

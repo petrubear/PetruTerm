@@ -4,7 +4,7 @@
 
 A developer-first GPU-accelerated terminal emulator written in Rust. Built for speed and extensibility, with first-class AI integration, a Lua configuration DSL, font ligatures, and a tmux-style tab/pane system.
 
-> **Platform:** macOS (primary). Linux planned for Phase 2+.
+> **Platform:** macOS only.
 
 ---
 
@@ -132,10 +132,9 @@ return config
 | ------------------------- | -------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | `config.font`             | string   | `"JetBrainsMono Nerd Font Mono, Monolisa Nerd Font, Fira Code, Menlo"` | Font family name. Use `petruterm.font("A, B, C")` to resolve the first installed family from a comma-separated list. |
 | `config.font_size`        | number   | `16`                                                                   | Font size in points.                                                                                                 |
-| `config.font_line_height` | number   | `1.2`                                                                  | Line-height multiplier.                                                                                              |
+| `config.font_line_height` | number   | `1.4`                                                                  | Line-height multiplier.                                                                                              |
 | `config.font_features`    | string[] | `{"calt=1","liga=1","dlig=1"}`                                         | HarfBuzz OpenType feature tags.                                                                                      |
-| `config.font_fallbacks`   | string[] | `{"Apple Color Emoji","Noto Color Emoji"}`                             | Fallback fonts for missing glyphs and emoji.                                                                         |
-| `config.lcd_antialiasing` | bool     | `false`                                                                | Enable LCD subpixel antialiasing where supported.                                                                    |
+| `config.lcd_antialiasing` | bool     | `false`                                                                | Enable FreeType LCD subpixel antialiasing (`petruterm` wgpu binary only).                                            |
 
 ```lua
 config.font         = petruterm.font("Monolisa Nerd Font, JetBrainsMono Nerd Font Mono")
@@ -155,9 +154,9 @@ Bold and italic text (SGR bold/italic from the shell) render using the same fami
 | `background`        | `"#0e0e10"` | Terminal background                              |
 | `cursor_bg`         | `"#9580ff"` | Cursor fill color                                |
 | `cursor_fg`         | `"#e0e0e8"` | Text under cursor                                |
-| `cursor_border`     | `"#9580ff"` | Cursor outline                                   |
+| `cursor_border`     | `"#9580ff"` | Cursor outline (accepted, not yet rendered)      |
 | `selection_bg`      | `"#2a2a3a"` | Selection background                             |
-| `selection_fg`      | `"#e0e0e8"` | Selected text color                              |
+| `selection_fg`      | `"#e0e0e8"` | Selected text color (accepted, not yet rendered) |
 | `ansi`              | Dracula Pro | Array of 8 normal ANSI colors (indices 0–7)      |
 | `brights`           | Dracula Pro | Array of 8 bright ANSI colors (indices 8–15)     |
 | `ui_accent`         | derived     | Optional semantic accent color for UI highlights |
@@ -167,6 +166,7 @@ Bold and italic text (SGR bold/italic from the shell) render using the same fami
 | `ui_muted`          | derived     | Optional semantic muted text / separator color   |
 | `ui_success`        | derived     | Optional semantic success color                  |
 | `ui_overlay`        | derived     | Optional semantic overlay background             |
+| `ui_border`         | derived     | Optional pane separator / card outline color     |
 
 ```lua
 config.colors = {
@@ -191,18 +191,17 @@ config.colors = {
 | Key               | Type        | Default                                  | Description                                                                                                                          |
 | ----------------- | ----------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `title_bar_style` | string      | `"custom"`                               | `"custom"` — transparent title bar, draggable content area (macOS). `"native"` — standard OS title bar. `"none"` — fully borderless. |
-| `padding`         | table       | `{left=20, right=20, top=60, bottom=10}` | Inner padding in physical pixels. `top` should be ≥ 60 with `"custom"` to clear traffic lights.                                      |
+| `padding`         | table       | `{left=20, right=20, top=5, bottom=10}`  | Inner padding in physical pixels. With `"custom"`, `top` is the gap below the titlebar; the titlebar height is added internally.     |
 | `start_maximized` | bool        | `true`                                   | Launch maximized.                                                                                                                    |
 | `initial_width`   | number\|nil | `nil`                                    | Initial window width in pixels (overrides `start_maximized`).                                                                        |
 | `initial_height`  | number\|nil | `nil`                                    | Initial window height in pixels.                                                                                                     |
 | `opacity`         | number      | `1.0`                                    | Window opacity (0.0–1.0).                                                                                                            |
-| `borderless`      | bool        | `false`                                  | Remove all window chrome.                                                                                                            |
 | `blur`            | string\|bool | `false`                                  | macOS vibrancy behind the window: `"dark"`, `"light"`, or `false`/omitted to disable. Softens `ui_surface*` panel colors automatically. |
 
 ```lua
 config.window = {
     title_bar_style = "custom",
-    padding = { left = 12, right = 12, top = 60, bottom = 8 },
+    padding = { left = 12, right = 12, top = 5, bottom = 8 },
     start_maximized = false,
     initial_width   = 1400,
     initial_height  = 900,
@@ -212,13 +211,6 @@ config.window = {
 ```
 
 When `blur` is set (or `opacity < 1.0`), panel and sidebar backgrounds (`ui_surface`, `ui_surface_hover`) automatically render with reduced alpha so the vibrancy/translucency shows through.
-
-#### Tab bar
-
-| Key                          | Type | Default | Description                                  |
-| ---------------------------- | ---- | ------- | -------------------------------------------- |
-| `config.enable_tab_bar`      | bool | `true`  | Show tab bar when more than one tab is open. |
-| `config.hide_tab_bar_if_one` | bool | `true`  | Hide tab bar when only one tab exists.       |
 
 #### Status bar
 
@@ -249,7 +241,6 @@ config.status_bar = {
 | `config.gpu_preference`             | string | `"low_power"` | GPU selection preference: `"high_performance"`, `"low_power"`, or `"none"`.                                                  |
 | `config.status_bar.git_dirty_check` | bool   | `false`       | Poll `git status --porcelain` for a dirty marker in the status bar.                                                          |
 | `config.battery_saver`              | string | `"auto"`      | Battery saver policy: `"auto"`, `"always"`, or `"never"`.                                                                    |
-| `config.shell_integration`          | bool   | `true`        | Enable shell integration hooks (writes CWD/exit-code context for the AI panel). See [Shell Integration](#shell-integration). |
 
 ```lua
 config.scrollback_lines  = 50000
@@ -257,23 +248,21 @@ config.enable_scroll_bar = true
 config.max_fps           = 120
 config.gpu_preference    = "high_performance"
 config.battery_saver     = "never"
-config.shell_integration = true
 ```
 
 ---
 
-### Workspaces
+### `config.lua` — Shell and workspaces
 
-| Key                                 | Type | Default | Description                                              |
-| ------------------------------------ | ---- | ------- | ---------------------------------------------------------- |
-| `config.workspaces.auto_save_on_exit`   | bool | `true`  | Save the layout of every workspace automatically on quit. |
-| `config.workspaces.auto_save_on_switch` | bool | `false` | Save a workspace's layout automatically when you switch away from it (`Leader+W+j/k`), in addition to on exit. |
+| Key                                   | Type   | Default                  | Description                                                                                                                  |
+| ------------------------------------- | ------ | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `config.shell`                        | string | `$SHELL` or `/bin/zsh`   | Shell launched in new tabs.                                                                                                  |
+| `config.shell_integration`            | bool   | `true`                   | Enable shell integration hooks (writes CWD/exit-code context for the AI panel). See [Shell Integration](#shell-integration). |
+| `config.workspaces.auto_save_on_exit` | bool   | `true`                   | Save the layout of every workspace automatically on quit.                                                                    |
 
 ```lua
-config.workspaces = {
-    auto_save_on_exit   = true,
-    auto_save_on_switch = true,
-}
+config.shell_integration = true
+config.workspaces = { auto_save_on_exit = true }
 ```
 
 See [Sidebar](#sidebar) for browsing and restoring saved workspaces.
@@ -289,6 +278,8 @@ config.leader = { key = "f", mods = "CTRL", timeout_ms = 1000 }
 ```
 
 Press `Ctrl+F`, release, then press the bound key within `timeout_ms` milliseconds.
+
+`config.keybind_style = "normal"` (set in `keybinds.lua` itself) swaps the leader table for direct macOS `Cmd` combos. Only the `petruterm` (wgpu) binary honors it; `gpui-petruterm` always uses the leader bindings.
 
 #### Keyboard
 
@@ -315,23 +306,28 @@ Press `Ctrl+F`, release, then press the bound key within `timeout_ms` millisecon
 | --------------------- | ---------------------------------------------------------- |
 | `Leader+o`            | Open command palette                                       |
 | `Leader+a+a`          | Open / close AI panel                                      |
-| `Leader+A`            | Move focus between terminal and AI panel (without closing) |
+| `Leader+A`            | Move focus between terminal and AI panel (without closing; wgpu binary only) |
+| `Leader+a+c`          | Clear AI context (wgpu binary only)                        |
 | `Leader+a+e`          | Explain last terminal output                               |
 | `Leader+a+f`          | Fix last error                                             |
 | `Leader+a+z`          | Undo last AI file write                                    |
 | `Leader+e+e`          | Toggle sidebar (Workspaces / MCP / Skills / Steering — see [Sidebar](#sidebar)) |
+| `Leader+s`            | Toggle sidebar (alias for `Leader+e+e`)                    |
 | `Leader+w`            | New workspace                                              |
-| `Leader+W+n`          | New workspace                                              |
+| `Leader+W+n`          | New workspace (wgpu binary only)                           |
 | `Leader+W+&`          | Close workspace                                            |
 | `Leader+W+,`          | Rename workspace                                           |
 | `Leader+W+j`          | Next workspace                                             |
 | `Leader+W+k`          | Previous workspace                                         |
-| `Leader+W+s`          | Save current workspace layout                              |
-| `Leader+W+L`          | Open saved workspaces palette                              |
+| `Leader+W+s`          | Save current workspace layout (wgpu binary only)           |
+| `Leader+W+L`          | Open saved workspaces palette (wgpu binary only)           |
 | `Leader+c`            | New tab                                                    |
 | `Leader+&`            | Close tab                                                  |
 | `Leader+n`            | Next tab                                                   |
 | `Leader+b`            | Previous tab                                               |
+| `Leader+,`            | Rename tab                                                 |
+| `Leader+1–9`          | Switch to tab N                                            |
+| `Leader+z`            | Zoom / unzoom active pane                                  |
 | `Leader+%`            | Split pane horizontally (left \| right)                    |
 | `Leader+"`            | Split pane vertically (top / bottom)                       |
 | `Leader+x`            | Close active pane                                          |
@@ -352,7 +348,7 @@ config.keys = {
 }
 ```
 
-`Leader+a+*`, `Leader+e+e`, `Leader+w`, `Leader+W+*`, `Ctrl+Space`, `Cmd+F`, `Cmd+K`, `Cmd+1-9`, and `F12` are handled by the built-in input layer rather than `config.keys`. The single-key leader prefixes `a`, `e`, and `W` are reserved for those built-in sequences.
+`Leader+a+*`, `Leader+e+e`, `Leader+s`, `Leader+z`, `Leader+w`, `Leader+W+*`, `Leader+1–9`, `Ctrl+Space`, `Cmd+F`, `Cmd+K`, `Cmd+1-9`, and `F12` are handled by the built-in input layer rather than `config.keys`. The single-key leader prefixes `a`, `e`, and `W` are reserved for those built-in sequences.
 
 #### Available actions
 
@@ -364,14 +360,26 @@ config.keys = {
 | `petruterm.action.ExplainLastOutput` | Send last terminal output to AI for explanation |
 | `petruterm.action.FixLastError`      | Send last failed command to AI for a fix        |
 | `petruterm.action.UndoLastWrite`     | Undo last AI-proposed file write                |
+| `petruterm.action.ClearAiContext`    | Clear the AI conversation context               |
+| `petruterm.action.EnableAiFeatures`  | Turn AI features on                             |
+| `petruterm.action.DisableAiFeatures` | Turn AI features off                            |
 | `petruterm.action.ToggleStatusBar`   | Show / hide the status bar                      |
 | `petruterm.action.NewTab`            | Open a new tab                                  |
 | `petruterm.action.CloseTab`          | Close the current tab                           |
 | `petruterm.action.NextTab`           | Switch to the next tab                          |
 | `petruterm.action.PrevTab`           | Switch to the previous tab                      |
+| `petruterm.action.RenameTab`         | Rename the current tab                          |
+| `petruterm.action.NewWorkspace`      | Create a new workspace                          |
+| `petruterm.action.CloseWorkspace`    | Close the current workspace                     |
+| `petruterm.action.RenameWorkspace`   | Rename the current workspace                    |
+| `petruterm.action.NextWorkspace`     | Switch to the next workspace                    |
+| `petruterm.action.PrevWorkspace`     | Switch to the previous workspace                |
+| `petruterm.action.SaveWorkspace`     | Save the current workspace layout               |
+| `petruterm.action.OpenSavedWorkspaces` | Open the saved workspaces palette             |
 | `petruterm.action.SplitHorizontal`   | Split active pane horizontally                  |
 | `petruterm.action.SplitVertical`     | Split active pane vertically                    |
 | `petruterm.action.ClosePane`         | Close the active pane                           |
+| `petruterm.action.ZoomPane`          | Zoom / unzoom the active pane                   |
 | `petruterm.action.FocusPaneLeft`     | Focus pane to the left                          |
 | `petruterm.action.FocusPaneRight`    | Focus pane to the right                         |
 | `petruterm.action.FocusPaneUp`       | Focus pane above                                |
@@ -387,21 +395,13 @@ config.keys = {
 
 ```lua
 config.llm = {
-    enabled  = false,
+    enabled  = true,
+    backend  = "provider",   -- the shipped llm.lua uses "agent"; see Agent backend below
 
     provider = "openrouter",
     model    = "meta-llama/llama-3.1-8b-instruct:free",
     api_key  = os.getenv("OPENROUTER_API_KEY"),
     base_url = nil,   -- nil = provider default
-
-    features = {
-        nl_to_command  = true,
-        explain_output = true,
-        fix_last_error = true,
-        context_chat   = true,
-    },
-
-    context_lines = 50,
 }
 ```
 
@@ -415,7 +415,6 @@ config.llm = {
 | `model`         | string      | `"meta-llama/llama-3.1-8b-instruct:free"` | Model identifier. Format depends on the provider.                                         |
 | `api_key`       | string\|nil | `nil`                                     | API key. Use `os.getenv("VAR")` to avoid hardcoding secrets. See provider defaults below. |
 | `base_url`      | string\|nil | `nil`                                     | Override the provider's base URL. `nil` uses the default.                                 |
-| `context_lines` | number      | `50`                                      | Lines of terminal output included as context in AI requests.                              |
 
 #### Provider defaults
 
@@ -425,15 +424,6 @@ config.llm = {
 | `ollama`     | `http://localhost:11434/v1`     | None                     |
 | `lmstudio`   | `http://localhost:1234/v1`      | None                     |
 | `copilot`    | `https://api.githubcopilot.com` | GitHub token (see below) |
-
-#### `features` table
-
-| Key              | Type | Default | Description                                                          |
-| ---------------- | ---- | ------- | -------------------------------------------------------------------- |
-| `nl_to_command`  | bool | `true`  | Natural language → shell command via inline AI block (`Ctrl+Space`). |
-| `explain_output` | bool | `true`  | Explain last terminal output (`Leader+a+e`).                         |
-| `fix_last_error` | bool | `true`  | Suggest a fix for the last failed command (`Leader+a+f`).            |
-| `context_chat`   | bool | `true`  | Multi-turn chat panel with CWD, exit code, and last command context. |
 
 #### `ui` table
 
@@ -762,7 +752,7 @@ uses wgpu/winit for rendering and windowing, `gpui-petruterm` uses gpui for both
 ├── ui.lua                 # Font, colors, window, status bar
 ├── perf.lua               # Scrollback, FPS, GPU
 ├── keybinds.lua           # Leader key and all bindings
-├── llm.lua                # AI provider/agent and features
+├── llm.lua                # AI provider / ACP agent
 ├── snippets.lua           # Tab-expandable snippets
 ├── notifications.lua      # Toast vs native notification style
 ├── skills/                # SKILL.md prompts, one directory per skill (see Skills)

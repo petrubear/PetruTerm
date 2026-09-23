@@ -1,10 +1,10 @@
-// gpui chrome migration (M3a Task 1): `TextInput`, a single-line editable
+// `TextInput`, a single-line editable
 // text field with real cursor, selection, clipboard, and IME composition
 // (marked-range) support.
 //
 // Ports gpui 0.2.2's own `examples/input.rs` `TextInput` almost verbatim --
-// see that file for the canonical reference this was built from. Six
-// deliberate adaptations from the example: colors resolve from
+// see that file for the canonical reference this was built from.
+// Deliberate adaptations from the example: colors resolve from
 // `ColorScheme` instead of hardcoded literals; every key binding is scoped
 // to a `"TextInput"` key context (the example uses global bindings, which
 // would capture backspace/arrows/clipboard chords application-wide and stop
@@ -13,7 +13,7 @@
 // functions over `&str` so they unit-test without a gpui context;
 // `on_mouse_down` (`edit.rs`) calls `cx.stop_propagation()`, because unlike
 // the example's standalone demo, every real consumer here nests this input
-// inside clickable chrome (the tab bar's cell, and M3b's chat input/
+// inside clickable chrome (the tab bar's cell, the chat input/
 // file-picker query) whose own click handlers must not fire on an in-editor
 // click; and, as a direct consequence, `on_mouse_down` ALSO focuses the
 // field explicitly (`window.focus(&self.focus_handle)`) rather than relying
@@ -28,14 +28,13 @@
 // leaves it visibly present but permanently unfocused: no caret, no IME,
 // keystrokes falling through to whatever now holds focus instead -- for a
 // field that lives for one keystroke sequence (a tab rename) that's a
-// dead-end bug; for one that lives for minutes (M3b's chat composer) it
-// would be a daily annoyance.
+// dead-end bug; for one that lives for minutes (the chat composer) it is
+// a daily annoyance.
 //
-// Split under the 400-line convention: this file keeps the `TextInput`
-// struct, its constructor/accessors, the actions/key-binding registration,
-// and `Render`/`Focusable`; `edit` holds the editing and mouse methods;
-// `ime` holds `EntityInputHandler`, the UTF-16/grapheme helpers, and their
-// tests; `element` (unchanged by this split) holds the paint-time
+// This file keeps the `TextInput` struct, its constructor/accessors, the
+// actions/key-binding registration, and `Render`/`Focusable`; `edit` holds
+// the editing and mouse methods; `ime` holds `EntityInputHandler`, the
+// UTF-16/grapheme helpers, and their tests; `element` holds the paint-time
 // `TextElement`.
 
 use std::ops::Range;
@@ -93,7 +92,7 @@ impl EventEmitter<TextInputEvent> for TextInput {}
 /// A gpui `Entity` rather than this module's usual "plain struct + free
 /// `render_*` function" shape, because `window.handle_input` needs a
 /// `FocusHandle` and an `EntityInputHandler` implementor -- neither of which a
-/// free function can provide. See the M3 design's §3.1.
+/// free function can provide.
 pub struct TextInput {
     focus_handle: FocusHandle,
     content: SharedString,

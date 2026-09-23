@@ -1,19 +1,6 @@
-// gpui chrome migration (M4d Task 1): a transient top-right notification,
-// mirroring the wgpu build's own toast (`src/app/mod.rs`'s `toast` field,
-// `src/app/renderer/overlay.rs`'s `build_toast_instances`) as a real gpui
-// `div()` rather than a hand-shaped GPU rect. Deliberately non-modal: no
-// backdrop, no `cx.stop_propagation()`, no `FocusHandle` -- the ONE surface
-// in this codebase that needs no key guard at all, since nothing about it
-// is interactive and `input.rs`'s `on_key_down` never needs to ask it
-// anything (see this milestone's own Global Constraints for why this
-// differs from every text-input-holding surface M4a/b built).
-//
-// The Lua-triggered path the wgpu build uses (`petruterm.notify()`) is
-// deferred -- see this plan's own Global Constraints for the full,
-// verified reasoning (`gpui_shell` has no live Lua VM at all yet). This
-// file's own `show_toast` is the primitive a future Lua bridge would call;
-// Task 2 wires it to the one concrete trigger this milestone actually
-// ships: config hot-reload.
+// A transient top-right notification. Non-modal, no key guard, no
+// `FocusHandle`. Only trigger: config hot-reload; `petruterm.notify()` is
+// not supported in gpui_shell.
 
 use std::time::{Duration, Instant};
 
@@ -32,7 +19,7 @@ impl GpuiShellRoot {
     /// own `dispatch_notification`'s behavior (`self.toast = Some((msg,
     /// deadline))`, unconditional overwrite). Drained on expiry by
     /// `poll.rs`'s own tick, called from `poll.rs`'s config-hot-reload
-    /// branch (Task 2) -- the first real trigger.
+    /// branch (the only trigger).
     pub(super) fn show_toast(
         &mut self,
         message: impl Into<String>,

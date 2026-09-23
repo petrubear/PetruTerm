@@ -99,7 +99,7 @@ fn main() -> Result<()> {
     #[cfg(not(target_os = "macos"))]
     let event_loop = EventLoop::new()?;
 
-    // about_to_wait sets Wait/WaitUntil each frame; PTY threads wake via wakeup_proxy.
+    // about_to_wait sets WaitUntil each frame; PTY threads wake via wakeup_proxy.
     event_loop.set_control_flow(ControlFlow::Wait);
 
     // Proxy lets PTY background threads wake the winit event loop immediately

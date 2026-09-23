@@ -150,10 +150,6 @@ pub struct RenderContext {
     pub rect_instances: Vec<RoundedRectInstance>,
 
     // ── Cursor overlay (fast blink path) ─────────────────────────────────────
-    /// Number of non-cursor instances after the last full frame build.
-    /// The cursor vertex is always appended at this slot so it can be
-    /// updated in-place on blink without rebuilding the whole cell buffer.
-    pub content_end: usize,
     /// Cursor vertex template (blink=on state) from the last full frame.
     /// None when the cursor is hidden or shape is Hidden.
     /// Reused on blink-only fast renders to avoid a full rebuild.
@@ -327,7 +323,6 @@ impl RenderContext {
             sidebar_rect_cache: Vec::new(),
             sidebar_cache_key: None,
             pane_infos: Vec::new(),
-            content_end: 0,
             cursor_vertex_template: None,
         })
     }
@@ -402,7 +397,6 @@ impl RenderContext {
         self.sidebar_rect_cache.clear();
         self.sidebar_cache_key = None;
         self.cursor_vertex_template = None;
-        self.content_end = 0;
         self.last_instance_count = 0;
         self.last_terminal_count = 0;
         self.last_overlay_count = 0;
@@ -423,7 +417,7 @@ impl RenderContext {
                 }
             }
             fn shrink_str(s: &mut String) {
-                const MAX: usize = 880; // TYPICAL_COLS * 4
+                const MAX: usize = 880; // ~220 cols x 4 bytes
                 if s.capacity() > MAX * 2 {
                     s.shrink_to(MAX);
                 }
@@ -448,12 +442,6 @@ impl RenderContext {
             self.terminal_instances.clear();
             self.terminal_lcd_instances.clear();
         }
-    }
-
-    /// Drop all per-terminal row caches (used after atlas eviction).
-    #[allow(dead_code)]
-    pub fn clear_all_row_caches(&mut self) {
-        self.clear_all_row_caches_for(FullRebuildTrigger::MissingRowCache);
     }
 
     pub(crate) fn clear_all_row_caches_for(&mut self, trigger: FullRebuildTrigger) {

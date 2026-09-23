@@ -27,7 +27,6 @@ pub(crate) enum RowWriteError {
 
 #[derive(Clone, Debug)]
 pub(crate) struct TerminalInstanceLayout {
-    #[allow(dead_code)]
     pub(crate) terminal_id: usize,
     pub(crate) columns: usize,
     pub(crate) rows: usize,
@@ -74,7 +73,6 @@ impl TerminalInstanceLayout {
         self.rows.saturating_mul(self.row_stride)
     }
 
-    #[allow(dead_code)]
     pub(crate) fn matches_geometry(
         &self,
         columns: usize,
@@ -166,7 +164,7 @@ impl TerminalInstanceLayout {
 /// The comparison is deliberately slot-based: row slots include transparent
 /// padding, which is part of the observable GPU state even when a row has fewer
 /// visible instances than its capacity.
-#[allow(dead_code)]
+#[cfg(test)]
 pub(crate) fn row_storage_equivalent(
     full: &[CellVertex],
     incremental: &[CellVertex],

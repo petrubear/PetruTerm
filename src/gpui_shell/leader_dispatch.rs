@@ -1,9 +1,4 @@
-// gpui chrome migration (M3c post-Task-4 split): `dispatch_leader_action`,
-// the single big match over every resolved leader-key action. Split out of
-// `actions.rs` for the 400-line convention -- `actions.rs` grew past 400
-// lines once M3c's three workspace tasks landed on top of it, and this
-// function alone (all sixteen `LeaderAction` variants) was the single
-// largest contributor. Pure code motion: no logic changed.
+// `dispatch_leader_action`: the match over every resolved leader-key action.
 
 use gpui::{Context, Focusable, Window};
 
@@ -12,9 +7,8 @@ use super::panes::{PaneForest, SplitDir};
 use super::{spawn_terminal, spawn_terminal_at, GpuiShellRoot};
 
 impl GpuiShellRoot {
-    /// Execute one resolved leader-key action (`on_key_down`'s leader
-    /// dispatch branch). See `leader::LeaderAction`'s doc comment for why
-    /// the set stops at these variants.
+    /// Execute one resolved leader-key action (`input.rs`'s leader
+    /// dispatch; the palette and other surfaces reuse it).
     pub(super) fn dispatch_leader_action(
         &mut self,
         action: LeaderAction,
@@ -141,7 +135,7 @@ impl GpuiShellRoot {
             LeaderAction::ToggleWorkspaceSidebar => {
                 self.sidebar.toggle();
                 // Same division of labor `ToggleAiPanel` already has: opening
-                // moves focus TO the sidebar so Tab/arrow navigation (Task 3)
+                // moves focus TO the sidebar so Tab/arrow navigation
                 // works immediately; closing gives it back to the terminal
                 // rather than leaving a stale focus target (`is_focused`
                 // would otherwise report `true` for a handle nothing can see

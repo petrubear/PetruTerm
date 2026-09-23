@@ -8,11 +8,11 @@ pub struct PaletteAction {
     pub name: String,
     /// Internal action tag for dispatch.
     pub action: Action,
-    /// Formatted keybind hint shown right-aligned (e.g. "^B c", "Cmd+Q").
+    /// Formatted keybind hint shown right-aligned (e.g. "^F c", "Cmd+Q").
     pub keybind: Option<String>,
 }
 
-/// All built-in actions for Phase 1.
+/// All palette/keybind actions.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
     // Placeholder — palette item that does nothing when selected.
@@ -27,6 +27,7 @@ pub enum Action {
     NextTab,
     PrevTab,
     SwitchToTab(usize),
+    RenameTab,
     // Workspaces
     NewWorkspace,
     CloseWorkspace,
@@ -47,10 +48,9 @@ pub enum Action {
     // Window
     ToggleFullscreen,
     Quit,
-    // AI / Phase 2
+    ToggleStatusBar,
+    // AI
     ToggleAiPanel,
-    #[allow(dead_code)]
-    ToggleAiMode, // legacy alias — same behaviour as ToggleAiPanel
     FocusAiPanel,
     EnableAiFeatures,
     DisableAiFeatures,
@@ -59,17 +59,11 @@ pub enum Action {
     UndoLastWrite,
     ClearAiContext,
     TrustLocalMcp,
-    ToggleStatusBar,
-    RenameTab,
     GitCheckout(String),
-    /// Open the palette in branch-picker mode (populates async). Reachable
-    /// from the command palette in `gpui_shell`; the wgpu build reaches
-    /// the same `open_branch_picker` via a status-bar click instead
-    /// (`src/app/mod.rs`'s own dispatch) and does not yet expose this as
-    /// a palette entry, though nothing stops it from adopting one too.
+    /// Open the palette in branch-picker mode (populated async).
     OpenBranchPicker,
     ExpandSnippet(String),
-    // Phase 3 P3 — Themes
+    // Themes
     OpenThemePicker,
     SwitchTheme(String),
 }

@@ -1,14 +1,5 @@
-// gpui chrome migration (M3b Task 1): the chat panel's `div()` tree --
-// drawer frame, header, scrollable message list, composer row. The header
-// itself moved to `header.rs` in the alignment pass (2026-09-17) to keep
-// this file under the 400-line convention.
-//
-// `src/app/renderer/chat.rs` is the reference for *what* the wgpu build
-// draws (see its `build_panel_header`/`build_panel_messages`), not *how* --
-// every line of its `RoundedRectInstance` pixel math is replaced by real
-// flex elements here, the same "port the logic, rewrite the painting" split
-// `status_bar::render_status_bar` and `tabs::render_tab_bar` already went
-// through.
+// The chat panel's `div()` tree: drawer frame, scrollable message list,
+// composer row. The header lives in `header.rs`.
 
 use gpui::{
     div, prelude::*, px, App, Div, FontWeight, MouseButton, MouseDownEvent, ScrollHandle, Window,
@@ -28,8 +19,7 @@ use super::header::render_header;
 use super::markdown::render_line;
 use super::{ChatPanelView, MARKDOWN_WRAP_WIDTH};
 
-/// Fixed drawer width (§3.3). Not yet user-resizable -- a future task's
-/// concern if the dogfood asks for it.
+/// Fixed drawer width. Not user-resizable.
 pub const PANEL_WIDTH_PX: f32 = 480.0;
 
 /// Called on a suggestion-pill click ("Fix last error" / "Explain
@@ -164,19 +154,9 @@ fn render_message_list(
         );
     }
 
-    // Settled messages read from `panel`'s own wrapped-line cache
-    // (`ChatPanel::wrapped_message`, populated by `ensure_wrap_cache` --
-    // `ChatPanelView::sync_markdown_cache` calls it once per frame, from
-    // `gpui_shell::render`, BEFORE this read-only function runs). Task 1
-    // called `parse_markdown` fresh here for every message on every frame;
-    // once Task 2 makes the panel repaint at ~30Hz while streaming, that
-    // became an O(whole conversation) reparse per frame for content that,
-    // for every message except the very last one added, never changes again
-    // -- this cache turns "reparse everything" into "reparse only messages
-    // appended since the last frame that had a new one" (a no-op on every
-    // frame in between). The streaming buffer below is NOT cached: it
-    // mutates on every single token, so there is no repeated work to save,
-    // only the unavoidable cost of parsing the one in-flight message.
+    // Settled messages read from the wrap cache (`ChatPanel::wrapped_message`,
+    // filled by `ChatPanelView::sync_markdown_cache` before this runs); only
+    // the streaming buffer is reparsed per frame.
     for (idx, msg) in panel.messages.iter().enumerate() {
         list = list.child(render_message(msg, panel.wrapped_message(idx), colors));
     }
@@ -235,7 +215,6 @@ fn render_message(
         ChatRole::User => "You",
         ChatRole::Assistant => "AI",
         ChatRole::System => "System",
-        ChatRole::Tool(_) => "Tool",
     };
     let is_user = matches!(msg.role, ChatRole::User);
     let bubble = div()
@@ -273,8 +252,8 @@ fn render_message_body_lines(lines: &[AnnotatedLine], colors: &ColorScheme) -> D
 }
 
 /// One clickable suggestion pill -- shared by the zero-state's two pills
-/// and the post-response row's two pills (Step 5/6). Real gpui `.hover()`
-/// (already used once, M4c's context-menu rows) replaces the wgpu build's
+/// and the post-response row's two pills. Real gpui `.hover()`
+/// replaces the wgpu build's
 /// manual `zero_state_hover`/`suggestion_hover` tracking entirely -- both
 /// fields stay permanently unread by `gpui_shell`.
 fn render_pill(label: &str, on_click: ChatPillCallback, colors: &ColorScheme) -> impl IntoElement {

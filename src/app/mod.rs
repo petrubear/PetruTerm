@@ -1119,7 +1119,7 @@ impl App {
                     self.request_redraw();
                     return;
                 }
-                // Separator drag: if click is within ±3px of a separator, start drag.
+                // Separator drag: if click is within +/-8 physical px of a separator, start drag.
                 let sep_hit = if !in_panel {
                     self.separator_at_pixel(
                         self.input.mouse_pos.0 as f32,
@@ -1802,7 +1802,7 @@ impl ApplicationHandler<()> for App {
 
         self.window = Some(window);
         self.render_ctx = Some(render_ctx);
-        self.apply_tab_bar_padding(); // no-op here (0 tabs yet), but sets up for first tab
+        self.apply_tab_bar_padding(); // sets grid origin before the first tab opens
         if self.open_initial_tab().is_err() {
             event_loop.exit();
         }
@@ -2002,8 +2002,8 @@ impl ApplicationHandler<()> for App {
         // ── Idle detection ───────────────────────────────────────────────────
         // The frame is "idle" when there is no PTY data, no AI events, no active
         // drag, no overlay, and no search bar open. When idle, we skip cursor blink
-        // entirely (many terminals do this) and use ControlFlow::Wait so the OS
-        // keeps the event loop dormant until a real event arrives.
+        // entirely (many terminals do this) and park with ControlFlow::WaitUntil
+        // for up to 1h so the event loop stays dormant until a real event arrives.
         //
         // Background AI activity should not keep the app "active" by itself.
         // Only visible, interactive AI surfaces prevent idle; hidden/background

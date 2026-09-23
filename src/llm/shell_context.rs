@@ -39,8 +39,8 @@ impl ShellContext {
         Self::cache_dir().join(format!("shell-context-{pid}.json"))
     }
 
-    /// Load from the per-PID file (written by the updated shell integration).
-    /// Falls back to the legacy global file so old integrations keep working.
+    /// Load from the per-PID file written by the shell integration.
+    /// Falls back to the legacy global file (not written by the current integration).
     pub fn load_for_pid(pid: u32) -> Option<Self> {
         let pid_path = Self::context_file_path_for_pid(pid);
         if let Ok(data) = std::fs::read_to_string(&pid_path) {
@@ -48,20 +48,17 @@ impl ShellContext {
                 return Some(ctx);
             }
         }
-        // Fallback: global file (shell-integration.zsh v1 without per-PID support).
+        // Fallback: legacy global file from older shell integrations.
         let data = std::fs::read_to_string(Self::context_file_path()).ok()?;
         serde_json::from_str(&data).ok()
     }
 
-    /// Load from the JSON file. Returns `None` if missing or unparseable.
+    /// Load the legacy global `shell-context.json`. Returns `None` if missing or
+    /// unparseable. The current shell integration writes only per-PID files;
+    /// prefer `load_for_pid`.
     pub fn load() -> Option<Self> {
         let data = std::fs::read_to_string(Self::context_file_path()).ok()?;
         serde_json::from_str(&data).ok()
-    }
-
-    #[allow(dead_code)]
-    pub fn has_failed_exit(&self) -> bool {
-        self.last_exit_code != 0
     }
 
     /// Redact sensitive information like API keys, tokens, and passwords from commands.

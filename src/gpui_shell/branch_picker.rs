@@ -1,10 +1,5 @@
-// gpui chrome migration (M5c Task 4): the git-branch picker. Mirrors
-// `src/app/ui/git.rs`'s own `open_branch_picker`/`poll_branch_scan`/
-// `git_checkout` (std::thread::spawn + crossbeam_channel, zero winit
-// coupling) -- the same shape `status_bar/git.rs`'s own `poll_git_
-// branch` already proved out in `gpui_shell` for the status bar's
-// branch display. `list_git_branches_sync` is ported verbatim (it was
-// a private free function in `git.rs`, not reusable directly).
+// The git-branch picker: lists branches on a background thread
+// (std::thread::spawn + crossbeam_channel) and shows them in the palette.
 
 use super::GpuiShellRoot;
 

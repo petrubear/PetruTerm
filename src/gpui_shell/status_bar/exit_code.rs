@@ -1,5 +1,4 @@
-// gpui chrome migration (M2 Task 6a): `ExitCodeState`, split out of
-// `status_bar.rs` for the 400-line convention.
+// `ExitCodeState`.
 
 use std::time::SystemTime;
 

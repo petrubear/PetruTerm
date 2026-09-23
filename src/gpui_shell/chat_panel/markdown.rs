@@ -1,9 +1,8 @@
-// gpui chrome migration (M3b Task 1): turns
-// `crate::llm::markdown::{AnnotatedLine, BlockKind, SpanKind}` -- an
+// Turns `crate::llm::markdown::{AnnotatedLine, BlockKind, SpanKind}` -- an
 // engine-agnostic annotation format built for the wgpu build's terminal-cell
 // grid (`src/app/renderer/chat.rs`) -- into styled gpui text.
 //
-// Per the M3 design's §3.2, messages get *native gpui text layout*: real
+// Messages get *native gpui text layout*: real
 // proportional-font wrapping, not the wgpu renderer's character-column math.
 // `render.rs` calls `parse_markdown` with a very large width so its own
 // char-count wrapping never fires; the `AnnotatedLine`s that come back are

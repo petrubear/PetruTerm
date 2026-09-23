@@ -1,20 +1,10 @@
-// gpui chrome migration (M3d Task 2): a scrollable, read-only content
-// popup -- the activation target for every sidebar row this milestone
-// adds (MCP server, skill, steering file) and, later, workspace details.
+// A scrollable, read-only content popup -- the activation target for
+// sidebar rows (MCP server, skill, steering file). Scrolls via
+// `gpui::ScrollHandle`.
 //
-// Ported fresh from `src/ui/info_overlay.rs`'s tiny data model (title +
-// parsed-markdown lines + scroll position), not copied verbatim: that
-// version hand-rolls scroll as a `usize` line offset because the wgpu
-// renderer has no real scroll container to delegate to. gpui does --
-// `gpui::ScrollHandle` plus `.track_scroll()`/`.scroll_to_item()` -- so
-// this version drives a real one instead of reimplementing scrolling.
-//
-// Deliberately modal, and deliberately the ONE guard in this codebase keyed
-// on visibility instead of focus (see `input.rs`'s own doc comment on its
-// guard for the full reasoning): its backdrop calls `cx.stop_propagation()`
-// on every click (Step 4), so nothing behind it is reachable while it's
-// open -- unlike the chat panel or AI block, which are deliberately
-// non-modal and let the terminal stay interactive underneath them.
+// Its key guard is keyed on visibility (no FocusHandle; genuinely modal):
+// the backdrop calls `cx.stop_propagation()` on every click, so nothing
+// behind it is reachable while it's open.
 
 use gpui::{
     div, prelude::*, px, rgba, App, Context, FontWeight, KeyDownEvent, MouseButton, MouseDownEvent,
@@ -174,17 +164,8 @@ pub fn render_info_overlay(overlay: &InfoOverlay, colors: &ColorScheme) -> impl 
 
 impl GpuiShellRoot {
     /// `InfoOverlay`'s own key guard, called from `input.rs`'s
-    /// `on_key_down` as its very first statement -- moved here (out of
-    /// `input.rs` itself) to keep that file under the 400-line convention.
-    /// Returns `true` if the key was consumed. Unlike every other guard in
-    /// this codebase, this one is keyed on `is_visible()`, not
-    /// `is_focused(window)`: `InfoOverlay` grabs no `FocusHandle` of its
-    /// own (it's read-only -- nothing to type into, nowhere for real gpui
-    /// focus to go), and it is a genuine blocking modal (its backdrop's
-    /// `cx.stop_propagation()`, above, means there is no "clicked back
-    /// into the terminal while this stays open" case the way there is for
-    /// the chat panel or AI block) -- so visibility really is the only,
-    /// and the correct, signal here.
+    /// `on_key_down`. Returns `true` if the key was consumed. Keyed on
+    /// visibility (no FocusHandle; genuinely modal).
     pub(super) fn maybe_handle_info_overlay_key(
         &mut self,
         event: &KeyDownEvent,

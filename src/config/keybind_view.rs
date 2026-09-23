@@ -171,11 +171,9 @@ mod tests {
 
     #[test]
     fn direct_bindings_view_output_parses_into_real_actions() {
-        // Exercises the exact same two-step pipeline InputHandler::new runs
-        // (direct_bindings_view -> parse mods + action per binding), using a
-        // real Action string from this codebase rather than a placeholder, to
-        // catch a future Action rename that keybind_view itself has no direct
-        // dependency on.
+        // Mirrors the first half of `rebuild_keybind_maps` (app/input/mod.rs):
+        // direct_bindings_view -> parse_mods per binding. Action parsing is not
+        // exercised here; a real Action string is used for realism.
         let config = Config {
             keys: vec![kb("CMD|SHIFT", "w", "CloseTab")],
             ..Config::default()

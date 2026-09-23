@@ -1,5 +1,4 @@
-// gpui chrome migration (M2 Task 6a): the git-branch async bridge, split out
-// of `status_bar.rs` for the 400-line convention.
+// The git-branch async bridge.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -8,12 +7,11 @@ use std::time::{Duration, Instant};
 
 // ── Git-branch async bridge ──────────────────────────────────────────────────
 //
-// Mirrors `gpui_shell/mod.rs`'s `PENDING_CONFIG_RELOAD`/`CONFIG_CHANGED`
-// bridge (see that file's own doc comment for *why*: gpui 0.2.2 has no
-// `spawn_blocking`-style bridge from `BackgroundExecutor` to drive a true
-// cross-thread wake, so a background tokio task writes into a static slot
-// and the existing ~33ms poll loop in `GpuiShellRoot::new`'s `cx.spawn`
-// block reads it). One window, one `GpuiShellRoot`, so a single static slot
+// Mirrors `config_watch.rs`'s `PENDING_CONFIG_RELOAD`/`CONFIG_CHANGED`
+// bridge: gpui 0.2.2 has no `spawn_blocking`-style bridge from
+// `BackgroundExecutor` to drive a true cross-thread wake, so a background
+// tokio task writes into a static slot and the poll loop (`poll.rs`) reads
+// it. One window, one `GpuiShellRoot`, so a single static slot
 // is safe the same way `PENDING_CONFIG_RELOAD` already is -- a second
 // concurrent consumer would race over it, but nothing here creates one.
 static PENDING_GIT_BRANCH: Mutex<Option<String>> = Mutex::new(None);

@@ -43,8 +43,8 @@ The wgpu binary (`petruterm`) uses a winit event loop as its backbone. The App s
 
 ```
 PetruTerm/
-├── CLAUDE.md                    # This file
-├── Cargo.toml                   # Workspace manifest
+├── AGENTS.md                    # This file (CLAUDE.md includes it)
+├── Cargo.toml                   # Package manifest (2 bins + lib)
 ├── Cargo.lock
 ├── scripts/
 │   ├── bundle.sh                # Builds + packages both .app bundles
@@ -57,7 +57,11 @@ PetruTerm/
 │       ├── ui.lua
 │       ├── perf.lua
 │       ├── keybinds.lua
-│       └── llm.lua
+│       ├── llm.lua
+│       ├── snippets.lua
+│       ├── notifications.lua
+│       ├── mcp.json
+│       └── system/system_prompt.md
 ├── src/
 │   ├── main.rs                  # wgpu binary entry point
 │   ├── lib.rs                   # Shared library root
@@ -67,11 +71,12 @@ PetruTerm/
 │   ├── gpui_shell/               # gpui binary: chrome (tabs, panes, sidebar, chat, status bar)
 │   ├── renderer/                # wgpu GPU renderer
 │   ├── term/                    # Terminal engine (wraps alacritty_terminal)
-│   ├── ui/                      # Command palette (shared)
+│   ├── ui/                      # Shared UI state (palette, panes, tabs, status bar, search, context menu)
 │   ├── font/                    # Font loading + shaping
 │   ├── config/                  # Lua DSL + hot reload
 │   ├── llm/                     # LLM providers, ACP client, MCP, inline AI mode
-│   └── platform/                # macOS platform integration (menu bar, notifications)
+│   ├── i18n.rs                  # Localization (strings in locales/)
+│   └── platform/                # macOS platform integration (battery, notifications)
 ├── .context/
 │   ├── core/
 │   │   ├── SESSION_STATE.md
@@ -83,7 +88,9 @@ PetruTerm/
 │   │   └── build_phases.md      # Phased build plan
 │   └── quality/
 │       └── TECHNICAL_DEBT.md
-└── tests/
+├── benches/                     # Criterion benchmarks
+├── locales/                     # i18n string tables
+└── docs/
 ```
 
 ## Conventions
@@ -117,9 +124,9 @@ the full phase history.
 
 - `alacritty_terminal` owns the terminal grid and PTY; do not reimplement grid logic
 - The wgpu renderer reads cells from alacritty_terminal's grid and maps them to GPU vertices
-- Lua config is loaded once at startup; hot-reload replaces only changed fields (no full restart)
+- Lua config is re-evaluated in full on file change and the whole `Config` is swapped; dependent state (keybind maps, palette, metrics) is then rebuilt
 - LLM features are entirely optional and can be disabled via `config.llm.enabled = false`
-- Default theme: Dracula Pro. Default font: Monolisa Nerd Font (fallback: JetBrains Mono)
+- Default theme: Dracula Pro. Default font: JetBrainsMono Nerd Font Mono (then Monolisa Nerd Font, Fira Code, Menlo)
 - macOS only; no cross-platform target currently planned
 - Building either binary requires full Xcode.app, not just Command Line Tools — `gpui`'s build
   script needs the `metal` shader compiler, which CLT does not ship
@@ -132,7 +139,8 @@ Leader key: `Ctrl+F` (timeout 1000ms)
 
 Two keybind styles are available via `config.keybind_style` in `keybinds.lua` (default
 `"tmux"`, shown below). `"normal"` gives direct macOS Cmd-combos instead — see
-`config/default/keybinds.lua`'s own "normal" table for the full list.
+`config/default/keybinds.lua`'s own "normal" table for the full list. Only the wgpu binary
+honors `keybind_style`; `gpui-petruterm` always uses the tmux-style leader binds.
 
 | Keybind                | Action                                     |
 | ---------------------- | ------------------------------------------ |
@@ -141,15 +149,19 @@ Two keybind styles are available via `config.keybind_style` in `keybinds.lua` (d
 | `Cmd+K`                | Clear screen + scrollback                  |
 | `Cmd+F`                | Open/close text search                     |
 | `Cmd+1-9`              | Switch to tab N                            |
+| `Leader 1-9`           | Switch to tab N                            |
 | `Leader c`             | New tab                                    |
 | `Leader &`             | Close tab                                  |
 | `Leader n/b`           | Next/prev tab                              |
 | `Leader ,`             | Rename tab                                 |
 | `Leader w`             | New workspace                              |
+| `Leader W n`           | New workspace (wgpu only)                  |
 | `Leader W &`           | Close workspace                            |
 | `Leader W ,`           | Rename workspace                           |
 | `Leader W j/k`         | Next/prev workspace                        |
-| `Leader s`             | Open/close sidebar                         |
+| `Leader W s`           | Save workspace (wgpu only)                 |
+| `Leader W L`           | Open saved workspaces (wgpu only)          |
+| `Leader s` / `Leader e e` | Open/close sidebar                      |
 | `Leader %`             | Split horizontal                           |
 | `Leader "`             | Split vertical                             |
 | `Leader x`             | Close pane                                 |
@@ -157,7 +169,9 @@ Two keybind styles are available via `config.keybind_style` in `keybinds.lua` (d
 | `Leader h/j/k/l`       | Focus pane (vim-style)                     |
 | `Leader Option+arrows` | Resize pane                                |
 | `Leader a`             | Enter AI sub-leader                        |
-| `Leader a a`           | Open AI panel / toggle focus terminal↔chat |
+| `Leader a a`           | Open/close AI panel                        |
+| `Leader A`             | Toggle focus terminal/AI panel (wgpu only) |
+| `Leader a c`           | Clear AI context (wgpu only)               |
 | `Leader a e`           | Explain last output                        |
 | `Leader a f`           | Fix last error                             |
 | `Leader a z`           | Undo last write                            |

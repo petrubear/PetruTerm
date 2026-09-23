@@ -1,5 +1,6 @@
--- PetruTerm LLM configuration (Phase 2)
--- Set enabled = true and provide your api_key to activate AI features.
+-- PetruTerm LLM configuration
+-- AI features are on by default via the ACP agent backend (Claude Code).
+-- Set enabled = false to turn them off.
 
 local module = {}
 
@@ -8,7 +9,7 @@ function module.apply_to_config(config)
     enabled  = true,    -- Set to false to disable AI features
 
     -- Backend: "provider" (direct LLM API) or "agent" (ACP agent process like Claude Code CLI).
-    -- Default: "agent". When set to "agent", the fields below are used instead of provider/model.
+    -- When set to "agent", the `agent` table below is used instead of provider/model.
     backend  = "agent",
 
     -- ACP agent config (used when backend = "agent"). Requires Node.js/npx installed.
@@ -36,22 +37,11 @@ function module.apply_to_config(config)
     -- GitHub Copilot (requires active Copilot subscription):
     -- provider = "copilot",
     -- model    = "gpt-4o",  -- also: gpt-4o-mini, claude-3.5-sonnet, o1-mini
-    -- api_key is auto-resolved: GITHUB_TOKEN env var → `gh auth token` → Keychain.
-    -- Easiest setup: gh auth login, then export GITHUB_TOKEN=$(gh auth token) in ~/.zshrc
+    -- api_key is resolved from `api_key` above, then the Keychain, then the GitHub device-flow login.
 
     -- Local provider examples (no api_key needed):
     -- provider = "ollama",   model = "llama3.2"   -- base_url defaults to http://localhost:11434/v1
     -- provider = "lmstudio", model = "..."         -- base_url defaults to http://localhost:1234/v1
-
-    features = {
-      nl_to_command  = true,   -- Natural language → shell command (Ctrl+Space)
-      explain_output = true,   -- Explain selected/last output
-      fix_last_error = true,   -- Fix suggestion on non-zero exit
-      context_chat   = true,   -- Multi-turn chat with terminal context
-    },
-
-    -- Number of terminal output lines sent as context with each query.
-    context_lines = 50,
 
     -- ── Chat panel appearance ───────────────────────────────────────────────
     ui = {

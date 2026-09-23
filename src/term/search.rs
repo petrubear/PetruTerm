@@ -1,15 +1,5 @@
-// gpui chrome migration (M4b Task 1): the terminal grid text-search
-// algorithm -- extracted from `src/app/mux/mod.rs`'s `Mux::
-// search_active_terminal`/`Mux::filter_matches`, which only ever needed
-// `&Terminal` internally (via `Mux::active_terminal()` then `terminal.
-// with_term(..)` for everything else). `Mux`'s own methods become
-// one-line wrappers below this file's functions -- their behavior and
-// the wgpu build's own `push_search_match_truncates_only_after_limit_
-// is_exceeded` test (moved here, unchanged) are both preserved exactly.
-// `gpui_shell` calls these functions directly on whichever `Rc<Terminal>`
-// the focused pane holds, the same "used directly, never copied"
-// relationship this migration has established for every other
-// engine-agnostic piece of wgpu-build logic it reuses.
+// Terminal grid text search shared by both binaries (Mux wraps these;
+// gpui_shell calls them directly).
 
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::index::{Column, Line};

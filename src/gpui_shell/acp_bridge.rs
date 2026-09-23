@@ -1,20 +1,7 @@
-// gpui chrome migration (M5a Task 4): drains `ChatPanelView::acp_
-// terminal_rx` and answers each `AcpTerminalRequest` the agent sent
-// (terminal/create, terminal/output, terminal/wait_for_exit, terminal/
-// kill -- terminal/release is a client-side no-op, matching the wgpu
-// build's own comment on why). Mirrors `App::handle_acp_terminal_
-// requests` (`src/app/frame.rs:187-246`) exactly in control flow.
-//
-// `Kill`'s own mechanism is genuinely different from the wgpu build's:
-// `Mux::kill_terminal` calls `term.pty.shutdown()` through `&mut
-// Terminal`, unreachable here since every `gpui_shell` `Terminal` is
-// `Rc<Terminal>` (confirmed: `actions.rs`'s own `reap_pane` doc comment
-// already documents that `Drop for Pty` runs the full shutdown sequence
-// when a terminal's last `Rc` is dropped, never a direct call). `Terminal
-// ::child_pid: u32` needs no mutable access, so this sends SIGHUP
-// directly -- the reader thread's own already-existing exit detection
-// (EIO on the master fd) does the rest, exactly like a natural shell
-// exit.
+// Drains `ChatPanelView::acp_terminal_rx` and answers each
+// `AcpTerminalRequest` the agent sent (terminal/create, output,
+// wait_for_exit, kill; release is a client-side no-op).
+// Kill -> `Pty::request_exit` (killpg); see inline comment.
 
 use std::path::PathBuf;
 
@@ -56,7 +43,7 @@ impl GpuiShellRoot {
                     }
                 }
                 AcpTerminalRequest::Kill { pane_id } => {
-                    // `Pty::request_exit` (TD-GPUI-01), not a raw `libc::kill`
+                    // `Pty::request_exit`, not a raw `libc::kill`
                     // here: it `killpg`s the whole session/pgid rather than
                     // just this direct child, so a descendant the killed
                     // command spawned (and that doesn't outlive the tty on

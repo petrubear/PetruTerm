@@ -1,26 +1,19 @@
-// gpui chrome migration (M5a Task 2): per-terminal exit-code tracking and
-// final-output caching -- neither exists in `gpui_shell` today (`poll.rs`
-// already drains `PtyEvent::Exit(code)` but discards `code`; a reaped
-// terminal's grid is simply gone). Built for ACP's own `terminal/output`/
-// `terminal/wait_for_exit` (Task 4), which need to answer "what did this
-// pane print" and "did it exit, with what code" even after the pane
-// itself has closed -- mirrors `Mux::{terminal_output_text,
-// terminal_exit_code}` (`src/app/mux/mod.rs:637-673`) exactly.
+// Per-terminal exit-code tracking and final-output caching, so ACP's
+// `terminal/output` and `terminal/wait_for_exit` can answer after a pane
+// has closed. Used by `acp_bridge.rs`.
 
 use crate::term::Terminal;
 
 use super::GpuiShellRoot;
 
-/// Cap on `terminal_final_output`'s size -- oldest entry evicted past
-/// this, same bounded-cache shape `Mux::retain_closed_terminal` already
-/// established for its own identical map.
+/// Cap on `terminal_final_output`'s size. Past it, an arbitrary entry
+/// (HashMap iteration order, not the oldest) is evicted.
 const MAX_FINAL_OUTPUT_ENTRIES: usize = 64;
 
 impl GpuiShellRoot {
     /// Every visible row of `terminal_id`'s grid if it's still alive,
     /// trimmed of trailing empty lines; the cached final output if it has
     /// already been reaped; empty string if neither.
-    #[allow(dead_code)]
     pub(super) fn terminal_output_text(&self, terminal_id: usize) -> String {
         let Some(terminal) = self.terminals.get(&terminal_id) else {
             return self
@@ -34,7 +27,6 @@ impl GpuiShellRoot {
 
     /// `None` while `terminal_id` is still alive; its cached exit code
     /// once it has been reaped.
-    #[allow(dead_code)]
     pub(super) fn terminal_exit_code(&self, terminal_id: usize) -> Option<i32> {
         if self.terminals.contains_key(&terminal_id) {
             return None;

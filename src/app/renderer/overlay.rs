@@ -844,8 +844,8 @@ impl RenderContext {
         let bar_bg = StatusBar::bar_bg(&sb_colors);
 
         // Full-width background rect: covers the cell row + SB_EXTRA_PX extension below.
-        // Renders before cell backgrounds (rect pass is first), filling left/right padding
-        // areas and the extension strip with the bar's background color.
+        // Fills the left/right padding areas and the extension strip with the bar's
+        // background color (the rect pass runs after terminal cells).
         {
             let cell_h = self.shaper.cell_height;
             let bar_y = pad_y + row as f32 * cell_h;
@@ -974,10 +974,9 @@ impl RenderContext {
         }
     }
 
-    /// Render the unified titlebar: traffic lights reserve, control buttons, and tab pills.
+    /// Render the unified titlebar: traffic lights reserve, control buttons, and tabs.
     ///
-    /// TD-013: Each tab is rendered as a rounded pill (via RoundedRectPipeline)
-    ///         with text overlaid using transparent-bg cell instances.
+    /// Tabs are flat labels; the active tab gets a subtle flat rect.
     /// TD-014: The bar background comes from the window clear color (config.colors.background),
     ///         so `bar_bg` is acknowledged here but not used directly for fill.
     #[allow(clippy::too_many_arguments)]
@@ -1121,7 +1120,7 @@ impl RenderContext {
             }
 
             // Combined flat label: "title: N" (e.g. "zsh: 1"). Shared with the
-            // click hit-test so pill widths stay in sync (TD-P9-02).
+            // click hit-test so tab widths stay in sync (TD-P9-02).
             let label = crate::ui::tabs::tab_display_label(&tab.title, i, is_active, rename_input);
             let label_w = label.chars().count().min(max_cols - col);
 
@@ -1241,7 +1240,7 @@ impl RenderContext {
 
     /// Render a 1-row search bar overlay at the top-right corner of the terminal.
     ///
-    /// Shows: `  / query /  N / M  ↑↓ esc `
+    /// Shows: ` /query/  N / M   ↑↓ esc `
     /// Width adapts to the query length with a minimum of 24 columns.
     pub fn build_search_bar_instances(
         &mut self,
@@ -1263,7 +1262,7 @@ impl RenderContext {
 
         let count_label = search.count_label();
 
-        // Build the bar text:  "  query_  N / M  ↑↓ esc "
+        // Build the bar text: " /query/  N / M   ↑↓ esc "
         // We render it in 3 segments with different colors.
         let query_display = format!(" /{}/", search.query);
         let count_display = if count_label.is_empty() {
@@ -1318,7 +1317,7 @@ impl RenderContext {
             self.push_shaped_row(hint, hint_fg, bar_bg, row, seg_offset, remaining, font);
         }
 
-        // Cursor blink at end of query (a 1-cell colored block)
+        // Cursor: drawn unconditionally as a 1-cell block over the closing '/'.
         let cursor_col = col_offset + 1 + search.query.chars().count() + 1; // after the /query
         if cursor_col < col_offset + q_width {
             self.instances.push(CellVertex {

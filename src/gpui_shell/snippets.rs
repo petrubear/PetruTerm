@@ -1,13 +1,7 @@
-// gpui chrome migration (M5c Task 2): a narrow, gpui_shell-local
-// tracker of "the word currently being typed since the last prompt",
-// just enough to drive Tab-triggered snippet expansion -- NOT a port of
-// `crate::term::InputShadow` (ghost text, history completion, PATH
-// resolution), which stays hard-coupled to winit's `KeyEvent`/
-// `Modifiers` with zero gpui_shell caller (see this milestone's own
-// spec, §4, for the full investigation and the decision to defer fully
-// decoupling it). `try_expand_snippet` mirrors the wgpu build's own
-// `Input::try_expand_snippet` (src/app/input/mod.rs:801-833) against
-// this narrower tracker instead of `self.input_echo`.
+// A narrow tracker of the word being typed since the last prompt, enough to
+// drive Tab-triggered snippet expansion (not a port of
+// `crate::term::InputShadow`). `try_expand_snippet` mirrors the wgpu
+// build's `Input::try_expand_snippet`.
 
 use gpui::{Context, KeyDownEvent};
 
@@ -17,7 +11,7 @@ use crate::term::Terminal;
 use super::GpuiShellRoot;
 
 impl GpuiShellRoot {
-    /// Called from `input.rs`'s `on_key_down`, right before the generic
+    /// Called from `key_write.rs`, right before the generic
     /// key-forwarding fallthrough, only when `event.keystroke.key ==
     /// "tab"` with no Shift/Control held. Returns `true` if a snippet
     /// trigger matched and was expanded (caller should NOT forward Tab to
@@ -46,12 +40,11 @@ impl GpuiShellRoot {
     }
 
     /// Called after every key that actually reached the PTY as text (see
-    /// `input.rs`'s own call site) -- keeps `self.snippet_word` in sync
+    /// `key_write.rs`'s call site) -- keeps `self.snippet_word` in sync
     /// with what the shell's line editor is showing, on a best-effort
     /// basis (arrow-key repositioning mid-word is a known, accepted gap:
     /// this tracker only handles the common "type a trigger, press Tab"
-    /// pattern, not full cursor-aware editing -- see the spec's own scope
-    /// decision on why full `InputShadow` parity is out of scope here).
+    /// pattern, not full cursor-aware editing).
     pub(super) fn track_snippet_key(&mut self, event: &KeyDownEvent) {
         let key = event.keystroke.key.as_str();
         if event.keystroke.modifiers.platform || event.keystroke.modifiers.control {

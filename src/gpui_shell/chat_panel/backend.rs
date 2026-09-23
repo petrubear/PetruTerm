@@ -1,13 +1,6 @@
-// gpui chrome migration (M5a Task 3): the ACP session lifecycle -- connect
-// (spawned, never blocking), poll-drain the result, and backend-aware
-// rewiring. `AcpSession::connect` itself (src/llm/acp/mod.rs) is already
-// fully engine-agnostic and reused unmodified; this file is the gpui-side
-// bridge around it, mirroring `UiManager::rewire_backend`/`spawn_acp_
-// connect`/`poll_acp_connect` (src/app/ui/{mod,providers}.rs) minus the
-// winit `EventLoopProxy<()>` wakeup every one of them takes -- the 33ms
-// poll tick IS the wake mechanism here, the same "drop the wakeup
-// parameter" adaptation every prior async-scan milestone this session has
-// made (M5c's branch/workspace scans, M5b's file-picker scan).
+// The ACP session lifecycle: connect (spawned, never blocking), poll-drain
+// the result, and backend-aware rewiring. The poll tick is the wake
+// mechanism (no winit `EventLoopProxy`).
 
 use std::path::PathBuf;
 

@@ -1,8 +1,5 @@
-// gpui chrome migration (M5b Task 3 follow-up): the tail of `on_key_down` --
-// paste, snippet-Tab-expand, and the final PTY key write. Split out of
-// `input.rs` for the 400-line convention (Task 3 pushed that file over the
-// limit by adding the file-picker Tab guard), the same code-motion-only
-// split `standalone_keys.rs`/`sidebar_nav.rs` already went through.
+// The tail of `on_key_down`: paste, snippet Tab-expand, and the final PTY
+// key write.
 
 use gpui::{Context, KeyDownEvent};
 

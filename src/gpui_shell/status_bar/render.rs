@@ -1,5 +1,4 @@
-// gpui chrome migration (M2 Task 6a): `render_status_bar`, split out of
-// `status_bar.rs` for the 400-line convention.
+// `render_status_bar`.
 
 use gpui::{div, prelude::*, px, Div, MouseButton, MouseDownEvent, Rgba};
 
@@ -16,16 +15,9 @@ use super::{SegmentKind, StatusBar, StatusBarSegment};
 /// rounded/bordered floating-card frame (visual-polish pass 2, 2026-09-17,
 /// matching the approved mockup's separated-pill status treatment).
 ///
-/// This replaces the previous powerline-chevron treatment (segments joined
-/// into one continuous strip via `PillEdge::Start/Middle/End` grouping and
-/// `StatusBar::pl_left_arrow`/`pl_right_arrow` connector glyphs), which a
-/// live dogfood screenshot showed rendering as "objetos de formas
-/// extrañas": those Nerd Font glyphs don't rasterize cleanly at UI text
-/// size outside the terminal grid's own ligature-aware glyph path. Because
-/// of that, `bar.style` (Powerline vs. Plain, a real user config option
-/// that still matters to the wgpu binary's own true powerline rendering) is
-/// intentionally not consulted here anymore -- gpui_shell always renders
-/// the separated-pill style regardless of that setting.
+/// Always the separated-pill style: `config.status_bar.style` (Powerline
+/// vs. Plain) only affects the wgpu binary, since powerline Nerd Font
+/// glyphs don't rasterize cleanly at UI text size outside the terminal grid.
 pub fn render_status_bar(bar: &StatusBar, colors: &StatusBarColors) -> Div {
     let bar_bg_color = to_rgba(StatusBar::bar_bg(colors));
     let [br, bg, bb, _] = colors.fg_dim;
@@ -85,8 +77,7 @@ pub fn render_status_bar(bar: &StatusBar, colors: &StatusBarColors) -> Div {
         // Without this, this row's text falls back to gpui's own default UI
         // font -- a different (and differently metriced) typeface from the
         // terminal grid's own cosmic-text-rasterized glyphs sitting right
-        // above it, which is exactly what a dogfood report flagged ("the
-        // statusbar seems to be a completely different font"). `.font_family`
+        // above it. `.font_family`
         // on a div cascades to its text children via gpui's TextStyle stack,
         // the same mechanism `.text_color` above already relies on.
         .font_family(crate::gpui_shell::font_state::font_family())

@@ -1,5 +1,5 @@
 -- PetruTheme Light for PetruTerm
--- Ported from /Users/edison/tools/PetruTheme (design/palette.md + themes/zed/petru.json):
+-- Ported from PetruTheme (palette.md + Zed petru.json):
 -- neutrals anchored to Dracula Pro "Alucard", 14 accents per-hue-tuned to land at
 -- ~4.7:1 contrast against Base. Values taken directly from the Zed theme's own
 -- `terminal.*` block (already tuned per-role) rather than re-derived from the raw

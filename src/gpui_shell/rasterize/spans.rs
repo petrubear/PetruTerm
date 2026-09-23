@@ -1,7 +1,4 @@
-// gpui chrome migration (TD-GPUI-03 split): building the whole grid's
-// cosmic-text shaping spans, split out of `grid.rs` (itself split out of the
-// single `rasterize.rs`, M1b) -- `grid.rs` was still ten lines over the
-// 400-line convention with this inline. Pure code motion, no logic changed.
+// Builds the whole grid's cosmic-text shaping spans.
 
 use cosmic_text::{Attrs, FontFeatures};
 

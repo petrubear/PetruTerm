@@ -1,6 +1,4 @@
-// gpui chrome migration (M2 Task 5b): keyboard input handling --
-// `arrow_key_to_focus_dir` and `GpuiShellRoot::on_key_down`. Split out of
-// `mod.rs` for the 400-line convention.
+// Keyboard input handling: `GpuiShellRoot::on_key_down`.
 
 use gpui::{Context, Focusable, KeyDownEvent, Window};
 
@@ -10,8 +8,8 @@ use super::{panes, GpuiShellRoot};
 /// Maps a gpui named-key string to the resize direction it drives under
 /// `Leader Option+Arrow` / resize-mode continuation. gpui's own arrow-key
 /// strings ("left"/"right"/"up"/"down", see `key_map::translate_key`), not
-/// winit's `NamedKey::Arrow*` variants -- different event model, see this
-/// module's own doc comment on why gpui_shell can't import winit at all.
+/// winit's `NamedKey::Arrow*` variants -- see `spawn_terminal.rs` on why
+/// gpui_shell can't use winit at all.
 pub(super) fn arrow_key_to_focus_dir(key: &str) -> Option<panes::FocusDir> {
     match key {
         "left" => Some(panes::FocusDir::Left),
@@ -39,7 +37,7 @@ impl GpuiShellRoot {
             return;
         }
 
-        // InfoOverlay intercepts all keys (checked first, on top visually).
+        // InfoOverlay intercepts all keys (on top visually).
         // See `info_overlay.rs`'s `maybe_handle_info_overlay_key` doc.
         if self.maybe_handle_info_overlay_key(event, cx) {
             return;
@@ -104,7 +102,7 @@ impl GpuiShellRoot {
             }
         }
 
-        // Same guard, same reasoning, for the chat composer (M3b): while it
+        // Same guard, same reasoning, for the chat composer: while it
         // holds focus every key is either one of `TextInput`'s own bound
         // actions (dispatched before this bubble listener runs) or a
         // printable character routed through IME -- neither should also
@@ -113,8 +111,7 @@ impl GpuiShellRoot {
         // `self.chat.is_visible()`: the panel can be open while the
         // terminal holds focus (the user clicked back into it), and a
         // visibility-keyed guard would swallow every terminal keystroke in
-        // that state -- exactly M3a's shipped Critical, reproduced here if
-        // this guard checked the wrong thing.
+        // that state.
         if self.chat.composer_focused(window, cx) {
             // Tab opens the file picker (the composer's own real focus
             // never changes -- see `maybe_handle_file_picker_key`'s own
@@ -131,7 +128,7 @@ impl GpuiShellRoot {
         }
 
         // Same guard, same reasoning, for the inline AI block's composer
-        // (M3b Task 3) -- keyed on `composer_focused` (== `is_focused
+        // -- keyed on `composer_focused` (== `is_focused
         // (window)`), never on `self.ai_block.is_visible()`, per `ai_block.
         // rs`'s own doc comment (point 1). Checked as its own arm rather
         // than folded into the chat-composer check above: the two composers
@@ -141,16 +138,9 @@ impl GpuiShellRoot {
             return;
         }
 
-        // Same guard, same reasoning, for the workspace sidebar (M3d) --
-        // keyed on `is_focused(window)`, never on `self.sidebar.is_
-        // visible()`: the drawer can be open while the terminal holds focus
-        // (the user clicked back into it), and a visibility-keyed guard
-        // here would swallow every terminal keystroke in that state -- the
-        // exact M3a-class Critical this project has now avoided three times
-        // over by keying every guard like it on real focus. See
-        // `sidebar_nav.rs`'s own doc comment on `handle_sidebar_focused_key`
-        // for the rest of the reasoning (moved there to keep this file under
-        // the 400-line convention).
+        // Same guard, same reasoning, for the workspace sidebar -- keyed on
+        // `is_focused(window)`, never on `self.sidebar.is_visible()`. See
+        // `sidebar_nav.rs`'s `handle_sidebar_focused_key`.
         if self.sidebar_focus_handle.is_focused(window) {
             self.handle_sidebar_focused_key(event, window, cx);
             return;
@@ -180,8 +170,8 @@ impl GpuiShellRoot {
         }
 
         // ── Leader key activation ────────────────────────────────────────
-        // Leader-deadline expiry piggybacks on the 33ms poll loop (`new()`'s
-        // `cx.spawn` block) -- this branch only ever SETS leader_active/
+        // Leader-deadline expiry piggybacks on the poll loop
+        // (`poll::spawn_poll_loop`) -- this branch only ever SETS leader_active/
         // leader_deadline, never expires them (a key press always means the
         // deadline hasn't fired yet, since the poll loop would have cleared
         // leader_active first if it had).
@@ -196,7 +186,7 @@ impl GpuiShellRoot {
                 std::time::Instant::now()
                     + std::time::Duration::from_millis(self.config.leader.timeout_ms),
             );
-            cx.notify(); // leader-active indicator (future status bar) needs to see this
+            cx.notify(); // leader-active indicator needs to see this
             return;
         }
 
@@ -220,10 +210,7 @@ impl GpuiShellRoot {
                         }
                         "f" => self.dispatch_leader_action(LeaderAction::FixLastError, window, cx),
                         "z" => self.dispatch_leader_action(LeaderAction::UndoLastWrite, window, cx),
-                        // `c` (ClearAiContext) stays out of scope -- ACP/
-                        // tool-calling-dependent, per this milestone's own
-                        // spec §9. Dropped, matching the wgpu build's own
-                        // `_ => {}` fallthrough.
+                        // `c` (ClearAiContext) is not ported; dropped.
                         _ => {}
                     }
                 }
@@ -266,8 +253,7 @@ impl GpuiShellRoot {
             }
 
             // Leader + a → enter the AI sub-prefix: re-arm the leader
-            // timeout and wait for the second key. Only "a" (below) is
-            // wired to anything this milestone.
+            // timeout and wait for the second key: a/e/f/z.
             if event.keystroke.key == "a" {
                 self.leader_active = true;
                 self.leader_prefix = Some('a');
@@ -312,8 +298,7 @@ impl GpuiShellRoot {
                 return;
             }
 
-            // Data-driven dispatch for this milestone's ten actions
-            // (c/&/n/b/,/%/"/x/z/h/j/k/l, per config/default/keybinds.lua).
+            // Config-driven single-key leader dispatch (`leader_map`).
             if let Some(action) = self.leader_map.get(event.keystroke.key.as_str()).copied() {
                 self.dispatch_leader_action(action, window, cx);
             }
@@ -330,8 +315,7 @@ impl GpuiShellRoot {
         // already returned otherwise), so this can't be swallowed by a
         // focused text field's own key bindings. See `standalone_keys.rs`'s
         // own doc comment on `toggle_ai_block` for the rest of the
-        // reasoning (moved there to keep this file under the 400-line
-        // convention).
+        // reasoning.
         if event.keystroke.modifiers.control
             && !event.keystroke.modifiers.shift
             && !event.keystroke.modifiers.platform

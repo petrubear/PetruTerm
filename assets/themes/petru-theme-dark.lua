@@ -1,5 +1,5 @@
 -- PetruTheme Dark for PetruTerm
--- Ported from /Users/edison/tools/PetruTheme (design/palette.md + themes/zed/petru.json):
+-- Ported from PetruTheme (palette.md + Zed petru.json):
 -- neutrals anchored to Dracula Pro "Van Helsing", 14 Catppuccin-position accents at
 -- flat HSL(hue, 95%, 75%). Values taken directly from the Zed theme's own `terminal.*`
 -- block (already tuned per-role) rather than re-derived from the raw palette table.

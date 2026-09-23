@@ -1,6 +1,4 @@
-// gpui chrome migration (TD-GPUI-03 split): per-terminal click-tracking and
-// scrollbar-drag state. Split out of the single `mouse.rs` (M1b) for the
-// 400-line convention -- pure code motion, no logic changed.
+// Per-terminal click-tracking and scrollbar-drag state.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -182,10 +180,8 @@ pub(super) fn take_dragged(terminal_key: usize) -> bool {
 /// ported from the wgpu app's `scroll_pixel_accum` (`src/app/mod.rs`'s
 /// `handle_scroll`). A trackpad reports many small events per gesture; each
 /// one's delta is frequently under one line's worth of pixels (an 18px cell
-/// swallows anything under ~9px per `.round()`), so rounding each event
-/// independently -- this function's previous behaviour -- silently dropped
-/// most of a gentle scroll. Accumulating first means no motion is lost, just
-/// delayed by at most one line until enough of it has arrived.
+/// swallows anything under ~9px per `.round()`), so accumulating first means
+/// no motion is lost, just delayed by at most one line.
 pub(super) fn accumulate_scroll_lines(terminal_key: usize, raw_lines: f32) -> i32 {
     CLICK_STATE.with_borrow_mut(|states| {
         let state = states.entry(terminal_key).or_insert_with(ClickState::new);

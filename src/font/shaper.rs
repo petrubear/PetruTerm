@@ -328,23 +328,13 @@ impl Drop for FreeTypeCmapLookup {
 pub struct ShapedRun {
     pub glyphs: Vec<ShapedGlyph>,
     pub ascent: f32,
-    #[allow(dead_code)]
-    pub line_height: f32,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct ShapedGlyph {
     pub col: usize,
-    #[allow(dead_code)]
-    pub span: usize,
     pub ch: char,
     pub cache_key: CacheKey,
-    #[allow(dead_code)]
-    pub advance: f32,
-    #[allow(dead_code)]
-    pub bearing_x: f32,
-    #[allow(dead_code)]
-    pub bearing_y: f32,
     pub fg: [f32; 4],
     pub bg: [f32; 4],
 }
@@ -375,7 +365,7 @@ pub struct TextShaper {
     /// FreeType cmap lookup — always initialized (not just for LCD) to resolve
     /// PUA glyph_ids that cosmic-text can't find via fontdb coverage.
     ft_cmap: Option<FreeTypeCmapLookup>,
-    /// Per-run shape cache: key is (xxhash(text_bytes), font_size_bits).
+    /// Per-run shape cache: key is (DefaultHasher(text_bytes), font_size_bits).
     /// Stores pre-shaped `ShapedRun`s so that common words (`fn`, `let`, etc.)
     /// hit this cache instead of re-entering HarfBuzz. Capped at 1024 entries
     /// with LRU eviction — evicts the least-recently-used entry instead of
@@ -503,9 +493,8 @@ impl TextShaper {
 
     fn measure_cell(&mut self, font_config: &FontConfig) {
         if let Some((width, height)) = self.ft_cmap.as_ref().and_then(|ft| ft.cell_metrics()) {
-            // `cell_metrics` now returns unrounded values (gpui_shell needs
-            // them raw); rounding here keeps this path's output bit-identical
-            // to what it produced when the rounding lived inside it.
+            // `cell_metrics` returns unrounded values (gpui_shell needs them
+            // raw); round here for the wgpu grid.
             self.cell_width = width.round();
             self.cell_height = height
                 .round()
@@ -628,7 +617,6 @@ impl TextShaper {
 
         let font_size = font_config.size;
         let ascent = self.metrics.line_height * 0.8; // approximate; matches HarfBuzz closely
-        let line_height = self.cell_height;
 
         let mut glyphs = Vec::with_capacity(text.len());
 
@@ -659,22 +647,14 @@ impl TextShaper {
 
             glyphs.push(ShapedGlyph {
                 col,
-                span: 1,
                 ch,
                 cache_key: key,
-                advance: self.cell_width,
-                bearing_x: 0.0,
-                bearing_y: ascent,
                 fg,
                 bg,
             });
         }
 
-        Some(ShapedRun {
-            glyphs,
-            ascent,
-            line_height,
-        })
+        Some(ShapedRun { glyphs, ascent })
     }
 
     /// Compute a cheap hash for a word (or short text run) for `word_cache`.
@@ -747,7 +727,6 @@ impl TextShaper {
         font_config: &FontConfig,
     ) -> Option<ShapedRun> {
         let font_size_bits = font_config.size.to_bits();
-        let cell_height = self.cell_height;
 
         // Collect token ranges: (col_start, &str) pairs.
         // We split by spaces so each token is a contiguous run of non-space chars.
@@ -799,7 +778,6 @@ impl TextShaper {
             return Some(ShapedRun {
                 glyphs: all_glyphs,
                 ascent,
-                line_height: cell_height,
             });
         }
 
@@ -834,7 +812,6 @@ impl TextShaper {
         Some(ShapedRun {
             glyphs: all_glyphs,
             ascent,
-            line_height: cell_height,
         })
     }
 
@@ -872,7 +849,6 @@ impl TextShaper {
 
         let mut glyphs = Vec::new();
         let mut ascent = 0.0f32;
-        let mut line_height = self.cell_height;
 
         // Precompute byte-offset → char-index map once (O(n)) to avoid O(n²) per-glyph scans.
         // Reuse the buffer across cache-miss calls. Shrink if capacity is >4x the current need
@@ -892,14 +868,12 @@ impl TextShaper {
 
         for run in self.shape_buf.layout_runs() {
             ascent = run.line_y;
-            line_height = run.line_height;
 
             for glyph in run.glyphs {
                 let tlen = text.len();
                 let start = glyph.start.min(tlen);
                 let end = glyph.end.min(tlen);
                 let col = byte_to_col[start];
-                let span = (byte_to_col[end] - col).max(1);
                 let ch = text[start..end].chars().next().unwrap_or(' ');
 
                 if log::log_enabled!(log::Level::Debug) {
@@ -958,23 +932,15 @@ impl TextShaper {
 
                 glyphs.push(ShapedGlyph {
                     col,
-                    span,
                     ch,
                     cache_key,
-                    advance: glyph.w,
-                    bearing_x: glyph.x - (col as f32 * self.cell_width),
-                    bearing_y: run.line_y,
                     fg,
                     bg,
                 });
             }
         }
 
-        ShapedRun {
-            glyphs,
-            ascent,
-            line_height,
-        }
+        ShapedRun { glyphs, ascent }
     }
 
     pub fn rasterize_to_atlas(

@@ -1,6 +1,4 @@
-// gpui chrome migration (M2 Task 5b): the ~33ms `cx.spawn` poll/wake loop
-// spawned once from `GpuiShellRoot::new`. Split out of `mod.rs` for the
-// 400-line convention.
+// The `cx.spawn` poll/wake loop spawned once from `GpuiShellRoot::new`.
 
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
@@ -10,9 +8,8 @@ use gpui::Context;
 use super::config_watch::{CONFIG_CHANGED, PENDING_CONFIG_RELOAD};
 use super::{font_state, leader, status_bar, GpuiShellRoot};
 
-/// Tick interval used whenever our window is OS-focused -- unchanged from
-/// the original always-on 33ms cadence (input responsiveness, PTY-echo
-/// repaint latency).
+/// Tick interval used whenever our window is OS-focused (input
+/// responsiveness, PTY-echo repaint latency).
 const FOCUSED_TICK: Duration = Duration::from_millis(33);
 
 /// Tick interval used while our window is NOT the OS-focused window (the
@@ -25,19 +22,10 @@ const FOCUSED_TICK: Duration = Duration::from_millis(33);
 /// and nobody is watching those while the app isn't focused anyway.
 const UNFOCUSED_TICK: Duration = Duration::from_millis(400);
 
-/// Spawn the M1a repaint-reliability poll loop (per the migration spec): PTY
-/// output arrives on a background reader thread, decoupled from any gpui
-/// entity/state mutation gpui itself would notice — without this, nothing
-/// repaints the terminal grid until an unrelated event (e.g. the next
-/// keystroke) incidentally triggers one, reproducing the exact
-/// `gotcha_lost_pty_echo_wakeup`/Zed-vi-mode class of bug this spike exists
-/// to catch. M0 called `cx.notify()` unconditionally on every tick (measured
-/// ~21-24% idle CPU); M1a gates that on each terminal's `WakeupGate` so a
-/// tick with no PTY activity since the last check is a no-op — still up to
-/// 33ms repaint latency, but no wasted relayout/repaint when nothing
-/// happened. gpui 0.2.2 has no `spawn_blocking`-style bridge from
-/// `BackgroundExecutor` to drive a true cross-thread wake instead (see
-/// `spawn_terminal`'s doc comment).
+/// Spawn the poll loop: PTY output arrives on a background reader thread
+/// gpui doesn't observe, so this ticks every 33ms focused / 400ms
+/// unfocused and gates `cx.notify()` on each terminal's `WakeupGate` (plus
+/// config reloads, deadlines, AI drains and status bar changes).
 pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
     cx.spawn(async move |this, cx| {
         let mut tick = FOCUSED_TICK;
@@ -86,13 +74,13 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                                 .update(cx, |input, cx| input.set_colors(&colors, cx));
                             this.search_query
                                 .update(cx, |input, cx| input.set_colors(&colors, cx));
-                            // M3b Task 2: pick up an edited `llm.*` block
+                            // Pick up an edited `llm.*` block
                             // (provider, model, api key, base url) on the
                             // same hot-reload path every other config field
                             // already uses, rather than only at startup and
                             // via `/model`.
                             this.chat.rewire_backend(&this.config, &this.tokio_rt);
-                            // M3b Task 3: the inline AI block has its own
+                            // The inline AI block has its own
                             // provider instance (own channel/state -- see
                             // `ai_block.rs`'s doc comment), so it needs the
                             // same rewire the chat panel just got above.
@@ -258,7 +246,7 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                 }
                 // Toast auto-dismiss: cleared once its deadline passes,
                 // same shape as leader-deadline expiry just above --
-                // piggybacks on this same 33ms tick rather than a
+                // piggybacks on this same tick rather than a
                 // dedicated timer. See `toast.rs`'s own doc comment.
                 if this
                     .toast
@@ -268,21 +256,7 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                     this.toast = None;
                     should_notify = true;
                 }
-                // Status bar: CWD, exit code, git branch -- all keyed
-                // off the active tab's focused terminal, all
-                // refreshed on this same 33ms tick rather than every
-                // `render()` call. CWD is a cheap syscall
-                // (proc_pidinfo), so unlike the wgpu app's own
-                // call-site-instrumented `refresh_status_cache`
-                // (called from every focus-changing path plus PTY
-                // data arrival) this just re-checks it every tick --
-                // simpler than chasing gpui_shell's many
-                // focus-changing call sites (tab switch, pane click,
-                // vim-style pane focus, a closed pane promoting a
-                // sibling...) and it's also the only way to notice a
-                // `cd` typed into the still-focused pane, which has
-                // no dedicated event either.
-                // AI streaming drain (M3b Task 2): bounded per tick
+                // AI streaming drain: bounded per tick
                 // (`ChatPanelView::drain_events`'s own `AI_POLL_CAP`) so
                 // a fast stream can't starve everything else sharing
                 // this tick -- PTY reads, cursor blink, and the status
@@ -290,7 +264,7 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                 if this.chat.drain_events() {
                     should_notify = true;
                 }
-                // Same drain, independent channel (M3b Task 3) -- see
+                // Same drain, independent channel -- see
                 // `ai_block.rs`'s doc comment on why the block owns its
                 // own `AiEvent` pair rather than sharing the chat
                 // panel's.
@@ -298,6 +272,14 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                     should_notify = true;
                 }
 
+                // Status bar: CWD, exit code, git branch -- all keyed
+                // off the active tab's focused terminal, all
+                // refreshed on this same tick rather than every
+                // `render()` call. CWD is a cheap syscall
+                // (proc_pidinfo), so this just re-checks it every tick
+                // rather than chasing every focus-changing call site,
+                // and it's also the only way to notice a `cd` typed
+                // into the still-focused pane.
                 let active = this.workspaces.active().tabs.active_index();
                 let active_tid = this.workspaces.active().tab_panes[active].focused_terminal;
                 if let Some(terminal) = this.terminals.get(&active_tid) {

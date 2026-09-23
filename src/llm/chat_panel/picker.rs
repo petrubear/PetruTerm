@@ -13,7 +13,7 @@ impl ChatPanel {
         }
     }
 
-    /// Attach a file, reading its char count once for token estimation.
+    /// Attach a file, reading its byte size once for token estimation.
     /// No-op if already attached.
     pub fn attach_file(&mut self, path: PathBuf) {
         if self.attached_files.contains(&path) {
@@ -34,7 +34,7 @@ impl ChatPanel {
         }
     }
 
-    /// Estimated token count (chars / 4) across messages + attached files.
+    /// Estimated token count (bytes / 4) across messages + attached files.
     pub fn estimated_tokens(&self) -> usize {
         let msg_chars: usize = self.messages.iter().map(|m| m.content.len()).sum::<usize>()
             + self.input.len()
@@ -261,17 +261,4 @@ fn char_chunks(s: &str, width: usize) -> Vec<String> {
         result.push(chunk);
     }
     result
-}
-
-#[allow(dead_code)]
-/// Build a separator line with `title` centered: `── title ──────`.
-pub fn titled_separator(title: &str, width: usize) -> String {
-    let inner = format!(" {} ", title);
-    let inner_len = inner.chars().count();
-    if inner_len >= width {
-        return "─".repeat(width);
-    }
-    let left = (width - inner_len) / 2;
-    let right = width - inner_len - left;
-    format!("{}{}{}", "─".repeat(left), inner, "─".repeat(right))
 }

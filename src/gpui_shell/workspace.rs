@@ -1,30 +1,11 @@
-// gpui chrome migration (M3c Task 1): the workspace data model --
-// `Workspace` (one named group of tabs+panes) and `WorkspaceManager` (the
-// ordered list of them, plus which one is active).
+// The workspace data model: `Workspace` (one named group of tabs+panes, owning
+// its `TabManager` + `Vec<PaneForest>` + zoom state) and `WorkspaceManager`
+// (the ordered list, plus the active one). Switching just moves the active
+// index.
 //
-// Mirrors the wgpu build's `Mux` workspace CRUD (`src/app/mux/workspace.rs`)
-// conceptually -- same operations (new/close/switch/rename/next/prev) -- but
-// NOT its "active fields direct on Mux + Vec<WorkspaceData> archive" shape.
-// `Mux` keeps the active workspace's `tabs`/`panes` as bare fields on itself
-// and `mem::take`s them into an archive `Vec` on switch, because it grew
-// workspaces onto a struct that started single-workspace and had to stay
-// source-compatible with every existing `mux.tabs`/`mux.panes` call site.
-// `gpui_shell` has no such legacy: `Workspace` just owns its `TabManager` +
-// `Vec<PaneForest>` + zoom state directly, `WorkspaceManager` holds
-// `Vec<Workspace>` + an active index, and switching is nothing more than
-// pointing the index elsewhere -- no archive, no `mem::take`.
-//
-// `active` is tracked by INDEX into `workspaces`, not by id -- the same
-// choice `TabManager` already made (`tabs.rs`), and for the same reason:
-// display order IS index order (the sidebar lists `workspaces()` top to
-// bottom), so switching by click needs `switch_to_index` anyway. Every
-// mutation below shifts `active` using the exact fixed logic
-// `TabManager::close_tab`'s own doc comment explains -- M2 already paid for
-// finding that bug once for tabs; this module's tests are the same
-// regression coverage one level up, per the M3 design's §3.6 explicit
-// requirement.
-
-#![allow(dead_code)]
+// `active` is tracked by INDEX, not by id, like `TabManager`: display order
+// IS index order. Every mutation below shifts `active` using the same logic
+// as `TabManager::close_tab`.
 
 use super::panes::PaneForest;
 use super::tabs::TabManager;
@@ -35,8 +16,7 @@ pub struct Workspace {
     pub name: String,
     pub tabs: TabManager,
     pub tab_panes: Vec<PaneForest>,
-    /// Render-time zoom filter (see `GpuiShellRoot`'s own field of the same
-    /// name, before Task 2): workspace-scoped, since a zoomed terminal id
+    /// Render-time zoom filter: workspace-scoped, since a zoomed terminal id
     /// only makes sense against ITS workspace's `tab_panes`.
     pub zoomed_pane: Option<usize>,
 }
@@ -54,7 +34,7 @@ impl Workspace {
 }
 
 /// Manages the ordered list of workspaces. Never empty once `new_workspace`
-/// has been called at least once -- `GpuiShellRoot::new` (Task 2) calls it
+/// has been called at least once -- `GpuiShellRoot::new` calls it
 /// immediately, same invariant `TabManager` relies on callers upholding for
 /// tabs (`GpuiShellRoot::new` calls `tabs.new_tab` right after
 /// `TabManager::new`).

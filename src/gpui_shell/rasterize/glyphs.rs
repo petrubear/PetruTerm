@@ -1,8 +1,4 @@
-// gpui chrome migration (TD-GPUI-03 split): the glyph-draw pass, split out
-// of `grid.rs` (itself split out of the single `rasterize.rs`, M1b) --
-// `grid.rs` was still over the 400-line convention with this alone (its
-// biggest phase, ~200 lines including its own doc comment) still inline.
-// Pure code motion, no logic changed.
+// The glyph-draw pass of `rasterize_grid`.
 
 use cosmic_text::{Buffer, SwashCache, SwashContent};
 use image::RgbaImage;

@@ -1,13 +1,5 @@
-// gpui chrome migration (M4b Task 1 review): the two standalone
-// modifier-combo toggles (`Ctrl+Space` for the inline AI block, `Cmd+F`
-// for the search bar) -- neither is a leader chord, both were previously
-// inline in `input.rs`'s own `on_key_down`. Moved here for the 400-line
-// convention: Task 1's own Cmd+F guard pushed `input.rs` to 423 lines
-// (`ai_block.rs`, the AI block's natural home, is already at 399 and has
-// no room either). Same class of fix M4a's `palette.rs`/M3d's
-// `sidebar_nav.rs` already established, just grouped by "standalone
-// combo" rather than by feature, since neither surface alone is large
-// enough to justify its own extraction file.
+// Standalone (non-leader) key handlers: Ctrl+Space, Cmd+F, Cmd+K, the
+// confirm-card key guards, and undo-last-write.
 
 use gpui::{Context, Focusable, KeyDownEvent, Window};
 
@@ -56,12 +48,7 @@ impl GpuiShellRoot {
 
     /// The inline-action confirm card's own key guard, called from
     /// `input.rs`'s `on_key_down`. Returns `true` if the key was consumed.
-    /// Mode-keyed on `panel.state`, not focus -- see this milestone's own
-    /// Global Constraints. Lives here rather than in `mod.rs` (where the M5a
-    /// plan sketched it) purely for the 400-line convention -- `mod.rs` was
-    /// already at the limit before this task's own `pending_agent_action`
-    /// field addition, same budget pressure this file's own doc comment
-    /// above already explains for its other three methods.
+    /// Mode-keyed on `panel.state`, not focus.
     pub(super) fn maybe_handle_confirm_action_key(
         &mut self,
         event: &KeyDownEvent,

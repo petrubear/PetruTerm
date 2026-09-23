@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::sync::atomic::{AtomicU32, Ordering};
 
 static NEXT_NODE_ID: AtomicU32 = AtomicU32::new(1);
@@ -188,7 +186,7 @@ impl PaneManager {
             return None; // Can't close the last pane.
         }
 
-        // Find the sibling to promote; focus moves to nearest leaf.
+        // Find the sibling to promote; focus moves to the first remaining leaf.
         if remove_leaf(&mut self.root, closed) {
             self.root.layout(self.root.rect());
             // Move focus to first remaining leaf.

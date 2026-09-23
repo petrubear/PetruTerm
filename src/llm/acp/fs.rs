@@ -4,7 +4,8 @@ use anyhow::{bail, Result};
 
 /// Validate that `path` is safe to read or write:
 /// - Resolves to an absolute path (relative paths are resolved against $HOME).
-/// - Must not escape `$HOME` (mirrors AUDIT-SEC-01 logic).
+/// - Must not escape `$HOME` (same canonicalization as AUDIT-SEC-01, bounded by
+///   `$HOME` instead of the cwd).
 ///
 /// Walks up to the nearest existing ancestor and canonicalizes that instead of
 /// `abs` directly, so `..` segments and symlinks are resolved even when `abs`

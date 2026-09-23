@@ -1,4 +1,3 @@
-// No global dead_code allow — unused methods removed.
 use anyhow::{Context, Result};
 use std::cell::RefCell;
 use std::mem;
@@ -15,7 +14,7 @@ use crate::renderer::rounded_rect::{RoundedRectInstance, RoundedRectPipeline};
 use crate::renderer::upload::upload_ranges_bytes;
 use crate::renderer::upload::UploadRange;
 
-/// Maximum number of cell instances per frame (cols × rows + overdraw headroom).
+/// Initial cell instance buffer capacity; grown on demand.
 const INITIAL_INSTANCE_CAPACITY: usize = 32_768;
 const MAX_OVERLAY_INSTANCES: usize = 32_768;
 
@@ -45,11 +44,6 @@ fn validate_upload_range(range: UploadRange, instance_len: usize) -> Result<()> 
 pub enum RenderOutcome {
     Presented,
     RebuildNeeded,
-}
-
-#[allow(dead_code)]
-pub const fn render_outcome_requires_rebuild(outcome: RenderOutcome) -> bool {
-    matches!(outcome, RenderOutcome::RebuildNeeded)
 }
 
 /// Core wgpu renderer: owns the surface, device, queue, pipeline, and glyph atlas.
@@ -94,19 +88,6 @@ pub struct GpuRenderer {
     rect_pipeline: RoundedRectPipeline,
     rect_instance_buffer: wgpu::Buffer,
     rect_instance_count: usize,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{render_outcome_requires_rebuild, RenderOutcome};
-
-    #[test]
-    fn surface_recovery_outcome_requires_full_rebuild() {
-        assert!(!render_outcome_requires_rebuild(RenderOutcome::Presented));
-        assert!(render_outcome_requires_rebuild(
-            RenderOutcome::RebuildNeeded
-        ));
-    }
 }
 
 impl GpuRenderer {
@@ -253,7 +234,7 @@ impl GpuRenderer {
         // Atlas bind group (mask + color)
         let atlas_bind_group = make_main_atlas_bind_group(&device, &pipeline, &atlas, &color_atlas);
 
-        // Bind groups for bg-aware pipeline (same resource, different layout instances)
+        // Bind groups used by the LCD pass (same resources, bg-aware layouts)
         let bg_aware_uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("cell uniform bg (bg-aware)"),
             layout: &bg_aware_pipeline.uniform_bind_group_layout,
@@ -592,7 +573,8 @@ impl GpuRenderer {
         self.overlay_instance_count = count;
     }
 
-    /// Render a single frame: combined pass for bg and glyphs.
+    /// Render a single frame in one render pass: terminal bg + glyph + LCD,
+    /// then rounded rects, then overlays.
     pub fn render(&mut self) -> Result<RenderOutcome> {
         use wgpu::CurrentSurfaceTexture;
         let mut rebuild_needed = false;
@@ -672,12 +654,9 @@ impl GpuRenderer {
                 }
             }
 
-            // Rounded rect pass (tab-bar pill, panel/modal backgrounds, separators, …).
-            // Drawn after the terminal pass (not before it, as TD-013 originally had
-            // it for the tab-bar pill) so panel backgrounds — search bar, command
-            // palette, sidebar, toast, HUD, … — correctly occlude terminal text
-            // underneath instead of terminal glyphs painting over them. Still drawn
-            // before the overlay pass so overlay text/pills render on top of it.
+            // Rounded rect pass (panel/modal backgrounds, separators, ...).
+            // Drawn after the terminal pass so panel backgrounds occlude terminal
+            // text, and before the overlay pass so overlay text renders on top.
             if self.rect_instance_count > 0 {
                 pass.set_pipeline(&self.rect_pipeline.pipeline);
                 pass.set_bind_group(0, &self.rect_pipeline.uniform_bind_group, &[]);
@@ -989,4 +968,21 @@ fn make_main_atlas_bind_group(
             },
         ],
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RenderOutcome;
+
+    const fn render_outcome_requires_rebuild(outcome: RenderOutcome) -> bool {
+        matches!(outcome, RenderOutcome::RebuildNeeded)
+    }
+
+    #[test]
+    fn surface_recovery_outcome_requires_full_rebuild() {
+        assert!(!render_outcome_requires_rebuild(RenderOutcome::Presented));
+        assert!(render_outcome_requires_rebuild(
+            RenderOutcome::RebuildNeeded
+        ));
+    }
 }

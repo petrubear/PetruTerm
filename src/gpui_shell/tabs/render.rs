@@ -1,8 +1,4 @@
-// gpui chrome migration (M2 Task 3, visual-polish pass 2026-09-17): the tab
-// bar's own render function. Split out of the single `tabs.rs` (now
-// `tabs/mod.rs`) once the polish pass's pill treatment pushed that file over
-// the 400-line convention -- pure code motion for the surrounding types,
-// only `render_tab_bar`'s own body actually changed shape.
+// The tab bar's render function.
 
 use std::rc::Rc;
 
@@ -22,25 +18,18 @@ pub type TabSelectCallback = Rc<dyn Fn(&usize, &mut Window, &mut App)>;
 /// Called with the clicked tab's index and the right-click position --
 /// triggers the tab color picker menu at that position for that tab.
 ///
-/// `pub(crate)` (not `pub(super)`): this type is defined one module deeper
-/// than the original flat `tabs.rs`, so `pub(super)` here would only reach
-/// `tabs`, not `gpui_shell` where `render.rs`'s call site needs it --
-/// `tabs/mod.rs`'s own re-export narrows this back down to `pub(super)`
-/// (i.e. `gpui_shell`-visible), matching the original visibility exactly.
+/// `pub(crate)` (not `pub(super)`): `pub(super)` here would only reach
+/// `tabs`, not `gpui_shell`; `tabs/mod.rs`'s re-export narrows it back to
+/// `pub(super)`.
 pub(crate) type TabRightClickCallback =
     Rc<dyn Fn(usize, gpui::Point<gpui::Pixels>, &mut Window, &mut App)>;
 
-/// The tab bar row: now the header strip of the terminal "card" (visual-
-/// polish pass 2, 2026-09-17 -- `render.rs`'s `terminal_card` wraps this bar
-/// above the pane area, inside its own rounded/bordered frame, replacing
-/// this bar's old role as a full-window-width bar sitting *above* the
-/// sidebar too). Lighter treatment than pass 1's filled pill chips, matching
-/// the approved mockup's minimal tab strip: no background of its own (the
-/// card already has one), a soft highlight only behind the active label, an
-/// accent-colored dot for the active tab, dimmed text for the rest, and a
-/// bottom border separating the strip from the pane content below it (no
-/// behavior changed, `on_select`/`on_right_click`/rename wiring is
-/// untouched).
+/// The tab bar row: the header strip of the terminal "card" (`render.rs`'s
+/// `terminal_card`), with no background of its own. Every tab is a pill:
+/// the active one gets `ui_surface_hover` (or a tint of its custom accent),
+/// inactive ones get `ui_surface`. Custom-colored tabs use their accent as
+/// text color and show an accent dot; the active tab always shows a dot.
+/// A bottom divider separates the strip from the pane content.
 pub fn render_tab_bar(
     tabs: &TabManager,
     colors: &ColorScheme,
@@ -89,10 +78,8 @@ pub fn render_tab_bar(
             // own underline (`src/app/renderer/overlay.rs`'s `tab_accent`/
             // `accent_color.is_some()` split) -- a color assigned via the
             // tab's right-click menu needs to stay visible at a glance
-            // without switching to that tab (reported live: the dot-only
-            // pass 1 rewrite dropped this, showing color for the active tab
-            // alone), while a plain tab with no assigned color doesn't get
-            // a decorative dot it never asked for.
+            // without switching to that tab, while a plain tab with no
+            // assigned color doesn't get a decorative dot it never asked for.
             let show_dot = is_active || tab.accent_color.is_some();
             let cell = if show_dot {
                 let dot_color = to_rgba(tab.accent_color.unwrap_or(colors.ui_accent));
@@ -123,8 +110,7 @@ pub fn render_tab_bar(
                 // (`brights[1..7]`, dracula-pro.lua) are all very light
                 // pastels, so scaling their RGB toward black shrinks every
                 // channel by the same proportion and the results collapse
-                // into near-identical dark blobs (reported live: red vs.
-                // magenta, blue vs. cyan were impossible to tell apart).
+                // into near-identical dark blobs.
                 // Pinning lightness instead keeps each swatch's actual hue
                 // doing the differentiating work. A plain tab with no
                 // custom color keeps the neutral highlight instead of every
@@ -143,9 +129,8 @@ pub fn render_tab_bar(
                 };
                 cell.bg(bg).text_color(fg)
             } else {
-                // Inactive tabs now get a visible (but clearly dimmer)
-                // pill too, matching the status bar's always-filled
-                // segments, instead of no background at all.
+                // Inactive tabs get a dimmer pill, matching the status
+                // bar's always-filled segments.
                 let fg = match tab.accent_color {
                     Some(accent) => to_rgba(accent),
                     None => to_rgba(colors.ui_muted),
@@ -162,8 +147,7 @@ pub fn render_tab_bar(
         // `px_2` here must equal `pane_view.rs`'s own leaf-wrapper `p_2` --
         // that's what puts the first pill's own left edge directly above the
         // terminal grid's own left edge (column 0), instead of the pill
-        // sitting further right than the prompt text below it (a live
-        // dogfood screenshot showed the mismatch directly). Nothing adds a
+        // sitting further right than the prompt text below it. Nothing adds a
         // margin on top of this padding: see `divider` below for why the
         // border-bottom is a separate element instead of living here.
         .px_2()

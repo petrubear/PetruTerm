@@ -1,14 +1,11 @@
-// gpui chrome migration (M3c Task 4 / M3d Task 3): the workspace sidebar
-// drawer's visibility, active-section, and per-section-cursor state.
-// Mirrors `chat_panel`'s own `visible: bool` + `toggle`/`is_visible` shape
-// (`chat_panel/mod.rs`) for the drawer-level state; the section/cursor
-// fields are new in M3d.
+// The workspace sidebar drawer's visibility, active-section, and
+// per-section-cursor state.
 
 pub mod render;
 pub mod sections;
 
 /// Which of the sidebar's four sections is active. Cycled by Tab/Shift+Tab
-/// while the sidebar holds keyboard focus (`input.rs`), or by clicking a
+/// while the sidebar holds keyboard focus (`sidebar_nav.rs`), or by clicking a
 /// section-tab label (`render.rs`'s `on_select_section`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SidebarSection {
@@ -43,9 +40,7 @@ impl SidebarSection {
 pub struct WorkspaceSidebar {
     visible: bool,
     active_section: SidebarSection,
-    /// Highlighted row within the MCP section's server list. Unused until
-    /// Task 4 renders that list; kept here now so the section-switching
-    /// skeleton this task builds doesn't need touching again to add it.
+    /// Highlighted row in the MCP list.
     mcp_cursor: usize,
     /// Highlighted row within the Skills section's list. See `mcp_cursor`.
     skills_cursor: usize,
@@ -62,7 +57,7 @@ impl WorkspaceSidebar {
         self.visible = !self.visible;
     }
 
-    /// Force the drawer open -- used by `begin_workspace_rename` (M3c) so
+    /// Force the drawer open -- used by `begin_workspace_rename` so
     /// the rename editor (rendered inline in the sidebar row) is never
     /// focused while invisible.
     pub fn show(&mut self) {

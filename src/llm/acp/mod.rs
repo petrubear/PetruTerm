@@ -4,7 +4,6 @@ pub mod terminal;
 
 use std::path::Path;
 use std::sync::Arc;
-use std::time::Instant;
 
 use agent_client_protocol_tokio::AcpAgent;
 use anyhow::Result;
@@ -33,12 +32,13 @@ struct PromptMsg {
 /// Both backends (Provider and Agent) emit the same `AiEvent`s so `ChatPanel`
 /// and `UiManager` do not need to distinguish them.
 pub struct AcpSession {
+    // Read only by gpui_shell; main.rs's mod tree never reads it.
     #[allow(dead_code)]
     pub agent_name: String,
+    // Read only by gpui_shell; main.rs's mod tree never reads it.
     #[allow(dead_code)]
     pub display_name: String,
     prompt_tx: mpsc::Sender<PromptMsg>,
-    pub last_prompt_at: Instant,
     _task: tokio::task::JoinHandle<()>,
 }
 
@@ -48,8 +48,8 @@ impl AcpSession {
     /// `mcp_servers` is passed straight into the ACP `session/new` request
     /// (`NewSessionRequest::mcp_servers`) -- the agent connects to and
     /// calls these servers' tools itself, independent of this project's
-    /// own `McpManager` (used only by the direct-provider tool-calling
-    /// path). Pass an empty `Vec` for no MCP access.
+    /// own `McpManager` (used by the direct-provider tool-calling path and
+    /// for tool listings). Pass an empty `Vec` for no MCP access.
     pub async fn connect(
         cfg: &AcpAgentConfig,
         cwd: &Path,
@@ -82,38 +82,12 @@ impl AcpSession {
             agent_name,
             display_name,
             prompt_tx,
-            last_prompt_at: Instant::now(),
             _task: task,
         })
     }
 
-    /// Send a prompt to the agent.  Tokens stream back via `ai_tx`.
-    /// Terminal/fs callbacks from the agent are forwarded via `terminal_tx`.
-    #[allow(dead_code)]
-    pub async fn prompt(
-        &mut self,
-        content: &str,
-        ai_tx: mpsc::Sender<AiEvent>,
-        terminal_tx: mpsc::Sender<AcpTerminalRequest>,
-    ) -> Result<()> {
-        self.last_prompt_at = Instant::now();
-        self.prompt_tx
-            .send(PromptMsg {
-                content: content.to_string(),
-                ai_tx,
-                terminal_tx,
-            })
-            .await
-            .map_err(|_| anyhow::anyhow!("ACP session task closed"))
-    }
-
-    /// Returns `true` if no prompt has been sent in the last 300 seconds.
-    #[allow(dead_code)]
-    pub fn is_idle(&self) -> bool {
-        self.last_prompt_at.elapsed().as_secs() >= 300
-    }
-
-    /// Sync variant of `prompt` — uses `try_send` so it can be called from the main thread.
+    /// Queue a prompt without awaiting (usable from the main thread). Tokens
+    /// stream back via `ai_tx`; terminal/fs callbacks go to `terminal_tx`.
     /// Returns an error if the internal channel is full or the session task has died.
     pub fn try_send_prompt(
         &mut self,
@@ -121,7 +95,6 @@ impl AcpSession {
         ai_tx: mpsc::Sender<AiEvent>,
         terminal_tx: mpsc::Sender<AcpTerminalRequest>,
     ) -> Result<()> {
-        self.last_prompt_at = Instant::now();
         self.prompt_tx
             .try_send(PromptMsg {
                 content,

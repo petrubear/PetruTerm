@@ -1,14 +1,5 @@
-// gpui chrome migration (M2): tab list + the tab bar that renders it. The
-// data half (Tab/TabManager/tab_display_label) is ported from src/ui/tabs.rs
-// verbatim -- pure data + one pure string-formatting function, zero I/O.
-//
-// Split into this directory (visual-polish pass, 2026-09-17): the single
-// `tabs.rs` this replaces grew past 400 lines once the tab bar's pill
-// treatment landed. `render.rs` holds `render_tab_bar` and the two callback
-// type aliases it needs; this file keeps the data/logic half. Pure code
-// motion for everything except `render_tab_bar`'s own body.
-
-#![allow(dead_code)]
+// Tab list data model (Tab/TabManager/tab_display_label). `render.rs` holds
+// `render_tab_bar` and its callback type aliases.
 
 mod render;
 
@@ -21,10 +12,6 @@ pub const TAB_LABEL_MAX_CHARS: usize = 18;
 /// The visible label for a tab pill: `" title: N "` (1-based), or the rename
 /// buffer with a cursor when that tab is being renamed. Truncated to
 /// [`TAB_LABEL_MAX_CHARS`].
-///
-/// Shared by the tab-bar renderer (`build_tab_bar_instances`) and the click
-/// hit-test (`hit_test_tab_bar`) so both agree on each pill's column width —
-/// they diverged before, which made tab clicks land on the wrong tab (TD-P9-02).
 pub fn tab_display_label(
     title: &str,
     index: usize,
@@ -43,8 +30,6 @@ pub fn tab_display_label(
 pub struct Tab {
     pub id: usize,
     pub title: String,
-    /// Index into the pane tree (one pane tree per tab).
-    pub pane_tree_id: usize,
     /// Optional accent color override. None → use theme ui_accent.
     pub accent_color: Option<[f32; 4]>,
 }
@@ -69,11 +54,9 @@ impl TabManager {
     pub fn new_tab(&mut self, title: impl Into<String>) -> usize {
         let id = self.next_id;
         self.next_id += 1;
-        let pane_tree_id = id; // 1:1 mapping for now
         self.tabs.push(Tab {
             id,
             title: title.into(),
-            pane_tree_id,
             accent_color: None,
         });
         self.active = self.tabs.len() - 1;

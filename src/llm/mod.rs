@@ -110,29 +110,12 @@ impl ChatMessage {
         }
     }
 
-    /// Create a tool-result message (response to an LLM tool call).
-    #[allow(dead_code)]
-    pub fn tool_result(tool_call_id: impl Into<String>, content: impl Into<String>) -> Self {
-        Self {
-            role: ChatRole::Tool(tool_call_id.into()),
-            content: content.into(),
-        }
-    }
-
-    /// Serialize to the JSON format expected by OpenAI-compatible APIs.
-    /// Regular roles produce `{role, content}`; Tool roles add `tool_call_id`.
+    /// Serialize to the `{role, content}` JSON expected by OpenAI-compatible APIs.
     pub fn to_api_value(&self) -> Value {
-        match &self.role {
-            ChatRole::Tool(id) => serde_json::json!({
-                "role": "tool",
-                "tool_call_id": id,
-                "content": self.content,
-            }),
-            _ => serde_json::json!({
-                "role": self.role.as_str(),
-                "content": self.content,
-            }),
-        }
+        serde_json::json!({
+            "role": self.role.as_str(),
+            "content": self.content,
+        })
     }
 }
 
@@ -141,9 +124,6 @@ pub enum ChatRole {
     System,
     User,
     Assistant,
-    /// Tool-result message. Inner string is the `tool_call_id` from the LLM's request.
-    #[allow(dead_code)]
-    Tool(String),
 }
 
 impl ChatRole {
@@ -152,7 +132,6 @@ impl ChatRole {
             ChatRole::System => "system",
             ChatRole::User => "user",
             ChatRole::Assistant => "assistant",
-            ChatRole::Tool(_) => "tool",
         }
     }
 }

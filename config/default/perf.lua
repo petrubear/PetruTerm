@@ -17,18 +17,11 @@ function module.apply_to_config(config)
   config.max_fps           = 60
 
   -- GPU power preference: "high_performance" | "low_power" | "none"
-  -- Selects the wgpu GPU adapter at startup. Use "low_power" (default) to
-  -- prefer the integrated / efficiency GPU for best battery life.
+  -- Selects the wgpu GPU adapter at startup (wgpu binary only). Use "low_power"
+  -- (default) to prefer the integrated / efficiency GPU for best battery life.
   -- Use "high_performance" if you need the discrete GPU (e.g. eGPU or dual-GPU Mac).
   -- Note: changing this requires a restart to take effect.
   config.gpu_preference    = "low_power"
-
-  -- Shell to launch in new tabs. Defaults to $SHELL or /bin/zsh.
-  config.shell             = os.getenv("SHELL") or "/bin/zsh"
-
-  -- Inject shell integration (CWD tracking, exit codes, last command).
-  config.shell_integration = true
-
 
   -- Show dirty indicator (*) next to the git branch name in the status bar.
   -- Requires running `git status --porcelain` every 5 s — costs an extra subprocess.
@@ -37,7 +30,7 @@ function module.apply_to_config(config)
 
   -- Battery saver mode: "auto" | "always" | "never"
   -- "auto": when on battery, disables git_dirty_check, extends git poll TTL to 60 s,
-  --         slows cursor blink to 750 ms, switches present mode to Fifo (vsync),
+  --         slows cursor blink, switches present mode to Fifo (vsync, wgpu binary),
   --         and shows a BAT XX% indicator in the status bar.
   -- "always": apply restrictions regardless of power source.
   -- "never":  never apply restrictions.

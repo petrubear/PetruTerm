@@ -20,7 +20,6 @@ pub(crate) fn blink_only_render(
     cursor_blink_dirty && data_empty && !had_ai && !had_ai_block && !pending_pty_redraw
 }
 
-#[allow(dead_code)]
 pub(crate) fn terminal_upload_ranges_for_blink(
     blink_only: bool,
     ranges: &[crate::renderer::UploadRange],
@@ -500,7 +499,7 @@ impl App {
             return;
         }
 
-        // Sync per-pane chat panel to the focused terminal.
+        // No-op kept for call-site compatibility (chat panel is workspace-level).
         let terminal_id = self.mux.focused_terminal_id();
         self.ui.set_active_terminal(terminal_id);
 
@@ -1079,8 +1078,8 @@ impl App {
                 // R-8: pin the status bar near the window bottom (full-bleed) by
                 // back-computing its grid row from the inset content origin.
                 // `floor` (not `round`) so the bar never drops past
-                // `win_h - pad.bottom`, preserving the bottom padding — matches the
-                // pre-R-8 placement. `round` could eat `pad.bottom` on some heights.
+                // `win_h - pad.bottom`, preserving the bottom padding. `round`
+                // could eat `pad.bottom` on some heights.
                 let sb_win_h = rc.renderer.size().1 as f32;
                 let status_row = ((sb_win_h - sb_bottom_pad - sb_h_px - sb_pad_y) / cell_h as f32)
                     .floor()
@@ -1441,14 +1440,11 @@ impl App {
             if rc.frame_times.len() > 120 {
                 rc.frame_times.pop_front();
             }
-
-            // Suppress unused warning for scroll-bar focused dimensions.
-            let _ = (term_cols, term_rows);
         }
     }
 }
 
-/// Build and upload cell instances for every pane in the active tab.
+/// Build cell instances for every pane in the active tab.
 /// Calls `rc.begin_frame()` first to clear previous frame's instances.
 #[allow(clippy::too_many_arguments)]
 fn build_all_pane_instances(
@@ -1645,10 +1641,7 @@ fn build_all_pane_instances(
     // it doesn't leak into a future frame's unrelated rebuild.
     rc.build_state.clear_pending_full_rebuild();
 
-    // Record content boundary before cursor — used by the fast blink path.
-    rc.content_end = rc.terminal_instances.len();
-
-    // Emit cursor for the focused pane (always after content_end).
+    // Emit cursor for the focused pane (after all cell instances).
     if let Some(info) = pane_infos.iter().find(|i| i.focused) {
         if let Some(cursor) = mux
             .terminals

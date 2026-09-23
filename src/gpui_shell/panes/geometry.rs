@@ -1,6 +1,5 @@
-// gpui chrome migration (M2 Task 6a): `RectCache` and the pixel-rect-driven
-// pane operations (`focus_dir`, `adjust_ratio`, `drag_separator`), split out
-// of `panes.rs` for the 400-line convention.
+// `RectCache` and the pixel-rect-driven pane operations (`focus_dir`,
+// `adjust_ratio`, `drag_separator`).
 
 use super::{FocusDir, PaneForest, PaneTree, SplitDir};
 
@@ -20,7 +19,7 @@ pub struct RectCache {
     /// `drag_split_ratio` divides by this rect's extent in the resize axis to
     /// turn a pointer position into a 0..1 ratio; the divider's own ~6px
     /// width in that denominator would make every pointer more than a few
-    /// pixels away clamp straight to 0.1 or 0.9. Task 3's flex walk
+    /// pixels away clamp straight to 0.1 or 0.9. The flex walk
     /// (`pane_view::render_split`) populates this from the union of the
     /// container's three children, which tile it exactly.
     pub separators: std::collections::HashMap<u32, gpui::Bounds<gpui::Pixels>>,
@@ -222,8 +221,7 @@ mod tests {
     fn drag_separator_tracks_the_pointer_across_the_whole_split() {
         // Pins what `RectCache::separators` must hold: the SPLIT CONTAINER's
         // bounds. Populated with the 6px divider's own rect instead, every
-        // position below would divide by ~6 and clamp to 0.9 -- the exact
-        // cross-task ambiguity Task 1 deferred to Task 3.
+        // position below would divide by ~6 and clamp to 0.9.
         let mut forest = PaneForest::new(1);
         forest.split(SplitDir::Horizontal, 2);
         let node_id = root_node_id(&forest);

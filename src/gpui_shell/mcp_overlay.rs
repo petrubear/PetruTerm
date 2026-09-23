@@ -1,7 +1,5 @@
-// gpui chrome migration (M3d Task 4): builds the markdown content the info
-// overlay shows for an MCP server -- ported verbatim from the wgpu build's
-// `UiManager::mcp_overlay_content` (`src/app/ui/providers.rs`), as a free
-// function instead of a method (gpui_shell has no `UiManager`).
+// Builds the markdown content the info overlay shows for an MCP server,
+// ported from the wgpu build's `UiManager::mcp_overlay_content`.
 
 use crate::llm::mcp::manager::McpManager;
 

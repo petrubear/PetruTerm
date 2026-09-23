@@ -13,6 +13,7 @@ use crate::font::locator::FontLocator;
 ///   - String      — actual internal family name (queried from fontdb, may differ from config)
 ///   - fontdb::ID  — fontdb face ID (needed to build CacheKeys for PUA glyph override)
 ///   - PathBuf     — resolved font file path (for FreeType cmap lookup)
+///   - u32         - face index within that file (for .ttc collections)
 pub fn build_font_system(
     font_config: &FontConfig,
 ) -> Result<(FontSystem, String, fontdb::ID, PathBuf, u32)> {
@@ -164,11 +165,12 @@ fn register_variable_weights(font_system: &mut FontSystem, family: &str) {
     }
 }
 
-/// Locates the user-selected font for LCD AA and sets font_path in the config.
+/// Per-family cache of located font paths.
 static FONT_PATH_CACHE: std::sync::OnceLock<
     parking_lot::Mutex<std::collections::HashMap<String, Option<PathBuf>>>,
 > = std::sync::OnceLock::new();
 
+/// Locates the user-selected font for LCD AA and sets font_path in the config.
 pub fn locate_font_for_lcd(font_config: &mut FontConfig) {
     if !font_config.lcd_antialiasing {
         return;

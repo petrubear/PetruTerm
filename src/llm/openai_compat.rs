@@ -5,10 +5,6 @@ use reqwest::Client;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
 use serde_json::Value;
-/// OpenAI-compatible provider — works with Ollama and LMStudio out of the box.
-///
-/// Both expose the same `/v1/chat/completions` endpoint with SSE streaming.
-/// No API key is required by default; `api_key` is forwarded if present.
 use std::time::Duration;
 
 use super::tools::AgentStepResult;
@@ -18,6 +14,10 @@ use super::{
 };
 use crate::config::schema::LlmConfig;
 
+/// OpenAI-compatible provider - works with Ollama and LMStudio out of the box.
+///
+/// Both expose the same `/v1/chat/completions` endpoint with SSE streaming.
+/// No API key is required by default; `api_key` is forwarded if present.
 pub struct OpenAICompatProvider {
     client: Client,
     model: String,

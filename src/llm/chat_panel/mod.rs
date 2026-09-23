@@ -42,7 +42,7 @@ pub enum AiEvent {
         cmd: String,
         result_tx: tokio::sync::oneshot::Sender<bool>,
     },
-    /// Original file content to store for single-step undo (sent before writing).
+    /// Original file content to store for single-step undo (sent when a confirmed write is applied).
     UndoState {
         path: PathBuf,
         content: String,
@@ -186,9 +186,10 @@ pub struct ChatPanel {
     wrapped_cache_width: usize,
 
     // ── File context ──────────────────────────────────────────────────────────
-    /// Files attached as context; injected into LLM system message at query time.
+    /// Files attached as context; injected into the prompt context at query time
+    /// (system message for providers, prepended to the user prompt for ACP).
     pub attached_files: Vec<PathBuf>,
-    /// Cached char counts for each attached file (index-parallel to attached_files).
+    /// Cached byte sizes for each attached file (index-parallel to attached_files).
     pub(super) attached_file_chars: Vec<usize>,
 
     // ── Confirmation prompt ───────────────────────────────────────────────────
@@ -204,8 +205,9 @@ pub struct ChatPanel {
     pub thin_separator_cache: String,
 
     // ── Active skill ─────────────────────────────────────────────────────────
-    /// Name of the skill injected into the current query's system prompt, if any.
-    /// Cleared when the response completes or errors.
+    /// Name of the skill injected into the prompt context (system message for
+    /// providers, prepended to the user prompt for ACP), if any. Sticky across
+    /// turns; cleared by `clear_messages`.
     pub matched_skill: Option<String>,
 
     // ── Status indicators (shown in header) ───────────────────────────────────
@@ -315,7 +317,7 @@ impl ChatPanel {
     }
 
     /// Return the pre-wrapped lines for message `idx`.
-    /// Panics if `ensure_wrap_cache` was not called first for the current width.
+    /// Returns an empty slice if `ensure_wrap_cache` has not covered `idx`.
     pub fn wrapped_message(&self, idx: usize) -> &[AnnotatedLine] {
         self.wrapped_cache
             .get(idx)
@@ -600,7 +602,8 @@ impl ChatPanel {
     }
 
     /// Show a tool-call status line in the streaming buffer.
-    /// `done=false` replaces the last status line; `done=true` marks it finished.
+    /// `done=false` replaces a trailing in-progress line; `done=true` appends a
+    /// check line.
     pub fn set_tool_status(&mut self, tool: &str, path: &str, done: bool) {
         self.state = PanelState::Streaming;
         let icon = if done { "✓" } else { "⟳" };
@@ -771,7 +774,6 @@ impl ChatPanel {
                 ChatRole::User => "You",
                 ChatRole::Assistant => "AI",
                 ChatRole::System => continue,
-                ChatRole::Tool(_) => continue,
             };
             let body = msg.content.trim();
             if !body.is_empty() {

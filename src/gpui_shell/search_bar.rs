@@ -1,9 +1,6 @@
-// gpui chrome migration (M4b Task 2): the search bar's render tree and its
-// own keyboard guard. State (`SearchBar`) is reused directly from
-// `crate::ui::search_bar` -- see `mod.rs`'s own doc comment on the
-// `search_bar` field for why. Deliberately non-modal (no backdrop, no
-// `cx.stop_propagation()`): the terminal stays interactive underneath
-// while this is open, unlike M4a's command palette.
+// The search bar's render tree and its keyboard guard. State (`SearchBar`)
+// is reused from `crate::ui::search_bar`. Non-modal: the terminal stays
+// interactive underneath while this is open.
 
 use gpui::{div, prelude::*, px, App, Context, Entity, Focusable, KeyDownEvent, Window};
 
@@ -49,7 +46,7 @@ pub fn render_search_bar(
 
 impl GpuiShellRoot {
     /// True while the search query field genuinely holds keyboard focus --
-    /// same shape as `palette_query_focused` (M4a's `palette.rs`).
+    /// same shape as `palette_query_focused` (`palette.rs`).
     pub(super) fn search_query_focused(&self, window: &Window, cx: &App) -> bool {
         self.search_query.focus_handle(cx).is_focused(window)
     }
@@ -75,10 +72,10 @@ impl GpuiShellRoot {
     /// The search bar's own key guard, called from `input.rs`'s
     /// `on_key_down`. Returns `true` if the key was consumed. Up/Down move
     /// to the prev/next match directly (`SearchBar::prev_match`/
-    /// `next_match`, TextInput has no binding for either -- verified in
-    /// M4a). Enter/Escape are TextInput's own bound `Submit`/`Cancel`
-    /// actions, handled via `search_query`'s `cx.subscribe` callback in
-    /// `mod.rs` instead, same mechanism M4a's command palette established.
+    /// `next_match`; TextInput has no binding for either). Enter/Escape are
+    /// TextInput's own bound `Submit`/`Cancel` actions, handled via
+    /// `search_query`'s `cx.subscribe` callback in `construct.rs`, same as
+    /// the command palette.
     pub(super) fn maybe_handle_search_key(
         &mut self,
         event: &KeyDownEvent,
@@ -102,9 +99,7 @@ impl GpuiShellRoot {
     /// frame.rs`, lines 647-685), just moved from "once per poll tick" to
     /// "once per `render()` call" (this codebase has no separate per-tick
     /// hook the way `frame.rs` does, and `render()` already runs every
-    /// frame the poll loop wakes for). Called from `render.rs`'s own top
-    /// -- moved here (out of `render.rs` itself) to keep that file under
-    /// the 400-line convention.
+    /// frame the poll loop wakes for). Called from `render.rs`'s own top.
     pub(super) fn drive_search(&mut self) {
         if !self.search_bar.visible {
             return;

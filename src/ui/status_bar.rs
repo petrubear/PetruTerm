@@ -47,11 +47,15 @@ impl StatusBar {
     ///
     /// - `leader_active`: true when the leader key has been pressed and the
     ///   timeout is still running (shows the LEADER segment in theme accent color).
-    /// - `leader_resize_mode`: true when leader is active AND the Alt/Option modifier
-    ///   is held, indicating the user is about to resize a pane (shows RESIZE in yellow).
+    /// - `leader_resize_mode`: true while resizing a pane (leader+Option held,
+    ///   resize mode active, or a separator being dragged); shows RESIZE.
+    /// - `leader_key`: leader key name shown in the LEADER segment.
     /// - `cwd`: current working directory (None if unavailable).
     /// - `git_branch`: cached git branch string (None if not a git repo or not yet fetched).
     /// - `last_exit_code`: last exit code from shell context (None if unavailable).
+    /// - `pane_zoomed`: shows the ZOOM segment.
+    /// - `style`: segment rendering style.
+    /// - `battery`: `(percent, on_battery)`; shown only when on battery power.
     /// - `colors`: theme-derived status bar colors (AUDIT-THEME-01).
     #[allow(clippy::too_many_arguments)]
     pub fn build(

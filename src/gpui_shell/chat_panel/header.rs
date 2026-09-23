@@ -1,14 +1,5 @@
-// gpui chrome migration (alignment pass, 2026-09-17): the chat panel's
-// header row. Split out of `render.rs` to keep that file under the
-// 400-line convention -- pure code motion, no behavior change.
-//
-// The header's close affordance is a text hint, not a clickable icon: wiring
-// a real click handler needs a `cx.listener` built where `cx` is in scope
-// (`GpuiShellRoot::render`, the same place `tabs::render_tab_bar`'s
-// `on_select_tab` is built), which this function's fixed 2-argument
-// interface has no room for. `Leader a a` (Task 1) and `/q` (Task 2) are the
-// real close paths; a decorative "×" that silently did nothing on click
-// would be worse than no icon at all.
+// The chat panel's header row. The close affordance is a text hint, not a
+// clickable icon: `Leader a a` and `/q` are the close paths.
 
 use gpui::{div, prelude::*, px};
 
@@ -23,11 +14,7 @@ use super::super::pane_view::to_rgba;
 /// why `acp_session` is still `None` -- mirrors the wgpu build's own
 /// `build_panel_header` (`src/app/renderer/chat.rs`), which branches on
 /// `backend` first and never falls through to the provider label while in
-/// agent mode. This function used to branch on `acp_session.is_some()`
-/// alone, so it showed the raw `llm.provider`/`llm.model` (e.g. "openrouter")
-/// as if connected any time no session existed yet -- including while the
-/// ACP connect was still spawning, or had failed outright -- even with
-/// `backend = "agent"` configured correctly.
+/// agent mode.
 pub(super) fn render_header(
     panel: &ChatPanel,
     llm: &LlmConfig,

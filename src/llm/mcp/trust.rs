@@ -19,7 +19,8 @@ pub fn is_trusted(cwd: &Path) -> bool {
     list.iter().any(|s| Path::new(s) == canon)
 }
 
-/// Mark `cwd` as trusted and persist to `~/.config/petruterm/mcp_trust.json`.
+/// Mark `cwd` as trusted and persist to `{config_dir}/petruterm/mcp_trust.json`
+/// (macOS: `~/Library/Application Support`).
 pub fn trust(cwd: &Path) -> anyhow::Result<()> {
     let canon = cwd.canonicalize().unwrap_or_else(|_| cwd.to_path_buf());
     let path = trust_file().ok_or_else(|| anyhow::anyhow!("no config dir available"))?;

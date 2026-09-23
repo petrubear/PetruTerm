@@ -1,7 +1,5 @@
-// gpui chrome migration (TD-GPUI-03 split): the pure color/geometry helpers
-// `rasterize_grid` builds on -- cell color resolution, search highlighting,
-// shaping attrs, and pixel blending. Split out of the single `rasterize.rs`
-// (M1b) for the 400-line convention -- pure code motion, no logic changed.
+// Pure color/geometry helpers `rasterize_grid` builds on -- cell color
+// resolution, search highlighting, shaping attrs, and pixel blending.
 
 use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::vte::ansi::Color as AnsiColor;
@@ -97,12 +95,9 @@ pub(super) fn attrs_for<'a>(
 /// Source-over composite of one antialiased glyph pixel onto whatever is
 /// already in the bitmap (its cell's resolved background, or nothing).
 ///
-/// Overwriting instead — the previous behaviour — dropped the cell background
-/// on every partially-covered edge pixel, so antialiased text over a non-default
-/// background (powerline pill segments, selection highlight) got a fringe of
-/// semi-transparent pixels that composited against the window's base fill
-/// rather than against their own cell. On a fully transparent destination this
-/// is exactly equivalent to the old `put_pixel`.
+/// Blending (rather than overwriting) keeps antialiased edges over a
+/// non-default cell background from fringing. On a fully transparent
+/// destination this is equivalent to `put_pixel`.
 pub(super) fn blend_pixel(img: &mut RgbaImage, x: u32, y: u32, src: [u8; 3], src_a: u8) {
     let dst = img.get_pixel(x, y).0;
     if dst[3] == 0 || src_a == 255 {

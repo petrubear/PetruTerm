@@ -1,9 +1,5 @@
-// gpui chrome migration (M5a Task 1): the shared confirm-card chrome and
-// the inline-action confirm card built on top of it. Split out of
-// `render.rs` for the 400-line convention -- Task 6 (ACP write/run
-// confirms, later in this milestone) reuses `render_confirm_card` from
-// here too, hence a dedicated file rather than folding this into
-// `render.rs`.
+// The shared confirm-card chrome and the inline-action confirm card built
+// on it.
 
 use gpui::{div, prelude::*, px, FontWeight};
 

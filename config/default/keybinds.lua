@@ -44,16 +44,22 @@ function module.apply_to_config(config)
       { mods = "LEADER", key = "o",  action = petruterm.action.CommandPalette },
 
       -- ── AI controls ────────────────────────────────────────────────────────
-      -- leader+A   : focus AI panel / return focus to terminal
+      -- leader+A   : focus AI panel / return focus to terminal (wgpu binary only)
       { mods = "LEADER", key = "A",  action = petruterm.action.FocusAiPanel },
-      -- leader+a+a : toggle AI panel open / close
-      -- leader+a+e : Explain last output
-      -- leader+a+f : Fix last error
-      -- leader+a+z : Undo last write
-      -- (These are handled as hardcoded sub-leader sequences, not config entries.)
 
-      -- ── Explorer sub-leader (leader+e+*) ──────────────────────────────────
-      -- leader+e+e : Toggle workspace sidebar
+      -- ── Hardcoded leader sequences (not config entries, cannot be rebound) ──
+      -- leader+a+a : toggle AI panel open / close
+      -- leader+a+c : clear AI context (wgpu binary only)
+      -- leader+a+e : explain last output
+      -- leader+a+f : fix last error
+      -- leader+a+z : undo last write
+      -- leader+e+e : toggle workspace sidebar (leader+s is an alias)
+      -- leader+z   : zoom / unzoom focused pane
+      -- leader+w   : new workspace
+      -- leader+W+& / W+, / W+j / W+k : close / rename / next / prev workspace
+      -- leader+W+n / W+s / W+L       : new / save / open saved workspaces (wgpu binary only)
+      -- leader+1-9 : switch to tab N
+      -- leader+Option+Arrows : resize focused pane
 
       -- ── Tabs (tmux-style) ─────────────────────────────────────────────────
       { mods = "LEADER", key = "c",  action = petruterm.action.NewTab },

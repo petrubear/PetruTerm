@@ -1,7 +1,4 @@
-// gpui chrome migration (M1b): font identity + real cell metrics, split out
-// of `terminal_element.rs` (M1a's font/metrics work was already
-// self-contained; this plan's later tasks need `terminal_element.rs` back
-// under the project's 400-line module convention before adding more to it).
+// Font identity and real cell metrics shared by the grid renderer and chrome.
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
@@ -250,12 +247,8 @@ thread_local! {
 /// renderers agree. FreeType (`FT_LOAD_DEFAULT`) grid-fits each glyph, so its
 /// reported advance is the hinted, whole-pixel one the glyphs are actually
 /// rasterized against; cosmic-text's shaped advance is the font's unhinted
-/// design value. For MonoLisaCode at 16pt those differ (10.0 vs 10.24), and
-/// this file previously used only the shaping branch — so every column sat
-/// 2.4% further right than the glyph ink drawn into it, leaving a visible
-/// sliver of extra space beside every character that the wgpu renderer,
-/// reading the hinted value, never had. That is the "large space between
-/// characters" a dogfood report flagged as present only in gpui-petruterm.
+/// design value. For MonoLisaCode at 16pt those differ (10.0 vs 10.24);
+/// using the shaped advance would leave extra space beside every character.
 ///
 /// Measured at the LOGICAL font size; `rasterize_grid` multiplies by the
 /// window's scale factor at paint time. `cell_metrics` therefore returns
@@ -300,12 +293,8 @@ fn compute_cell_size(
     let cell_height = metrics.line_height.max(1.0);
 
     // Parity with `font::shaper::TextShaper::measure_cell`'s own
-    // `log::info!("Cell size: ...")` line -- gpui_shell had no equivalent,
-    // making it impossible to compare the two binaries' computed cell
-    // geometry for the same font/config without attaching a debugger. Added
-    // while investigating a dogfood report of wide inter-character spacing
-    // present only in gpui-petruterm, not the original wgpu petruterm, for
-    // the identical font.
+    // `log::info!("Cell size: ...")` line, so both binaries' cell geometry
+    // can be compared.
     log::info!(
         "gpui-shell: cell size {cell_width:.2}x{cell_height:.2}px (font: '{family}' {size}pt, line_height={line_height})"
     );
@@ -320,8 +309,7 @@ pub fn measured_cell_size() -> (Pixels, Pixels) {
     CELL_SIZE.get()
 }
 
-/// Real, current font size in points — replaces the M0-era hardcoded
-/// `FONT_SIZE` constant everywhere it was read.
+/// Real, current font size in points.
 pub fn font_size() -> f32 {
     FONT_SYSTEM.with_borrow(|state| state.size)
 }
@@ -334,12 +322,8 @@ pub fn font_size() -> f32 {
 /// has four labels to fit in a narrow, user-resizable column down to
 /// `sidebar::render::MIN_SIDEBAR_WIDTH_PX`, and matching the terminal's
 /// font size there reintroduces the "Steering" label clipping bug that
-/// `sidebar_width_px` was added to fix). A live dogfood screenshot boxing
-/// all three headers side by side showed the sidebar's own row sitting
-/// visibly shorter than the other two even after their paddings were
-/// numerically equalized -- this ties the row's height itself to a shared
-/// budget instead of trusting padding-plus-line-height arithmetic to land
-/// the same by coincidence for two different font sizes.
+/// `sidebar_width_px` was added to fix). Tying the row height to a shared
+/// budget keeps the rows equal despite different font sizes.
 pub fn header_row_min_height() -> Pixels {
     px(font_size() + 26.0)
 }

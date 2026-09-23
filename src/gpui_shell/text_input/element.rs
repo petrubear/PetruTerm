@@ -1,10 +1,6 @@
-// gpui chrome migration (M3a Task 1): `TextElement`, the paint-time half of
-// `TextInput`.
-//
-// Ports gpui 0.2.2's own `examples/input.rs` `TextElement`/`PrepaintState`
-// almost verbatim, with the example's hardcoded colors (`hsla(0., 0., 0.,
-// 0.2)` for the placeholder, `gpui::blue()` for the cursor, `rgba(0x3311ff30)`
-// for the selection) replaced by the entity's theme-resolved fields.
+// `TextElement`, the paint-time half of `TextInput`. Ports gpui 0.2.2's own
+// `examples/input.rs` `TextElement`/`PrepaintState` almost verbatim, with the
+// example's hardcoded colors replaced by the entity's theme-resolved fields.
 
 use gpui::{
     fill, point, prelude::*, size, Bounds, Element, ElementId, ElementInputHandler, Entity,

@@ -1,13 +1,7 @@
-// gpui chrome migration (M0 foundation spike + M1a foundation fixes): paints
-// one `term::Terminal`'s grid as a custom gpui `Element`.
-//
-// gpui's native text-shaping/painting facilities (`window.text_system()`,
-// used here originally) do not produce ligatures at this gpui version, per
-// real dogfood testing (not a config mistake — a confirmed limitation).
-// Fallback: shape + rasterize the grid with cosmic-text (which already
-// renders ligatures correctly in this project's existing wgpu renderer, see
-// src/font/shaper.rs) into an RGBA bitmap, and paint that bitmap into gpui
-// via `Window::paint_image`.
+// Paints one `term::Terminal`'s grid as a custom gpui `Element`. gpui's
+// native text system doesn't produce ligatures at this gpui version, so the
+// grid is shaped + rasterized with cosmic-text (`rasterize/`) into an RGBA
+// bitmap and painted via `Window::paint_image`.
 
 use std::rc::Rc;
 
@@ -75,12 +69,10 @@ impl Element for TerminalGridElement {
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
         // Fill whatever the parent gives us, rather than asking for
-        // `cols x rows` cells' worth of pixels. M2's pane tree makes the
+        // `cols x rows` cells' worth of pixels. The pane tree makes the
         // *layout* the authority on a pane's size and resizes the terminal to
         // match (`pane_view::fit_terminal`, driven from the wrapping div's
-        // `on_children_prepainted`) -- the reverse of the M0/M1 arrangement,
-        // where the grid's fixed 80x24 decided the element's size and neither
-        // a window resize nor a split could change it. Requesting a relative
+        // `on_children_prepainted`). Requesting a relative
         // size also means the bounds recorded in `RectCache` for this leaf
         // are the pane's full rect, not a smaller grid rect floating inside
         // it, so hit-testing and `focus_dir`'s geometry agree with what the
@@ -112,8 +104,7 @@ impl Element for TerminalGridElement {
         window: &mut Window,
         _cx: &mut App,
     ) {
-        // Background. Real theme background (not the M0/M1a placeholder
-        // color) -- `rasterize::rasterize_grid` skips filling any cell whose
+        // Background. `rasterize::rasterize_grid` skips filling any cell whose
         // resolved background equals `colors.background` on the assumption
         // that this base fill already covers it, so the two must agree.
         if !self.translucent {
@@ -153,7 +144,7 @@ impl Element for TerminalGridElement {
             window,
             search_ref,
         ) {
-            // `bounds` is now the pane's FULL layout rect (M2's flex tree
+            // `bounds` is the pane's FULL layout rect (the flex tree
             // sizes this element via `relative(1.0)`, not a fixed
             // `cell_width * cols`), but `rasterize_grid`'s bitmap is still
             // sized to exactly `cell_width * cols` x `cell_height * rows`
@@ -162,10 +153,7 @@ impl Element for TerminalGridElement {
             // pixel size is only ever >= the grid's own size, by less than
             // one cell in each axis). Painting the bitmap into the FULL
             // `bounds` would have gpui stretch it to fill that leftover
-            // fractional-cell strip -- exactly the destination-rect
-            // mismatch M1b's Task 2 spent multiple rounds eliminating
-            // (blurred/smeared glyph edges, worse the narrower or shorter
-            // a pane is, which multi-pane splitting routinely produces).
+            // fractional-cell strip (blurred/smeared glyph edges).
             // Clamp the destination rect to the bitmap's own native size
             // instead; the leftover strip (at most one cell wide/tall)
             // stays the plain background already painted above.
@@ -183,19 +171,8 @@ impl Element for TerminalGridElement {
 
         // Cursor. Shape from Terminal::cursor_info() (DECSCUSR / default),
         // geometry ported from src/app/renderer/terminal.rs's
-        // build_cursor_overlay. Only the focused pane draws a cursor at
-        // all, matching the wgpu renderer exactly: `RenderContext::
-        // build_cursor_instance` (src/app/renderer/terminal.rs) has
-        // exactly one call site, for "the focused terminal pane" (its own
-        // doc comment) -- unfocused panes get none. M1b/M1c's earlier
-        // HollowBlock-for-unfocused-Block design predates M2's real
-        // multi-pane rendering (it was only ever dogfooded through the
-        // single-pair SplitDemo proof of concept) and doesn't generalize:
-        // it only ever changes Block's presentation, so any other DECSCUSR
-        // shape (Beam, Underline -- both common shell/editor prompt
-        // choices) looked visually IDENTICAL in every pane regardless of
-        // focus, which is what the wgpu app's simpler "no cursor at all
-        // when unfocused" rule avoids by construction.
+        // build_cursor_overlay. Only the focused pane draws a cursor,
+        // matching the wgpu renderer.
         let cursor = self.terminal.cursor_info();
         if self.is_active && cursor.visible && self.cursor_blink_on {
             let shape = cursor.shape;

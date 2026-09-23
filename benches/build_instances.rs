@@ -83,7 +83,6 @@ fn make_shaper() -> (TextShaper, FontConfig) {
         line_height: 1.2,
         lcd_antialiasing: false,
         features: vec![],
-        fallbacks: vec![],
         font_path: None,
     };
 
@@ -553,7 +552,7 @@ fn bench_incremental_multi_pane_layout_change(c: &mut Criterion) {
         })
         .collect();
     let mut pane_layout = [(0.0_f32, 0.0_f32), (40.0_f32, 0.0_f32)];
-    let mut pane_instances = vec![Vec::with_capacity(COLS * ROWS); 2];
+    let mut pane_instances: Vec<Vec<_>> = (0..2).map(|_| Vec::with_capacity(COLS * ROWS)).collect();
     for (pane, &(col_offset, row_offset)) in pane_layout.iter().enumerate() {
         for (row_idx, cached) in row_cache.iter().enumerate() {
             apply_row_offset(

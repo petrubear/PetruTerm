@@ -125,7 +125,6 @@ struct AgentRequest<'a> {
 fn build_api_messages<'a>(messages: &'a [ChatMessage]) -> Vec<ApiMessage<'a>> {
     messages
         .iter()
-        .filter(|m| !matches!(m.role, super::ChatRole::Tool(_)))
         .map(|m| ApiMessage {
             role: m.role.as_str(),
             content: &m.content,

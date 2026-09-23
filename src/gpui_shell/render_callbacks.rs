@@ -1,11 +1,5 @@
-// gpui chrome migration (M4c Task 2 review): the five per-frame `Rc`
-// callbacks `render()` hands down into the pane tree and the context
-// menu. Split out of `render.rs` for the 400-line convention -- this
-// block was self-contained (its only input is `cx`, its only output is
-// the five callbacks) and grew `render.rs` to 439 lines once the M4c
-// Task 2 context-menu callbacks (`on_right_click`, `on_context_action`,
-// `on_close_context_menu`) landed alongside the pre-existing
-// `on_focus`/`on_drag` pair.
+// The per-frame `Rc` callbacks `render()` hands down into the pane tree,
+// context menu, tab bar and chat panel.
 //
 // Every closure below holds a WEAK handle (`cx.entity().downgrade()`),
 // exactly what `Context::listener` does internally and for the same
@@ -52,7 +46,7 @@ pub(super) fn build_frame_callbacks(
             drag_view
                 .update(cx, |root, cx| {
                     // Clone the Rc first: `drag_separator` needs `&mut
-                    // self.tab_panes[..]` and `&self.rect_cache`'s
+                    // self.workspaces.active_mut().tab_panes[..]` and `&self.rect_cache`'s
                     // contents at once, which a single `root.` borrow of
                     // both fields can't express.
                     let rects = root.rect_cache.clone();
@@ -225,9 +219,7 @@ pub(super) fn build_frame_callbacks(
 
 /// Tab bar's own right-click callback -- opens the tab-color picker context
 /// menu. Split out from `build_frame_callbacks` above (rather than folded
-/// into its tuple) since it needs its own `cx.entity().downgrade()`, not
-/// one of the five already threaded through `render()`'s pane/context-menu
-/// plumbing; kept here (not `render.rs`) purely for the 400-line convention.
+/// into its tuple) since it needs its own `cx.entity().downgrade()`.
 pub(super) fn build_tab_right_click_callback(
     cx: &mut Context<GpuiShellRoot>,
 ) -> tabs::TabRightClickCallback {

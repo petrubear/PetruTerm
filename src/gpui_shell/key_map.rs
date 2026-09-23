@@ -1,14 +1,9 @@
-// gpui chrome migration: full key-event mapping.
-//
-// M0/M1a's `on_key_down` only forwarded printable characters (see
-// `mod.rs`'s prior history) -- Escape, arrows, Home/End, function keys, and
-// other control sequences never reached the PTY, which blocks anything that
-// needs them (vi, less, readline navigation). This closes that gap.
+// Full key-event mapping to PTY escape sequences.
 //
 // Ported from `crate::app::input::key_map::translate_key` (the wgpu app's
 // proven implementation): same escape sequences, same modifier semantics,
 // but built on gpui's `Keystroke`/`Modifiers` instead of winit's `Key`/
-// `Modifiers` -- `gpui_shell` must not import winit (see `mod.rs`'s
+// `Modifiers` -- `gpui_shell` must not import winit (see `spawn_terminal.rs`'s
 // `spawn_terminal` doc comment for why), so this is a genuine port, not a
 // shared function.
 

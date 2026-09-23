@@ -1,5 +1,7 @@
-/// Cell flag bits for the `flags` field in `CellVertex`.
-/// Used by the GPU shader to select rendering mode.
+// Cell flag bits for the `flags` field in `CellVertex`.
+// Used by the GPU shader to select rendering mode.
+
+/// Cursor quad: bg pass draws a partial-cell rect from glyph_offset/glyph_size.
 pub const FLAG_CURSOR: u32 = 0x08;
 /// LCD subpixel AA glyph (3× horizontal resolution in atlas).
 pub const FLAG_LCD: u32 = 0x10;
@@ -25,7 +27,7 @@ pub struct CellVertex {
     pub glyph_offset: [f32; 2],
     /// Glyph size [w, h] in pixels.
     pub glyph_size: [f32; 2],
-    /// Cell flags bit field: 0x1 = wide char, 0x2 = underline, 0x4 = strikethrough.
+    /// Bit field of FLAG_* constants above.
     pub flags: u32,
     /// Padding to align to 16 bytes.
     pub _pad: u32,

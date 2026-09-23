@@ -1,12 +1,7 @@
-// gpui chrome migration (M4a Task 2): the command palette's render tree and
-// its own keyboard guard. State (`CommandPalette`) is reused directly from
-// `crate::ui::palette` -- see `mod.rs`'s own doc comment on the `palette`
-// field for why. This file owns everything that touches gpui: rendering,
-// the Up/Down key guard (Enter/Escape route through `palette_query`'s own
-// `Submit`/`Cancel` actions and the `cx.subscribe` callback in `mod.rs`
-// instead -- see that subscribe's own doc comment), and (this task only)
-// a small interim action dispatch. Task 3 (`palette_dispatch.rs`) replaces
-// the interim dispatch and the interim item list with the real, full ones.
+// The command palette's render tree and its Up/Down key guard. State
+// (`CommandPalette`) is reused from `crate::ui::palette`. Enter/Escape route
+// through `palette_query`'s `Submit`/`Cancel` actions and the `cx.subscribe`
+// callback in `construct.rs`.
 
 use gpui::{
     div, prelude::*, px, rgba, App, Context, Entity, Focusable, FontWeight, KeyDownEvent,
@@ -140,17 +135,14 @@ impl GpuiShellRoot {
     }
 
     /// The palette's own key guard, called from `input.rs`'s `on_key_down`
-    /// as its very first statement -- moved here (out of `input.rs` itself)
-    /// to keep that file under the 400-line convention, the same class of
-    /// fix M3d's `sidebar_nav.rs` split already established for an
-    /// identical overshoot. Returns `true` if the key was consumed (the
+    /// as its very first statement. Returns `true` if the key was consumed (the
     /// query field held focus), telling the caller to `return` early.
     ///
     /// The palette's query field intercepts Up/Down directly. Enter/Escape
     /// are NOT handled here -- `TextInput`'s own `"TextInput"`-scoped key
     /// bindings (`text_input/mod.rs`) consume those as its own
     /// `Submit`/`Cancel` actions before this bubble listener ever sees
-    /// them; `mod.rs`'s `cx.subscribe` callback on `palette_query` is where
+    /// them; `construct.rs`'s `cx.subscribe` callback on `palette_query` is where
     /// this struct reacts to them instead. Keyed on real focus, not
     /// `self.palette.visible`: unlike `InfoOverlay`, the palette's query
     /// field is a genuine focus-grabbing `TextInput`, so it follows the

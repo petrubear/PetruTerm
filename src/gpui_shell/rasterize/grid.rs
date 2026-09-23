@@ -1,14 +1,7 @@
-// gpui chrome migration (TD-GPUI-03 split): `rasterize_grid` itself --
-// cosmic-text rasterization of the terminal grid into an RGBA bitmap, using
-// the frame cache (`cache.rs`) to skip re-rasterizing/re-uploading when the
-// grid hasn't changed. Split out of the single `rasterize.rs` (M1b) for the
-// 400-line convention. `rasterize_grid`'s own body is broken into three
-// private helpers along already-documented phase boundaries the original
-// function's own comments called out: `fill_cell_backgrounds` and
-// `build_shaping_spans` stay here, `draw_glyphs` (the biggest phase) is
-// `glyphs.rs` -- this file was still over 400 lines with it inline. Pure
-// code motion throughout, no logic changed, same computation order, same
-// parameters threaded through by reference.
+// `rasterize_grid`: cosmic-text rasterization of the terminal grid into an
+// RGBA bitmap, using the frame cache (`cache.rs`) to skip re-rasterizing
+// when the grid hasn't changed. `build_shaping_spans` is in `spans.rs`,
+// `draw_glyphs` in `glyphs.rs`.
 
 use std::cell::RefCell;
 use std::hash::{Hash, Hasher};
@@ -65,8 +58,8 @@ pub fn rasterize_grid(
             term.selection.as_ref().and_then(|s| s.to_range(term));
 
         // Build a line-indexed search map once — O(matches) — so the
-        // per-cell lookup below is O(1) (TD-PERF-22, ported from the wgpu
-        // build's own `collect_grid_cells`). Keyed on buffer-space grid
+        // per-cell lookup below is O(1) (same as `Mux::collect_grid_cells_for`).
+        // Keyed on buffer-space grid
         // line (matching `SearchMatch::grid_line`'s own semantics
         // directly, the same space `cell.point.line.0` below is in before
         // any viewport conversion) — no coordinate translation needed.
@@ -86,13 +79,8 @@ pub fn rasterize_grid(
                 rustc_hash::FxHashMap::default()
             };
 
-        // See `viewport_row`'s doc comment: `display_iter`'s cell line
-        // numbers are buffer-space, not viewport-space, whenever
-        // `display_offset > 0` -- using them as row indices directly (this
-        // file's previous behaviour) drops the scrolled-back view's topmost
-        // rows and misfiles the rest, leaving the bottom of the screen
-        // blank. Invisible at `display_offset == 0`, the only case this
-        // file was exercised under before scrolling existed (Task 6).
+        // `display_iter`'s cell line numbers are buffer-space, not
+        // viewport-space, whenever `display_offset > 0` -- see `viewport_row`.
         let display_offset = content.display_offset;
 
         // Ligatures (e.g. `->`, `==`) only exist as a shaper decision across
@@ -130,8 +118,7 @@ pub fn rasterize_grid(
             });
             let (fg, bg) = resolve_cell_colors(cell.fg, cell.bg, cell.flags, in_selection, colors);
             // Search highlight overrides selection, not the reverse --
-            // matches the wgpu build's own priority order in
-            // `collect_grid_cells`.
+            // matches `Mux::collect_grid_cells_for`'s priority order.
             let (fg, bg) =
                 search_highlight_at(cell.point.line.0, col, &search_idx).unwrap_or((fg, bg));
             let style = CellStyle {
@@ -144,12 +131,10 @@ pub fn rasterize_grid(
         let cell_w_px = f32::from(cell_width) * scale;
         let cell_h_px = f32::from(cell_height) * scale;
         // Must exactly match the destination rect `terminal_element.rs`'s
-        // `paint()` passes to `Window::paint_image` for this bitmap. Since
-        // M2 (`TerminalGridElement::request_layout` now requests
-        // `relative(1.0)` -- a pane's element fills whatever size the flex
-        // tree gives it, not a fixed `cell_width * cols` -- that call site
-        // no longer uses its own full `bounds` as the image's destination
-        // rect; it explicitly clamps to `cell_width * cols` x
+        // `paint()` passes to `Window::paint_image` for this bitmap.
+        // `TerminalGridElement::request_layout` requests `relative(1.0)`, so
+        // that call site doesn't use its full `bounds` as the image's
+        // destination rect; it explicitly clamps to `cell_width * cols` x
         // `cell_height * rows` (the same values this function computes) so
         // the two always agree regardless of leftover fractional-cell space
         // in the pane's actual layout rect. `paint_image` then scales
@@ -158,8 +143,8 @@ pub fn rasterize_grid(
         // -- verified against gpui 0.2.2's `window.rs`/`geometry.rs`); this
         // file mirrors that exact rounding order (multiply-by-scale, THEN
         // `.ceil()`, not the reverse) so the two computations can never
-        // disagree by even one device pixel -- a real disagreement here
-        // (found and fixed once already, in M1b) forces the GPU to stretch
+        // disagree by even one device pixel -- a disagreement here
+        // forces the GPU to stretch
         // the uploaded texture to fit a differently-sized target rect,
         // which blurs/smears hardest exactly at sharp color edges (glyph
         // boundaries, cell/pill transitions) while staying invisible in
@@ -229,22 +214,8 @@ pub fn rasterize_grid(
                 let mut buffer = Buffer::new(font_system, metrics);
 
                 // Whole grid, ONE multi-line buffer: rows are joined with
-                // '\n' into a single span list and shaped/drawn in one pass
-                // (`set_rich_text` + `shape_until_scroll` + `draw`, each
-                // called exactly once), matching the pre-M1b structure this
-                // file replaced (`grid_rows.join("\n")` into one buffer).
-                // Shaping each row as its own independent single-line buffer
-                // in a loop — the previous structure here — was the actual
-                // regression that produced fragmented/split Nerd Font icon
-                // glyphs: resetting the buffer to a fresh single line 24
-                // times and manually offsetting each row's glyph Y by
-                // `row_idx * cell_height` doesn't necessarily line up with
-                // cosmic-text's own ascent/descent/baseline placement for a
-                // "fresh single line", which clips or misplaces glyphs that
-                // sit close to the edges of their nominal cell height (Nerd
-                // Font icons especially). Shaping the whole grid as one
-                // buffer lets cosmic-text compute line positions itself, the
-                // same way the pre-M1b code did.
+                // '\n' and shaped/drawn in one pass so cosmic-text places
+                // lines itself (per-row buffers clip Nerd Font icons).
                 //
                 // Spans still split ONLY on (bold, italic), never on color —
                 // color must never fragment shaping (see `attrs_for`'s doc
@@ -318,8 +289,7 @@ pub fn rasterize_grid(
             )
         });
         // Explicitly free the previous frame's sprite-atlas entry — gpui's
-        // atlas is insert-only otherwise, which is the root cause of the M0
-        // leak this cache fixes.
+        // atlas is insert-only otherwise (see `cache.rs`).
         if let Some(old_frame) = old {
             let _ = window.drop_image(old_frame.image);
         }
