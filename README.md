@@ -130,7 +130,7 @@ return config
 
 | Key                       | Type     | Default                                                                | Description                                                                                                          |
 | ------------------------- | -------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `config.font`             | string   | `"JetBrainsMono Nerd Font Mono, Monolisa Nerd Font, Fira Code, Menlo"` | Font family name. Use `petruterm.font("A, B, C")` to resolve the first installed family from a comma-separated list. |
+| `config.font`             | string   | `"MonolisaCode Nerd Font, JetBrainsMono Nerd Font Mono, Monolisa Nerd Font, Fira Code, Menlo"` | Font family name. Use `petruterm.font("A, B, C")` to resolve the first installed family from a comma-separated list. |
 | `config.font_size`        | number   | `16`                                                                   | Font size in points.                                                                                                 |
 | `config.font_line_height` | number   | `1.4`                                                                  | Line-height multiplier.                                                                                              |
 | `config.font_features`    | string[] | `{"calt=1","liga=1","dlig=1"}`                                         | HarfBuzz OpenType feature tags.                                                                                      |

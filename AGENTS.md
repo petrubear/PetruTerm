@@ -126,7 +126,7 @@ the full phase history.
 - The wgpu renderer reads cells from alacritty_terminal's grid and maps them to GPU vertices
 - Lua config is re-evaluated in full on file change and the whole `Config` is swapped; dependent state (keybind maps, palette, metrics) is then rebuilt
 - LLM features are entirely optional and can be disabled via `config.llm.enabled = false`
-- Default theme: Dracula Pro. Default font: JetBrainsMono Nerd Font Mono (then Monolisa Nerd Font, Fira Code, Menlo)
+- Default theme: PetruTheme Dark (inline in ui.lua). Default font: MonolisaCode Nerd Font (then JetBrainsMono Nerd Font Mono, Monolisa Nerd Font, Fira Code, Menlo)
 - macOS only; no cross-platform target currently planned
 - Building either binary requires full Xcode.app, not just Command Line Tools — `gpui`'s build
   script needs the `metal` shader compiler, which CLT does not ship

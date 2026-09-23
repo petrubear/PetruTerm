@@ -23,14 +23,14 @@ function module.apply_to_config(config)
       -- this machine, the SDK reuses those credentials and env can stay empty.
       -- Otherwise set your key here (or export ANTHROPIC_API_KEY in your shell).
       env          = {},          -- e.g. { ANTHROPIC_API_KEY = "sk-ant-..." }
-      display_name = nil,         -- override label in chat panel header (nil = command basename)
+      display_name = "Claude",    -- label in chat panel header (nil = command basename)
     },
     -- Fallback package name if the one above fails to resolve via npx:
     -- "@zed-industries/claude-code-acp" (older name, still the hardcoded
     -- default in the agent-client-protocol-tokio crate this project vendors).
 
     provider = "openrouter",                               -- "openrouter" | "ollama" | "lmstudio" | "copilot"
-    model    = "meta-llama/llama-3.1-8b-instruct:free",   -- Free model for testing
+    model    = "openai/gpt-5.6-luna",
     api_key  = os.getenv("OPENROUTER_API_KEY"),            -- Or paste key directly (not recommended)
     base_url = nil,                                        -- nil = use provider default
 

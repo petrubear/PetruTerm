@@ -4,9 +4,9 @@ local module = {}
 
 function module.apply_to_config(config)
   -- Number of lines kept in terminal scrollback history.
-  -- Each terminal uses ~200 B/line; 5 000 lines ≈ 1 MB per pane.
-  -- With 20 panes open that is ~20 MB. Raise carefully: 50 000 = ~200 MB total.
-  config.scrollback_lines  = 5000
+  -- Each terminal uses ~200 B/line; 10 000 lines ≈ 2 MB per pane.
+  -- With 20 panes open that is ~40 MB. Raise carefully: 50 000 = ~200 MB total.
+  config.scrollback_lines  = 10000
 
   -- Show a scroll position indicator on the right edge of the terminal.
   config.enable_scroll_bar = true
@@ -25,8 +25,8 @@ function module.apply_to_config(config)
 
   -- Show dirty indicator (*) next to the git branch name in the status bar.
   -- Requires running `git status --porcelain` every 5 s — costs an extra subprocess.
-  -- Enable if you want the indicator; leave false to save CPU/battery.
-  config.status_bar.git_dirty_check = false
+  -- Set to false to save CPU/battery.
+  config.status_bar.git_dirty_check = true
 
   -- Battery saver mode: "auto" | "always" | "never"
   -- "auto": when on battery, disables git_dirty_check, extends git poll TTL to 60 s,

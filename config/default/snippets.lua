@@ -10,6 +10,9 @@ local module = {}
 
 function module.apply_to_config(config)
     config.snippets = {
+        -- Build
+        { name = "Maven clean install",  body = "mvn clean install -DskipTests ",             trigger = "mci" },
+
         -- Version control
         { name = "git log graph",        body = "git log --oneline --graph --decorate --all", trigger = "gla" },
         { name = "git status short",     body = "git status -s",                              trigger = "gss" },
