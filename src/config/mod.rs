@@ -356,9 +356,8 @@ mod tests {
             .collect();
         preloaded.push(("keybinds", normal_keybinds.as_str()));
 
-        let (config, _lua) =
-            lua::load_config_str(DEFAULT_CONFIG, "default/config.lua", &preloaded)
-                .expect("embedded default config with keybind_style=normal must load");
+        let (config, _lua) = lua::load_config_str(DEFAULT_CONFIG, "default/config.lua", &preloaded)
+            .expect("embedded default config with keybind_style=normal must load");
         assert_eq!(config.keybind_style, schema::KeybindStyle::Normal);
         assert_eq!(config.keys.len(), 23);
         assert!(config
