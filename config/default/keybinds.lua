@@ -5,6 +5,11 @@
 -- keybind_style = "normal": direct macOS Cmd-combos, no leader key at all
 --   (Ctrl+F passes through to the shell instead of activating a leader).
 --
+-- WARNING: keybind_style must be set HERE, in this file -- setting it in config.lua or
+-- elsewhere has no effect (this file's apply_to_config always sets it) and silently disables
+-- ALL keybinds (leader and direct). This file is version-managed: PetruTerm overwrites your
+-- customized copy whenever the bundled default's version bumps, resetting this back to "tmux".
+--
 -- System keybinds that remain hardcoded regardless of style (not configurable here):
 --   Cmd+C / Cmd+V   — copy / paste (clipboard)
 --   Cmd+Q           — quit
@@ -72,22 +77,22 @@ function module.apply_to_config(config)
     config.keys = {
       -- ── Tabs ────────────────────────────────────────────────────────────
       { mods = "CMD",         key = "t", action = petruterm.action.NewTab },
-      { mods = "CMD|SHIFT",   key = "w", action = petruterm.action.CloseTab },
+      { mods = "CMD|SHIFT",   key = "W", action = petruterm.action.CloseTab },
       { mods = "CMD",         key = "]", action = petruterm.action.NextTab },
       { mods = "CMD",         key = "[", action = petruterm.action.PrevTab },
-      { mods = "CMD|SHIFT",   key = "r", action = petruterm.action.RenameTab },
+      { mods = "CMD|SHIFT",   key = "R", action = petruterm.action.RenameTab },
 
       -- ── Panes ───────────────────────────────────────────────────────────
       { mods = "CMD",         key = "w", action = petruterm.action.ClosePane },
       { mods = "CMD",         key = "d", action = petruterm.action.SplitVertical },
-      { mods = "CMD|SHIFT",   key = "d", action = petruterm.action.SplitHorizontal },
-      { mods = "CMD|SHIFT",   key = "m", action = petruterm.action.ZoomPane },
+      { mods = "CMD|SHIFT",   key = "D", action = petruterm.action.SplitHorizontal },
+      { mods = "CMD|SHIFT",   key = "M", action = petruterm.action.ZoomPane },
 
       -- ── Overlays ────────────────────────────────────────────────────────
-      { mods = "CMD|SHIFT",   key = "p", action = petruterm.action.CommandPalette },
+      { mods = "CMD|SHIFT",   key = "P", action = petruterm.action.CommandPalette },
 
       -- ── AI controls ─────────────────────────────────────────────────────
-      { mods = "CMD|SHIFT",   key = "a", action = petruterm.action.FocusAiPanel },
+      { mods = "CMD|SHIFT",   key = "A", action = petruterm.action.FocusAiPanel },
       { mods = "CMD|OPTION",  key = "a", action = petruterm.action.ToggleAiPanel },
       { mods = "CMD|OPTION",  key = "c", action = petruterm.action.ClearAiContext },
       { mods = "CMD|OPTION",  key = "e", action = petruterm.action.ExplainLastOutput },
@@ -95,13 +100,13 @@ function module.apply_to_config(config)
       { mods = "CMD|OPTION",  key = "z", action = petruterm.action.UndoLastWrite },
 
       -- ── Workspaces ──────────────────────────────────────────────────────
-      { mods = "CMD|SHIFT",   key = "n", action = petruterm.action.NewWorkspace },
-      { mods = "CMD|SHIFT",   key = "x", action = petruterm.action.CloseWorkspace },
+      { mods = "CMD|SHIFT",   key = "N", action = petruterm.action.NewWorkspace },
+      { mods = "CMD|SHIFT",   key = "X", action = petruterm.action.CloseWorkspace },
       { mods = "CMD|OPTION",  key = "r", action = petruterm.action.RenameWorkspace },
-      { mods = "CMD|SHIFT",   key = "]", action = petruterm.action.NextWorkspace },
-      { mods = "CMD|SHIFT",   key = "[", action = petruterm.action.PrevWorkspace },
-      { mods = "CMD|SHIFT",   key = "s", action = petruterm.action.SaveWorkspace },
-      { mods = "CMD|SHIFT",   key = "o", action = petruterm.action.OpenSavedWorkspaces },
+      { mods = "CMD|SHIFT",   key = "}", action = petruterm.action.NextWorkspace },
+      { mods = "CMD|SHIFT",   key = "{", action = petruterm.action.PrevWorkspace },
+      { mods = "CMD|SHIFT",   key = "S", action = petruterm.action.SaveWorkspace },
+      { mods = "CMD|SHIFT",   key = "O", action = petruterm.action.OpenSavedWorkspaces },
     }
   end
 end

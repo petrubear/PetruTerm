@@ -79,28 +79,9 @@ pub struct InputHandler {
 
 impl InputHandler {
     pub fn new(config: &Config) -> Self {
-        let leader_view = crate::config::keybind_view::leader_bindings_view(config);
-        let leader_map = leader_view
-            .bindings
-            .iter()
-            .filter_map(|kb| {
-                let action = kb.action.parse::<Action>().ok()?;
-                Some((kb.key.clone(), action))
-            })
-            .collect();
-
-        let direct_view = crate::config::keybind_view::direct_bindings_view(config);
-        let direct_map = direct_view
-            .bindings
-            .iter()
-            .filter_map(|kb| {
-                let action = kb.action.parse::<Action>().ok()?;
-                let mods = crate::config::keybind_view::parse_mods(&kb.mods);
-                Some(((mods, kb.key.clone()), action))
-            })
-            .collect();
-
-        Self {
+        let leader_map = HashMap::new();
+        let direct_map = HashMap::new();
+        let mut handler = Self {
             modifiers: Modifiers::default(),
             leader_active: false,
             leader_deadline: None,
@@ -125,7 +106,35 @@ impl InputHandler {
             input_echo: String::new(),
             last_key_instant: None,
             leader_prefix: None,
-        }
+        };
+        handler.rebuild_keybind_maps(config);
+        handler
+    }
+
+    /// (Re)builds `leader_map` and `direct_map` from `config.keys`. Called once from `new()`
+    /// and again on every hot-reload (`app_state.rs::check_config_reload`) so an edited
+    /// `keybinds.lua` -- including a `keybind_style` switch -- takes effect without a restart.
+    pub fn rebuild_keybind_maps(&mut self, config: &Config) {
+        let leader_view = crate::config::keybind_view::leader_bindings_view(config);
+        self.leader_map = leader_view
+            .bindings
+            .iter()
+            .filter_map(|kb| {
+                let action = kb.action.parse::<Action>().ok()?;
+                Some((kb.key.clone(), action))
+            })
+            .collect();
+
+        let direct_view = crate::config::keybind_view::direct_bindings_view(config);
+        self.direct_map = direct_view
+            .bindings
+            .iter()
+            .filter_map(|kb| {
+                let action = kb.action.parse::<Action>().ok()?;
+                let mods = crate::config::keybind_view::parse_mods(&kb.mods);
+                Some(((mods, kb.key.clone()), action))
+            })
+            .collect();
     }
 
     /// Update click count for multi-click detection. Returns 1 / 2 / 3+ based on timing and position.
@@ -229,6 +238,7 @@ impl InputHandler {
         let cmd = self.modifiers.state().super_key();
         let ctrl = self.modifiers.state().control_key();
         let shift = self.modifiers.state().shift_key();
+        let option = self.modifiers.state().alt_key();
 
         // ── Pane resize mode — hold Option + press arrows to resize ──────────
         // Activated by <leader>+Option+Arrow. Active while Option is held;
@@ -261,20 +271,20 @@ impl InputHandler {
         }
 
         // ── Direct (non-leader) keybind dispatch — "normal" keybind style ──
-        // Inert under "tmux" style: direct_map is empty there (keybinds.lua's
-        // tmux table has no non-LEADER entries), so this never matches.
-        if let Key::Character(s) = &event.logical_key {
-            let mods = crate::config::keybind_view::Mods {
-                cmd,
-                shift,
-                ctrl,
-                option: self.modifiers.state().alt_key(),
-            };
-            if let Some(action) = self.direct_map.get(&(mods, s.to_string())).cloned() {
-                if let Some(rc) = render_ctx.as_mut() {
-                    ui.handle_palette_action(action, mux, rc, config, window, wakeup_proxy);
+        if config.keybind_style == crate::config::schema::KeybindStyle::Normal {
+            if let Key::Character(s) = &event.logical_key {
+                let mods = crate::config::keybind_view::Mods {
+                    cmd,
+                    shift,
+                    ctrl,
+                    option,
+                };
+                if let Some(action) = self.direct_map.get(&(mods, s.to_string())).cloned() {
+                    if let Some(rc) = render_ctx.as_mut() {
+                        ui.handle_palette_action(action, mux, rc, config, window, wakeup_proxy);
+                    }
+                    return;
                 }
-                return;
             }
         }
 
@@ -283,10 +293,10 @@ impl InputHandler {
         // hardcoded to match the existing tmux-style sidebar toggle
         // (`leader s` / `leader e e`), which is ALSO hardcoded, not
         // config-driven, today. Cmd+Option/Ctrl+Arrow are Key::Named, never
-        // Key::Character, so they can't be config.keys entries at all (see
-        // this plan's "Corrections to the spec").
+        // Key::Character, so they can't be config.keys entries at all
+        // (arrow keys arrive as Key::Named, never Key::Character, and
+        // KeyBind.key only ever matches a character).
         if config.keybind_style == crate::config::schema::KeybindStyle::Normal {
-            let option = self.modifiers.state().alt_key();
             if cmd && !shift && !ctrl && !option {
                 if let Key::Character(s) = &event.logical_key {
                     if s.as_str() == "b" {

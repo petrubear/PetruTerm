@@ -1,5 +1,20 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- `config.keybind_style = "tmux" | "normal"` (set in `keybinds.lua`, default `"tmux"`) — `"normal"`
+  gives the `petruterm` (wgpu) binary direct macOS Cmd-combo keybindings (Cmd+T new tab, Cmd+W
+  close pane, Cmd+Shift+P command palette, etc. — see `keybinds.lua`'s own "normal" table for the
+  full list) as an alternative to the default leader-key/tmux-style scheme.
+
+### Changed
+- `keybinds.lua`'s managed-file version bumped 3 → 4 as part of the above — this resets any
+  already-installed `~/.config/petruterm/keybinds.lua` customization back to the new bundled
+  default on next launch (existing mechanism, not new, but worth calling out here).
+
+---
+
 ## [1.0.2] — 2026-09-22
 
 ### Added

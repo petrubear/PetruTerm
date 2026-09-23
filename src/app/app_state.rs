@@ -146,6 +146,7 @@ impl App {
                 self.ui.panel_mut().dirty = true;
                 self.ui.ai_block.dirty = true;
                 self.ui.palette.rebuild_keybinds(&self.config);
+                self.input.rebuild_keybind_maps(&self.config);
                 self.ui.palette.rebuild_snippets(&self.config.snippets);
                 self.ui
                     .rewire_backend(&self.config, self.wakeup_proxy.clone());
