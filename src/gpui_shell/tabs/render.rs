@@ -103,16 +103,8 @@ pub fn render_tab_bar(
                 )
             };
             if is_active {
-                // Status-bar-style pill: a custom-colored tab gets a
-                // darkened tint of its own accent. Clamped in HSL space
-                // (fixed lightness, hue/saturation kept) rather than a flat
-                // `RGB * factor` scale-down -- the theme's tab swatches
-                // (`brights[1..7]`, dracula-pro.lua) are all very light
-                // pastels, so scaling their RGB toward black shrinks every
-                // channel by the same proportion and the results collapse
-                // into near-identical dark blobs.
-                // Pinning lightness instead keeps each swatch's actual hue
-                // doing the differentiating work. A plain tab with no
+                // Status-bar-style pill: a custom-colored tab gets its accent
+                // scaled down by `ACTIVE_TAB_TINT_FACTOR`. A plain tab with no
                 // custom color keeps the neutral highlight instead of every
                 // default active tab turning theme-accent purple.
                 let (bg, fg) = match tab.accent_color {
@@ -180,72 +172,15 @@ pub fn render_tab_bar(
         .child(divider)
 }
 
-/// Fixed lightness an active custom-colored tab's pill is tinted to,
-/// regardless of the source swatch's own lightness -- see
-/// `render_tab_bar`'s call site for why a flat RGB scale-down isn't enough.
-const ACTIVE_TAB_TINT_LIGHTNESS: f32 = 0.16;
+/// Flat RGB scale-down of the accent, same factor as the status bar's
+/// `darken(_, 0.15)` segment backgrounds.
+const ACTIVE_TAB_TINT_FACTOR: f32 = 0.15;
 
-/// Recolor `(r, g, b)` (0.0-1.0 each) to `ACTIVE_TAB_TINT_LIGHTNESS`,
-/// keeping its hue and saturation. A minimal local RGB<->HSL round trip
-/// (gpui has no public conversion for this) -- standard formulas, e.g.
-/// https://www.w3.org/TR/css-color-3/#hsl-color.
 fn tab_pill_tint(r: f32, g: f32, b: f32) -> Rgba {
-    let max = r.max(g).max(b);
-    let min = r.min(g).min(b);
-    let l = (max + min) / 2.0;
-    let (h, s) = if (max - min).abs() < f32::EPSILON {
-        (0.0, 0.0)
-    } else {
-        let d = max - min;
-        let s = if l > 0.5 {
-            d / (2.0 - max - min)
-        } else {
-            d / (max + min)
-        };
-        let h = if max == r {
-            (g - b) / d + if g < b { 6.0 } else { 0.0 }
-        } else if max == g {
-            (b - r) / d + 2.0
-        } else {
-            (r - g) / d + 4.0
-        };
-        (h / 6.0, s)
-    };
-
-    fn hue_to_channel(p: f32, q: f32, mut t: f32) -> f32 {
-        if t < 0.0 {
-            t += 1.0;
-        }
-        if t > 1.0 {
-            t -= 1.0;
-        }
-        if t < 1.0 / 6.0 {
-            return p + (q - p) * 6.0 * t;
-        }
-        if t < 0.5 {
-            return q;
-        }
-        if t < 2.0 / 3.0 {
-            return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
-        }
-        p
+    Rgba {
+        r: r * ACTIVE_TAB_TINT_FACTOR,
+        g: g * ACTIVE_TAB_TINT_FACTOR,
+        b: b * ACTIVE_TAB_TINT_FACTOR,
+        a: 1.0,
     }
-
-    let l = ACTIVE_TAB_TINT_LIGHTNESS;
-    let (r, g, b) = if s == 0.0 {
-        (l, l, l)
-    } else {
-        let q = if l < 0.5 {
-            l * (1.0 + s)
-        } else {
-            l + s - l * s
-        };
-        let p = 2.0 * l - q;
-        (
-            hue_to_channel(p, q, h + 1.0 / 3.0),
-            hue_to_channel(p, q, h),
-            hue_to_channel(p, q, h - 1.0 / 3.0),
-        )
-    };
-    Rgba { r, g, b, a: 1.0 }
 }
