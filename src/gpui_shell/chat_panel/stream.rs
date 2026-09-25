@@ -243,6 +243,7 @@ impl GpuiShellRoot {
                 self.chat.panel.matched_skill.as_deref(),
                 &text,
                 &self.chat.panel.attached_files,
+                self.active_shell_pid(),
             );
             self.chat.panel.set_input(text);
             self.chat.submit(addendum, &self.tokio_rt, cx);

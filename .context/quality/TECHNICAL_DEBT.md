@@ -1,8 +1,8 @@
 # Technical Debt Registry
 
 **Last Updated:** 2026-09-23
-**Open Items:** 10 (AUDIT-BUG-01..10, ver abajo)
-**Critical (P0):** 0 | **P1:** 2 | **P2:** 3 | **P3:** 5 (AUDIT-BUG-01..10, 2026-09-23) | **gpui M5/M3:** 0 (TD-GPUI-01..06 + ACP todos RESUELTOS, 2026-09-17) | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 4
+**Open Items:** 5 (AUDIT-BUG-06..10, ver abajo)
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 5 (AUDIT-BUG-06..10, 2026-09-23) | **gpui M5/M3:** 0 (TD-GPUI-01..06 + ACP todos RESUELTOS, 2026-09-17) | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 4
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
 
@@ -101,24 +101,9 @@ GRAPH-ARCH-01 — COMPLETA (2026-07-25). Loose ends: GRAPH-ARCH-01-A/B/C (backlo
 
 ## P1 — Alta prioridad
 
-**AUDIT-BUG-01** — ABIERTO (2026-09-23). `McpClient::connect()` (`src/llm/mcp/client.rs`) spawnea
-el proceso del servidor MCP con `.kill_on_drop(true)`, pero el `tokio::process::Child` es una
-variable local de la función y nunca se guarda en el struct. Se dropea en cuanto `connect()`
-retorna, lo que mata el proceso del servidor justo después del handshake `initialize` y
-`tools/list`. Resultado: cualquier `call_tool` posterior falla porque el proceso ya no corre.
-Rompe silenciosamente el tool-calling del backend "provider" y el listado de tools de la sidebar
-para cualquier servidor MCP configurado. Fix: guardar el `Child` en `McpClient` (nuevo campo,
-p.ej. `_child: tokio::process::Child`) para que el `kill_on_drop` se dispare solo cuando el
-cliente real se dropea.
+**AUDIT-BUG-01** — RESUELTO (2026-09-24). `McpClient` ahora guarda el `tokio::process::Child` en un campo `_child`, así que `kill_on_drop` solo se dispara cuando el cliente se dropea, no al retornar `connect()`. Test de regresión `server_survives_connect_and_serves_tool_calls` (servidor MCP falso en python3). `src/llm/mcp/client.rs`.
 
-**AUDIT-BUG-02** — ABIERTO (2026-09-23). `ShellContext::load()` (`src/llm/shell_context.rs`) lee
-únicamente el archivo global legado `shell-context.json`. La integración de shell actual
-(`scripts/shell-integration.zsh`, v2) escribe solo archivos por-PID (`shell-context-$$.json`);
-nada escribe ya el archivo global. Como resultado, el contexto de shell (CWD, último comando,
-exit code) que se supone se inyecta en cada query de AI nunca llega — la función que todos los
-call sites llaman (`app/ui/mod.rs`, `gpui_shell/ai_block.rs`, `gpui_shell/ai_actions.rs`,
-`llm/prompt_context.rs`) siempre encuentra el archivo global ausente. Fix: cambiar esos call
-sites a `load_for_pid`, que sí lee el archivo correcto.
+**AUDIT-BUG-02** — RESUELTO (2026-09-24). Se eliminó `ShellContext::load()` (leía el archivo global legado que nada escribe). Todos los call sites usan `load_for_pid` con el PID del shell del pane activo: `Mux::active_shell_pid()` / `GpuiShellRoot::active_shell_pid()`, pasado como `shell_pid: Option<u32>` a `build_prompt_addendum`, `UiManager::submit_ai_query`/`submit_ai_block_query` y `AiBlockView::submit`; `fix_last_error` (ambos binarios) lo resuelve directo.
 
 **AUDIT-PERF-08** — RESUELTO (2026-05-22). `GpuRenderer::render()` re-bindea `uniform_bind_group`, `atlas_bind_group` y `instance_buffer` para `bg_pipeline` y `cell_pipeline` tanto en main como en overlay aunque los recursos no cambian dentro del mismo render pass. `src/renderer/gpu.rs:448-457, 477-486`. Esto aumenta validación del driver, tráfico de comandos GPU y CPI del render loop; conviene encapsular el draw en un helper que haga bind una sola vez por bloque.
 
@@ -146,30 +131,11 @@ sites a `load_for_pid`, que sí lee el archivo correcto.
 
 ## P2 — Prioridad media
 
-**AUDIT-BUG-03** — ABIERTO (2026-09-23). El binario `gpui-petruterm` ignora
-`config.keybind_style` por completo (`src/gpui_shell` no tiene grep hits para ese campo ni para
-`direct_bindings_view`); siempre usa el esquema de leader tmux-style, aunque el usuario haya
-puesto `keybind_style = "normal"` en `keybinds.lua`. Además, varias acciones que el wgpu binary sí
-soporta faltan en el dispatch de gpui: `LeaderAction::try_from` no tiene rama para
-`"FocusAiPanel"` (así que `Leader A` cae al sub-prefijo AI en vez de mover foco), y
-`ClearAiContext` (`Leader a c`) y `NewWorkspace`/`SaveWorkspace`/`OpenSavedWorkspaces` bajo el
-prefijo `W` (`Leader W n/s/L`) no están cableados en `gpui_shell/input.rs`. AGENTS.md y README ya
-documentan estas brechas como "wgpu binary only"; queda pendiente decidir si se portan a gpui o se
-aceptan como diferencia permanente entre binarios.
+**AUDIT-BUG-03** — CERRADO COMO DIFERENCIA ACEPTADA (2026-09-24). Decisión del usuario: NO portar a gpui `keybind_style`, `Leader A`, `Leader a c` ni `Leader W n/s/L`. Son diferencias permanentes entre binarios (AGENTS.md y README ya las documentan como "wgpu binary only"). Consecuencia: los hints `^F W n/s/L` de la palette son engañosos en gpui (ver AUDIT-BUG-09).
 
-**AUDIT-BUG-04** — ABIERTO (2026-09-23). En `gpui_shell/palette_dispatch.rs`, elegir una rama en
-el selector de branches (`branch_picker.rs`) emite `Action::GitCheckout(b)`, que no está
-manejado por el filtro de acciones del palette ni por `dispatch_palette_action` — cae al brazo
-`_ => {}`. Resultado: seleccionar una rama en el picker de gpui no hace nada. El binario wgpu sí
-lo maneja (`app/ui/mod.rs:1592`). Fix: agregar el brazo `GitCheckout` al dispatch de gpui (llamar
-al mismo helper de checkout que ya existe para el binario wgpu, o portar su lógica).
+**AUDIT-BUG-04** — RESUELTO (2026-09-24). `Action::GitCheckout` ahora se acepta en `gpui_shell_actions` y tiene brazo en `dispatch_palette_action`; nuevo `GpuiShellRoot::git_checkout` (`branch_picker.rs`, bloqueante como el del wgpu) y `GitBranchState::invalidate()` para que la status bar refresque la rama de inmediato. Test `invalidate_forces_refetch_within_ttl`.
 
-**AUDIT-BUG-05** — ABIERTO (2026-09-23). `UiManager::remove_terminal_state` (wgpu binary,
-`src/app/ui/mod.rs`) ignora el `_tid` que recibe y aborta el stream de chat AI en curso cada vez
-que se cierra *cualquier* terminal, no solo el que originó la query. Cerrar una pestaña o pane
-sin relación con una conversación de AI activa interrumpe esa conversación. Fix: comparar el id
-del terminal cerrado contra el id que originó el stream actual antes de abortar (o eliminar el
-parámetro si en la práctica solo hay un stream posible a la vez y documentar por qué).
+**AUDIT-BUG-05** — RESUELTO (2026-09-24). Se eliminó `UiManager::remove_terminal_state` y sus 2 call sites (`app/frame.rs`, `app/mod.rs`). El panel de chat es único y global al workspace (`panel_id` siempre 0) y el stream no está asociado a ningún terminal, así que cerrar un terminal nunca debía abortarlo. El stream sigue abortándose al enviar una query nueva.
 
 **AUDIT-ENERGY-05** — RESUELTO (2026-05-22). `poll_low_freq_tasks()` en `impl App` extrae battery poll + git poll (74 líneas) de `about_to_wait()`. Este último queda en 217 líneas, enfocado en scheduling/wakeup. `about_to_wait` sigue siendo llamado por winit pero ya no mezcla lógica de baja frecuencia con la de scheduling.
 
@@ -435,5 +401,5 @@ GRAPH-ARCH-01: COMPLETA (2026-07-25) — LLM domain + keys/leader view + font/ma
 Migración gpui: COMPLETA (2026-09-17) — TD-GPUI-01..06 + TD-GPUI-ACP RESUELTOS, mergeada a master (2026-09-17, gpui-petruterm 1.0.0).
 Watch: AUDIT-CLEAN-02, AUDIT-PERF-10, TD-P9-07, AUDIT-DEP-01
 Backlog abierto (P3): AUDIT-BUG-06..10. GRAPH-ARCH-01-A cerrado no-accionable, GRAPH-ARCH-01-B/C resueltos (2026-09-22).
-Abierto sin resolver (2026-09-23): AUDIT-BUG-01..10 (ver arriba) — P1: 01,02 | P2: 03,04,05 | P3: 06,07,08,09,10.
+Abierto sin resolver: AUDIT-BUG-06..10 (ver arriba), todos P3. AUDIT-BUG-01..05 resueltos/cerrados 2026-09-24.
 ```

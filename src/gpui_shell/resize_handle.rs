@@ -1,5 +1,5 @@
 // A draggable vertical edge for resizing a fixed-width panel (the workspace
-// sidebar).
+// sidebar or the chat drawer).
 //
 // Mirrors `separator.rs`'s own `SeparatorElement`/`DRAGGING_SEPARATOR`
 // almost exactly, and for the same reason that file's own doc comment
@@ -27,24 +27,30 @@ use std::rc::Rc;
 /// turning that into a clamped width and updating its own state.
 pub(super) type ResizeDragCallback = Rc<dyn Fn(Point<Pixels>, &mut Window, &mut App)>;
 
-thread_local! {
-    /// `true` while this handle's drag is in progress. Only one resizable
-    /// panel exists today (the sidebar), so a single flag is enough; a
-    /// second resizable panel would need to key this the way
-    /// `DRAGGING_SEPARATOR` keys on `node_id`.
-    static DRAGGING: Cell<bool> = const { Cell::new(false) };
+/// Which resizable panel a handle belongs to -- keys `DRAGGING` so a drag
+/// on one handle never drives the other's callback.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum ResizeHandleId {
+    Sidebar,
+    Chat,
 }
 
-/// Whether this handle is currently being dragged -- `mouse.rs` can check
+thread_local! {
+    /// The handle whose drag is in progress, if any.
+    static DRAGGING: Cell<Option<ResizeHandleId>> = const { Cell::new(None) };
+}
+
+/// Whether any handle is currently being dragged -- `mouse.rs` can check
 /// this the same way it already checks `pane_view::is_dragging_separator()`,
 /// so an overshoot from this drag into the terminal beside it doesn't also
 /// start or extend a text selection there.
 pub(super) fn is_dragging_resize_handle() -> bool {
-    DRAGGING.with(|d| d.get())
+    DRAGGING.with(|d| d.get().is_some())
 }
 
 /// Paints the grab strip's divider line and owns its drag gesture.
 pub(super) struct ResizeHandleElement {
+    pub id: ResizeHandleId,
     pub color: Rgba,
     pub on_drag: ResizeDragCallback,
 }
@@ -110,7 +116,7 @@ impl Element for ResizeHandleElement {
         // `mouse_position()` at paint time; this element requests no
         // repaint on hover change and the poll loop only notifies on
         // activity, so hover feedback can lag until the next repaint.
-        let dragging = DRAGGING.with(|d| d.get());
+        let dragging = DRAGGING.with(|d| d.get()) == Some(self.id);
         let hovered = bounds.contains(&window.mouse_position());
         if dragging || hovered {
             let line = px(1.0);
@@ -124,6 +130,7 @@ impl Element for ResizeHandleElement {
             window.paint_quad(fill(line_bounds, self.color));
         }
 
+        let id = self.id;
         window.on_mouse_event(move |event: &MouseDownEvent, phase, window, _cx| {
             if phase != DispatchPhase::Bubble || event.button != MouseButton::Left {
                 return;
@@ -131,7 +138,7 @@ impl Element for ResizeHandleElement {
             if !bounds.contains(&event.position) {
                 return;
             }
-            DRAGGING.with(|d| d.set(true));
+            DRAGGING.with(|d| d.set(Some(id)));
             window.refresh();
         });
 
@@ -140,14 +147,14 @@ impl Element for ResizeHandleElement {
             if phase != DispatchPhase::Bubble {
                 return;
             }
-            if !DRAGGING.with(|d| d.get()) {
+            if DRAGGING.with(|d| d.get()) != Some(id) {
                 return;
             }
             if event.pressed_button != Some(MouseButton::Left) {
                 // A release that never reached the mouse-up handler (e.g. it
                 // happened outside the window) -- end the drag rather than
                 // keeping it stuck to the pointer forever.
-                DRAGGING.with(|d| d.set(false));
+                DRAGGING.with(|d| d.set(None));
                 return;
             }
             on_drag(event.position, window, cx);
@@ -157,8 +164,8 @@ impl Element for ResizeHandleElement {
             if phase != DispatchPhase::Bubble || event.button != MouseButton::Left {
                 return;
             }
-            if DRAGGING.with(|d| d.get()) {
-                DRAGGING.with(|d| d.set(false));
+            if DRAGGING.with(|d| d.get()) == Some(id) {
+                DRAGGING.with(|d| d.set(None));
             }
         });
     }

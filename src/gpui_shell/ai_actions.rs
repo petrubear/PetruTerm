@@ -25,7 +25,7 @@ impl GpuiShellRoot {
     /// post-response "Fix last error" pills.
     pub(super) fn fix_last_error(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let output = self.last_terminal_lines(30);
-        let ctx = ShellContext::load();
+        let ctx = self.active_shell_pid().and_then(ShellContext::load_for_pid);
         let query = match &ctx {
             Some(c) if !c.last_command.is_empty() => format!(
                 "The command `{}` failed (exit code {}). Output:\n```\n{output}\n```\nHow do I \
@@ -62,6 +62,7 @@ impl GpuiShellRoot {
             self.chat.panel.matched_skill.as_deref(),
             &query,
             &self.chat.panel.attached_files,
+            self.active_shell_pid(),
         );
         self.chat.panel.set_input(query);
         self.chat
@@ -146,6 +147,13 @@ impl GpuiShellRoot {
     /// (`src/app/mux/mod.rs:611-627`), adapted to read the focused
     /// `Terminal` directly (same style as `blocks.rs`'s
     /// `row_text_and_absolute_row`).
+    /// PID of the focused pane's shell -- keys its per-PID shell-context file.
+    pub(super) fn active_shell_pid(&self) -> Option<u32> {
+        let active_ws = self.workspaces.active();
+        let active_tid = active_ws.tab_panes[active_ws.tabs.active_index()].focused_terminal;
+        self.terminals.get(&active_tid).map(|t| t.child_pid)
+    }
+
     pub(super) fn last_terminal_lines(&self, n: usize) -> String {
         let active_ws = self.workspaces.active();
         let active_tid = active_ws.tab_panes[active_ws.tabs.active_index()].focused_terminal;

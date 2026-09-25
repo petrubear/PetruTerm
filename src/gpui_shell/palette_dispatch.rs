@@ -1,6 +1,6 @@
 // The command palette's action list and dispatch table. Not handled in
 // gpui_shell: theme picker, Enable/DisableAiFeatures, ClearAiContext,
-// TrustLocalMcp, GitCheckout. `gpui_shell_actions` and
+// TrustLocalMcp. `gpui_shell_actions` and
 // `dispatch_palette_action` must stay in sync: every variant filtered in
 // has a real arm below.
 
@@ -49,6 +49,7 @@ pub(super) fn gpui_shell_actions(config: &Config) -> Vec<PaletteAction> {
                     | Action::ReloadConfig
                     | Action::SwitchToTab(_)
                     | Action::OpenBranchPicker
+                    | Action::GitCheckout(_)
                     | Action::ExpandSnippet(_)
                     | Action::SaveWorkspace
                     | Action::OpenSavedWorkspaces
@@ -166,6 +167,11 @@ impl GpuiShellRoot {
                     self.open_branch_picker(&cwd);
                 }
             }
+            Action::GitCheckout(branch) => {
+                if let Some(cwd) = self.cached_cwd.clone() {
+                    self.git_checkout(&branch, &cwd);
+                }
+            }
             Action::SaveWorkspace => {
                 if let Err(e) = self.save_active_workspace() {
                     log::error!("save_active_workspace: {e}");
@@ -200,9 +206,7 @@ impl GpuiShellRoot {
             }
             Action::ExplainLastOutput => self.explain_last_output(window, cx),
             Action::FixLastError => self.fix_last_error(window, cx),
-            // Variants filtered out of `gpui_shell_actions` land here as a
-            // no-op. Reachable: the branch picker (`branch_picker.rs`) emits
-            // `GitCheckout`, which is not handled yet.
+            // Variants filtered out of `gpui_shell_actions` land here as a no-op.
             _ => {}
         }
     }

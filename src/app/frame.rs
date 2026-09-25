@@ -154,7 +154,6 @@ impl App {
         }
         for tid in exited {
             self.terminal_shell_ctxs.remove(&tid);
-            self.ui.remove_terminal_state(tid);
             if let Some(rc) = &mut self.render_ctx {
                 rc.clear_terminal_state(tid);
             }
@@ -309,7 +308,9 @@ impl App {
                     .active_cwd()
                     .or_else(|| std::env::current_dir().ok())
                     .unwrap_or_default();
-                self.ui.submit_ai_query(self.wakeup_proxy.clone(), cwd);
+                let shell_pid = self.mux.active_shell_pid();
+                self.ui
+                    .submit_ai_query(self.wakeup_proxy.clone(), cwd, shell_pid);
             }
         }
     }

@@ -50,13 +50,15 @@ enum OutboundMsg {
 
 /// Client for a single MCP server process.
 ///
-/// Owns the background IO task that drives stdin/stdout communication.
-/// Does not own the child process handle.
+/// Owns the background IO task that drives stdin/stdout communication and the
+/// child process handle: `kill_on_drop` must fire when the client is dropped,
+/// not when `connect()` returns.
 pub struct McpClient {
     pub name: String,
     pub tools: Vec<McpTool>,
     msg_tx: mpsc::Sender<OutboundMsg>,
     _task: JoinHandle<()>,
+    _child: tokio::process::Child,
 }
 
 impl McpClient {
@@ -93,6 +95,7 @@ impl McpClient {
             tools: vec![],
             msg_tx,
             _task: task,
+            _child: child,
         };
 
         client
@@ -403,5 +406,40 @@ mod tests {
         assert_eq!(spec["type"], "function");
         assert_eq!(spec["function"]["name"], "read_file");
         assert_eq!(spec["function"]["parameters"]["type"], "object");
+    }
+
+    // Regression: the server process must outlive `connect()` (the `Child` used to
+    // be a local, so `kill_on_drop` killed the server right after the handshake).
+    #[tokio::test]
+    async fn server_survives_connect_and_serves_tool_calls() {
+        const SERVER: &str = r#"
+import sys, json
+for line in sys.stdin:
+    msg = json.loads(line)
+    if "id" not in msg:
+        continue
+    if msg["method"] == "tools/list":
+        result = {"tools": [{"name": "echo"}]}
+    else:
+        result = {"content": [{"type": "text", "text": "pong"}]}
+    print(json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": result}), flush=True)
+"#;
+        let cfg = McpServerConfig {
+            command: "python3".into(),
+            args: vec!["-c".into(), SERVER.into()],
+            env: HashMap::new(),
+        };
+        let timeout = std::time::Duration::from_secs(10);
+        let client = tokio::time::timeout(timeout, McpClient::connect("fake".into(), cfg))
+            .await
+            .expect("connect timed out")
+            .unwrap();
+        assert_eq!(client.tools.len(), 1);
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        let out = tokio::time::timeout(timeout, client.call_tool("echo", json!({})))
+            .await
+            .expect("call_tool timed out")
+            .unwrap();
+        assert_eq!(out, "pong");
     }
 }

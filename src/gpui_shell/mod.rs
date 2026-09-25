@@ -30,6 +30,7 @@ mod rasterize;
 mod rename;
 mod render;
 mod render_callbacks;
+mod render_chat_drawer;
 mod render_sidebar;
 mod resize_handle;
 mod search_bar;
@@ -170,6 +171,10 @@ pub struct GpuiShellRoot {
     /// edge (`resize_handle.rs`). `sidebar::render::DEFAULT_SIDEBAR_WIDTH_PX`
     /// is only the starting value.
     sidebar_width_px: f32,
+    /// Live chat drawer width, user-adjustable via the drag handle on its
+    /// left edge (`render_chat_drawer.rs`). `chat_panel::DEFAULT_PANEL_WIDTH_PX`
+    /// is only the starting value.
+    chat_width_px: f32,
     /// The AI chat panel -- one global drawer, not one per pane (see
     /// `chat_panel/mod.rs`'s doc comment on why the wgpu build's
     /// `panel_id`/`set_active_terminal` plumbing has no equivalent here).

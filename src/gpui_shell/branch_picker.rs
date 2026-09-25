@@ -24,6 +24,19 @@ impl GpuiShellRoot {
         });
     }
 
+    /// Check out `branch` in `cwd` and force the status bar to refetch the
+    /// branch name. Blocking, like the wgpu build's `UiManager::git_checkout`.
+    pub(super) fn git_checkout(&mut self, branch: &str, cwd: &std::path::Path) {
+        let status = std::process::Command::new("git")
+            .args(["-C", &cwd.to_string_lossy(), "checkout", branch])
+            .status();
+        match status {
+            Ok(s) if s.success() => self.git_branch.invalidate(),
+            Ok(s) => log::warn!("git checkout {branch} exited with {s}"),
+            Err(e) => log::error!("git checkout {branch} failed: {e}"),
+        }
+    }
+
     /// Drain a completed branch scan and repopulate the palette. Returns
     /// `true` if it updated anything (caller should `cx.notify()`).
     /// Called from `poll.rs`'s existing 33ms tick.

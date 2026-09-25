@@ -185,6 +185,7 @@ impl GpuiShellRoot {
             sidebar: sidebar::WorkspaceSidebar::default(),
             sidebar_focus_handle: cx.focus_handle(),
             sidebar_width_px: sidebar::render::DEFAULT_SIDEBAR_WIDTH_PX,
+            chat_width_px: chat_panel::DEFAULT_PANEL_WIDTH_PX,
             chat,
             ai_block,
             skill_manager,

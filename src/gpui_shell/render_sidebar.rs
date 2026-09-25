@@ -8,7 +8,7 @@ use gpui::{div, ease_out_quint, prelude::*, px, Animation, AnimationExt as _, Co
 
 use super::leader::LeaderAction;
 use super::pane_view::to_rgba;
-use super::resize_handle::{self, ResizeHandleElement};
+use super::resize_handle::{self, ResizeHandleElement, ResizeHandleId};
 use super::sidebar;
 use super::sidebar::render::{MAX_SIDEBAR_WIDTH_PX, MIN_SIDEBAR_WIDTH_PX};
 use super::sidebar::SidebarSection;
@@ -141,6 +141,7 @@ impl GpuiShellRoot {
             .w(px(super::render::CARD_GAP_PX))
             .cursor_col_resize()
             .child(ResizeHandleElement {
+                id: ResizeHandleId::Sidebar,
                 color: handle_color,
                 on_drag,
             });

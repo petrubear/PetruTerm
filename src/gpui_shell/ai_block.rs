@@ -130,7 +130,12 @@ impl AiBlockView {
     /// configured provider. Ported from `submit_ai_block_query`
     /// (`src/app/ui/mod.rs:1280`) minus the `wakeup_proxy` sends (the poll
     /// tick is the wake here, no winit event loop to nudge).
-    pub fn submit(&mut self, tokio_rt: &tokio::runtime::Runtime, cx: &mut Context<GpuiShellRoot>) {
+    pub fn submit(
+        &mut self,
+        tokio_rt: &tokio::runtime::Runtime,
+        shell_pid: Option<u32>,
+        cx: &mut Context<GpuiShellRoot>,
+    ) {
         let query = self.block.query.trim().to_string();
         if query.is_empty() {
             return;
@@ -150,7 +155,7 @@ impl AiBlockView {
                            want to do in natural language. Reply with ONLY the shell command \
                            to run — no explanation, no markdown, no code fences."
             .to_string();
-        if let Some(ctx) = ShellContext::load() {
+        if let Some(ctx) = shell_pid.and_then(ShellContext::load_for_pid) {
             system.push_str(&format!(
                 "\n\nShell context:\n{}",
                 ctx.format_for_system_message()
@@ -258,7 +263,8 @@ impl GpuiShellRoot {
                     .composer
                     .update(cx, |input, cx| input.set_content("", cx));
                 self.ai_block.block.query = text;
-                self.ai_block.submit(&self.tokio_rt, cx);
+                let shell_pid = self.active_shell_pid();
+                self.ai_block.submit(&self.tokio_rt, shell_pid, cx);
             }
             AiState::Done => self.run_ai_block_command(cx),
             _ => {}

@@ -1,32 +1,23 @@
 // `impl Render for GpuiShellRoot`: the window's full element tree.
 
 use std::rc::Rc;
-use std::time::Duration;
 
-use gpui::{
-    div, ease_out_quint, prelude::*, px, Animation, AnimationExt as _, Context, Render, Window,
-};
+use gpui::{div, prelude::*, px, Context, Render, Window};
 
 use crate::config::schema::TitleBarStyle;
 
 use super::pane_view::to_rgba;
 use super::{
-    ai_block, chat_panel, context_menu, info_overlay, palette, pane_view, render_callbacks,
-    search_bar, status_bar, tabs, toast, GpuiShellRoot,
+    ai_block, context_menu, info_overlay, palette, pane_view, render_callbacks, search_bar,
+    status_bar, tabs, toast, GpuiShellRoot,
 };
-
-/// Duration of the drawer's opening grow animation. Closing is
-/// instant -- see this file's own `render()` doc comment on the animated
-/// child for why gpui 0.2.2's `Animation`/`with_animation` only gets this
-/// one direction for free.
-const CHAT_PANEL_OPEN_ANIM: Duration = Duration::from_millis(180);
 
 /// Outer window padding and the gap between floating "cards" (sidebar,
 /// terminal, chat panel, status bar).
 ///
-/// `pub(super)` (not private): `render_sidebar.rs`'s own drag handle floats
-/// over exactly this gap rather than adding its own width beside it -- see
-/// that file's own doc comment on why.
+/// `pub(super)` (not private): the drag handles in `render_sidebar.rs` and
+/// `render_chat_drawer.rs` float over exactly this gap rather than adding
+/// their own width beside it -- see `render_sidebar.rs`'s doc comment on why.
 pub(super) const CARD_GAP_PX: f32 = 10.0;
 
 impl Render for GpuiShellRoot {
@@ -354,18 +345,7 @@ impl Render for GpuiShellRoot {
             })
             .child(terminal_card)
             .when(self.chat.is_visible(), |el| {
-                let panel = chat_panel::render_chat_panel(
-                    &self.chat,
-                    &self.config.llm,
-                    &self.config.colors,
-                    on_fix_last_error,
-                    on_explain_last_output,
-                );
-                el.child(panel.with_animation(
-                    "chat-panel-drawer",
-                    Animation::new(CHAT_PANEL_OPEN_ANIM).with_easing(ease_out_quint()),
-                    |panel, delta| panel.w(px(chat_panel::PANEL_WIDTH_PX * delta)),
-                ))
+                el.child(self.render_chat_drawer(on_fix_last_error, on_explain_last_output, cx))
             });
 
         // `None` and `Custom` both open the window with a transparent

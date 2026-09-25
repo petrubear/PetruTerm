@@ -281,6 +281,11 @@ impl Mux {
         crate::term::process_cwd(pid)
     }
 
+    /// PID of the active terminal's shell -- keys its per-PID shell-context file.
+    pub fn active_shell_pid(&self) -> Option<u32> {
+        self.active_terminal().map(|t| t.child_pid)
+    }
+
     pub fn active_terminal_size(&self) -> (usize, usize) {
         if let Some(t) = self.active_terminal() {
             return (t.cols.get() as usize, t.rows.get() as usize);

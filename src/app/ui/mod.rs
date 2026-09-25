@@ -470,13 +470,6 @@ impl UiManager {
         &mut self.chat_panel
     }
 
-    /// Abort the in-flight chat stream, regardless of the terminal id.
-    pub fn remove_terminal_state(&mut self, _tid: usize) {
-        if let Some(h) = self.streaming_handle.take() {
-            h.abort();
-        }
-    }
-
     pub fn active_panel_id(&self) -> usize {
         0
     }
@@ -793,7 +786,12 @@ impl UiManager {
     }
 
     /// Submit the current panel input. `cwd` is used for tool sandboxing.
-    pub fn submit_ai_query(&mut self, wakeup_proxy: EventLoopProxy<()>, cwd: PathBuf) {
+    pub fn submit_ai_query(
+        &mut self,
+        wakeup_proxy: EventLoopProxy<()>,
+        cwd: PathBuf,
+        shell_pid: Option<u32>,
+    ) {
         // Canonicalize once — on macOS /var is a symlink to /private/var; without this
         // execute_tool's canon.starts_with(cwd) check always fails (TD-029).
         let cwd = cwd.canonicalize().unwrap_or(cwd);
@@ -808,6 +806,7 @@ impl UiManager {
             self.panel().matched_skill.as_deref(),
             &user_content,
             &self.panel().attached_files,
+            shell_pid,
         );
         if let Some(name) = addendum.matched_skill.clone() {
             self.panel_mut().matched_skill = Some(name);
@@ -1180,12 +1179,12 @@ impl UiManager {
             .active_cwd()
             .or_else(|| std::env::current_dir().ok())
             .unwrap_or_default();
-        self.submit_ai_query(wakeup_proxy, cwd);
+        self.submit_ai_query(wakeup_proxy, cwd, mux.active_shell_pid());
     }
 
     pub fn fix_last_error(&mut self, mux: &Mux, wakeup_proxy: EventLoopProxy<()>) {
         let output = mux.last_terminal_lines(30);
-        let ctx = ShellContext::load();
+        let ctx = mux.active_shell_pid().and_then(ShellContext::load_for_pid);
         let query = match &ctx {
             Some(c) if !c.last_command.is_empty() => format!(
                 "The command `{}` failed (exit code {}). Output:\n```\n{}\n```\nHow do I fix this?",
@@ -1205,7 +1204,7 @@ impl UiManager {
             .active_cwd()
             .or_else(|| std::env::current_dir().ok())
             .unwrap_or_default();
-        self.submit_ai_query(wakeup_proxy, cwd);
+        self.submit_ai_query(wakeup_proxy, cwd, mux.active_shell_pid());
     }
 
     /// Execute the last AI-suggested command in the active terminal.
@@ -1223,7 +1222,11 @@ impl UiManager {
     // ── Inline AI block operations ────────────────────────────────────────────
 
     /// Submit the current AI block query to the LLM (NL → shell command mode).
-    pub fn submit_ai_block_query(&mut self, wakeup_proxy: EventLoopProxy<()>) {
+    pub fn submit_ai_block_query(
+        &mut self,
+        wakeup_proxy: EventLoopProxy<()>,
+        shell_pid: Option<u32>,
+    ) {
         let query = self.ai_block.query.trim().to_string();
         if query.is_empty() {
             return;
@@ -1241,7 +1244,7 @@ impl UiManager {
         self.ai_block.set_loading();
 
         let mut system = "You are a shell command generator. The user describes what they want to do in natural language. Reply with ONLY the shell command to run — no explanation, no markdown, no code fences.".to_string();
-        if let Some(ctx) = ShellContext::load() {
+        if let Some(ctx) = shell_pid.and_then(ShellContext::load_for_pid) {
             system.push_str(&format!(
                 "\n\nShell context:\n{}",
                 ctx.format_for_system_message()

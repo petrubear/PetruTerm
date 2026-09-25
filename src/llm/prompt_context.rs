@@ -30,6 +30,7 @@ pub fn build_prompt_addendum(
     active_skill_name: Option<&str>,
     user_content: &str,
     attached_files: &[PathBuf],
+    shell_pid: Option<u32>,
 ) -> PromptAddendum {
     let mut text = String::new();
     let mut matched_skill = None;
@@ -69,7 +70,7 @@ pub fn build_prompt_addendum(
         matched_skill = Some(skill_name);
     }
 
-    if let Some(ctx) = ShellContext::load() {
+    if let Some(ctx) = shell_pid.and_then(ShellContext::load_for_pid) {
         text.push_str(&format!(
             "\n\nShell context:\n{}",
             ctx.format_for_system_message()
@@ -127,7 +128,7 @@ mod tests {
     fn empty_managers_produce_no_skill_or_steering_text() {
         let skills = SkillManager::new();
         let steering = SteeringManager::new();
-        let result = build_prompt_addendum(&skills, &steering, None, "hello", &[]);
+        let result = build_prompt_addendum(&skills, &steering, None, "hello", &[], None);
         assert!(result.matched_skill.is_none());
         assert!(!result.text.contains("expert skill"));
         assert!(!result.text.contains("steering instructions"));
@@ -146,8 +147,14 @@ mod tests {
         skills.load(dir.path(), true);
         let steering = SteeringManager::new();
 
-        let result =
-            build_prompt_addendum(&skills, &steering, None, "skill git-helper please", &[]);
+        let result = build_prompt_addendum(
+            &skills,
+            &steering,
+            None,
+            "skill git-helper please",
+            &[],
+            None,
+        );
         assert_eq!(result.matched_skill, Some("git-helper".to_string()));
         assert!(result.text.contains("expert skill has been activated"));
         assert!(result.text.contains("Use `git switch`."));
@@ -166,8 +173,14 @@ mod tests {
         skills.load(dir.path(), true);
         let steering = SteeringManager::new();
 
-        let result =
-            build_prompt_addendum(&skills, &steering, Some("git-helper"), "what next?", &[]);
+        let result = build_prompt_addendum(
+            &skills,
+            &steering,
+            Some("git-helper"),
+            "what next?",
+            &[],
+            None,
+        );
         assert_eq!(result.matched_skill, Some("git-helper".to_string()));
         assert!(result.text.contains("Use `git switch`."));
     }
@@ -185,7 +198,8 @@ mod tests {
         skills.load(dir.path(), true);
         let steering = SteeringManager::new();
 
-        let result = build_prompt_addendum(&skills, &steering, None, "totally unrelated", &[]);
+        let result =
+            build_prompt_addendum(&skills, &steering, None, "totally unrelated", &[], None);
         assert!(result.matched_skill.is_none());
         assert!(!result.text.contains("expert skill"));
     }
@@ -198,7 +212,7 @@ mod tests {
         let mut steering = SteeringManager::new();
         steering.load(dir.path(), true);
 
-        let result = build_prompt_addendum(&skills, &steering, None, "hi", &[]);
+        let result = build_prompt_addendum(&skills, &steering, None, "hi", &[], None);
         assert!(result.text.contains("steering instructions"));
         assert!(result.text.contains("Be concise."));
     }
@@ -211,7 +225,7 @@ mod tests {
         let skills = SkillManager::new();
         let steering = SteeringManager::new();
 
-        let result = build_prompt_addendum(&skills, &steering, None, "hi", &[file_path]);
+        let result = build_prompt_addendum(&skills, &steering, None, "hi", &[file_path], None);
         assert!(result.text.contains("--- File:"));
         assert!(result.text.contains("important notes"));
     }
@@ -224,7 +238,7 @@ mod tests {
         let skills = SkillManager::new();
         let steering = SteeringManager::new();
 
-        let result = build_prompt_addendum(&skills, &steering, None, "hi", &[file_path]);
+        let result = build_prompt_addendum(&skills, &steering, None, "hi", &[file_path], None);
         assert!(result.text.contains("[... truncated"));
     }
 }

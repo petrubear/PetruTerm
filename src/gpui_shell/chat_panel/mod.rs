@@ -15,7 +15,10 @@ mod render;
 mod slash_command;
 mod stream;
 
-pub use render::{render_chat_panel, ChatPillCallback, PANEL_WIDTH_PX};
+pub use render::{
+    render_chat_panel, ChatPillCallback, DEFAULT_PANEL_WIDTH_PX, MAX_PANEL_WIDTH_PX,
+    MIN_PANEL_WIDTH_PX,
+};
 
 use std::sync::Arc;
 

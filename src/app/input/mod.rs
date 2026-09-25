@@ -572,7 +572,7 @@ impl InputHandler {
                 }
                 Key::Named(NamedKey::Enter) => {
                     if ui.ai_block.is_typing() {
-                        ui.submit_ai_block_query(wakeup_proxy);
+                        ui.submit_ai_block_query(wakeup_proxy, mux.active_shell_pid());
                     } else if ui.ai_block.is_done() {
                         ui.run_ai_block_command(mux);
                     }
@@ -717,7 +717,7 @@ impl InputHandler {
                                 .active_cwd()
                                 .or_else(|| std::env::current_dir().ok())
                                 .unwrap_or_default();
-                            ui.submit_ai_query(wakeup_proxy, cwd);
+                            ui.submit_ai_query(wakeup_proxy, cwd, mux.active_shell_pid());
                         }
                     }
                 }
@@ -755,7 +755,7 @@ impl InputHandler {
                         .active_cwd()
                         .or_else(|| std::env::current_dir().ok())
                         .unwrap_or_default();
-                    ui.submit_ai_query(wakeup_proxy, cwd);
+                    ui.submit_ai_query(wakeup_proxy, cwd, mux.active_shell_pid());
                 }
                 Key::Character(s) => {
                     for ch in s.chars() {

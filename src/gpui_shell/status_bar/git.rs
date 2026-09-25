@@ -68,6 +68,14 @@ async fn fetch_git_branch(cwd: &std::path::Path, dirty_check: bool) -> String {
     }
 }
 
+impl GitBranchState {
+    /// Force the next `poll_git_branch` tick to refetch (e.g. right after a
+    /// checkout), instead of waiting for the TTL to expire.
+    pub fn invalidate(&mut self) {
+        self.fetched_at = None;
+    }
+}
+
 /// Whether `poll_git_branch` should spawn a fresh fetch this tick. Extracted
 /// as a pure function (ported policy from `src/app/ui/git.rs`'s
 /// `poll_git_branch`) so the TTL/cwd-changed decision is unit-testable
@@ -175,6 +183,27 @@ mod git_branch_state_tests {
             fetched_at: Some(Instant::now() - Duration::from_secs(20)),
             ..Default::default()
         };
+        assert!(should_spawn_fetch(
+            &state,
+            Some(&cwd),
+            Duration::from_secs(15)
+        ));
+    }
+
+    #[test]
+    fn invalidate_forces_refetch_within_ttl() {
+        let cwd = std::path::PathBuf::from("/a");
+        let mut state = GitBranchState {
+            cwd: Some(cwd.clone()),
+            fetched_at: Some(Instant::now()),
+            ..Default::default()
+        };
+        assert!(!should_spawn_fetch(
+            &state,
+            Some(&cwd),
+            Duration::from_secs(15)
+        ));
+        state.invalidate();
         assert!(should_spawn_fetch(
             &state,
             Some(&cwd),

@@ -19,8 +19,12 @@ use super::header::render_header;
 use super::markdown::render_line;
 use super::{ChatPanelView, MARKDOWN_WRAP_WIDTH};
 
-/// Fixed drawer width. Not user-resizable.
-pub const PANEL_WIDTH_PX: f32 = 480.0;
+/// Starting drawer width; the live value is `GpuiShellRoot::chat_width_px`,
+/// adjusted by the drag handle in `render_chat_drawer.rs`.
+pub const DEFAULT_PANEL_WIDTH_PX: f32 = 480.0;
+/// Drag-resize clamp.
+pub const MIN_PANEL_WIDTH_PX: f32 = 320.0;
+pub const MAX_PANEL_WIDTH_PX: f32 = 900.0;
 
 /// Called on a suggestion-pill click ("Fix last error" / "Explain
 /// command"/"Explain more", both the zero-state's and the post-response
@@ -41,6 +45,7 @@ pub fn render_chat_panel(
     view: &ChatPanelView,
     llm: &LlmConfig,
     colors: &ColorScheme,
+    width_px: f32,
     on_fix_last_error: ChatPillCallback,
     on_explain_last_output: ChatPillCallback,
 ) -> Div {
@@ -49,7 +54,7 @@ pub fn render_chat_panel(
         .flex_col()
         .flex_shrink_0()
         .h_full()
-        .w(px(PANEL_WIDTH_PX))
+        .w(px(width_px))
         .rounded_lg()
         .overflow_hidden()
         .bg(to_rgba(colors.ui_surface))

@@ -53,14 +53,6 @@ impl ShellContext {
         serde_json::from_str(&data).ok()
     }
 
-    /// Load the legacy global `shell-context.json`. Returns `None` if missing or
-    /// unparseable. The current shell integration writes only per-PID files;
-    /// prefer `load_for_pid`.
-    pub fn load() -> Option<Self> {
-        let data = std::fs::read_to_string(Self::context_file_path()).ok()?;
-        serde_json::from_str(&data).ok()
-    }
-
     /// Redact sensitive information like API keys, tokens, and passwords from commands.
     pub fn sanitize_command(cmd: &str) -> String {
         let cmd = EXPORT_REGEX.replace_all(cmd, "$1=[REDACTED]");
