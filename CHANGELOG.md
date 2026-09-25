@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+---
+
+## [1.1.0] — 2026-09-24
+
 ### Added
 - `config.keybind_style = "tmux" | "normal"` (set in `keybinds.lua`, default `"tmux"`) — `"normal"`
   gives the `petruterm` (wgpu) binary direct macOS Cmd-combo keybindings (Cmd+T new tab, Cmd+W
@@ -12,6 +16,12 @@
 - `keybinds.lua`'s managed-file version bumped 3 → 4 as part of the above — this resets any
   already-installed `~/.config/petruterm/keybinds.lua` customization back to the new bundled
   default on next launch (existing mechanism, not new, but worth calling out here).
+
+### Fixed
+- MCP servers are no longer killed right after the handshake: `McpClient` now keeps the child process alive for the client's lifetime, so tool calls and the sidebar tool list work.
+- Shell context (CWD, last command, exit code) is now actually injected into AI queries: all call sites read the per-PID context file of the active pane's shell instead of the legacy global file nothing writes anymore.
+- `gpui-petruterm`: the command palette's git checkout action now works and the status bar refreshes the branch immediately.
+- Closing a terminal no longer aborts an in-flight AI chat stream (the chat panel is global, not per-terminal).
 
 ---
 
