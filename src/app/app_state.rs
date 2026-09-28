@@ -103,23 +103,23 @@ impl App {
         const DEBOUNCE_MS: u64 = 300;
 
         // Global config dir watcher — split lua (app config) vs json (MCP config).
+        // Both kinds are checked independently so a lua *and* json change landing
+        // in the same poll window each schedule their own reload (AUDIT-BUG-07).
         if let Some(watcher) = &self.config_watcher {
-            if let Some(path) = watcher.poll() {
-                if path.extension().is_some_and(|e| e == "json") {
-                    self.mcp_reload_at = Some(
-                        std::time::Instant::now() + std::time::Duration::from_millis(DEBOUNCE_MS),
-                    );
-                } else {
-                    self.config_reload_at = Some(
-                        std::time::Instant::now() + std::time::Duration::from_millis(DEBOUNCE_MS),
-                    );
-                }
+            let changes = watcher.poll();
+            if changes.json {
+                self.mcp_reload_at =
+                    Some(std::time::Instant::now() + std::time::Duration::from_millis(DEBOUNCE_MS));
+            }
+            if changes.lua {
+                self.config_reload_at =
+                    Some(std::time::Instant::now() + std::time::Duration::from_millis(DEBOUNCE_MS));
             }
         }
 
         // Project-local .petruterm/ watcher.
         if let Some(watcher) = &self.mcp_watcher {
-            if watcher.poll().is_some() {
+            if !watcher.poll().is_empty() {
                 self.mcp_reload_at =
                     Some(std::time::Instant::now() + std::time::Duration::from_millis(DEBOUNCE_MS));
             }

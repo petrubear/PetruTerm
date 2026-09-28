@@ -178,7 +178,6 @@
   "176": ".render_chat_drawer",
   "177": "UiManager",
   "178": ".maybe_handle_palette_key",
-  "179": "WindowConfig",
   "180": "gpui M3c: Workspace Layer + Workspace Sidebar Drawer Implementation Plan",
   "181": "gpui M3d: Sidebar MCP/Skills/Steering Sections + InfoOverlay Implementation Plan",
   "182": "list_git_branches_sync",
@@ -193,19 +192,14 @@
   "191": ".handle_slash_command",
   "192": ".show_toast",
   "193": "M4d — Toasts Implementation Plan",
-  "194": "AcpSession",
   "195": "ChatPanelView",
   "196": ".write_key_to_terminal",
-  "197": "cache.rs",
   "198": ".render_sidebar_drawer",
-  "199": "draw_glyphs",
-  "200": "AcpTerminalRequest",
   "201": "claude-stop-ci.sh",
   "202": "petru-theme-dark.lua",
   "203": "petru-theme-light.lua",
   "204": "key_write.rs",
   "205": "rename.rs",
   "206": "sidebar_nav.rs",
-  "207": "standalone_keys.rs",
-  "208": ".cursor_down"
+  "207": "standalone_keys.rs"
 }

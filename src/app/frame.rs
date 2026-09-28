@@ -1620,13 +1620,21 @@ fn build_all_pane_instances(
                     .map(|overlay| overlay.viewport_row),
             },
         );
-        let force_full = terminal_changed || layout_changed || visual_state_changed;
+        let force_full_trigger = if terminal_changed {
+            Some(FullRebuildTrigger::TerminalSwitch)
+        } else if layout_changed {
+            Some(FullRebuildTrigger::PaneGeometryChange)
+        } else if visual_state_changed {
+            Some(FullRebuildTrigger::OverlayStateChange)
+        } else {
+            None
+        };
         mux.collect_grid_cells_for(
             info.terminal_id,
             &mut cell_data_scratch,
             &mut dirty_rows,
             search_arg,
-            force_full,
+            force_full_trigger,
             syntax_overlay.as_ref(),
             ghost_overlay.as_ref(),
             flag_hint_overlay.as_ref(),

@@ -38,6 +38,12 @@ pub(super) enum ResizeHandleId {
 thread_local! {
     /// The handle whose drag is in progress, if any.
     static DRAGGING: Cell<Option<ResizeHandleId>> = const { Cell::new(None) };
+    /// The handle hovered as of the last paint, if any. Compared against
+    /// each paint's freshly-computed hover state so a hover-only change
+    /// (no drag, no other state change) still gets an explicit repaint
+    /// (AUDIT-BUG-10) instead of waiting on the poll loop's next
+    /// `cx.notify()`, which only fires when something else changed.
+    static LAST_HOVERED: Cell<Option<ResizeHandleId>> = const { Cell::new(None) };
 }
 
 /// Whether any handle is currently being dragged -- `mouse.rs` can check
@@ -113,11 +119,16 @@ impl Element for ResizeHandleElement {
         // hovered; a permanent line reads as a stray rule. The hit area
         // (this whole strip, via `on_mouse_event` below) always exists:
         // only the visible feedback is conditional. Hover is read from
-        // `mouse_position()` at paint time; this element requests no
-        // repaint on hover change and the poll loop only notifies on
-        // activity, so hover feedback can lag until the next repaint.
+        // `mouse_position()` at paint time; a change since the last paint
+        // triggers an explicit `window.refresh()` below so hover feedback
+        // doesn't have to wait for the poll loop's next unrelated repaint.
         let dragging = DRAGGING.with(|d| d.get()) == Some(self.id);
         let hovered = bounds.contains(&window.mouse_position());
+        let was_hovered = LAST_HOVERED.with(|h| h.get()) == Some(self.id);
+        if hovered != was_hovered {
+            LAST_HOVERED.with(|h| h.set(if hovered { Some(self.id) } else { None }));
+            window.refresh();
+        }
         if dragging || hovered {
             let line = px(1.0);
             let line_bounds = Bounds {

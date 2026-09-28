@@ -183,7 +183,7 @@ pub fn built_in_actions(config: &Config) -> Vec<PaletteAction> {
         PaletteAction {
             name: t!("palette.zoom_pane").to_string(),
             action: Action::ZoomPane,
-            keybind: Some("^F z".into()),
+            keybind: Some(format!("{leader_label} z")),
         },
         PaletteAction {
             name: t!("palette.focus_left").to_string(),
@@ -273,27 +273,27 @@ pub fn built_in_actions(config: &Config) -> Vec<PaletteAction> {
         PaletteAction {
             name: "New Workspace".to_string(),
             action: Action::NewWorkspace,
-            keybind: Some("^F W n".into()),
+            keybind: Some(format!("{leader_label} W n")),
         },
         PaletteAction {
             name: "Close Workspace".to_string(),
             action: Action::CloseWorkspace,
-            keybind: Some("^F W &".into()),
+            keybind: Some(format!("{leader_label} W &")),
         },
         PaletteAction {
             name: "Rename Workspace".to_string(),
             action: Action::RenameWorkspace,
-            keybind: Some("^F W ,".into()),
+            keybind: Some(format!("{leader_label} W ,")),
         },
         PaletteAction {
             name: "Next Workspace".to_string(),
             action: Action::NextWorkspace,
-            keybind: Some("^F W j".into()),
+            keybind: Some(format!("{leader_label} W j")),
         },
         PaletteAction {
             name: "Previous Workspace".to_string(),
             action: Action::PrevWorkspace,
-            keybind: Some("^F W k".into()),
+            keybind: Some(format!("{leader_label} W k")),
         },
         PaletteAction {
             name: t!("palette.switch_theme").to_string(),
@@ -303,12 +303,12 @@ pub fn built_in_actions(config: &Config) -> Vec<PaletteAction> {
         PaletteAction {
             name: "Save Workspace".to_string(),
             action: Action::SaveWorkspace,
-            keybind: Some("^F W s".into()),
+            keybind: Some(format!("{leader_label} W s")),
         },
         PaletteAction {
             name: "Saved Workspaces...".to_string(),
             action: Action::OpenSavedWorkspaces,
-            keybind: Some("^F W L".into()),
+            keybind: Some(format!("{leader_label} W L")),
         },
         PaletteAction {
             name: "Git: Switch Branch".to_string(),
@@ -318,4 +318,30 @@ pub fn built_in_actions(config: &Config) -> Vec<PaletteAction> {
     ];
     actions.sort_unstable_by(|a, b| a.name.cmp(&b.name));
     actions
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression check for AUDIT-BUG-09: every palette hint must reflect a
+    /// non-default leader key, not the literal `^F` the default happens to
+    /// produce.
+    #[test]
+    fn keybind_hints_follow_a_non_default_leader_key() {
+        let mut config = Config::default();
+        config.leader.key = "g".into();
+
+        let actions = built_in_actions(&config);
+        for action in &actions {
+            if let Some(hint) = &action.keybind {
+                assert!(
+                    !hint.contains("^F"),
+                    "hint {:?} for {:?} still hardcodes the default leader key",
+                    hint,
+                    action.action
+                );
+            }
+        }
+    }
 }

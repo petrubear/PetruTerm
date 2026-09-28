@@ -925,7 +925,7 @@ impl Mux {
         buf: &mut Vec<(String, Vec<(AnsiColor, AnsiColor, CellStyle)>)>,
         dirty_rows: &mut DirtyRows,
         search: Option<(&[SearchMatch], usize)>,
-        force_full: bool,
+        force_full_trigger: Option<FullRebuildTrigger>,
         syntax: Option<&SyntaxOverlay>,
         ghost: Option<&GhostOverlay>,
         flag_hint: Option<&FlagHintOverlay>,
@@ -967,17 +967,18 @@ impl Mux {
         // and skip undamaged rows — their stale data in `buf` will produce the same hash
         // as last frame, giving a row-cache hit in build_instances without grid reads.
         // REC-PERF-03: integrates alacritty_terminal's TermDamage API.
-        let can_skip = !force_full && sel_range.is_none() && search.is_none();
+        let can_skip = force_full_trigger.is_none() && sel_range.is_none() && search.is_none();
         use alacritty_terminal::term::TermDamage;
         let term_damage = term.damage();
-        if force_full {
-            *dirty_rows = rows_for_full_rebuild(FullRebuildTrigger::PaneGeometryChange, rows);
+        if let Some(trigger) = force_full_trigger {
+            *dirty_rows = rows_for_full_rebuild(trigger, rows);
         } else if !can_skip {
-            *dirty_rows = rows_for_full_rebuild(FullRebuildTrigger::ThemeColorChange, rows);
+            *dirty_rows = rows_for_full_rebuild(FullRebuildTrigger::SelectionOrSearchActive, rows);
         } else {
             match term_damage {
                 TermDamage::Full => {
-                    *dirty_rows = rows_for_full_rebuild(FullRebuildTrigger::TerminalResize, rows);
+                    *dirty_rows =
+                        rows_for_full_rebuild(FullRebuildTrigger::TerminalDamageFull, rows);
                 }
                 TermDamage::Partial(iter) => {
                     for line in iter {

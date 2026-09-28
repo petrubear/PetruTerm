@@ -42,6 +42,13 @@ pub fn spawn_config_watcher() {
                 .wait_timeout(std::time::Duration::from_secs(3600))
                 .is_some()
             {
+                // Drain and coalesce anything else that queued up while we
+                // were waking up (e.g. a `.json` save right behind the
+                // `.lua` one that woke us) — `reload()` below re-reads all
+                // config fresh regardless of kind, so this just avoids
+                // leaving an unobserved change sitting in the channel until
+                // the next unrelated fs event (AUDIT-BUG-07).
+                let _ = watcher.poll();
                 match crate::config::reload() {
                     Ok((config, _lua)) => {
                         *PENDING_CONFIG_RELOAD.lock().unwrap() = Some(config);

@@ -60,6 +60,16 @@ pub(crate) enum FullRebuildTrigger {
     RowSlotCapacityOverflow,
     InvalidGpuUploadRange,
     SurfaceReconfiguration,
+    /// The scratch buffer's active terminal changed (pane/tab switch).
+    TerminalSwitch,
+    /// A search/selection/syntax/ghost/flag-hint overlay row changed.
+    OverlayStateChange,
+    /// Selection or search is live this frame; damage tracking can't be
+    /// trusted to cover the highlighted range, so every row is rebuilt.
+    SelectionOrSearchActive,
+    /// alacritty_terminal reported `TermDamage::Full` — covers resize, but
+    /// also clear, full reset, and terminal mode changes.
+    TerminalDamageFull,
 }
 
 pub(crate) fn rows_for_full_rebuild(_trigger: FullRebuildTrigger, row_count: usize) -> DirtyRows {
@@ -203,6 +213,10 @@ mod tests {
             FullRebuildTrigger::RowSlotCapacityOverflow,
             FullRebuildTrigger::InvalidGpuUploadRange,
             FullRebuildTrigger::SurfaceReconfiguration,
+            FullRebuildTrigger::TerminalSwitch,
+            FullRebuildTrigger::OverlayStateChange,
+            FullRebuildTrigger::SelectionOrSearchActive,
+            FullRebuildTrigger::TerminalDamageFull,
         ];
 
         for trigger in triggers {

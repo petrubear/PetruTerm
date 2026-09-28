@@ -236,12 +236,15 @@ pub struct GpuiShellRoot {
     pending_agent_action: Option<crate::llm::agent_action::AgentAction>,
     /// Exit code of a terminal that has been reaped, keyed by the id it
     /// had while alive -- `self.terminals` no longer has an entry for it
-    /// by the time this map is read. Unbounded: never pruned.
+    /// by the time this map is read. Evicted FIFO via `closed_terminal_order`.
     terminal_exit_codes: HashMap<usize, i32>,
     /// Final grid contents of a reaped terminal, captured just before its
-    /// last `Rc<Terminal>` is dropped. Capped at a small size; past the cap
-    /// an arbitrary entry (HashMap order, not the oldest) is evicted.
+    /// last `Rc<Terminal>` is dropped. Evicted FIFO via `closed_terminal_order`.
     terminal_final_output: HashMap<usize, String>,
+    /// Insertion order of closed terminal ids, so `terminal_exit_codes` and
+    /// `terminal_final_output` can be evicted oldest-first once they exceed
+    /// `MAX_CLOSED_TERMINALS` -- mirrors `Mux::closed_terminal_order`.
+    closed_terminal_order: std::collections::VecDeque<usize>,
     /// ACP `terminal/wait_for_exit` requests still waiting on a terminal
     /// that hasn't exited yet -- resolved on a later poll tick once
     /// `terminal_exit_code` returns `Some`. Mirrors `UiManager::pending_

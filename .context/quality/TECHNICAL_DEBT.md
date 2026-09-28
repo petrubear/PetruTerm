@@ -1,10 +1,20 @@
 # Technical Debt Registry
 
-**Last Updated:** 2026-09-23
-**Open Items:** 5 (AUDIT-BUG-06..10, ver abajo)
-**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 5 (AUDIT-BUG-06..10, 2026-09-23) | **gpui M5/M3:** 0 (TD-GPUI-01..06 + ACP todos RESUELTOS, 2026-09-17) | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 4
+**Last Updated:** 2026-09-28
+**Open Items:** 0 (AUDIT-BUG-06..10 resueltos 2026-09-28; ver Watch para deuda sin fix de nuestro lado)
+**Critical (P0):** 0 | **P1:** 0 | **P2:** 0 | **P3:** 0 (AUDIT-BUG-06..10 resueltos 2026-09-28) | **gpui M5/M3:** 0 (TD-GPUI-01..06 + ACP todos RESUELTOS, 2026-09-17) | **Deferred:** 2 | **Resueltos (Wave 1):** 8 | **Resueltos (Wave 2):** 5+5=10 | **Resueltos (Wave 3):** 4 | **Resueltos (Wave 4+5+6):** 8 | **Resueltos (Wave 7):** 4 | **Watch:** 4 (AUDIT-CLEAN-02, AUDIT-PERF-10, AUDIT-DEP-01, AUDIT-DEP-02)
 
 > Resolved items are in [TECHNICAL_DEBT_archive.md](./TECHNICAL_DEBT_archive.md).
+
+> **Pase de cierre 2026-09-28.** AUDIT-BUG-06..10 resueltos (ver entradas individuales en P3
+> abajo). De paso: TD-P9-07 cerrado por stale — `wayland-scanner` ya bumpeó a 0.31.11 y el
+> lockfile resuelve `quick-xml` a 0.41.0 (el fix), así que las dos entradas de ignore en
+> `.cargo/audit.toml` para RUSTSEC-2026-0194/-0195 ya no correspondían a nada alcanzable y se
+> quitaron. Además, `lru` bumpeado 0.17→0.18.5 (RUSTSEC-2026-0253, unsound `LruCache::pop()`,
+> parcheado en >=0.18.2) — nunca fue explotable en este código (key `(u64, u32)` sin `Drop` que
+> pueda panicar, y `word_cache` sólo llama `.get()`/`.put()`, nunca `.pop()`), bump por higiene.
+> Nuevo AUDIT-DEP-02 (WATCH) registra 7 advisories `unmaintained` más que `cargo audit` reporta
+> sin fallar el build, todas transitivas vía `gpui`, sin acción posible de nuestro lado.
 
 > **AUDIT-BUG-01..10 — abiertos (2026-09-23).** Encontrados durante un pase de limpieza de
 > comentarios/dead-code (settings sin ordenar, claves muertas, comentarios engañosos) hecho con
@@ -74,8 +84,8 @@ Phase 9 — UI Restyle (COMPLETA y MERGEADA a master 2026-07-03, version 0.3.0)
 Watch
   AUDIT-CLEAN-02 (sin cambio; reevaluar si ContextAction crece)
   AUDIT-PERF-10 (micro-regresiones de benchmark; reevaluar tras el próximo pase de perf)
-  TD-P9-07 (ignore de cargo audit quick-xml; quitar cuando winit bumpee Wayland)
   AUDIT-DEP-01 (ignore de cargo audit ttf-parser/RUSTSEC-2026-0192; quitar cuando fontdb migre a skrifa)
+  AUDIT-DEP-02 (7 advisories "unmaintained" vía gpui sin fix de nuestro lado; reevaluar si gpui bumpea sus deps)
 
 GRAPH-ARCH-01 — COMPLETA (2026-07-25). Loose ends: GRAPH-ARCH-01-A/B/C (backlog, P3).
 ```
@@ -165,46 +175,55 @@ GRAPH-ARCH-01 — COMPLETA (2026-07-25). Loose ends: GRAPH-ARCH-01-A/B/C (backlo
 
 ## P3 — Prioridad baja / Backlog
 
-**AUDIT-BUG-06** — ABIERTO (2026-09-23). En `src/app/mux/mod.rs` (`cmd_close_tab` y alrededores),
-las tres etiquetas de `FullRebuildTrigger` pasadas a `rows_for_full_rebuild` no corresponden a lo
-que realmente disparó el rebuild: el cambio de selección/búsqueda pasa `ThemeColorChange`,
-`force_full` pasa `PaneGeometryChange`, y `TermDamage::Full` pasa `TerminalResize`. No causa un
-bug visible (el rebuild ocurre igual), pero cualquier métrica o log que agrupe por trigger da
-lecturas engañosas. Fix: pasar la etiqueta que de verdad describe cada call site.
+**AUDIT-BUG-06** — RESUELTO (2026-09-28). Las tres etiquetas de `FullRebuildTrigger` en
+`collect_grid_cells_for` (`src/app/mux/mod.rs`) ahora describen la causa real. `force_full`
+dejó de ser un `bool` — `collect_grid_cells_for` recibe `force_full_trigger: Option<
+FullRebuildTrigger>`, y `frame.rs` calcula cuál de `terminal_changed`/`layout_changed`/
+`visual_state_changed` disparó el rebuild y pasa la etiqueta correspondiente (`TerminalSwitch`,
+`PaneGeometryChange` o el nuevo `OverlayStateChange`). El branch de selección/búsqueda activa
+pasa el nuevo `SelectionOrSearchActive` (no `ThemeColorChange`). `TermDamage::Full` pasa el
+nuevo `TerminalDamageFull` (no `TerminalResize` — ese damage cubre clear/reset/mode-change,
+no sólo resize). `src/app/renderer/damage.rs`, `src/app/mux/mod.rs`, `src/app/frame.rs`.
 
-**AUDIT-BUG-07** — ABIERTO (2026-09-23). `src/config/watcher.rs::poll()` usa un canal de
-capacidad 1 con `try_send`: si un cambio en `.json` (p.ej. `mcp.json`) llega justo después de un
-cambio en `.lua` y antes del siguiente poll, el evento `.json` se descarta silenciosamente
-(`app_state.rs` separa el manejo de `.lua` vs `.json` a partir de este único path). El usuario
-puede editar dos archivos de config casi a la vez y ver que solo uno de los dos se recarga. Fix:
-usar una cola pequeña (o un `HashSet` de paths pendientes) en vez de un slot de capacidad 1.
+**AUDIT-BUG-07** — RESUELTO (2026-09-28). `ConfigWatcher` cambió de `sync_channel(1)` +
+`try_send` (lossy) a un canal sin límite (`mpsc::channel()`) que transporta un `ConfigFileKind`
+(Lua/Json) en vez del `PathBuf` completo (ningún consumidor leía el path). `poll()` ahora drena
+y coalesce en un `ConfigChanges { lua: bool, json: bool }`, así que un cambio en `.lua` seguido
+de cerca por uno en `.json` (o viceversa) ya no pisa al otro. `app_state.rs::check_config_reload`
+chequea ambos flags de forma independiente. `gpui_shell/config_watch.rs` (que usa `wait_timeout`,
+bloqueante) drena con `poll()` justo después de despertar, para no dejar un cambio sin observar
+en el canal. `src/config/watcher.rs`, `src/app/app_state.rs`, `src/gpui_shell/config_watch.rs`.
 
-**AUDIT-BUG-08** — ABIERTO (2026-09-23). En `gpui_shell/terminal_output.rs`, el cache
-`terminal_final_output` se topa a `MAX_FINAL_OUTPUT_ENTRIES` evictando
-`.keys().next()` de un `HashMap` — orden arbitrario, no FIFO (a diferencia de `Mux`, que usa un
-`VecDeque` para el mismo propósito). `terminal_exit_codes` en el mismo archivo no tiene cap
-alguno y crece sin límite mientras la app corre. Impacto bajo en sesiones normales (crece con el
-número de terminales cerrados, no con el tiempo), pero diverge del comportamiento documentado
-("mirrors Mux") y puede acumular memoria en sesiones muy largas con muchas pestañas. Fix: usar un
-`VecDeque` para eviction FIFO real y aplicar el mismo cap a `terminal_exit_codes`.
+**AUDIT-BUG-08** — RESUELTO (2026-09-28). `GpuiShellRoot` ahora tiene un `closed_terminal_order:
+VecDeque<usize>` que mirrors `Mux::closed_terminal_order` exactamente: `retain_closed_terminal`
+(llamado desde `record_terminal_exit_code` y `record_terminal_final_output`) empuja el id una
+sola vez y evict el más viejo de ambos mapas (`terminal_exit_codes` y `terminal_final_output`,
+ahora bajo el mismo cap compartido `MAX_CLOSED_TERMINALS = 64`) cuando se excede el cap — FIFO
+real, no orden arbitrario de `HashMap`. Lógica factoreada a la función libre
+`evict_oldest_closed_terminals` para poder testearla sin construir un `GpuiShellRoot` vivo; el
+test viejo (que reimplementaba la lógica rota dentro del propio test) fue reemplazado por tests
+que llaman la función real y verifican eviction FIFO. `src/gpui_shell/terminal_output.rs`,
+`src/gpui_shell/mod.rs`, `src/gpui_shell/construct.rs`.
 
-**AUDIT-BUG-09** — ABIERTO (2026-09-23). Varios hints de keybind en
-`src/ui/palette/actions.rs` (`built_in_actions`, líneas ~192, ~262-285, ~302-310) están
-hardcodeados como strings literales (`"^F z"`, `"^F W n"`, etc.) en vez de derivarse de
-`config.leader.key` como hace el resto de `built_in_actions`. Si el usuario cambia su leader key
-en `keybinds.lua`, estos hints del command palette quedan desactualizados y muestran la tecla
-vieja. Adicionalmente, los hints con prefijo `W` (`^F W n/s/L`) corresponden a acciones que ni
-siquiera funcionan en el binario gpui (ver AUDIT-BUG-03), así que ahí el hint es doblemente
-engañoso. Fix: construir estos hints a partir de `leader_label` como el resto de la función.
+**AUDIT-BUG-09** — RESUELTO (2026-09-28). Los 8 hints hardcodeados en `built_in_actions`
+(`ZoomPane` y los 7 de workspace) ahora se construyen con `format!("{leader_label} ...")` en vez
+del literal `"^F ..."`. El sufijo (`z`, `W n`, `W &`, etc.) se dejó literal a propósito: son
+secuencias de leader de dos niveles hardcodeadas en el input handler (`keybinds.lua` las
+documenta como "cannot be rebound"), no entradas de `config.keys` — `kb()` no las conoce y
+habría devuelto `None`, haciendo desaparecer el hint en vez de arreglarlo. Sólo el prefijo del
+leader key es dinámico, que es exactamente lo que rompía al cambiar `config.leader.key`. Test de
+regresión: con un leader key no default, ningún hint debe contener `"^F"`. Nota: el hint
+doblemente engañoso en gpui para las acciones `W` (ver AUDIT-BUG-03) sigue ahí — ese es un
+problema de disponibilidad de la acción, no de formato del hint, fuera de alcance de este fix.
+`src/ui/palette/actions.rs`.
 
-**AUDIT-BUG-10** — ABIERTO (2026-09-23). En `gpui_shell/resize_handle.rs`, el hover sobre un
-separador de panes no dispara ningún `window.refresh()` propio; el comentario decía (antes de
-esta limpieza) que "el poll loop ya repinta a ~30Hz", pero el poll loop solo llama `cx.notify()`
-cuando algo relevante cambió (gate, blink, etc.) — no hay un repaint periódico incondicional. En
-la práctica el feedback visual del hover puede tardar hasta el próximo blink (o no llegar nunca
-si el blink está apagado en modo battery-saver). Impacto cosmético, bajo. Fix: disparar un
-refresh explícito al entrar/salir del hover, o confirmar con perfiles reales que el lag es
-imperceptible y cerrar como no-accionable.
+**AUDIT-BUG-10** — RESUELTO (2026-09-28), pendiente de dogfooding visual. `ResizeHandleElement`
+(`gpui_shell/resize_handle.rs`) ahora trackea el último handle hovereado en un thread-local
+(`LAST_HOVERED`, mismo patrón que `DRAGGING`) y lo compara contra el hover recién calculado en
+cada `paint()`; en un cambio llama `window.refresh()` explícito. No se tocó `separator.rs`, que
+tiene la misma forma pero no está en el alcance de este item. No pudo verificarse visualmente en
+esta sesión (sin captura de la ventana gpui) — marcado RESUELTO pero a confirmar con el usuario
+en la próxima sesión de dogfood. `src/gpui_shell/resize_handle.rs`.
 
 **GRAPH-ARCH-01-A** — CERRADO COMO NO-ACCIONABLE (2026-09-22). Reinvestigado: `provider_cfg` **no** puede reducirse a `provider`/`model`. `src/app/ui/mod.rs:313` y `src/app/ui/providers.rs:88` pasan `&view.provider_cfg` completo a `crate::llm::build_provider()`, cuyos `from_config()` (openrouter/ollama/lmstudio/copilot) leen `api_key`, `base_url` y otros campos según el provider — no solo los dos que `build_panel_header` usa. El hallazgo original de 2026-07-25 no había rastreado ese call site. `api_key` viaja a través de la vista porque el consumidor real (`build_provider`) lo necesita; no es scope creep. Sin fix — la premisa era incorrecta.
 
@@ -213,6 +232,17 @@ imperceptible y cerrar como no-accionable.
 **GRAPH-ARCH-01-C** — RESUELTO (2026-09-22). `install_shell_integration()` ahora está gateado por `config.shell_integration` en `src/config/mod.rs::load()`. Requirió reordenar `load()`: el config se parsea (`lua::load_config`/`load_config_str`) **antes** de decidir si instalar shell integration, en vez de instalar incondicionalmente antes de tener el `Config` parseado (el orden original no podía leer el campo porque el parseo pasaba después). `reload()` no llamaba `install_shell_integration()` — sin cambios ahí. Decisión del usuario: "wire it up" en vez de eliminar el knob.
 
 **AUDIT-DEP-01** — WATCH (2026-07-25). `cargo audit` ignora `RUSTSEC-2026-0192` (`ttf-parser` 0.25.1, unmaintained, sin versión parcheada) en `.cargo/audit.toml`. A diferencia de los demás ignores de este archivo, SÍ es alcanzable en macOS: llega vía `fontdb 0.23.0 → cosmic-text → petruterm`, usado para parseo de metadata/familia de fuentes (no shaping — el shaper de cosmic-text, `harfrust`, ya depende de `skrifa`, la alternativa que la propia advisory recomienda). `fontdb` 0.23.0 sigue siendo su última release y no ha migrado su parseo interno a `skrifa` todavía, así que no hay nada que actualizar o parchear de nuestro lado. Quitar el ignore cuando `fontdb` adopte `skrifa` upstream.
+
+**AUDIT-DEP-02** — WATCH (2026-09-28). `cargo audit` reporta 7 advisories `unmaintained`
+(informational, no bloquean el build) no cubiertas por ningún ignore: `async-std` 1.13.2
+(RUSTSEC-2025-0052), `instant` 0.1.13 (RUSTSEC-2024-0384), `paste` 1.0.15 (RUSTSEC-2024-0436),
+`proc-macro-error2` 2.0.1 (RUSTSEC-2026-0173), `rustls-pemfile` 2.2.0 (RUSTSEC-2025-0134),
+`rustybuzz` 0.14.1 y 0.20.1 (RUSTSEC-2026-0206, dos copias por dedup de versión). Las 7 son
+transitivas vía `gpui` (directa o vía `cosmic-text`/`usvg`/`zed-reqwest`/`zed-async-tar`) —
+ninguna es alcanzable con una versión distinta desde nuestro `Cargo.toml`. `cargo search gpui`
+no muestra una versión estable más nueva que la 0.2.2 fijada (regla de sólo-deps-estables); no
+hay bump que hacer en este pase. Revisar si gpui publica una versión que actualice estas
+dependencias.
 
 **AUDIT-REFAC-06** — RESUELTO (2026-05-22). `build_workspace_sidebar_instances()` tenía 18 parámetros con `#[allow(clippy::too_many_arguments)]`. Resuelto con `SidebarDrawParams<'a>` en `src/app/renderer/mod.rs`; call site en `frame.rs` construye el struct; función en `overlay.rs` destructura al inicio — cuerpo sin cambios, supresión eliminada.
 
@@ -238,7 +268,12 @@ imperceptible y cerrar como no-accionable.
 
 **AUDIT-PERF-10** — WATCH (2026-05-22). La revalidación de Criterion no mostró fallos graves, pero sí micro-regresiones repetidas de ~1-2% en shaping/rasterize/build instances (`shape_line_ascii` 284.68 ns +1.54%, `shape_line_ascii_cached` 277.03 ns +1.39%, `shape_line_ligatures_cached` 546.21 ns +1.57%, `rasterize_glyph_ascii` 1.3094 µs +1.67%, `build_row_miss` 857.77 ns +1.58%, `build_frame_hit` 792.79 ns +1.13%). No bloquea, pero conviene volver a medir tras el próximo pase de optimización de hot paths.
 
-**TD-P9-07** — WATCH (2026-07-03). `cargo audit` ignora `RUSTSEC-2026-0194` y `RUSTSEC-2026-0195` (quick-xml 0.39.2, DoS/quadratic) en `.cargo/audit.toml`. Entran transitivamente por `winit → smithay-client-toolkit → wayland-scanner` (Wayland, solo Linux; el target macOS nunca las compila). El fix 0.41 no satisface `wayland-scanner 0.31.9` (`quick-xml = "^0.39"`), así que requiere bump de winit upstream. Quitar el ignore cuando winit actualice su cadena Wayland.
+**TD-P9-07** — CERRADO por stale (2026-09-28). `wayland-scanner` ya bumpeó a 0.31.11 (desde el
+0.31.9 que este item describía) y el lockfile ahora resuelve `quick-xml` a una única versión,
+0.41.0 — el fix de RUSTSEC-2026-0194/-0195. El bump de winit que este item esperaba ya pasó, sin
+que nadie lo notara porque las dos entradas de `ignore` en `.cargo/audit.toml` seguían
+silenciando cualquier chequeo. Ambas entradas se quitaron; `cargo audit` sigue en verde
+(confirmado con `cargo tree -i quick-xml --target all`, que muestra sólo 0.41.0 en el árbol).
 
 ---
 
@@ -399,7 +434,7 @@ Wave 7: AUDIT-REFAC-08
 Phase 9: COMPLETA, verificada y MERGEADA a master (2026-07-03, v0.3.0) — TD-P9-01..08 cerrados.
 GRAPH-ARCH-01: COMPLETA (2026-07-25) — LLM domain + keys/leader view + font/max_fps consolidation, todo en master.
 Migración gpui: COMPLETA (2026-09-17) — TD-GPUI-01..06 + TD-GPUI-ACP RESUELTOS, mergeada a master (2026-09-17, gpui-petruterm 1.0.0).
-Watch: AUDIT-CLEAN-02, AUDIT-PERF-10, TD-P9-07, AUDIT-DEP-01
-Backlog abierto (P3): AUDIT-BUG-06..10. GRAPH-ARCH-01-A cerrado no-accionable, GRAPH-ARCH-01-B/C resueltos (2026-09-22).
-Abierto sin resolver: AUDIT-BUG-06..10 (ver arriba), todos P3. AUDIT-BUG-01..05 resueltos/cerrados 2026-09-24.
+Watch: AUDIT-CLEAN-02, AUDIT-PERF-10, AUDIT-DEP-01, AUDIT-DEP-02
+Backlog abierto (P3): ninguno. AUDIT-BUG-06..10 resueltos 2026-09-28. GRAPH-ARCH-01-A cerrado no-accionable, GRAPH-ARCH-01-B/C resueltos (2026-09-22).
+Abierto sin resolver: ninguno. AUDIT-BUG-01..05 resueltos/cerrados 2026-09-24; AUDIT-BUG-06..10 resueltos 2026-09-28. TD-P9-07 cerrado 2026-09-28 (stale, ver arriba). lru bumpeado 0.17→0.18.5 (RUSTSEC-2026-0253, hygiene, nunca explotable en este código).
 ```

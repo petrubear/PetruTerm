@@ -202,6 +202,7 @@ impl GpuiShellRoot {
             pending_agent_action: None,
             terminal_exit_codes: HashMap::new(),
             terminal_final_output: HashMap::new(),
+            closed_terminal_order: std::collections::VecDeque::new(),
             pending_acp_wait_for_exit: Vec::new(),
             pending_pty_run: None,
         }

@@ -105,13 +105,13 @@
     "semantic_hash": "277231d8294579809230c7ff8ad510d7"
   },
   "src/app/app_state.rs": {
-    "mtime": 1790602876.9110622,
-    "ast_hash": "58159d5d9a16144ea2019b3c2383b532",
+    "mtime": 1790170217.8326137,
+    "ast_hash": "7580a5d3a142ad45be6bf2d87ec99d63",
     "semantic_hash": ""
   },
   "src/app/frame.rs": {
-    "mtime": 1790602749.3527427,
-    "ast_hash": "cf6caa2ddd92b624f2287c2dbbad0d5f",
+    "mtime": 1790296497.0722413,
+    "ast_hash": "73eb17bc62777f8a6a656ea9b2ab49f6",
     "semantic_hash": ""
   },
   "src/app/hover_link.rs": {
@@ -145,8 +145,8 @@
     "semantic_hash": ""
   },
   "src/app/mux/mod.rs": {
-    "mtime": 1790602744.9538379,
-    "ast_hash": "d8c8a5551b97eb108258be07d594e4c0",
+    "mtime": 1790257028.7365003,
+    "ast_hash": "956be896ec52f79e6b57efc999533575",
     "semantic_hash": ""
   },
   "src/app/mux/snapshot.rs": {
@@ -210,8 +210,8 @@
     "semantic_hash": ""
   },
   "src/config/watcher.rs": {
-    "mtime": 1790602867.6852424,
-    "ast_hash": "9abc6d45dd43c817dbaaca29f57946f4",
+    "mtime": 1790176687.736902,
+    "ast_hash": "650db866392f304e8a4428b79f6b8ac6",
     "semantic_hash": ""
   },
   "src/font/freetype_lcd.rs": {
@@ -480,8 +480,8 @@
     "semantic_hash": "e167a39fe78a859d7ebdc786cde8e6bc"
   },
   "src/ui/palette/actions.rs": {
-    "mtime": 1790603129.429138,
-    "ast_hash": "931c5b8593a658c11adb5241844303d1",
+    "mtime": 1790176687.7515006,
+    "ast_hash": "323e285795c37ab6a2134be50de53cfa",
     "semantic_hash": ""
   },
   "src/ui/palette/mod.rs": {
@@ -535,8 +535,8 @@
     "semantic_hash": "7986faae6d019d823dfc6c6fe474c11c"
   },
   ".context/quality/TECHNICAL_DEBT.md": {
-    "mtime": 1790603379.8269768,
-    "ast_hash": "b2211fee41bec1f9efa3ceba7c9b4131",
+    "mtime": 1790296573.182509,
+    "ast_hash": "a8319fe8b5b526b2e2455fa930efb447",
     "semantic_hash": ""
   },
   ".context/quality/TECHNICAL_DEBT_archive.md": {
@@ -585,8 +585,8 @@
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1790298059.2252965,
-    "ast_hash": "e853ab8c7617646a7999ff182f1ba506",
+    "mtime": 1790122368.3405294,
+    "ast_hash": "ca35ec11847f14e506b7556eb832684a",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -670,8 +670,8 @@
     "semantic_hash": ""
   },
   "src/app/renderer/damage.rs": {
-    "mtime": 1790602735.5986195,
-    "ast_hash": "a7b35d5d0010075259ebe858ffe3445a",
+    "mtime": 1790176687.7353494,
+    "ast_hash": "a7974eac8ec34a578234e84739360e20",
     "semantic_hash": ""
   },
   "src/app/renderer/layout.rs": {
@@ -700,8 +700,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/mod.rs": {
-    "mtime": 1790602943.2763,
-    "ast_hash": "a2f92e76682286235877c642fe8faa92",
+    "mtime": 1790256791.363479,
+    "ast_hash": "c8df3d1b7d7ac88d9b56d884a31304de",
     "semantic_hash": ""
   },
   "src/gpui_shell/terminal_element.rs": {
@@ -750,8 +750,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/config_watch.rs": {
-    "mtime": 1790602881.0155563,
-    "ast_hash": "a3d7fddc6fbc11b902e3dfe0e5b3fa73",
+    "mtime": 1790176687.739448,
+    "ast_hash": "4287b6ab54ffaf2d78a97b8de7de0b82",
     "semantic_hash": ""
   },
   "src/gpui_shell/input.rs": {
@@ -925,8 +925,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/construct.rs": {
-    "mtime": 1790602949.0166368,
-    "ast_hash": "0dfb6842bae9c5754dae5768bd842fa7",
+    "mtime": 1790256757.972379,
+    "ast_hash": "20c483d54652f6bbe52e40eb9042c51f",
     "semantic_hash": ""
   },
   "src/gpui_shell/context_menu.rs": {
@@ -1025,8 +1025,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/resize_handle.rs": {
-    "mtime": 1790603173.341953,
-    "ast_hash": "5f0f3e2ccac305d2335da533991fd9f8",
+    "mtime": 1790256731.3659935,
+    "ast_hash": "9d69d95d16256351af9aed3db1f31edb",
     "semantic_hash": ""
   },
   "src/gpui_shell/search_bar.rs": {
@@ -1090,8 +1090,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/terminal_output.rs": {
-    "mtime": 1790603002.973961,
-    "ast_hash": "f7172dcdf8adcd3c335fbe82c33f6dc3",
+    "mtime": 1790176687.7454,
+    "ast_hash": "674dd4e482cad777d608cba819358a4a",
     "semantic_hash": ""
   },
   "src/gpui_shell/toast.rs": {
