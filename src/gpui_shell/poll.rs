@@ -100,6 +100,9 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
             }
 
             let result = this.update(cx, |this: &mut GpuiShellRoot, cx| {
+                // Unfocused: skip status-bar/cursor-blink work (cwd, git spawns,
+                // battery) so a backgrounded window does no periodic polling.
+                let focused = cx.active_window().is_some();
                 let mut should_notify = this.wakeup_gates.values().any(|g| g.take_pending());
 
                 // Detect shells that exited on their own (typing
@@ -220,7 +223,8 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                         this.cursor_blink_on = true;
                         should_notify = true;
                     }
-                } else if this.cursor_last_blink.elapsed() >= std::time::Duration::from_millis(530)
+                } else if focused
+                    && this.cursor_last_blink.elapsed() >= std::time::Duration::from_millis(530)
                 {
                     this.cursor_blink_on = !this.cursor_blink_on;
                     this.cursor_last_blink = std::time::Instant::now();
@@ -282,7 +286,7 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                 // into the still-focused pane.
                 let active = this.workspaces.active().tabs.active_index();
                 let active_tid = this.workspaces.active().tab_panes[active].focused_terminal;
-                if let Some(terminal) = this.terminals.get(&active_tid) {
+                if let Some(terminal) = this.terminals.get(&active_tid).filter(|_| focused) {
                     let pid = terminal.child_pid;
 
                     let cwd = crate::term::process_cwd(pid);
@@ -319,11 +323,13 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                 // deadline/toast checks above rather than needing its
                 // own timer -- `poll_battery`'s own TTL guard keeps the
                 // actual IOKit call down to once every 30s.
-                if status_bar::poll_battery(
-                    &mut this.battery,
-                    Instant::now(),
-                    std::time::Duration::from_secs(30),
-                ) {
+                if focused
+                    && status_bar::poll_battery(
+                        &mut this.battery,
+                        Instant::now(),
+                        std::time::Duration::from_secs(30),
+                    )
+                {
                     should_notify = true;
                     // `RUST_LOG=debug` visibility into a state that's
                     // otherwise only observable indirectly (frozen cursor,
@@ -358,7 +364,7 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                 // single-window (`bin/gpui_petruterm.rs`'s only
                 // `cx.open_window` call), so "some window is active" is
                 // equivalent to "our window is active".
-                if cx.active_window().is_some() {
+                if focused {
                     FOCUSED_TICK
                 } else {
                     UNFOCUSED_TICK
