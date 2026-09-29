@@ -259,6 +259,23 @@ pub(super) fn build_tab_right_click_callback(
     })
 }
 
+/// Tab bar's own reorder callback -- moves the dragged tab to the dropped
+/// gap. Split out for the same reason `build_tab_right_click_callback` is:
+/// it needs its own `cx.entity().downgrade()`.
+pub(super) fn build_tab_reorder_callback(
+    cx: &mut Context<GpuiShellRoot>,
+) -> tabs::TabReorderCallback {
+    let view = cx.entity().downgrade();
+    Rc::new(move |tab_id, to_gap, _window, cx| {
+        view.update(cx, |root, cx| {
+            if root.workspaces.active_mut().tabs.move_tab(tab_id, to_gap) {
+                cx.notify();
+            }
+        })
+        .ok();
+    })
+}
+
 /// Whole-window file-drop handler: dropped paths are written to the
 /// focused terminal's PTY, or appended to the chat composer if the AI
 /// panel is open. Mirrors the wgpu app's own `WindowEvent::DroppedFile`

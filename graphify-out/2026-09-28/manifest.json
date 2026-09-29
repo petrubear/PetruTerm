@@ -105,13 +105,13 @@
     "semantic_hash": "277231d8294579809230c7ff8ad510d7"
   },
   "src/app/app_state.rs": {
-    "mtime": 1790170217.8326137,
-    "ast_hash": "7580a5d3a142ad45be6bf2d87ec99d63",
+    "mtime": 1790603515.2790904,
+    "ast_hash": "0c180990afc0d3f1c12c83128035d195",
     "semantic_hash": ""
   },
   "src/app/frame.rs": {
-    "mtime": 1790296497.0722413,
-    "ast_hash": "73eb17bc62777f8a6a656ea9b2ab49f6",
+    "mtime": 1790602749.3527427,
+    "ast_hash": "cf6caa2ddd92b624f2287c2dbbad0d5f",
     "semantic_hash": ""
   },
   "src/app/hover_link.rs": {
@@ -145,8 +145,8 @@
     "semantic_hash": ""
   },
   "src/app/mux/mod.rs": {
-    "mtime": 1790257028.7365003,
-    "ast_hash": "956be896ec52f79e6b57efc999533575",
+    "mtime": 1790602744.9538379,
+    "ast_hash": "d8c8a5551b97eb108258be07d594e4c0",
     "semantic_hash": ""
   },
   "src/app/mux/snapshot.rs": {
@@ -210,8 +210,8 @@
     "semantic_hash": ""
   },
   "src/config/watcher.rs": {
-    "mtime": 1790176687.736902,
-    "ast_hash": "650db866392f304e8a4428b79f6b8ac6",
+    "mtime": 1790603515.3755472,
+    "ast_hash": "c9f55deb79b65283176a10855c2b556f",
     "semantic_hash": ""
   },
   "src/font/freetype_lcd.rs": {
@@ -480,8 +480,8 @@
     "semantic_hash": "e167a39fe78a859d7ebdc786cde8e6bc"
   },
   "src/ui/palette/actions.rs": {
-    "mtime": 1790176687.7515006,
-    "ast_hash": "323e285795c37ab6a2134be50de53cfa",
+    "mtime": 1790603129.429138,
+    "ast_hash": "931c5b8593a658c11adb5241844303d1",
     "semantic_hash": ""
   },
   "src/ui/palette/mod.rs": {
@@ -535,8 +535,8 @@
     "semantic_hash": "7986faae6d019d823dfc6c6fe474c11c"
   },
   ".context/quality/TECHNICAL_DEBT.md": {
-    "mtime": 1790296573.182509,
-    "ast_hash": "a8319fe8b5b526b2e2455fa930efb447",
+    "mtime": 1790603379.8269768,
+    "ast_hash": "b2211fee41bec1f9efa3ceba7c9b4131",
     "semantic_hash": ""
   },
   ".context/quality/TECHNICAL_DEBT_archive.md": {
@@ -585,8 +585,8 @@
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1790122368.3405294,
-    "ast_hash": "ca35ec11847f14e506b7556eb832684a",
+    "mtime": 1790298059.2252965,
+    "ast_hash": "e853ab8c7617646a7999ff182f1ba506",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -670,8 +670,8 @@
     "semantic_hash": ""
   },
   "src/app/renderer/damage.rs": {
-    "mtime": 1790176687.7353494,
-    "ast_hash": "a7974eac8ec34a578234e84739360e20",
+    "mtime": 1790602735.5986195,
+    "ast_hash": "a7b35d5d0010075259ebe858ffe3445a",
     "semantic_hash": ""
   },
   "src/app/renderer/layout.rs": {
@@ -700,8 +700,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/mod.rs": {
-    "mtime": 1790256791.363479,
-    "ast_hash": "c8df3d1b7d7ac88d9b56d884a31304de",
+    "mtime": 1790602943.2763,
+    "ast_hash": "a2f92e76682286235877c642fe8faa92",
     "semantic_hash": ""
   },
   "src/gpui_shell/terminal_element.rs": {
@@ -750,8 +750,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/config_watch.rs": {
-    "mtime": 1790176687.739448,
-    "ast_hash": "4287b6ab54ffaf2d78a97b8de7de0b82",
+    "mtime": 1790602881.0155563,
+    "ast_hash": "a3d7fddc6fbc11b902e3dfe0e5b3fa73",
     "semantic_hash": ""
   },
   "src/gpui_shell/input.rs": {
@@ -765,8 +765,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/render.rs": {
-    "mtime": 1790256791.3796408,
-    "ast_hash": "d61651155cb481665f7d7015bf93bc78",
+    "mtime": 1790609290.820971,
+    "ast_hash": "bd9572624a853f0cc4b15edd7f23976b",
     "semantic_hash": ""
   },
   "src/gpui_shell/panes/geometry.rs": {
@@ -925,8 +925,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/construct.rs": {
-    "mtime": 1790256757.972379,
-    "ast_hash": "20c483d54652f6bbe52e40eb9042c51f",
+    "mtime": 1790602949.0166368,
+    "ast_hash": "0dfb6842bae9c5754dae5768bd842fa7",
     "semantic_hash": ""
   },
   "src/gpui_shell/context_menu.rs": {
@@ -1015,8 +1015,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/render_callbacks.rs": {
-    "mtime": 1790176687.7429159,
-    "ast_hash": "3e8ff9383f6df00b5bd7624e07376667",
+    "mtime": 1790609279.6609414,
+    "ast_hash": "690cd848b0efcf282957b6566f5bdbd7",
     "semantic_hash": ""
   },
   "src/gpui_shell/render_sidebar.rs": {
@@ -1025,8 +1025,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/resize_handle.rs": {
-    "mtime": 1790256731.3659935,
-    "ast_hash": "9d69d95d16256351af9aed3db1f31edb",
+    "mtime": 1790603173.341953,
+    "ast_hash": "5f0f3e2ccac305d2335da533991fd9f8",
     "semantic_hash": ""
   },
   "src/gpui_shell/search_bar.rs": {
@@ -1080,18 +1080,18 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/tabs/mod.rs": {
-    "mtime": 1790176687.7450733,
-    "ast_hash": "10239de7b028155ae03d9e037abd5f78",
+    "mtime": 1790609298.8660436,
+    "ast_hash": "e3956f407f2e186708cf18f84dc42de6",
     "semantic_hash": ""
   },
   "src/gpui_shell/tabs/render.rs": {
-    "mtime": 1790185958.1362445,
-    "ast_hash": "82ebcb1b40b8f0c4bfcb8dcf75a62684",
+    "mtime": 1790609325.850514,
+    "ast_hash": "cb79e13113aabd42f379638ed907beb2",
     "semantic_hash": ""
   },
   "src/gpui_shell/terminal_output.rs": {
-    "mtime": 1790176687.7454,
-    "ast_hash": "674dd4e482cad777d608cba819358a4a",
+    "mtime": 1790603002.973961,
+    "ast_hash": "f7172dcdf8adcd3c335fbe82c33f6dc3",
     "semantic_hash": ""
   },
   "src/gpui_shell/toast.rs": {

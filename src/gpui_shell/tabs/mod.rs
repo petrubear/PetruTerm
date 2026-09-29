@@ -4,7 +4,7 @@
 mod render;
 
 pub(super) use render::TabRightClickCallback;
-pub use render::{render_tab_bar, TabSelectCallback};
+pub use render::{render_tab_bar, TabReorderCallback, TabSelectCallback};
 
 /// Max glyph width of a tab pill label.
 pub const TAB_LABEL_MAX_CHARS: usize = 18;
@@ -86,6 +86,36 @@ impl TabManager {
             self.active -= 1;
         } else {
             self.active = self.active.min(self.tabs.len() - 1);
+        }
+        true
+    }
+
+    /// Move the tab with `id` so it lands at gap `to_gap` in the
+    /// *pre-move* ordering (0 = before the first tab, `tab_count()` =
+    /// after the last). Returns true if a tab with that id was found, even
+    /// if the move was a no-op (dropping a tab into one of the two gaps
+    /// immediately adjacent to itself lands it back where it started).
+    ///
+    /// `active` is fixed up by re-finding the *active tab's own id* after
+    /// the move, not by hand-tracking how the index shifts -- the same
+    /// "key off stable id" trick `rename_tab` already uses, which sidesteps
+    /// the whole class of off-by-one bug `close_tab`'s own doc comment
+    /// warns about.
+    pub fn move_tab(&mut self, id: usize, to_gap: usize) -> bool {
+        let Some(from) = self.tabs.iter().position(|t| t.id == id) else {
+            return false;
+        };
+        let active_id = self.tabs.get(self.active).map(|t| t.id);
+        let to_gap = to_gap.min(self.tabs.len());
+        // `to_gap` is expressed in the ordering *before* `from` is removed;
+        // once removed, every gap past `from` shifts down by one.
+        let insert_at = if to_gap > from { to_gap - 1 } else { to_gap };
+        let tab = self.tabs.remove(from);
+        self.tabs.insert(insert_at, tab);
+        if let Some(active_id) = active_id {
+            if let Some(pos) = self.tabs.iter().position(|t| t.id == active_id) {
+                self.active = pos;
+            }
         }
         true
     }
@@ -262,6 +292,121 @@ mod tab_manager_tests {
 
         assert_eq!(mgr.tabs()[0].title, "notes");
         assert_eq!(mgr.tabs()[mgr.active_index()].title, "b");
+    }
+
+    #[test]
+    fn move_tab_reorders_by_dropping_into_the_target_gap() {
+        let mut mgr = TabManager::new();
+        let a = mgr.new_tab("a");
+        let b = mgr.new_tab("b");
+        let c = mgr.new_tab("c");
+        let _d = mgr.new_tab("d");
+        // a b c d -> drop a into the gap between c and d (gap index 3).
+        assert!(mgr.move_tab(a, 3));
+        assert_eq!(
+            mgr.tabs()
+                .iter()
+                .map(|t| t.title.as_str())
+                .collect::<Vec<_>>(),
+            vec!["b", "c", "a", "d"]
+        );
+        let _ = (b, c);
+    }
+
+    #[test]
+    fn move_tab_to_gap_zero_puts_it_first() {
+        let mut mgr = TabManager::new();
+        let _a = mgr.new_tab("a");
+        let _b = mgr.new_tab("b");
+        let c = mgr.new_tab("c");
+
+        assert!(mgr.move_tab(c, 0));
+        assert_eq!(
+            mgr.tabs()
+                .iter()
+                .map(|t| t.title.as_str())
+                .collect::<Vec<_>>(),
+            vec!["c", "a", "b"]
+        );
+    }
+
+    #[test]
+    fn move_tab_to_the_final_gap_puts_it_last() {
+        let mut mgr = TabManager::new();
+        let a = mgr.new_tab("a");
+        let _b = mgr.new_tab("b");
+        let _c = mgr.new_tab("c");
+
+        assert!(mgr.move_tab(a, mgr.tab_count()));
+        assert_eq!(
+            mgr.tabs()
+                .iter()
+                .map(|t| t.title.as_str())
+                .collect::<Vec<_>>(),
+            vec!["b", "c", "a"]
+        );
+    }
+
+    #[test]
+    fn move_tab_into_an_adjacent_gap_is_a_no_op() {
+        let mut mgr = TabManager::new();
+        let a = mgr.new_tab("a");
+        let b = mgr.new_tab("b");
+        let _c = mgr.new_tab("c");
+        // a b c: the gaps immediately before/after b (index 1) are gap 1
+        // and gap 2 -- dropping b into either must not move it.
+        assert!(mgr.move_tab(b, 1));
+        assert_eq!(
+            mgr.tabs()
+                .iter()
+                .map(|t| t.title.as_str())
+                .collect::<Vec<_>>(),
+            vec!["a", "b", "c"]
+        );
+        assert!(mgr.move_tab(b, 2));
+        assert_eq!(
+            mgr.tabs()
+                .iter()
+                .map(|t| t.title.as_str())
+                .collect::<Vec<_>>(),
+            vec!["a", "b", "c"]
+        );
+        let _ = a;
+    }
+
+    #[test]
+    fn move_tab_keeps_the_active_tab_active_across_the_reorder() {
+        let mut mgr = TabManager::new();
+        let a = mgr.new_tab("a");
+        let _b = mgr.new_tab("b");
+        let c = mgr.new_tab("c");
+        // new_tab() leaves "c" active.
+        mgr.switch_to_index(0);
+        assert_eq!(mgr.tabs()[mgr.active_index()].title, "a");
+
+        // Move a DIFFERENT tab (c) across the active one (a); active must
+        // keep following "a" by identity, not drift to whatever now sits
+        // at index 0.
+        assert!(mgr.move_tab(c, 0));
+        assert_eq!(mgr.tabs()[mgr.active_index()].title, "a");
+
+        // Now move the active tab itself; active must follow it to its new slot.
+        assert!(mgr.move_tab(a, mgr.tab_count()));
+        assert_eq!(mgr.tabs()[mgr.active_index()].title, "a");
+        assert_eq!(mgr.active_index(), mgr.tab_count() - 1);
+    }
+
+    #[test]
+    fn move_tab_with_unknown_id_returns_false_and_mutates_nothing() {
+        let mut mgr = TabManager::new();
+        let _a = mgr.new_tab("a");
+        let _b = mgr.new_tab("b");
+        let titles_before: Vec<_> = mgr.tabs().iter().map(|t| t.title.clone()).collect();
+
+        assert!(!mgr.move_tab(999, 0));
+
+        let titles_after: Vec<_> = mgr.tabs().iter().map(|t| t.title.clone()).collect();
+        assert_eq!(titles_before, titles_after);
     }
 
     #[test]

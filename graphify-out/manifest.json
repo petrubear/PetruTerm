@@ -105,8 +105,8 @@
     "semantic_hash": "277231d8294579809230c7ff8ad510d7"
   },
   "src/app/app_state.rs": {
-    "mtime": 1790602876.9110622,
-    "ast_hash": "58159d5d9a16144ea2019b3c2383b532",
+    "mtime": 1790603515.2790904,
+    "ast_hash": "0c180990afc0d3f1c12c83128035d195",
     "semantic_hash": ""
   },
   "src/app/frame.rs": {
@@ -210,8 +210,8 @@
     "semantic_hash": ""
   },
   "src/config/watcher.rs": {
-    "mtime": 1790602867.6852424,
-    "ast_hash": "9abc6d45dd43c817dbaaca29f57946f4",
+    "mtime": 1790603515.3755472,
+    "ast_hash": "c9f55deb79b65283176a10855c2b556f",
     "semantic_hash": ""
   },
   "src/font/freetype_lcd.rs": {
@@ -765,8 +765,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/render.rs": {
-    "mtime": 1790256791.3796408,
-    "ast_hash": "d61651155cb481665f7d7015bf93bc78",
+    "mtime": 1790609290.820971,
+    "ast_hash": "bd9572624a853f0cc4b15edd7f23976b",
     "semantic_hash": ""
   },
   "src/gpui_shell/panes/geometry.rs": {
@@ -1015,8 +1015,8 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/render_callbacks.rs": {
-    "mtime": 1790176687.7429159,
-    "ast_hash": "3e8ff9383f6df00b5bd7624e07376667",
+    "mtime": 1790609279.6609414,
+    "ast_hash": "690cd848b0efcf282957b6566f5bdbd7",
     "semantic_hash": ""
   },
   "src/gpui_shell/render_sidebar.rs": {
@@ -1080,13 +1080,13 @@
     "semantic_hash": ""
   },
   "src/gpui_shell/tabs/mod.rs": {
-    "mtime": 1790176687.7450733,
-    "ast_hash": "10239de7b028155ae03d9e037abd5f78",
+    "mtime": 1790609298.8660436,
+    "ast_hash": "e3956f407f2e186708cf18f84dc42de6",
     "semantic_hash": ""
   },
   "src/gpui_shell/tabs/render.rs": {
-    "mtime": 1790185958.1362445,
-    "ast_hash": "82ebcb1b40b8f0c4bfcb8dcf75a62684",
+    "mtime": 1790648592.0989497,
+    "ast_hash": "b7e4115042f4dbb38d2a15303fb2fa1f",
     "semantic_hash": ""
   },
   "src/gpui_shell/terminal_output.rs": {

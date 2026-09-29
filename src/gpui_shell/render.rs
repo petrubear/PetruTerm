@@ -123,6 +123,7 @@ impl Render for GpuiShellRoot {
         ) = render_callbacks::build_frame_callbacks(cx);
 
         let on_tab_right_click = render_callbacks::build_tab_right_click_callback(cx);
+        let on_tab_reorder = render_callbacks::build_tab_reorder_callback(cx);
         let on_file_drop = render_callbacks::build_file_drop_callback(cx);
 
         // Focus-border color: the active tab's own accent if it has one set,
@@ -225,6 +226,7 @@ impl Render for GpuiShellRoot {
             &self.config.colors,
             on_select_tab,
             on_tab_right_click,
+            on_tab_reorder,
             rename,
         );
 
