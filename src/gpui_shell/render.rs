@@ -217,10 +217,19 @@ impl Render for GpuiShellRoot {
                     cx.notify();
                 }
             }));
-        let rename = self
-            .tab_rename
-            .as_ref()
-            .map(|(id, input)| (*id, input.clone().into_any_element()));
+        // The field's own width is `relative(1.)` of its parent, and the tab
+        // cell is auto-sized, so it would collapse to zero. Give it an
+        // explicit width that grows with the typed text (monospace cells),
+        // with room for the cursor and the placeholder when empty.
+        let rename = self.tab_rename.as_ref().map(|(id, input)| {
+            let chars = input.read(cx).content().chars().count();
+            let cell_w = crate::gpui_shell::font_state::measured_cell_size().0;
+            let el = gpui::div()
+                .w(cell_w * (chars + 1).max("tab name".len()) as f32)
+                .child(input.clone())
+                .into_any_element();
+            (*id, el)
+        });
         let tab_bar = tabs::render_tab_bar(
             &self.workspaces.active().tabs,
             &self.config.colors,
