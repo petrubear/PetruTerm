@@ -9,6 +9,9 @@ set -euo pipefail
 rustup update stable --no-self-update
 
 export RUSTFLAGS="-D warnings"
+# Separate target dir: a different RUSTFLAGS invalidates every cached dependency, so sharing
+# `target/` with interactive builds would duplicate all of them on each run.
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target/ci}"
 
 cargo check --all-features
 cargo test --lib

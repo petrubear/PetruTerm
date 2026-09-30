@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # PetruTerm — macOS .app bundle script
-# Usage: ./scripts/bundle.sh [--debug]
+# Usage: ./scripts/bundle.sh [--debug] [--clean]
 #
 # Builds both binaries and packages each into its own .app bundle, so they
 # can be installed side by side:
@@ -21,11 +21,18 @@ DIST="$ROOT/dist"
 
 # ── flags ────────────────────────────────────────────────────────────────────
 PROFILE="release"
+CLEAN=0
 for arg in "$@"; do
     case $arg in
         --debug) PROFILE="debug" ;;
+        --clean) CLEAN=1 ;;
     esac
 done
+
+# Dedicated target dir: RUSTFLAGS (target-cpu) is part of every artifact hash, so sharing
+# `target/` with interactive builds duplicates all dependencies. --clean forces a full rebuild.
+export CARGO_TARGET_DIR="$ROOT/target/bundle"
+[ "$CLEAN" = 1 ] && rm -rf "$CARGO_TARGET_DIR"
 
 VERSION="$(grep '^version' "$ROOT/Cargo.toml" | head -1 | sed 's/.*= "\(.*\)"/\1/')"
 
@@ -43,10 +50,10 @@ build_bundle() {
         # RUSTFLAGS: target-cpu=apple-m1 enables AMX, SHA3, and other M1 ISA extensions.
         # Produces a binary optimised for Apple Silicon — NOT portable to Intel Macs.
         RUSTFLAGS="-C target-cpu=apple-m1" cargo build --release --bin "$BIN_NAME" --manifest-path "$ROOT/Cargo.toml"
-        BINARY="$ROOT/target/release/$BIN_NAME"
+        BINARY="$CARGO_TARGET_DIR/release/$BIN_NAME"
     else
         cargo build --bin "$BIN_NAME" --manifest-path "$ROOT/Cargo.toml"
-        BINARY="$ROOT/target/debug/$BIN_NAME"
+        BINARY="$CARGO_TARGET_DIR/debug/$BIN_NAME"
     fi
 
     echo "==> Creating $APP_DIR_NAME structure..."
