@@ -4,6 +4,19 @@
 
 ---
 
+## [1.2.0] — 2026-10-02
+
+### Added
+- `gpui-petruterm`: tabs can be reordered by drag and drop.
+
+### Fixed
+- `gpui-petruterm`: the tab rename field now has an explicit width and no longer collapses to zero.
+- `gpui-petruterm`: status-bar polling and cursor blink are skipped while the window is unfocused.
+- AUDIT-BUG-06..10 resolved, TD-P9-07 closed, `lru` bumped for RUSTSEC-2026-0253.
+
+### Changed
+- Dev profile uses `debug = "line-tables-only"`; `bundle.sh` and `ci-local.sh` build into dedicated target dirs (`target/bundle`, `target/ci`), and `bundle.sh` gains `--clean`.
+
 ## [1.1.0] — 2026-09-24
 
 ### Added
