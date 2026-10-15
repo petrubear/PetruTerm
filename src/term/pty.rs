@@ -13,6 +13,7 @@ use std::thread::JoinHandle;
 use crate::app::pty_schedule::WakeupGate;
 use crate::config::Config;
 use crate::term::osc133::{EraseScanner, Osc133Marker, Osc133Scanner};
+use crate::term::osc_notify::{OscNotification, OscNotifyScanner};
 
 /// Wakeup callback invoked whenever new PTY data / a child-exit event is
 /// ready, so the owning UI framework can schedule a redraw. Decoupled from
@@ -43,6 +44,8 @@ pub enum PtyEvent {
     PtyWrite(String),
     /// OSC 133 semantic prompt marker.
     Osc133(Osc133Marker),
+    /// Desktop notification requested by the program (OSC 9 / 99 / 777).
+    Notify(OscNotification),
     /// CSI 2 J (erase display) or CSI 3 J (erase scrollback) detected.
     /// Block decorations must be cleared.
     ScreenCleared,
@@ -469,7 +472,7 @@ unsafe fn spawn_shell(
 // ── Reader thread ─────────────────────────────────────────────────────────────
 
 /// Blocking PTY reader loop.  Runs on its own thread.
-/// Reads raw bytes from master_fd, scans for OSC 133 markers, advances the VTE
+/// Reads raw bytes from master_fd, scans for OSC 133 / notification markers, advances the VTE
 /// processor (which updates the terminal grid), and sends DataReady events.
 fn reader_loop(
     master_fd: RawFd,
@@ -481,6 +484,7 @@ fn reader_loop(
     let mut processor: VteProcessor<StdSyncHandler> = VteProcessor::new();
     let mut scanner = Osc133Scanner::new();
     let mut erase_scanner = EraseScanner::new();
+    let mut notify_scanner = OscNotifyScanner::new();
     let mut buf = vec![0u8; 0x10_0000]; // 1 MiB read buffer
 
     loop {
@@ -501,6 +505,9 @@ fn reader_loop(
             }
             if erase_scanner.scan(b) {
                 let _ = tx.try_send(PtyEvent::ScreenCleared);
+            }
+            if let Some(notification) = notify_scanner.scan(b) {
+                let _ = tx.try_send(PtyEvent::Notify(notification));
             }
         }
 

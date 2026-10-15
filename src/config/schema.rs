@@ -37,6 +37,7 @@ pub struct Config {
     pub snippets: Vec<SnippetConfig>,
     // notifications.lua
     pub notifications: NotificationsConfig,
+    pub agents: AgentsConfig,
     // config.lua
     pub shell: String,
     pub shell_integration: bool,
@@ -113,6 +114,7 @@ impl Default for Config {
             llm: LlmConfig::default(),
             snippets: vec![],
             notifications: NotificationsConfig::default(),
+            agents: AgentsConfig::default(),
             shell: std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into()),
             shell_integration: true,
             workspaces: WorkspacesConfig::default(),
@@ -165,6 +167,28 @@ impl Default for NotificationsConfig {
     fn default() -> Self {
         Self {
             style: NotificationStyle::Native,
+        }
+    }
+}
+
+/// Agent attention layer: how a pane that needs the user (OSC 9/99/777 notification,
+/// optionally BEL) is surfaced. See `docs/superpowers/specs/2026-10-15-agent-attention-design.md`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentsConfig {
+    /// Deliver a notification when a pane the user is not looking at asks for attention.
+    pub notifications: bool,
+    /// Show the tab dot / pane ring for panes that need attention.
+    pub ring: bool,
+    /// Treat BEL as "needs attention" (off by default: vim and tab completion ring it too).
+    pub bell_attention: bool,
+}
+
+impl Default for AgentsConfig {
+    fn default() -> Self {
+        Self {
+            notifications: true,
+            ring: true,
+            bell_attention: false,
         }
     }
 }

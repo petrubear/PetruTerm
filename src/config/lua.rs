@@ -737,6 +737,21 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
         }
     }
 
+    if let Ok(a_table) = table.get::<LuaTable>("agents") {
+        // `Option<bool>`: mlua converts a missing key to `false` for a bare `bool`.
+        if let Ok(Some(v)) = a_table.get::<Option<bool>>("notifications") {
+            config.agents.notifications = v;
+        }
+        // `Option<bool>`: mlua converts a missing key to `false` for a bare `bool`.
+        if let Ok(Some(v)) = a_table.get::<Option<bool>>("ring") {
+            config.agents.ring = v;
+        }
+        // `Option<bool>`: mlua converts a missing key to `false` for a bare `bool`.
+        if let Ok(Some(v)) = a_table.get::<Option<bool>>("bell_attention") {
+            config.agents.bell_attention = v;
+        }
+    }
+
     // ── config.lua ────────────────────────────────────────────────────────────
     if let Ok(shell) = table.get::<String>("shell") {
         config.shell = shell;

@@ -1,10 +1,16 @@
 /// Deliver a native notification with the given body text.
 /// No-op on non-macOS or if the app has not been granted notification permission.
 pub fn send(body: &str) {
+    send_with("PetruTerm", body, "petruterm.toast");
+}
+
+/// Deliver a native notification with an explicit title and identifier. Notifications that
+/// share an identifier replace each other, so per-pane callers pass a per-pane identifier.
+pub fn send_with(title: &str, body: &str, identifier: &str) {
     #[cfg(target_os = "macos")]
-    macos::send(body);
+    macos::send(title, body, identifier);
     #[cfg(not(target_os = "macos"))]
-    let _ = body;
+    let _ = (title, body, identifier);
 }
 
 #[cfg(target_os = "macos")]
@@ -17,7 +23,7 @@ mod macos {
         UNUserNotificationCenter,
     };
 
-    pub(super) fn send(body: &str) {
+    pub(super) fn send(title: &str, body: &str, identifier: &str) {
         unsafe {
             let center = UNUserNotificationCenter::currentNotificationCenter();
 
@@ -28,12 +34,12 @@ mod macos {
             center.requestAuthorizationWithOptions_completionHandler(opts, &noop);
 
             let content = UNMutableNotificationContent::new();
-            content.setTitle(&NSString::from_str("PetruTerm"));
+            content.setTitle(&NSString::from_str(title));
             content.setBody(&NSString::from_str(body));
 
-            // Reuse a fixed identifier so rapid notifications replace each other.
+            // Same identifier => the newer notification replaces the older one.
             let req = UNNotificationRequest::requestWithIdentifier_content_trigger(
-                &NSString::from_str("petruterm.toast"),
+                &NSString::from_str(identifier),
                 &content,
                 None,
             );

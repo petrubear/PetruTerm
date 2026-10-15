@@ -389,4 +389,20 @@ mod tests {
             schema::NotificationStyle::Native
         );
     }
+
+    #[test]
+    fn agents_defaults_and_overrides() {
+        let (config, _lua) =
+            lua::load_config_str("return {}", "test/config.lua", &[]).expect("empty config loads");
+        assert!(config.agents.notifications);
+        assert!(config.agents.ring);
+        assert!(!config.agents.bell_attention);
+
+        let src = r#"return { agents = { notifications = false, bell_attention = true } }"#;
+        let (config, _lua) =
+            lua::load_config_str(src, "test/config.lua", &[]).expect("agents config must load");
+        assert!(!config.agents.notifications);
+        assert!(config.agents.ring);
+        assert!(config.agents.bell_attention);
+    }
 }

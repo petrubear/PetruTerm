@@ -1,8 +1,10 @@
+pub mod attention;
 pub mod blocks;
 pub mod color;
 pub mod flag_db;
 pub mod input_shadow;
 pub mod osc133;
+pub mod osc_notify;
 pub mod pty;
 pub mod search;
 pub mod tokenizer;
@@ -11,6 +13,7 @@ pub use alacritty_terminal::vte::ansi::CursorShape;
 pub use blocks::BlockManager;
 pub use input_shadow::InputShadow;
 pub use osc133::Osc133Marker;
+pub use osc_notify::OscNotification;
 pub use pty::{Pty, PtyEvent, PtyEventProxy, Wakeup};
 
 use alacritty_terminal::grid::{Dimensions, Scroll};

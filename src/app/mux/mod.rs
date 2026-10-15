@@ -1,6 +1,7 @@
 use crate::app::pty_schedule::WakeupGate;
 use crate::app::renderer::{rows_for_full_rebuild, DirtyRows, FullRebuildTrigger};
 use crate::config::Config;
+use crate::term::attention::AttentionEvent;
 use crate::term::{Osc133Marker, PtyEvent, Terminal};
 use crate::ui::search_bar::SearchMatch;
 use crate::ui::{PaneInfo, PaneManager, PaneSeparator, Rect, TabManager};
@@ -187,6 +188,9 @@ pub struct Mux {
     pub zoomed_pane: Option<usize>,
     /// OSC 133 markers received this cycle: (terminal_id, marker).
     pub osc133_events: Vec<(usize, Osc133Marker)>,
+    /// Attention events (OSC 9/99/777 notification, BEL) queued by `poll_pty_events`:
+    /// (terminal_id, event). The App drains this after each poll.
+    pub attention_events: Vec<(usize, AttentionEvent)>,
     /// Exit codes for terminals that have exited, keyed by terminal_id.
     /// Retained after close so ACP `terminal/wait_for_exit` handlers can read them.
     /// Evicted after `MAX_CLOSED_TERMINALS` to avoid unbounded growth.
@@ -225,6 +229,7 @@ impl Mux {
             inactive_workspaces: Vec::new(),
             zoomed_pane: None,
             osc133_events: Vec::new(),
+            attention_events: Vec::new(),
             terminal_exit_codes: std::collections::HashMap::new(),
             terminal_final_output: std::collections::HashMap::new(),
             closed_terminal_order: VecDeque::new(),
@@ -363,6 +368,7 @@ impl Mux {
         let mut pending_events = 0usize;
         self.osc133_events.clear();
         let mut osc133_pending: Vec<(usize, Osc133Marker)> = Vec::new();
+        let mut attention_pending: Vec<(usize, AttentionEvent)> = Vec::new();
         let len = self.terminals.len();
         // Rotate the starting terminal each call so a terminal that floods
         // output (using up the whole shared budget by itself) doesn't always
@@ -397,7 +403,14 @@ impl Mux {
                             exited.push(id);
                         }
                     }
-                    PtyEvent::Bell => {}
+                    PtyEvent::Bell => attention_pending.push((id, AttentionEvent::Bell)),
+                    PtyEvent::Notify(n) => attention_pending.push((
+                        id,
+                        AttentionEvent::Notify {
+                            title: n.title,
+                            body: n.body,
+                        },
+                    )),
                     PtyEvent::ClipboardStore(text) => {
                         std::thread::spawn(move || {
                             let _ = arboard::Clipboard::new().and_then(|mut cb| cb.set_text(text));
@@ -441,6 +454,7 @@ impl Mux {
             self.retain_closed_terminal(id);
         }
         self.osc133_events.extend(osc133_pending);
+        self.attention_events.extend(attention_pending);
         PtyEventBatch {
             data_ids,
             exited,
@@ -1167,7 +1181,7 @@ fn syntax_highlight_at(
 #[cfg(test)]
 mod tests {
     use super::{drain_pty_events, PTY_EVENT_WORK_BUDGET};
-    use crate::term::{Osc133Marker, PtyEvent};
+    use crate::term::{Osc133Marker, OscNotification, PtyEvent};
     use crossbeam_channel::unbounded;
 
     #[test]
@@ -1181,6 +1195,11 @@ mod tests {
         tx.send(PtyEvent::Osc133(Osc133Marker::PromptStart))
             .unwrap();
         tx.send(PtyEvent::ScreenCleared).unwrap();
+        tx.send(PtyEvent::Notify(OscNotification {
+            title: None,
+            body: "hi".to_string(),
+        }))
+        .unwrap();
 
         let mut work = 0;
         let mut first = Vec::new();
@@ -1213,5 +1232,8 @@ mod tests {
         assert!(second
             .iter()
             .any(|event| matches!(event, PtyEvent::ScreenCleared)));
+        assert!(second
+            .iter()
+            .any(|event| matches!(event, PtyEvent::Notify(n) if n.body == "hi")));
     }
 }
