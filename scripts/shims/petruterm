@@ -1,0 +1,5 @@
+#!/bin/sh
+# `petruterm ...` from inside a PetruTerm pane runs the app binary that owns the pane.
+[ -n "$PETRUTERM_BIN" ] && exec "$PETRUTERM_BIN" "$@"
+echo "petruterm: not inside a PetruTerm pane" >&2
+exit 127

@@ -1566,6 +1566,11 @@ impl UiManager {
                     Err(e) => log::warn!("Failed to trust local MCP: {e:#}"),
                 }
             }
+            Action::ToggleRemote => match crate::remote::toggle() {
+                Ok(true) => log::info!("remote access started; run `petruterm remote pair`"),
+                Ok(false) => log::info!("remote access stopped"),
+                Err(e) => log::warn!("remote access: {e}"),
+            },
             Action::ToggleStatusBar => {
                 config.status_bar.enabled = !config.status_bar.enabled;
             }

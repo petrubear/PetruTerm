@@ -378,6 +378,7 @@ fn inject_petruterm_global(lua: &Lua) -> LuaResult<()> {
         // Overlays / window
         "CommandPalette",
         "ToggleStatusBar",
+        "ToggleRemote",
         "ToggleFullscreen",
         "Quit",
         // AI

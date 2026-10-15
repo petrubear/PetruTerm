@@ -49,6 +49,8 @@ pub enum Action {
     ToggleFullscreen,
     Quit,
     ToggleStatusBar,
+    // Remote access from a phone
+    ToggleRemote,
     // AI
     ToggleAiPanel,
     FocusAiPanel,
@@ -108,6 +110,7 @@ impl std::str::FromStr for Action {
             "UndoLastWrite" => Ok(Action::UndoLastWrite),
             "ClearAiContext" => Ok(Action::ClearAiContext),
             "ToggleStatusBar" => Ok(Action::ToggleStatusBar),
+            "ToggleRemote" => Ok(Action::ToggleRemote),
             "RenameTab" => Ok(Action::RenameTab),
             "SaveWorkspace" => Ok(Action::SaveWorkspace),
             "OpenSavedWorkspaces" => Ok(Action::OpenSavedWorkspaces),
@@ -258,6 +261,11 @@ pub fn built_in_actions(config: &Config) -> Vec<PaletteAction> {
         PaletteAction {
             name: "Trust local MCP config".to_string(),
             action: Action::TrustLocalMcp,
+            keybind: None,
+        },
+        PaletteAction {
+            name: "Remote: Start / Stop phone access".to_string(),
+            action: Action::ToggleRemote,
             keybind: None,
         },
         PaletteAction {

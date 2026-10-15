@@ -1,6 +1,8 @@
 # Remote access from a phone (Android) - design
 
-Status: draft, 2026-10-16. Nothing implemented.
+Status: implemented 2026-10-16 (phases 1-3 core). Verified end to end on the Android
+emulator: pairing through a local relay, pane list, snapshot, live output, typing, reconnect,
+needs-input notification. See "Implementation status" at the end.
 
 ## Decisions (2026-10-16)
 
@@ -159,7 +161,7 @@ as a PWA, no app store. Phone limits: no reliable background connection, so no p
 
 Phase 4 (only if the web client is not enough): native Android app (Kotlin) with a
 terminal view (Termux's terminal-view or a WebView xterm.js), foreground service for the
-connection and notifications, Keystore-held device key, Iroh via FFI if we adopt it.
+connection and notifications, device key stored encrypted under a Keystore AES key (Android Keystore cannot hold an X25519 key that Noise can use), Iroh via FFI if we adopt it.
 
 ## Phases
 
@@ -194,7 +196,7 @@ any security or transport work.
   desktop. Where it is hosted (self-hosted vs ours) is a separate decision.
 - Pairing is still a QR with a one-time secret, now carrying endpoint id + public key +
   relay URL. A stolen relay or QR (after expiry) must not grant access.
-- Android client: Kotlin, terminal view, foreground service, Keystore-held device key,
+- Android client: Kotlin, terminal view, foreground service, device key stored encrypted under a Keystore AES key (Android Keystore cannot hold an X25519 key that Noise can use),
   FCM-free push via its own relay connection. The Noise/frame codec should be a shared
   Rust crate used by desktop and Android (JNI) to avoid two implementations.
 - Phase order becomes: 1 host core, 2 E2E session + pairing + relay, 3 Android app,
@@ -203,3 +205,30 @@ any security or transport work.
 ## Open questions
 
 - Where to host the relay (self-hosted vs shared)?
+
+## Implementation status
+
+Built:
+- `crates/remote-proto`: Noise IK / IKpsk2 (snow), chunked framing, packets, pairing code. Also
+  compiled for Android and called through JNI by the app (`PetruTermMobile/rust`).
+- `crates/relay` (`petruterm-relay`): untrusted forwarder keyed by endpoint id, limits per IP,
+  per host and per client rate, newest host registration wins.
+- `src/remote/`: `host` (relay link and per-phone sessions), `bridge` (GUI-thread hand-off, used by
+  both binaries), `store` (host key, devices, status), `control` (`petruterm remote ...`).
+- On-demand only: `petruterm remote start|stop|status|pair|devices|revoke|readonly`, palette entry
+  "Remote: Start / Stop phone access", `Leader R` (gpui). `pair` refuses to print a code to a
+  non-terminal so an agent running in a pane cannot read it.
+- Output tee + grid snapshot (`term::tee`, `term::snapshot`).
+- Android app (separate repo): pairing by QR or pasted code, pane list, xterm.js terminal, key
+  toolbar, agent notifications.
+
+Not done / follow-ups:
+- Resize "fit" mode (the phone mirrors the desktop size, with a minimum zoom and horizontal
+  scroll); scrollback; primary screen under the alt screen.
+- Android foreground service so notifications arrive while the app is closed; push for a
+  disconnected phone.
+- Remote indicator in the desktop UI (status via `petruterm remote status` only); pane titles in
+  the gpui list are generic ("terminal N").
+- Relay hosting and TLS (use a TLS-terminating proxy for wss://); relay-side registration proof.
+- Control-socket caveat: any process of the same user can already read `host.key` and edit
+  `devices.json`, so the socket commands do not widen the trust boundary.

@@ -180,6 +180,7 @@ honors `keybind_style`; `gpui-petruterm` always uses the tmux-style leader binds
 | `/skills` (in panel)   | List loaded skills                         |
 | `/mcp` (in panel)      | List connected MCP servers and their tools |
 | `Leader u`             | Jump to next pane that needs attention (wgpu normal style: `Cmd+Shift+U`; gpui: `Cmd+Shift+U` too) |
+| `Leader R`             | Start/stop remote (phone) access (gpui)    |
 | `Leader o`             | Command palette                            |
 | `Ctrl+Space`           | Inline AI block                            |
 | Right-click            | Context menu                               |

@@ -17,8 +17,6 @@ mod tests;
 
 use crate::config::schema::RemoteConfig;
 use remote_proto::msg::HostMsg;
-use remote_proto::pair::PairingCode;
-use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
@@ -38,15 +36,6 @@ pub struct Manager {
     config: Mutex<RemoteConfig>,
     wakeup: Mutex<Option<Wakeup>>,
     running: Mutex<Option<Running>>,
-}
-
-/// Snapshot for status displays (palette / indicator wiring).
-#[cfg_attr(not(test), allow(dead_code))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Info {
-    pub active: bool,
-    pub relay_connected: bool,
-    pub clients: usize,
 }
 
 static MANAGER: OnceLock<Manager> = OnceLock::new();
@@ -74,19 +63,7 @@ pub fn notify_attention(pane_uid: u64, state: &str, message: &str) {
     }
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
 impl Manager {
-    pub fn info(&self) -> Info {
-        match self.running.lock().unwrap().as_ref() {
-            Some(r) => Info {
-                active: true,
-                relay_connected: r.ctx.relay_connected.load(Ordering::Relaxed),
-                clients: r.ctx.clients.load(Ordering::Relaxed),
-            },
-            None => Info::default(),
-        }
-    }
-
     pub fn is_active(&self) -> bool {
         self.running.lock().unwrap().is_some()
     }
@@ -155,25 +132,6 @@ impl Manager {
         }
     }
 
-    /// Mint a pairing code valid for [`OFFER_TTL`]; replaces any previous offer.
-    pub fn new_offer(&self, relay_override: Option<&str>) -> Result<PairingCode, String> {
-        let secret = remote_proto::random32().map_err(|e| e.to_string())?;
-        let expires = store::now_unix() + OFFER_TTL.as_secs();
-        self.install_offer(secret, expires)?;
-        let running = self.running.lock().unwrap();
-        let ctx = &running.as_ref().ok_or("remote access is not running")?.ctx;
-        let config = self.config.lock().unwrap().clone();
-        Ok(PairingCode {
-            host_public: ctx.identity.public,
-            secret,
-            expires_unix: expires,
-            relay: relay_override
-                .map(str::to_string)
-                .or(config.relay_public)
-                .unwrap_or(config.relay),
-        })
-    }
-
     /// Accept a pairing secret minted elsewhere (the CLI).
     pub fn install_offer(&self, secret: [u8; 32], expires: u64) -> Result<(), String> {
         let running = self.running.lock().unwrap();
@@ -187,6 +145,17 @@ impl Manager {
             failures: 0,
         });
         Ok(())
+    }
+}
+
+/// Start remote access if it is off, stop it if it is on. Returns the new state.
+pub fn toggle() -> Result<bool, String> {
+    let m = manager();
+    if m.is_active() {
+        m.stop();
+        Ok(false)
+    } else {
+        m.start().map(|_| true)
     }
 }
 

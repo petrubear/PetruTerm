@@ -3,6 +3,14 @@
 ## [Unreleased]
 
 ### Added
+- Remote access from a phone, on demand only (`petruterm remote start`, palette "Remote: Start /
+  Stop phone access", `Leader R` in the gpui build): panes are streamed to an Android app over an
+  end-to-end encrypted Noise session through a relay (`petruterm-relay`, new `relay` crate; the
+  relay only sees ciphertext). `petruterm remote pair` shows a QR code and a single-use code valid
+  for 2 minutes; `devices`, `revoke` and `readonly` manage paired phones. New `remote` table in
+  the config (`relay`, `relay_public`). The protocol lives in the new `remote-proto` crate; the
+  Android client is the separate `PetruTermMobile` project. A `petruterm` shim in pane `PATH`
+  runs the owning binary, so `petruterm remote pair` works inside a pane.
 - Agent attention layer (both binaries): a program running in a pane that asks for attention
   with an OSC 9 / OSC 99 / OSC 777 desktop-notification sequence (coding agents such as Claude
   Code, Codex, OpenCode) marks that pane as needing you when you are not looking at it. The tab

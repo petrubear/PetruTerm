@@ -31,6 +31,7 @@ pub enum LeaderAction {
     ToggleWorkspaceSidebar,
     OpenCommandPalette,
     JumpToUnread,
+    ToggleRemote,
 }
 
 impl TryFrom<&str> for LeaderAction {
@@ -63,6 +64,7 @@ impl TryFrom<&str> for LeaderAction {
             "ToggleWorkspaceSidebar" => Ok(LeaderAction::ToggleWorkspaceSidebar),
             "CommandPalette" => Ok(LeaderAction::OpenCommandPalette),
             "JumpToUnread" => Ok(LeaderAction::JumpToUnread),
+            "ToggleRemote" => Ok(LeaderAction::ToggleRemote),
             _ => Err(()),
         }
     }
@@ -72,7 +74,7 @@ impl TryFrom<&str> for LeaderAction {
 /// `LEADER`-scoped bindings (`leader_bindings_view(config).bindings`).
 ///
 /// `z` (ZoomPane), `w` (NewWorkspace), `s` (ToggleWorkspaceSidebar) and `u`
-/// (JumpToUnread) are seeded as defaults via `entry().or_insert`, so a config binding for
+/// (JumpToUnread) and `R` (ToggleRemote) are seeded as defaults via `entry().or_insert`, so a config binding for
 /// the same key overrides them.
 pub fn build_leader_map(bindings: &[KeyBind]) -> HashMap<String, LeaderAction> {
     let mut map = HashMap::new();
@@ -88,6 +90,8 @@ pub fn build_leader_map(bindings: &[KeyBind]) -> HashMap<String, LeaderAction> {
         .or_insert(LeaderAction::ToggleWorkspaceSidebar);
     map.entry("u".to_string())
         .or_insert(LeaderAction::JumpToUnread);
+    map.entry("R".to_string())
+        .or_insert(LeaderAction::ToggleRemote);
     map
 }
 
@@ -221,6 +225,7 @@ mod tests {
         assert_eq!(map.get("o"), Some(&LeaderAction::OpenCommandPalette));
         // Seeded too: jump to the next pane that needs attention.
         assert_eq!(map.get("u"), Some(&LeaderAction::JumpToUnread));
+        assert_eq!(map.get("R"), Some(&LeaderAction::ToggleRemote));
     }
 
     #[test]
@@ -228,6 +233,6 @@ mod tests {
         let bindings = vec![kb("o", "SomeUnknownFutureAction")];
         let map = build_leader_map(&bindings);
         assert_eq!(map.get("o"), None);
-        assert_eq!(map.len(), 4); // just the seeded "z", "w", "s" and "u"
+        assert_eq!(map.len(), 5); // just the seeded "z", "w", "s", "u" and "R"
     }
 }
