@@ -10,6 +10,7 @@
 pub mod claude_hooks;
 pub mod cli;
 pub mod server;
+pub mod shell;
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -89,7 +90,7 @@ pub fn shim_dir() -> Option<PathBuf> {
 }
 
 /// Environment to add to a new pane's shell.
-pub fn pane_env(pane_uid: u64) -> Vec<(String, String)> {
+pub fn pane_env(pane_uid: u64, shell: &str) -> Vec<(String, String)> {
     let mut env = vec![("PETRUTERM_PANE_ID".to_string(), pane_uid.to_string())];
     if let Some(sock) = server::socket_path() {
         env.push((
@@ -104,12 +105,16 @@ pub fn pane_env(pane_uid: u64) -> Vec<(String, String)> {
         ));
     }
     if let Some(dir) = shim_dir() {
-        let mut path = std::ffi::OsString::from(dir);
+        let mut path = std::ffi::OsString::from(&dir);
         if let Some(old) = std::env::var_os("PATH") {
             path.push(":");
             path.push(old);
         }
         env.push(("PATH".to_string(), path.to_string_lossy().into_owned()));
+        // Login-shell startup files reorder PATH; put the shim back first at the first prompt.
+        if let Some(base) = server::state_dir() {
+            env.extend(shell::integration_env(shell, &dir, &base));
+        }
     }
     env
 }
@@ -193,7 +198,7 @@ mod tests {
 
     #[test]
     fn pane_env_exports_id_and_binary() {
-        let env = pane_env(42);
+        let env = pane_env(42, "/bin/zsh");
         assert!(env.contains(&("PETRUTERM_PANE_ID".to_string(), "42".to_string())));
         assert!(env.iter().any(|(k, _)| k == "PETRUTERM_BIN"));
     }

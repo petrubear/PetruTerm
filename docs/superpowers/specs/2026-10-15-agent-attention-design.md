@@ -8,10 +8,11 @@ sources (see "cmux findings" and "Delivery slices").
 Implementation deviations: panes are identified on the socket by a process-unique `pane_uid`
 (`PETRUTERM_PANE_ID`), not the terminal id, because the wgpu build allocates terminal ids after
 spawning the shell. Hook state messages are not rate limited (OSC notifications still are).
-Known gap: macOS `path_helper` and user rc files reorder PATH in login shells, so the shim is
-not guaranteed to be first (verified: on the dev machine `~/.local/bin` precedes it). Fix
-candidates: ZDOTDIR-based shell integration that re-prepends the shim directory, or relying on
-`hooks setup claude`.
+Shim ordering: macOS `path_helper` and user rc files reorder PATH in login shells (verified: on
+the dev machine `~/.local/bin` precedes the shim). Solved with shell integration
+(`src/ipc/shell.rs`): zsh gets a generated `ZDOTDIR` whose `.zshenv` restores the user's
+`ZDOTDIR`, sources their `.zshenv` and re-prepends the shim dir in a one-shot `precmd` hook;
+bash gets a `PROMPT_COMMAND` prefix. Other shells (fish) rely on `hooks setup claude`.
 
 ## Goal
 

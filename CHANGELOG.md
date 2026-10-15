@@ -21,8 +21,10 @@
   `hooks setup claude [--dry-run]` (merges the hooks into `~/.claude/settings.json`, with a
   backup). Both exit 0 silently outside a PetruTerm pane. The app bundles ship a `claude`
   shim in `Contents/Resources/bin` (first on each pane's PATH) that injects the same hooks
-  through `--settings` when `claude` runs in a pane; it has no effect if your shell startup
-  files put another `claude` earlier on PATH, in which case use `hooks setup claude`.
+  through `--settings` when `claude` runs in a pane. zsh and bash panes re-prepend the shim
+  directory right before the first prompt (a generated `ZDOTDIR` for zsh, a `PROMPT_COMMAND`
+  prefix for bash), so `path_helper` and your own `PATH` exports cannot hide it; other shells
+  should use `hooks setup claude`.
 
 ---
 

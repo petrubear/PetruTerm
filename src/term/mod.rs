@@ -124,7 +124,7 @@ impl Terminal {
             working_directory,
             term_config,
             &size,
-            &crate::ipc::pane_env(pane_uid),
+            &crate::ipc::pane_env(pane_uid, &config.shell),
         )?;
 
         let child_pid = pty.child_pid;
