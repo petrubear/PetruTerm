@@ -2,6 +2,17 @@
 
 Status: draft, 2026-10-16. Nothing implemented.
 
+## Decisions (2026-10-16)
+
+1. Native Android app first (no web client). The app project location is asked of the
+   user before any app code is written; the host side lives in this repo.
+2. Built-in relay from the start (like cmux). Security is the priority, so the relay is
+   untrusted: the phone and desktop run an end-to-end encrypted session (Noise, keys
+   pinned at pairing) and the relay only forwards ciphertext between two endpoint ids.
+   LAN direct and Tailscale remain as optional routes under the same E2E session.
+3. Paired devices are read-write by default (the point is sending commands); a per-device
+   read-only flag still exists.
+
 ## Goal
 
 Use the desktop PetruTerm from a phone, like cmux's mobile app or Claude's `/rc`:
@@ -158,8 +169,23 @@ any security or transport work.
 - Security surface: pairing flow and TLS pinning must be reviewed before phase 2 ships.
 - Resize "fit" reflows the desktop pane; keep it opt-in.
 
+## Consequences of the decisions
+
+- Transport: an E2E session (Noise IK/XX with device Ed25519/X25519 keys) carried over
+  any byte route: relay (outbound WebSocket/QUIC from both sides), LAN, or Tailscale.
+  TLS pinning is replaced by the Noise handshake; the relay never sees plaintext or keys.
+- Relay: small Rust service, stateless forwarding by endpoint id, rate limits, no
+  accounts, no logs of content. Host and phone both dial out, so no inbound port on the
+  desktop. Where it is hosted (self-hosted vs ours) is a separate decision.
+- Pairing is still a QR with a one-time secret, now carrying endpoint id + public key +
+  relay URL. A stolen relay or QR (after expiry) must not grant access.
+- Android client: Kotlin, terminal view, foreground service, Keystore-held device key,
+  FCM-free push via its own relay connection. The Noise/frame codec should be a shared
+  Rust crate used by desktop and Android (JNI) to avoid two implementations.
+- Phase order becomes: 1 host core, 2 E2E session + pairing + relay, 3 Android app,
+  4 attention push and polish. The web client is dropped.
+
 ## Open questions
 
-- Web client first (recommended) or straight to native?
-- Tailscale-only for v1, or also a built-in relay?
-- Read-only by default for new devices?
+- Where to host the relay (self-hosted vs shared)?
+- Android project location (asked before writing).
