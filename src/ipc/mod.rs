@@ -78,15 +78,19 @@ pub fn next_pane_uid() -> u64 {
 }
 
 /// Directory with agent shims (`claude`, ...) to put first on a pane's PATH: the bundle's
-/// `Contents/Resources/bin`, or `PETRUTERM_BIN_DIR` for unbundled builds.
+/// `Contents/Resources/bin`, `PETRUTERM_BIN_DIR`, or (debug builds only) the source tree's
+/// `scripts/shims`, so `cargo run` works without bundling.
 pub fn shim_dir() -> Option<PathBuf> {
     let bundled = std::env::current_exe()
         .ok()
         .and_then(|exe| Some(exe.parent()?.parent()?.join("Resources/bin")));
+    let dev = cfg!(debug_assertions)
+        .then(|| PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/scripts/shims")));
     bundled
-        .filter(|d| d.is_dir())
-        .or_else(|| std::env::var_os("PETRUTERM_BIN_DIR").map(PathBuf::from))
-        .filter(|d| d.is_dir())
+        .into_iter()
+        .chain(std::env::var_os("PETRUTERM_BIN_DIR").map(PathBuf::from))
+        .chain(dev)
+        .find(|d| d.is_dir())
 }
 
 /// Environment to add to a new pane's shell.
