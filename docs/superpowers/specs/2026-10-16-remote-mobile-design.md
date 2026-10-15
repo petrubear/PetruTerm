@@ -10,7 +10,9 @@ Status: draft, 2026-10-16. Nothing implemented.
    untrusted: the phone and desktop run an end-to-end encrypted session (Noise, keys
    pinned at pairing) and the relay only forwards ciphertext between two endpoint ids.
    LAN direct and Tailscale remain as optional routes under the same E2E session.
-3. Paired devices are read-write by default (the point is sending commands); a per-device
+3. Remote access starts on demand, like Claude Code's `/rc`. Nothing listens or dials
+   out until the user runs a command; see "On-demand activation".
+4. Paired devices are read-write by default (the point is sending commands); a per-device
    read-only flag still exists.
 
 ## Goal
@@ -31,6 +33,18 @@ internet by default; replacing the local control socket (it stays local-only).
 
 Too heavy for a first version. We take the shape (host streams, client attaches,
 pairing grant, attention push) and defer the transport.
+
+## On-demand activation
+
+- Off at startup, always. No config key can make it start automatically.
+- Start: command palette entry "Remote: Start" and a leader keybind (`Leader R`), plus
+  the CLI `petruterm remote start|stop|status|devices` through the local control socket.
+- Starting opens the relay connection (and optional LAN listener), then shows a QR and
+  a short pairing code for new devices; already paired devices just reconnect.
+- Stop: "Remote: Stop", `remote stop`, or quitting the app. Stopping drops all client
+  sessions and closes the relay link. The state does not persist across restarts.
+- While active: status bar / tab indicator, plus a count of attached devices.
+- Revoking a device is separate from stopping and persists.
 
 ## Architecture
 
@@ -121,7 +135,7 @@ Versioned `hello` so old clients fail cleanly.
 
 This is shell access over a network. Requirements, all phase 2:
 
-- Off by default (`remote.enabled = false`); explicit command or config to enable.
+- Off by default and only started by an explicit command (see On-demand activation).
 - Listen address configurable; default loopback-only with an explicit "listen on
   tailnet/LAN" choice. Never `0.0.0.0` implicitly.
 - TLS with a self-signed certificate generated on first run; the QR carries the
