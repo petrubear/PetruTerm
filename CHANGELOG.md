@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Added
+- Agent attention layer (both binaries): a program running in a pane that asks for attention
+  with an OSC 9 / OSC 99 / OSC 777 desktop-notification sequence (coding agents such as Claude
+  Code, Codex, OpenCode) marks that pane as needing you when you are not looking at it. The tab
+  gets an orange dot, the pane an orange ring, and a native notification (or toast, per
+  `notifications.style`) titled with the tab name is delivered. `Leader u` (and `Cmd+Shift+U`)
+  jumps to the next such pane across tabs and workspaces. New `agents` table in
+  `notifications.lua`: `notifications`, `ring`, `bell_attention` (BEL as attention, off by
+  default). Notification text is untrusted PTY output: control characters are stripped, it is
+  capped at 200 chars, and each pane is limited to one event per second. ConEmu `OSC 9;4`
+  progress sequences are ignored. Design: `docs/superpowers/specs/2026-10-15-agent-attention-design.md`.
+
 ---
 
 ## [1.2.0] — 2026-10-02

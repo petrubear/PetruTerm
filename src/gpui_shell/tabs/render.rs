@@ -134,6 +134,8 @@ pub fn render_tab_bar(
     on_right_click: TabRightClickCallback,
     on_reorder: TabReorderCallback,
     rename: Option<(usize, gpui::AnyElement)>,
+    // Per-tab "needs attention" flags aligned with `tabs`; shorter slices mean "no dot".
+    unread: &[bool],
 ) -> Div {
     let active_index = tabs.active_index();
     // `rename`'s element can't be cloned into every loop iteration
@@ -231,6 +233,17 @@ pub fn render_tab_bar(
                     .h(gpui::px(6.0))
                     .rounded_full()
                     .bg(dot_color),
+            )
+        } else {
+            cell
+        };
+        let cell = if unread.get(idx).copied().unwrap_or(false) {
+            cell.child(
+                div()
+                    .w(gpui::px(6.0))
+                    .h(gpui::px(6.0))
+                    .rounded_full()
+                    .bg(to_rgba(crate::term::attention::ATTENTION_COLOR)),
             )
         } else {
             cell

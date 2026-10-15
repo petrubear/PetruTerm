@@ -7,9 +7,6 @@ use super::App;
 use crate::config::schema::NotificationStyle;
 use std::time::{Duration, Instant};
 
-/// Color of the unread tab dot and the pane ring (warm orange, distinct from accent colors).
-pub(crate) const ATTENTION_COLOR: [f32; 4] = [1.0, 0.65, 0.2, 1.0];
-
 impl App {
     /// Drain `mux.attention_events`, update the tracker, deliver notifications, and clear the
     /// indicator of the pane the user is looking at. Called once per loop iteration.

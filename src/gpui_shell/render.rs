@@ -167,6 +167,7 @@ impl Render for GpuiShellRoot {
             on_right_click,
             focus_accent,
             pane_count,
+            attention: self.config.agents.ring.then_some(&self.attention),
         };
         let panes = match self.workspaces.active().zoomed_pane {
             Some(terminal_id) => pane_view::render_leaf(terminal_id, &pane_ctx),
@@ -237,6 +238,7 @@ impl Render for GpuiShellRoot {
             on_tab_right_click,
             on_tab_reorder,
             rename,
+            &self.tab_attention_flags(),
         );
 
         // Status bar row -- built from the poll-loop-refreshed cwd/git-branch/

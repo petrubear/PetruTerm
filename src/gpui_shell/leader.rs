@@ -30,6 +30,7 @@ pub enum LeaderAction {
     RenameWorkspace,
     ToggleWorkspaceSidebar,
     OpenCommandPalette,
+    JumpToUnread,
 }
 
 impl TryFrom<&str> for LeaderAction {
@@ -61,6 +62,7 @@ impl TryFrom<&str> for LeaderAction {
             "RenameWorkspace" => Ok(LeaderAction::RenameWorkspace),
             "ToggleWorkspaceSidebar" => Ok(LeaderAction::ToggleWorkspaceSidebar),
             "CommandPalette" => Ok(LeaderAction::OpenCommandPalette),
+            "JumpToUnread" => Ok(LeaderAction::JumpToUnread),
             _ => Err(()),
         }
     }
@@ -69,8 +71,8 @@ impl TryFrom<&str> for LeaderAction {
 /// Build the single-key leader dispatch table from `config.keys`'s
 /// `LEADER`-scoped bindings (`leader_bindings_view(config).bindings`).
 ///
-/// `z` (ZoomPane), `w` (NewWorkspace) and `s` (ToggleWorkspaceSidebar) are
-/// seeded as defaults via `entry().or_insert`, so a config binding for
+/// `z` (ZoomPane), `w` (NewWorkspace), `s` (ToggleWorkspaceSidebar) and `u`
+/// (JumpToUnread) are seeded as defaults via `entry().or_insert`, so a config binding for
 /// the same key overrides them.
 pub fn build_leader_map(bindings: &[KeyBind]) -> HashMap<String, LeaderAction> {
     let mut map = HashMap::new();
@@ -84,6 +86,8 @@ pub fn build_leader_map(bindings: &[KeyBind]) -> HashMap<String, LeaderAction> {
         .or_insert(LeaderAction::NewWorkspace);
     map.entry("s".to_string())
         .or_insert(LeaderAction::ToggleWorkspaceSidebar);
+    map.entry("u".to_string())
+        .or_insert(LeaderAction::JumpToUnread);
     map
 }
 
@@ -215,6 +219,8 @@ mod tests {
         assert_eq!(map.get("w"), Some(&LeaderAction::NewWorkspace));
         assert_eq!(map.get("s"), Some(&LeaderAction::ToggleWorkspaceSidebar));
         assert_eq!(map.get("o"), Some(&LeaderAction::OpenCommandPalette));
+        // Seeded too: jump to the next pane that needs attention.
+        assert_eq!(map.get("u"), Some(&LeaderAction::JumpToUnread));
     }
 
     #[test]
@@ -222,6 +228,6 @@ mod tests {
         let bindings = vec![kb("o", "SomeUnknownFutureAction")];
         let map = build_leader_map(&bindings);
         assert_eq!(map.get("o"), None);
-        assert_eq!(map.len(), 3); // just the seeded "z", "w", and "s"
+        assert_eq!(map.len(), 4); // just the seeded "z", "w", "s" and "u"
     }
 }

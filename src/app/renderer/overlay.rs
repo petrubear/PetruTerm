@@ -1170,7 +1170,7 @@ impl RenderContext {
                         dot,
                         dot,
                     ],
-                    color: crate::app::attention::ATTENTION_COLOR,
+                    color: crate::term::attention::ATTENTION_COLOR,
                     radius: dot * 0.5,
                     border_width: 0.0,
                     _pad: [0.0; 2],

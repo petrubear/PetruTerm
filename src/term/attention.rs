@@ -7,6 +7,9 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
+/// Color of the unread tab dot and the pane ring (warm orange, distinct from accent colors).
+pub const ATTENTION_COLOR: [f32; 4] = [1.0, 0.65, 0.2, 1.0];
+
 /// Minimum gap between two accepted attention events from the same pane. Agents and scripts
 /// can print notification sequences in a loop, and the text is untrusted.
 const MIN_EVENT_GAP: Duration = Duration::from_secs(1);

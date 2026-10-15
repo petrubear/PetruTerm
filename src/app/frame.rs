@@ -833,7 +833,7 @@ impl App {
                     rc.build_focus_border(
                         info,
                         &self.config.colors,
-                        Some(super::attention::ATTENTION_COLOR),
+                        Some(crate::term::attention::ATTENTION_COLOR),
                     );
                 }
             }

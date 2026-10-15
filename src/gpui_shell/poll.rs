@@ -120,6 +120,7 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                 // arms below.
                 let mut exited_terminals = Vec::new();
                 let mut exit_codes = Vec::new();
+                let mut attention_events = Vec::new();
                 for (&id, terminal) in &this.terminals {
                     while let Ok(event) = terminal.pty.rx.try_recv() {
                         match event {
@@ -192,12 +193,24 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                             crate::term::PtyEvent::PtyWrite(text) => {
                                 terminal.write_input(text.as_bytes());
                             }
+                            crate::term::PtyEvent::Notify(n) => attention_events.push((
+                                id,
+                                crate::term::attention::AttentionEvent::Notify {
+                                    title: n.title,
+                                    body: n.body,
+                                },
+                            )),
+                            crate::term::PtyEvent::Bell => attention_events
+                                .push((id, crate::term::attention::AttentionEvent::Bell)),
                             _ => {}
                         }
                     }
                 }
                 for (id, code) in exit_codes {
                     this.record_terminal_exit_code(id, code);
+                }
+                if this.process_attention_events(attention_events, focused, cx) {
+                    should_notify = true;
                 }
                 for id in exited_terminals {
                     this.on_terminal_exited(id, cx);

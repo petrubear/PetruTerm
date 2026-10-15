@@ -62,6 +62,7 @@ impl GpuiShellRoot {
             LeaderAction::SplitVertical => self.split_focused(SplitDir::Vertical),
             LeaderAction::ClosePane => self.close_focused_pane(cx),
             LeaderAction::ZoomPane => self.toggle_zoom(),
+            LeaderAction::JumpToUnread => self.jump_to_next_unread(),
             LeaderAction::FocusPane(dir) => {
                 let active = self.workspaces.active().tabs.active_index();
                 // Clone the Rc first, same reason as `on_drag` in render():

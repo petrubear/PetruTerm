@@ -6,6 +6,7 @@ mod acp_bridge;
 mod actions;
 mod ai_actions;
 mod ai_block;
+mod attention;
 mod blocks;
 mod branch_picker;
 mod chat_panel;
@@ -232,6 +233,9 @@ pub struct GpuiShellRoot {
     context_menu: context_menu::ContextMenu,
     /// Transient top-right notification -- see `toast.rs`'s own doc comment.
     toast: Option<(String, std::time::Instant)>,
+    /// Per-terminal "needs the user" state (OSC 9/99/777 notifications, optionally BEL) --
+    /// see `attention.rs`.
+    attention: crate::term::attention::AttentionTracker,
     /// Confirmed inline agent action, drained at `render()`'s top.
     pending_agent_action: Option<crate::llm::agent_action::AgentAction>,
     /// Exit code of a terminal that has been reaped, keyed by the id it

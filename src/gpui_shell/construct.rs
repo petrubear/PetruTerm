@@ -168,6 +168,7 @@ impl GpuiShellRoot {
             branch_scan_rx: None,
             pending_send_to_chat: None,
             cursor_blink_on: true,
+            attention: crate::term::attention::AttentionTracker::new(),
             cursor_last_blink: std::time::Instant::now(),
             rect_cache: Rc::new(RefCell::new(panes::RectCache::default())),
             leader_active: false,

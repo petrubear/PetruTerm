@@ -354,6 +354,18 @@ impl GpuiShellRoot {
             return;
         }
 
+        // ── Cmd+Shift+U — jump to the next pane that needs attention ─────
+        if event.keystroke.modifiers.platform
+            && event.keystroke.modifiers.shift
+            && !event.keystroke.modifiers.control
+            && !event.keystroke.modifiers.alt
+            && event.keystroke.key.eq_ignore_ascii_case("u")
+        {
+            self.jump_to_next_unread();
+            cx.notify();
+            return;
+        }
+
         // ── Cmd+1-9 — switch to tab N (standard macOS pattern) ───────────
         if event.keystroke.modifiers.platform {
             if let Ok(n) = event.keystroke.key.parse::<usize>() {

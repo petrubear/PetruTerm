@@ -111,6 +111,9 @@ pub(super) struct PaneRenderCx<'a> {
     /// zoomed). The focus border only shows when there's more than one
     /// pane to distinguish between -- see `render_leaf`.
     pub pane_count: usize,
+    /// Attention state for the "needs the user" ring on unfocused panes; `None` when
+    /// `agents.ring` is off.
+    pub attention: Option<&'a crate::term::attention::AttentionTracker>,
 }
 
 /// Walk `node` into a nested flex tree. The returned `Div` carries no
@@ -164,6 +167,8 @@ pub(super) fn render_leaf(terminal_id: usize, ctx: &PaneRenderCx) -> Div {
     let is_focus_target = terminal_id == ctx.focused && ctx.pane_count > 1;
     let border_color = if is_focus_target {
         to_rgba(ctx.focus_accent)
+    } else if ctx.attention.is_some_and(|a| a.is_unread(terminal_id)) {
+        to_rgba(crate::term::attention::ATTENTION_COLOR)
     } else {
         Rgba {
             r: 0.0,
