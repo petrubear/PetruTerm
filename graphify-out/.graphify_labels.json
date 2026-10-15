@@ -209,7 +209,5 @@
   "207": "standalone_keys.rs",
   "208": "AgentStepResult",
   "209": ".rasterize_lcd_to_atlas",
-  "210": "McpServerConfig",
-  "211": "run_io_loop",
-  "212": "validate_path"
+  "210": "McpServerConfig"
 }
