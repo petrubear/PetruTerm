@@ -19,6 +19,7 @@ pub mod i18n;
 pub mod ipc;
 pub mod llm;
 pub mod platform;
+pub mod remote;
 pub mod renderer;
 pub mod term;
 pub mod ui;

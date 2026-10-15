@@ -3,6 +3,7 @@
 //! - `notify [--state S] [--title T] [--body B]`: report state / send a notification
 //! - `hook <agent> <event>`: entry point for agent hooks (payload JSON on stdin)
 //! - `hooks setup claude [--dry-run]`: install the hooks in `~/.claude/settings.json`
+//! - `remote ...`: phone access (see `remote::control`)
 //!
 //! `notify` and `hook` exit 0 silently when not running inside a PetruTerm pane, so hooks
 //! are safe to leave configured everywhere.
@@ -20,6 +21,7 @@ pub fn run(args: &[String]) -> Option<i32> {
         "notify" => Some(notify(&args[1..])),
         "hook" => Some(hook(&args[1..])),
         "hooks" => Some(hooks(&args[1..])),
+        "remote" => Some(crate::remote::control::cli(&args[1..])),
         _ => None,
     }
 }

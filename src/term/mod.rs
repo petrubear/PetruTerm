@@ -172,7 +172,6 @@ impl Terminal {
 
     /// Subscribe to this pane's output: the first chunk is a snapshot of the current
     /// screen, then raw PTY bytes follow in order. See `tee` for the ordering guarantee.
-    #[cfg_attr(not(test), allow(dead_code))]
     pub fn subscribe_remote(
         &self,
         capacity: usize,

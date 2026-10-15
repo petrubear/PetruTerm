@@ -95,6 +95,7 @@ pub fn message_for(event: &str, payload: &Value, pane: u64) -> Option<Message> {
         state: Some(state.into()),
         title: Some("Claude Code".into()),
         body,
+        ..Message::default()
     })
 }
 

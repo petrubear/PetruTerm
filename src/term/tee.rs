@@ -8,9 +8,6 @@
 //! already teed but not yet in the grid, so a client joining mid-block misses them until the
 //! next redraw.)
 
-// No consumer outside tests until the remote server lands.
-#![cfg_attr(not(test), allow(dead_code))]
-
 use crossbeam_channel::{Receiver, Sender, TrySendError};
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};

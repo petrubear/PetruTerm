@@ -96,7 +96,9 @@ fn handle_connection(stream: UnixStream, tx: &Sender<Message>, wakeup: &(dyn Fn(
             Ok(_) => {}
         }
         if let Some(msg) = std::str::from_utf8(&line).ok().and_then(parse_line) {
-            if tx.try_send(msg).is_ok() {
+            if msg.remote.is_some() {
+                crate::remote::control::apply(&msg);
+            } else if tx.try_send(msg).is_ok() {
                 wakeup();
             }
         }

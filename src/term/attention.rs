@@ -23,6 +23,16 @@ pub enum AgentState {
 }
 
 impl AgentState {
+    /// Name used on the control socket and the remote protocol.
+    pub fn label(self) -> &'static str {
+        match self {
+            AgentState::Idle => "idle",
+            AgentState::Working => "working",
+            AgentState::NeedsInput => "needs-input",
+            AgentState::Done => "done",
+        }
+    }
+
     fn rank(self) -> u8 {
         match self {
             AgentState::Idle => 0,

@@ -38,6 +38,7 @@ pub struct Config {
     // notifications.lua
     pub notifications: NotificationsConfig,
     pub agents: AgentsConfig,
+    pub remote: RemoteConfig,
     // config.lua
     pub shell: String,
     pub shell_integration: bool,
@@ -115,6 +116,7 @@ impl Default for Config {
             snippets: vec![],
             notifications: NotificationsConfig::default(),
             agents: AgentsConfig::default(),
+            remote: RemoteConfig::default(),
             shell: std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into()),
             shell_integration: true,
             workspaces: WorkspacesConfig::default(),
@@ -189,6 +191,25 @@ impl Default for AgentsConfig {
             notifications: true,
             ring: true,
             bell_attention: false,
+        }
+    }
+}
+
+/// Remote access from a phone. Never starts by itself; see `remote`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoteConfig {
+    /// Relay this desktop dials, e.g. `wss://relay.example.com`.
+    pub relay: String,
+    /// Relay URL written into pairing codes for phones, when it differs from `relay`
+    /// (for example the Android emulator reaches the host's relay at `ws://10.0.2.2:8787`).
+    pub relay_public: Option<String>,
+}
+
+impl Default for RemoteConfig {
+    fn default() -> Self {
+        Self {
+            relay: "ws://127.0.0.1:8787".into(),
+            relay_public: None,
         }
     }
 }

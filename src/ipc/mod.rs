@@ -25,6 +25,7 @@ pub const MAX_LINE_BYTES: usize = 16 * 1024;
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Message {
     /// Pane uid from `PETRUTERM_PANE_ID` (see [`next_pane_uid`]).
+    #[serde(default)]
     pub pane: u64,
     /// `working`, `needs-input`, `done` or `idle`. Absent: a plain notification.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -33,6 +34,14 @@ pub struct Message {
     pub title: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub body: Option<String>,
+    /// Remote-access command (`start`, `stop`, `offer`); handled by `remote::control`, not
+    /// an attention event.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secret: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires: Option<u64>,
 }
 
 pub fn parse_state(s: &str) -> Option<AgentState> {
@@ -138,6 +147,7 @@ mod tests {
             state: state.map(str::to_string),
             title: title.map(str::to_string),
             body: body.map(str::to_string),
+            ..Message::default()
         }
     }
 
@@ -193,7 +203,8 @@ mod tests {
     #[test]
     fn parse_line_rejects_garbage_and_accepts_unknown_fields() {
         assert!(parse_line("not json").is_none());
-        assert!(parse_line("{}").is_none()); // pane is required
+        // `pane` is optional (control commands carry none), but an empty message does nothing.
+        assert!(parse_line("{}").and_then(Message::into_event).is_none());
         assert!(parse_line(r#"{"pane":"x"}"#).is_none());
         let m = parse_line(r#"{"pane":3,"state":"done","extra":1}"#).unwrap();
         assert_eq!(m.pane, 3);

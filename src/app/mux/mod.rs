@@ -7,6 +7,7 @@ use crate::ui::search_bar::SearchMatch;
 use crate::ui::{PaneInfo, PaneManager, PaneSeparator, Rect, TabManager};
 
 mod attention;
+mod remote;
 pub mod snapshot;
 mod workspace;
 

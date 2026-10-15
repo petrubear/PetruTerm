@@ -28,6 +28,7 @@ mod pane_view;
 mod panes;
 mod poll;
 mod rasterize;
+mod remote;
 mod rename;
 mod render;
 mod render_callbacks;

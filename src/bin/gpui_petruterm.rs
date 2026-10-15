@@ -35,6 +35,8 @@ fn main() {
 
     // Control socket for agent hooks / `petruterm notify`; the shell polls it on its tick.
     petruterm::ipc::server::start(std::sync::Arc::new(|| {}));
+    // Remote access never starts by itself; this only supplies its settings.
+    petruterm::remote::configure(&config.remote, std::sync::Arc::new(|| {}));
 
     Application::new().run(move |cx: &mut App| {
         cx.on_action(quit);

@@ -38,24 +38,10 @@ pub enum Packet {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "t", rename_all = "snake_case")]
 pub enum ClientMsg {
-    Hello {
-        version: u32,
-        name: String,
-    },
+    Hello { version: u32, name: String },
     List,
-    Attach {
-        pane: u64,
-    },
-    Detach {
-        pane: u64,
-    },
-    /// Fit the pane to the phone while attached; the host restores the desktop size on
-    /// detach or disconnect.
-    Resize {
-        pane: u64,
-        cols: u16,
-        rows: u16,
-    },
+    Attach { pane: u64 },
+    Detach { pane: u64 },
     Ping,
 }
 

@@ -208,10 +208,21 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                     }
                 }
                 // Hook / `petruterm notify` messages from the control socket.
+                crate::remote::bridge::service(&super::remote::GpuiPanes(&this.terminals));
                 for msg in crate::ipc::server::drain() {
                     let Some((uid, event)) = msg.into_event() else {
                         continue;
                     };
+                    if let crate::term::attention::AttentionEvent::State {
+                        state, message, ..
+                    } = &event
+                    {
+                        crate::remote::notify_attention(
+                            uid,
+                            state.label(),
+                            message.as_deref().unwrap_or(""),
+                        );
+                    }
                     if let Some((&id, _)) = this.terminals.iter().find(|(_, t)| t.pane_uid == uid) {
                         attention_events.push((id, event));
                     }

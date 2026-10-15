@@ -752,6 +752,15 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
         }
     }
 
+    if let Ok(r_table) = table.get::<LuaTable>("remote") {
+        if let Ok(Some(v)) = r_table.get::<Option<String>>("relay") {
+            config.remote.relay = v;
+        }
+        if let Ok(Some(v)) = r_table.get::<Option<String>>("relay_public") {
+            config.remote.relay_public = Some(v);
+        }
+    }
+
     // ── config.lua ────────────────────────────────────────────────────────────
     if let Ok(shell) = table.get::<String>("shell") {
         config.shell = shell;

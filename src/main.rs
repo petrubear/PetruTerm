@@ -5,6 +5,7 @@ mod i18n;
 mod ipc;
 mod llm;
 mod platform;
+mod remote;
 mod renderer;
 mod term;
 mod ui;
@@ -119,6 +120,14 @@ fn main() -> Result<()> {
         ipc::server::start(std::sync::Arc::new(move || {
             let _ = proxy.send_event(());
         }));
+        // Remote access never starts by itself; this only supplies its settings and wakeup.
+        let proxy = wakeup_proxy.clone();
+        remote::configure(
+            &config.remote,
+            std::sync::Arc::new(move || {
+                let _ = proxy.send_event(());
+            }),
+        );
     }
 
     let mut app = App::new(config, lua, wakeup_proxy);

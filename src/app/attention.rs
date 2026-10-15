@@ -11,12 +11,22 @@ impl App {
     /// Drain `mux.attention_events`, update the tracker, deliver notifications, and clear the
     /// indicator of the pane the user is looking at. Called once per loop iteration.
     pub(super) fn process_attention_events(&mut self) {
+        crate::remote::bridge::service(&self.mux);
         self.mux.collect_ipc_events();
         let events = std::mem::take(&mut self.mux.attention_events);
         let focused = self.mux.focused_terminal_id();
         let now = Instant::now();
         let mut changed = false;
         for (id, event) in events {
+            if let crate::term::attention::AttentionEvent::State { state, message, .. } = &event {
+                if let Some(Some(t)) = self.mux.terminals.get(id) {
+                    crate::remote::notify_attention(
+                        t.pane_uid,
+                        state.label(),
+                        message.as_deref().unwrap_or(""),
+                    );
+                }
+            }
             let observed = self.window_focused && id == focused;
             let alert =
                 self.attention

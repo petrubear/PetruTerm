@@ -7,9 +7,6 @@
 //! primary screen while the alt screen is active (alacritty keeps it private), scroll
 //! regions, origin mode, and Kitty keyboard flags.
 
-// No consumer outside tests until the remote server lands.
-#![cfg_attr(not(test), allow(dead_code))]
-
 use alacritty_terminal::event::EventListener;
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::index::{Column, Line};
