@@ -1,9 +1,9 @@
-/// Per-pane "does this pane need the user" tracking, shared by both binaries (wgpu `Mux` and
-/// gpui `GpuiShellRoot`). Pure state, no UI and no window dependencies.
-///
-/// State is keyed by terminal id, never by tab index or position: tabs can be reordered
-/// (gpui drag-and-drop) and wgpu archives inactive workspaces, so positions are not stable.
-/// Tab / workspace indicators are derived by aggregating terminal ids at render time.
+//! Per-pane "does this pane need the user" tracking, shared by both binaries (wgpu `Mux` and
+//! gpui `GpuiShellRoot`). Pure state, no UI and no window dependencies.
+//!
+//! State is keyed by terminal id, never by tab index or position: tabs can be reordered
+//! (gpui drag-and-drop) and wgpu archives inactive workspaces, so positions are not stable.
+//! Tab / workspace indicators are derived by aggregating terminal ids at render time.
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -14,8 +14,12 @@ const MIN_EVENT_GAP: Duration = Duration::from_secs(1);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AgentState {
     Idle,
+    /// Reserved for hook-driven state (design slice 2); not constructed yet.
+    #[allow(dead_code)]
     Working,
     NeedsInput,
+    /// Reserved for hook-driven state (design slice 2); not constructed yet.
+    #[allow(dead_code)]
     Done,
 }
 
@@ -138,6 +142,7 @@ impl AttentionTracker {
         self.panes.remove(&terminal_id);
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn get(&self, terminal_id: usize) -> Option<&PaneAttention> {
         self.panes.get(&terminal_id)
     }

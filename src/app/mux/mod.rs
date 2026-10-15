@@ -6,6 +6,7 @@ use crate::term::{Osc133Marker, PtyEvent, Terminal};
 use crate::ui::search_bar::SearchMatch;
 use crate::ui::{PaneInfo, PaneManager, PaneSeparator, Rect, TabManager};
 
+mod attention;
 pub mod snapshot;
 mod workspace;
 
@@ -1181,7 +1182,8 @@ fn syntax_highlight_at(
 #[cfg(test)]
 mod tests {
     use super::{drain_pty_events, PTY_EVENT_WORK_BUDGET};
-    use crate::term::{Osc133Marker, OscNotification, PtyEvent};
+    use crate::term::osc_notify::OscNotification;
+    use crate::term::{Osc133Marker, PtyEvent};
     use crossbeam_channel::unbounded;
 
     #[test]

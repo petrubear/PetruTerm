@@ -59,6 +59,8 @@ pub struct InputHandler {
     pub pane_ratio_adjusted: bool,
     /// Set when <leader>+e+e fires so `app/mod.rs` can toggle the sidebar.
     pub toggle_sidebar_requested: bool,
+    /// Set by Leader+u / Cmd+Shift+U; the App jumps to the next pane that needs attention.
+    pub jump_unread_requested: bool,
     /// Set true whenever `handle_key_input` synchronously writes bytes to a PTY
     /// (typing, snippet expansion, Ctrl-L clear, KKP disambiguation, etc.). Reset
     /// at the top of every key press. `app/mod.rs` reads it to arm the PTY-echo
@@ -101,6 +103,7 @@ impl InputHandler {
             cursor_last_blink: Instant::now(),
             pane_ratio_adjusted: false,
             toggle_sidebar_requested: false,
+            jump_unread_requested: false,
             pty_written: false,
             resize_mode: false,
             input_echo: String::new(),
@@ -292,6 +295,15 @@ impl InputHandler {
         // Hardcoded, not config.keys: Cmd+B mirrors the hardcoded tmux-style
         // sidebar toggle, and arrow keys are Key::Named, which KeyBind can't match.
         if config.keybind_style == crate::config::schema::KeybindStyle::Normal {
+            // Cmd+Shift+U → jump to the next pane that needs attention.
+            if cmd && shift && !ctrl && !option {
+                if let Key::Character(s) = &event.logical_key {
+                    if s.eq_ignore_ascii_case("u") {
+                        self.jump_unread_requested = true;
+                        return;
+                    }
+                }
+            }
             if cmd && !shift && !ctrl && !option {
                 if let Key::Character(s) = &event.logical_key {
                     if s.as_str() == "b" {
@@ -481,6 +493,11 @@ impl InputHandler {
                 // Leader+s → toggle sidebar (alias for Leader+e+e).
                 if s.as_str() == "s" {
                     self.toggle_sidebar_requested = true;
+                    return;
+                }
+                // Leader+u → jump to the next pane that needs attention.
+                if s.as_str() == "u" {
+                    self.jump_unread_requested = true;
                     return;
                 }
                 // Leader+z → toggle zoom on focused pane.

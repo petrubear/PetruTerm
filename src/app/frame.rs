@@ -568,6 +568,7 @@ impl App {
                 })
             });
 
+        let attention_flags = self.tab_attention_flags();
         if let Some(rc) = &mut self.render_ctx {
             // Advance epoch once per frame so LRU eviction can age unused entries.
             rc.renderer.atlas.next_epoch();
@@ -823,6 +824,19 @@ impl App {
                     rc.build_focus_border(focused, &self.config.colors, tab_accent);
                 }
             }
+            // Attention ring on every other pane that needs the user.
+            if self.config.agents.ring {
+                for info in pane_infos
+                    .iter()
+                    .filter(|p| !p.focused && self.attention.is_unread(p.terminal_id))
+                {
+                    rc.build_focus_border(
+                        info,
+                        &self.config.colors,
+                        Some(super::attention::ATTENTION_COLOR),
+                    );
+                }
+            }
 
             // B-3/B-4: OSC 133 command block backgrounds, exit-code text pills.
             rc.build_block_instances(
@@ -877,6 +891,7 @@ impl App {
                     for tab in self.mux.tabs.tabs() {
                         tab.title.hash(&mut h);
                     }
+                    attention_flags.hash(&mut h);
                     rc.tab_bar_titles_hash == h.finish()
                 };
 
@@ -908,6 +923,7 @@ impl App {
                         self.sidebar.visible,
                         self.ui.is_panel_visible(),
                         rename_input,
+                        &attention_flags,
                         &self.config.colors,
                     );
                     rc.tab_bar_instances_cache.clear();
@@ -930,6 +946,7 @@ impl App {
                         for tab in self.mux.tabs.tabs() {
                             tab.title.hash(&mut h);
                         }
+                        attention_flags.hash(&mut h);
                         rc.tab_bar_titles_hash = h.finish();
                     }
                     rc.tab_bar_rename_input = rename_input.map(|s| s.to_string());

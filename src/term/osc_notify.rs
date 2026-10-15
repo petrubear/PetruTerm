@@ -1,14 +1,14 @@
-/// Desktop-notification OSC sequences emitted by terminal programs (agents, scripts):
-///   ESC ] 9 ; <text> ST                       — iTerm2 / ConEmu style
-///   ESC ] 777 ; notify ; <title> ; <body> ST  — urxvt / foot style
-///   ESC ] 99 ; <metadata> ; <payload> ST      — kitty style (single-chunk form only)
-///
-/// ST = BEL (\x07) or ESC \ (\x1b\x5c). `0x9c` is deliberately NOT a terminator: it is a
-/// UTF-8 continuation byte (e.g. U+2705 is E2 9C 85), so treating it as ST would truncate
-/// notification text that contains emoji.
-///
-/// The text comes from the PTY, so it is untrusted; [`sanitize`] strips control characters
-/// and caps the length before it reaches any UI.
+//! Desktop-notification OSC sequences emitted by terminal programs (agents, scripts):
+//!   ESC ] 9 ; <text> ST                       — iTerm2 / ConEmu style
+//!   ESC ] 777 ; notify ; <title> ; <body> ST  — urxvt / foot style
+//!   ESC ] 99 ; <metadata> ; <payload> ST      — kitty style (single-chunk form only)
+//!
+//! ST = BEL (\x07) or ESC \ (\x1b\x5c). `0x9c` is deliberately NOT a terminator: it is a
+//! UTF-8 continuation byte (e.g. U+2705 is E2 9C 85), so treating it as ST would truncate
+//! notification text that contains emoji.
+//!
+//! The text comes from the PTY, so it is untrusted; [`sanitize`] strips control characters
+//! and caps the length before it reaches any UI.
 
 /// Max bytes of body kept while scanning. Anything beyond is discarded.
 const BODY_CAP: usize = 4096;

@@ -13,7 +13,6 @@ pub use alacritty_terminal::vte::ansi::CursorShape;
 pub use blocks::BlockManager;
 pub use input_shadow::InputShadow;
 pub use osc133::Osc133Marker;
-pub use osc_notify::OscNotification;
 pub use pty::{Pty, PtyEvent, PtyEventProxy, Wakeup};
 
 use alacritty_terminal::grid::{Dimensions, Scroll};
@@ -311,5 +310,66 @@ pub fn process_cwd(pid: u32) -> Option<std::path::PathBuf> {
     #[cfg(not(target_os = "macos"))]
     {
         std::fs::read_link(format!("/proc/{}/cwd", pid)).ok()
+    }
+}
+
+#[cfg(test)]
+mod notify_pty_tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::{Duration, Instant};
+
+    /// End to end: a real PTY child prints notification sequences and they come out of the
+    /// reader thread as `PtyEvent::Notify` (BEL and ST terminators, emoji, ConEmu progress
+    /// ignored). The "shell" is a script so no line editor sits between us and the bytes.
+    #[test]
+    fn real_pty_child_notification_sequences_become_notify_events() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let script = dir.path().join("fake-shell.sh");
+        std::fs::write(
+            &script,
+            "#!/bin/sh\nprintf '\\033]9;first \u{2705}\\007\\033]9;4;1;50\\007\\033]777;notify;T;b;c\\033\\\\'\nsleep 5\n",
+        )
+        .expect("write script");
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+
+        let config = Config {
+            shell: script.to_string_lossy().into_owned(),
+            ..Config::default()
+        };
+        let terminal = Terminal::new(
+            &config,
+            80,
+            24,
+            8,
+            16,
+            Arc::new(|| {}),
+            Arc::new(WakeupGate::new()),
+            Some(dir.path().to_path_buf()),
+        )
+        .expect("spawn the fake shell in a PTY");
+
+        let mut got = Vec::new();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while got.len() < 2 && Instant::now() < deadline {
+            if let Ok(PtyEvent::Notify(n)) =
+                terminal.pty.rx.recv_timeout(Duration::from_millis(100))
+            {
+                got.push(n);
+            }
+        }
+        assert_eq!(
+            got,
+            vec![
+                osc_notify::OscNotification {
+                    title: None,
+                    body: "first ✅".to_string()
+                },
+                osc_notify::OscNotification {
+                    title: Some("T".to_string()),
+                    body: "b;c".to_string()
+                },
+            ]
+        );
     }
 }

@@ -13,6 +13,7 @@ use crate::config::{self, Config};
 use crate::ui::{ContextAction, SidebarState};
 
 mod app_state;
+mod attention;
 mod frame;
 pub(crate) mod hover_link;
 mod input;
@@ -45,6 +46,7 @@ pub struct App {
     window: Option<Arc<Window>>,
     render_ctx: Option<RenderContext>,
     mux: Mux,
+    attention: crate::term::attention::AttentionTracker,
     ui: UiManager,
     input: InputHandler,
 
@@ -169,6 +171,7 @@ impl App {
             window: None,
             render_ctx: None,
             mux: Mux::new(),
+            attention: crate::term::attention::AttentionTracker::new(),
             ui: UiManager::new(&config, wakeup_proxy.clone()),
             input: InputHandler::new(&config),
             menu: AppMenu::build(),
@@ -585,6 +588,7 @@ impl App {
         );
         // Clean up per-terminal state for any panes/tabs closed by input (TD-MEM-08).
         for tid in self.mux.closed_ids.drain(..) {
+            self.attention.remove(tid);
             self.terminal_shell_ctxs.remove(&tid);
             if let Some(rc) = &mut self.render_ctx {
                 rc.clear_terminal_state(tid);
@@ -609,6 +613,10 @@ impl App {
             // <leader>+Option+Arrow pane resize — resize with new ratio.
             self.input.pane_ratio_adjusted = false;
             self.resize_terminals_for_panel();
+        }
+        if self.input.jump_unread_requested {
+            self.input.jump_unread_requested = false;
+            self.jump_to_next_unread();
         }
         if self.input.toggle_sidebar_requested {
             self.input.toggle_sidebar_requested = false;
@@ -1960,6 +1968,7 @@ impl ApplicationHandler<()> for App {
         // the next redraw so rendering never has to poll the PTY channels.
         let batch = self.mux.poll_pty_events();
         self.mux.apply_osc133_events();
+        self.process_attention_events();
         let had_exit = !batch.exited.is_empty();
         let had_pty_data = !batch.data_ids.is_empty();
         let has_pending_pty = batch.has_pending;
