@@ -48,6 +48,7 @@ mod terminal_output;
 pub mod text_input;
 mod toast;
 mod workspace;
+pub mod workspace_info;
 mod workspace_snapshot;
 
 pub use config_watch::spawn_config_watcher;
@@ -236,6 +237,8 @@ pub struct GpuiShellRoot {
     /// Per-terminal "needs the user" state (OSC 9/99/777 notifications, optionally BEL) --
     /// see `attention.rs`.
     attention: crate::term::attention::AttentionTracker,
+    /// Branch / PR / listening ports per workspace, shown in the sidebar (slice 4).
+    workspace_info: workspace_info::WorkspaceInfoState,
     /// Confirmed inline agent action, drained at `render()`'s top.
     pending_agent_action: Option<crate::llm::agent_action::AgentAction>,
     /// Exit code of a terminal that has been reaped, keyed by the id it

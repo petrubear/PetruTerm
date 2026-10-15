@@ -341,6 +341,20 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                         should_notify = true;
                     }
                 }
+                // Sidebar rows: branch / PR / listening ports, only while the sidebar is
+                // open and the window is focused.
+                let probe_now = std::time::Instant::now();
+                let sidebar_open = this.sidebar.is_visible();
+                if this.workspace_info.drain() {
+                    should_notify = true;
+                }
+                if this
+                    .workspace_info
+                    .refresh_due(sidebar_open && focused, probe_now)
+                {
+                    let probes = this.workspace_probes();
+                    this.workspace_info.start(probe_now, probes);
+                }
                 // Battery: cheap, local IOKit call (no subprocess), so
                 // this piggybacks on the same 33ms tick like the leader-
                 // deadline/toast checks above rather than needing its

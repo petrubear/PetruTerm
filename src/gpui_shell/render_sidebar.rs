@@ -83,6 +83,7 @@ impl GpuiShellRoot {
             on_close_workspace,
             on_select_section,
             workspace_rename: workspace_rename_element,
+            row_details: self.workspace_row_details(),
             mcp_manager: &self.mcp_manager,
             mcp_cursor: self.sidebar.mcp_cursor(),
             on_open_mcp,

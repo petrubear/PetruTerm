@@ -12,6 +12,8 @@ use crate::llm::steering::SteeringManager;
 
 use super::super::pane_view::to_rgba;
 use super::super::workspace::WorkspaceManager;
+use super::super::workspace_info::RowDetail;
+use crate::term::attention::ATTENTION_COLOR;
 
 pub type WorkspaceSelectCallback = Rc<dyn Fn(&usize, &mut Window, &mut App)>;
 pub type WorkspaceNewCallback = Rc<dyn Fn(&(), &mut Window, &mut App)>;
@@ -30,6 +32,7 @@ pub fn render_workspaces_section(
     on_new: WorkspaceNewCallback,
     on_close: WorkspaceCloseCallback,
     rename: Option<(usize, gpui::AnyElement)>,
+    details: &std::collections::HashMap<usize, RowDetail>,
 ) -> impl IntoElement {
     let active_index = workspaces.active_index();
     let mut rename = rename;
@@ -44,28 +47,50 @@ pub fn render_workspaces_section(
             let close = on_close.clone();
             let ws_id = ws.id;
             let label = format!("{}  ({} tabs)", ws.name, ws.tabs.tab_count());
-            let row =
+            let detail = details.get(&ws.id);
+            let name_line =
                 div()
                     .flex()
                     .flex_row()
                     .items_center()
                     .justify_between()
-                    .mx_2()
-                    .px_2()
-                    .py_1()
-                    .rounded_md()
-                    .cursor_pointer()
-                    .on_mouse_down(MouseButton::Left, move |_: &MouseDownEvent, window, cx| {
-                        select(&idx, window, cx)
-                    })
-                    .when(is_renaming, |el| {
-                        el.child(rename.take().expect("checked is_some").1)
-                    })
-                    .when(!is_renaming, |el| el.child(label))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .gap_1()
+                            .when(detail.is_some_and(|d| d.unread), |el| {
+                                el.child(
+                                    div()
+                                        .w(px(6.0))
+                                        .h(px(6.0))
+                                        .rounded_full()
+                                        .bg(to_rgba(ATTENTION_COLOR)),
+                                )
+                            })
+                            .when(is_renaming, |el| {
+                                el.child(rename.take().expect("checked is_some").1)
+                            })
+                            .when(!is_renaming, |el| el.child(label)),
+                    )
                     .child(div().cursor_pointer().px_1().child("x").on_mouse_down(
                         MouseButton::Left,
                         move |_: &MouseDownEvent, window, cx| close(&ws_id, window, cx),
                     ));
+            let row = div()
+                .flex()
+                .flex_col()
+                .mx_2()
+                .px_2()
+                .py_1()
+                .rounded_md()
+                .cursor_pointer()
+                .on_mouse_down(MouseButton::Left, move |_: &MouseDownEvent, window, cx| {
+                    select(&idx, window, cx)
+                })
+                .child(name_line)
+                .children(detail.and_then(|d| detail_lines(d, colors)));
             if is_active {
                 row.bg(to_rgba(colors.ui_surface_active))
                     .text_color(to_rgba(colors.foreground))
@@ -113,6 +138,54 @@ pub fn render_workspaces_section(
                 ),
         )
         .children(rows)
+}
+
+/// Secondary lines under a workspace name: branch / PR / ports, then the agent state and
+/// its last message. `None` when there is nothing to show.
+fn detail_lines(detail: &RowDetail, colors: &ColorScheme) -> Option<Div> {
+    let info = &detail.info;
+    let mut facts: Vec<String> = Vec::new();
+    if let Some(branch) = &info.branch {
+        facts.push(format!("\u{e0a0} {branch}"));
+    }
+    if let Some(pr) = &info.pr {
+        facts.push(pr.label());
+    }
+    if !info.ports.is_empty() {
+        let ports: Vec<String> = info.ports.iter().take(4).map(|p| format!(":{p}")).collect();
+        facts.push(ports.join(" "));
+    }
+    let attention = detail.state_label().map(|label| match &detail.message {
+        Some(m) => format!("{label}: {m}"),
+        None => label.to_string(),
+    });
+    if facts.is_empty() && attention.is_none() {
+        return None;
+    }
+    let small = || div().text_size(px(10.0)).truncate();
+    Some(
+        div()
+            .flex()
+            .flex_col()
+            .when(!facts.is_empty(), |el| {
+                el.child(
+                    small()
+                        .text_color(to_rgba(colors.ui_muted))
+                        .child(facts.join("  ")),
+                )
+            })
+            .when_some(attention, |el, line| {
+                el.child(
+                    small()
+                        .text_color(if detail.unread {
+                            to_rgba(ATTENTION_COLOR)
+                        } else {
+                            to_rgba(colors.ui_muted)
+                        })
+                        .child(line),
+                )
+            }),
+    )
 }
 
 /// One row per connected MCP server (sorted by name, matching the wgpu

@@ -1,6 +1,7 @@
 // The sidebar drawer's outer frame -- width, background, section-tab row --
 // plus dispatch to the active section's body (`sections.rs`).
 
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use gpui::{div, prelude::*, px, App, Div, MouseButton, MouseDownEvent, Window};
@@ -10,6 +11,7 @@ use crate::config::schema::ColorScheme;
 use super::super::font_state;
 use super::super::pane_view::to_rgba;
 use super::super::workspace::WorkspaceManager;
+use super::super::workspace_info::RowDetail;
 use super::sections::{
     render_mcp_section, render_skills_section, render_steering_section, render_workspaces_section,
 };
@@ -48,6 +50,7 @@ pub struct SidebarRenderCx<'a> {
     pub on_close_workspace: WorkspaceCloseCallback,
     pub on_select_section: SectionSelectCallback,
     pub workspace_rename: Option<(usize, gpui::AnyElement)>,
+    pub row_details: HashMap<usize, RowDetail>,
     pub mcp_manager: &'a McpManager,
     pub mcp_cursor: usize,
     pub on_open_mcp: McpOpenCallback,
@@ -86,6 +89,7 @@ pub fn render_workspace_sidebar(ctx: SidebarRenderCx<'_>) -> Div {
                 ctx.on_new_workspace,
                 ctx.on_close_workspace,
                 ctx.workspace_rename,
+                &ctx.row_details,
             )
             .into_any_element(),
             SidebarSection::Mcp => {

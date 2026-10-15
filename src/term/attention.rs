@@ -216,6 +216,16 @@ impl AttentionTracker {
         agg
     }
 
+    #[cfg_attr(not(test), allow(dead_code))] // gpui sidebar only; the wgpu bin does not use it
+    /// Last message of the most urgent pane that has one (unread first, then by state).
+    pub fn message_for(&self, ids: impl IntoIterator<Item = usize>) -> Option<&str> {
+        ids.into_iter()
+            .filter_map(|id| self.panes.get(&id))
+            .filter(|p| p.last_message.is_some())
+            .max_by_key(|p| (p.unread, p.state.rank()))
+            .and_then(|p| p.last_message.as_deref())
+    }
+
     /// Next unread pane after `current` in `order` (wrapping). `current` itself is considered
     /// last, so repeated presses cycle through every unread pane.
     pub fn next_unread(&self, order: &[usize], current: Option<usize>) -> Option<usize> {
@@ -421,6 +431,24 @@ mod tests {
         assert!(agg.unread);
         let only_read = t.aggregate([1]).unwrap();
         assert!(!only_read.unread);
+    }
+
+    #[test]
+    fn message_for_prefers_unread_then_urgent_state() {
+        let mut t = AttentionTracker::new();
+        let now = Instant::now();
+        assert_eq!(t.message_for([1, 2]), None);
+        t.apply(1, state(AgentState::Done, Some("old")), true, false, now);
+        t.apply(
+            2,
+            state(AgentState::NeedsInput, Some("ask")),
+            false,
+            false,
+            now,
+        );
+        t.apply(3, state(AgentState::Working, None), false, false, now);
+        assert_eq!(t.message_for([1, 2, 3]), Some("ask"));
+        assert_eq!(t.message_for([1, 3]), Some("old"));
     }
 
     #[test]

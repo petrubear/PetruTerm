@@ -144,6 +144,62 @@ impl GpuiShellRoot {
         }
     }
 
+    /// One probe input per workspace for `workspace_info`: the focused pane's cwd and the
+    /// shell pids of every pane.
+    pub(super) fn workspace_probes(&self) -> Vec<super::workspace_info::WorkspaceProbe> {
+        self.workspaces
+            .workspaces()
+            .iter()
+            .map(|ws| {
+                let focused = ws
+                    .tab_panes
+                    .get(ws.tabs.active_index())
+                    .map(|f| f.focused_terminal);
+                let pid_of = |id: usize| self.terminals.get(&id).map(|t| t.child_pid);
+                super::workspace_info::WorkspaceProbe {
+                    id: ws.id,
+                    cwd: focused.and_then(pid_of).and_then(crate::term::process_cwd),
+                    pids: ws
+                        .tab_panes
+                        .iter()
+                        .flat_map(|f| f.root.leaf_ids())
+                        .filter_map(pid_of)
+                        .collect(),
+                    want_pr: false,
+                }
+            })
+            .collect()
+    }
+
+    /// Sidebar row data per workspace id: probed info plus aggregated attention state.
+    pub(super) fn workspace_row_details(
+        &self,
+    ) -> std::collections::HashMap<usize, super::workspace_info::RowDetail> {
+        use crate::term::attention::AgentState;
+        self.workspaces
+            .workspaces()
+            .iter()
+            .map(|ws| {
+                let ids: Vec<usize> = ws
+                    .tab_panes
+                    .iter()
+                    .flat_map(|f| f.root.leaf_ids())
+                    .collect();
+                let agg = self.attention.aggregate(ids.iter().copied());
+                let detail = super::workspace_info::RowDetail {
+                    info: self.workspace_info.get(ws.id).cloned().unwrap_or_default(),
+                    state: agg.map_or(AgentState::Idle, |a| a.state),
+                    unread: agg.is_some_and(|a| a.unread) && self.config.agents.ring,
+                    message: self
+                        .attention
+                        .message_for(ids.iter().copied())
+                        .map(str::to_owned),
+                };
+                (ws.id, detail)
+            })
+            .collect()
+    }
+
     /// Per-tab unread flags for the active workspace, aligned with its tabs. Empty when the
     /// ring/dot indicators are disabled.
     pub(super) fn tab_attention_flags(&self) -> Vec<bool> {

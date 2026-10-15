@@ -25,6 +25,12 @@
   directory right before the first prompt (a generated `ZDOTDIR` for zsh, a `PROMPT_COMMAND`
   prefix for bash), so `path_helper` and your own `PATH` exports cannot hide it; other shells
   should use `hooks setup claude`.
+- `gpui-petruterm`: workspace sidebar rows now show, under the name, the git branch of the
+  focused pane, the GitHub PR for that branch (`PR #12 open|draft|merged|closed`, needs the
+  `gh` CLI, silently skipped otherwise), the TCP ports the workspace's processes listen on, an
+  orange dot when a pane needs you, and the agent state with its last message. Probed on a
+  background thread every 15s (PR every 60s) only while the sidebar is open and the window is
+  focused.
 
 ---
 

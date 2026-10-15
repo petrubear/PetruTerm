@@ -3,7 +3,9 @@
 Status: APPROVED (2026-10-15). Slices 1, 2 and 3 IMPLEMENTED (OSC/BEL signals, tab dot, pane
 ring, jump to unread, native notifications, `agents` config, control socket, `notify` / `hook` /
 `hooks setup` subcommands, `claude` shim). Slices 2 and 3 were re-planned after reading the cmux
-sources (see "cmux findings" and "Delivery slices").
+sources (see "cmux findings" and "Delivery slices"). Slice 4 IMPLEMENTED for the gpui sidebar
+(`src/gpui_shell/workspace_info.rs`); the wgpu sidebar (an info overlay, not a row list) is not
+enriched.
 
 Implementation deviations: panes are identified on the socket by a process-unique `pane_uid`
 (`PETRUTERM_PANE_ID`), not the terminal id, because the wgpu build allocates terminal ids after
