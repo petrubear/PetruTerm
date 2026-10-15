@@ -4,8 +4,9 @@ Status: draft, 2026-10-16. Nothing implemented.
 
 ## Decisions (2026-10-16)
 
-1. Native Android app first (no web client). The app project location is asked of the
-   user before any app code is written; the host side lives in this repo.
+1. Native Android app first (no web client). The app lives in a separate repo at
+   /Users/edison/Documents/Projects/Kotlin/PetruTermMobile (path given by the user);
+   the host side lives in this repo.
 2. Built-in relay from the start (like cmux). Security is the priority, so the relay is
    untrusted: the phone and desktop run an end-to-end encrypted session (Noise, keys
    pinned at pairing) and the relay only forwards ciphertext between two endpoint ids.
@@ -202,4 +203,3 @@ any security or transport work.
 ## Open questions
 
 - Where to host the relay (self-hosted vs shared)?
-- Android project location (asked before writing).
