@@ -13,9 +13,10 @@ export RUSTFLAGS="-D warnings"
 # `target/` with interactive builds would duplicate all of them on each run.
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target/ci}"
 
-cargo check --all-features
+cargo check --all-features --workspace
 cargo test --lib
-cargo clippy --all-features -- -D warnings
+cargo test -p remote-proto -p relay
+cargo clippy --all-features --workspace -- -D warnings
 cargo fmt --check
 
 # CI installs cargo-audit fresh every run (ephemeral runner); a persistent dev machine

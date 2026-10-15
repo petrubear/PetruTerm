@@ -1,3 +1,6 @@
+[workspace]
+members = [".", "crates/remote-proto", "crates/relay"]
+
 [package]
 name = "petruterm"
 version = "1.2.0"

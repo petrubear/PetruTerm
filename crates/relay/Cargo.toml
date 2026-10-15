@@ -1,0 +1,24 @@
+[package]
+name = "relay"
+version = "0.1.0"
+edition = "2021"
+description = "PetruTerm relay: forwards end-to-end encrypted frames between a desktop host and phones"
+license = "MIT"
+
+[lib]
+name = "relay"
+path = "src/lib.rs"
+
+[[bin]]
+name = "petruterm-relay"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "sync", "macros", "io-util"] }
+tokio-tungstenite = "0.30"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+log = "0.4"
+env_logger = "0.11"
+
+[dev-dependencies]
+remote-proto = { path = "../remote-proto" }
