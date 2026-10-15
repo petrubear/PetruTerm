@@ -13,7 +13,7 @@ pub mod server;
 pub mod shell;
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::term::attention::{AgentState, AttentionEvent};
@@ -78,14 +78,19 @@ pub fn next_pane_uid() -> u64 {
 }
 
 /// Directory with agent shims (`claude`, ...) to put first on a pane's PATH: the bundle's
-/// `Contents/Resources/bin`, `PETRUTERM_BIN_DIR`, or (debug builds only) the source tree's
-/// `scripts/shims`, so `cargo run` works without bundling.
+/// `Contents/Resources/bin`, `PETRUTERM_BIN_DIR`, or the source tree's `scripts/shims` when
+/// the executable runs from that tree's `target/` (so `cargo run`, debug or release, works
+/// without bundling; a copied or installed binary never points into a source tree).
 pub fn shim_dir() -> Option<PathBuf> {
-    let bundled = std::env::current_exe()
-        .ok()
+    let exe = std::env::current_exe().ok();
+    let bundled = exe
+        .as_ref()
         .and_then(|exe| Some(exe.parent()?.parent()?.join("Resources/bin")));
-    let dev = cfg!(debug_assertions)
-        .then(|| PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/scripts/shims")));
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let dev = exe
+        .as_ref()
+        .is_some_and(|exe| exe.starts_with(manifest.join("target")))
+        .then(|| manifest.join("scripts/shims"));
     bundled
         .into_iter()
         .chain(std::env::var_os("PETRUTERM_BIN_DIR").map(PathBuf::from))
