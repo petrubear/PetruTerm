@@ -14,6 +14,7 @@ use crate::app::pty_schedule::WakeupGate;
 use crate::config::Config;
 use crate::term::osc133::{EraseScanner, Osc133Marker, Osc133Scanner};
 use crate::term::osc_notify::{OscNotification, OscNotifyScanner};
+use crate::term::tee::Tee;
 
 /// Wakeup callback invoked whenever new PTY data / a child-exit event is
 /// ready, so the owning UI framework can schedule a redraw. Decoupled from
@@ -129,6 +130,8 @@ pub struct Pty {
     child_thread: Option<JoinHandle<()>>,
     /// Shared with PtyEventProxy to serialize concurrent writes to master_fd.
     write_mutex: Arc<parking_lot::Mutex<()>>,
+    /// Remote subscribers fed by the reader thread.
+    pub(crate) tee: Arc<Tee>,
 }
 
 impl Pty {
@@ -196,6 +199,8 @@ impl Pty {
         let tx_clone = tx.clone();
         let wakeup_clone = wakeup.clone();
         let wakeup_gate_clone = Arc::clone(&wakeup_gate);
+        let tee = Arc::new(Tee::default());
+        let tee_clone = Arc::clone(&tee);
         let reader_thread = std::thread::Builder::new()
             .name("pty-reader".into())
             .spawn(move || {
@@ -205,6 +210,7 @@ impl Pty {
                     tx_clone,
                     wakeup_clone,
                     wakeup_gate_clone,
+                    tee_clone,
                 )
             })
             .context("failed to spawn pty reader thread")?;
@@ -249,6 +255,7 @@ impl Pty {
                 reader_thread: Some(reader_thread),
                 child_thread: Some(child_thread),
                 write_mutex,
+                tee,
             },
             term,
         ))
@@ -485,6 +492,7 @@ fn reader_loop(
     tx: Sender<PtyEvent>,
     wakeup: Wakeup,
     wakeup_gate: Arc<WakeupGate>,
+    tee: Arc<Tee>,
 ) {
     let mut processor: VteProcessor<StdSyncHandler> = VteProcessor::new();
     let mut scanner = Osc133Scanner::new();
@@ -520,6 +528,8 @@ fn reader_loop(
         {
             let mut term_lock = term.lock_unfair();
             processor.advance(&mut *term_lock, bytes);
+            // Still under the term lock: see `tee` for why.
+            tee.send(bytes);
         }
 
         // Notify main thread that new data is available.

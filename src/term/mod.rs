@@ -7,6 +7,8 @@ pub mod osc133;
 pub mod osc_notify;
 pub mod pty;
 pub mod search;
+pub mod snapshot;
+pub mod tee;
 pub mod tokenizer;
 
 pub use alacritty_terminal::vte::ansi::CursorShape;
@@ -166,6 +168,19 @@ impl Terminal {
     /// Write keyboard input bytes to the PTY.
     pub fn write_input(&self, data: &[u8]) {
         self.pty.write(data);
+    }
+
+    /// Subscribe to this pane's output: the first chunk is a snapshot of the current
+    /// screen, then raw PTY bytes follow in order. See `tee` for the ordering guarantee.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn subscribe_remote(
+        &self,
+        capacity: usize,
+    ) -> crossbeam_channel::Receiver<tee::RemoteChunk> {
+        let term = self.term.lock_unfair();
+        self.pty
+            .tee
+            .subscribe(snapshot::snapshot_ansi(&*term), capacity)
     }
 
     /// Clear the visible screen and scrollback, moving the cursor home.
@@ -377,6 +392,69 @@ mod notify_pty_tests {
                 },
             ]
         );
+    }
+
+    /// A subscriber attached after some output gets that output in the snapshot, and output
+    /// produced afterwards as live chunks.
+    #[test]
+    fn real_pty_remote_subscriber_gets_snapshot_then_live_output() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let script = dir.path().join("fake-shell.sh");
+        let marker = dir.path().join("go");
+        std::fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\nprintf 'before'\nwhile [ ! -e '{}' ]; do sleep 0.05; done\nprintf 'after'\nsleep 5\n",
+                marker.display()
+            ),
+        )
+        .expect("write script");
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        let config = Config {
+            shell: script.to_string_lossy().into_owned(),
+            ..Config::default()
+        };
+        let terminal = Terminal::new(
+            &config,
+            80,
+            24,
+            8,
+            16,
+            Arc::new(|| {}),
+            Arc::new(WakeupGate::new()),
+            Some(dir.path().to_path_buf()),
+        )
+        .expect("spawn the fake shell in a PTY");
+
+        // Wait until "before" reached the grid, then subscribe and release the script.
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !String::from_utf8_lossy(&snapshot::snapshot_ansi(&*terminal.term.lock()))
+            .contains("before")
+        {
+            assert!(Instant::now() < deadline, "shell never printed");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let rx = terminal.subscribe_remote(64);
+        std::fs::write(&marker, "").expect("release script");
+
+        let first = rx.recv_timeout(Duration::from_secs(5)).expect("snapshot");
+        match first {
+            tee::RemoteChunk::Snapshot(s) => {
+                assert!(String::from_utf8_lossy(&s).contains("before"));
+            }
+            other => panic!("expected snapshot first, got {other:?}"),
+        }
+        let mut live = Vec::new();
+        while !String::from_utf8_lossy(&live).contains("after") {
+            match rx
+                .recv_timeout(Duration::from_secs(5))
+                .expect("live output")
+            {
+                tee::RemoteChunk::Output(b) => live.extend(b),
+                other => panic!("expected output, got {other:?}"),
+            }
+        }
+        assert!(!String::from_utf8_lossy(&live).contains("before"));
     }
 
     /// The shell of a new pane sees its own `PETRUTERM_PANE_ID` (matching `pane_uid`) and
