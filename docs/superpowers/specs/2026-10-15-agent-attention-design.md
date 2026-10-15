@@ -149,6 +149,22 @@ config.agents = {
    toast in `gpui_shell/toast.rs`). Slice 1 must wire native notifications into gpui too,
    honoring `config.notifications.style`.
 
+## Getting agents to emit it (verified against Claude Code docs, 2026-10-15)
+
+Claude Code sends a desktop notification on its own only in Ghostty, Kitty and iTerm2; in any
+other terminal (`TERM_PROGRAM=PetruTerm` included) it emits nothing by default. Until the hook
+installer (slice 3) exists, the user must opt in manually, either:
+
+- `"preferredNotifChannel": "terminal_bell"` in `~/.claude/settings.json` plus
+  `agents.bell_attention = true`; or
+- a `Notification` hook whose command prints an OSC 9 sequence to the pane's tty, e.g.
+  `printf '\033]9;Claude Code needs your attention\007' > /dev/tty` (expected to work, not yet
+  tested end to end with a real Claude Code session).
+
+Lead for later: Claude Code v2.1.295+ also reports working / waiting / done status to terminals
+that implement the OSC 7501 "Program Status Protocol", with no hook needed. Not read or
+implemented yet.
+
 ## Risks
 
 - Untrusted PTY text in notifications (mitigated: sanitize, cap, rate-limit).

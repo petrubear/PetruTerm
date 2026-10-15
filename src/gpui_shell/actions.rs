@@ -253,6 +253,7 @@ impl GpuiShellRoot {
         }
         self.record_terminal_final_output(terminal_id);
         self.terminals.remove(&terminal_id);
+        self.attention.remove(terminal_id);
         self.wakeup_gates.remove(&terminal_id);
         self.block_managers.remove(&terminal_id);
         self.rect_cache.borrow_mut().leaves.remove(&terminal_id);

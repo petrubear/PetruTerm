@@ -54,15 +54,17 @@ impl GpuiShellRoot {
         body: &str,
         cx: &mut Context<Self>,
     ) {
-        match self.config.notifications.style {
-            NotificationStyle::Native => crate::platform::notifications::send_with(
+        // Native delivery needs an `.app` bundle; fall back to the toast otherwise.
+        if self.config.notifications.style == NotificationStyle::Native
+            && crate::platform::notifications::native_available()
+        {
+            crate::platform::notifications::send_with(
                 title,
                 body,
                 &format!("petruterm.pane.{terminal_id}"),
-            ),
-            NotificationStyle::Toast => {
-                self.show_toast(format!("{title}: {body}"), Duration::from_secs(4), cx)
-            }
+            );
+        } else {
+            self.show_toast(format!("{title}: {body}"), Duration::from_secs(4), cx);
         }
     }
 

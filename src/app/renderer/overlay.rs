@@ -1161,15 +1161,12 @@ impl RenderContext {
             }
 
             if tab_w > 0.0 && unread.get(i).copied().unwrap_or(false) {
-                // Attention dot in the trailing pad of the pill.
-                let dot = (pill_h * 0.28).max(4.0 * sf);
+                // Attention dot in the pill's top-right corner, clear of the vertically
+                // centered label text (labels truncated at TAB_LABEL_MAX_CHARS have no
+                // trailing pad cell to hold it).
+                let dot = (pill_h * 0.22).max(3.0 * sf);
                 self.rect_instances.push(RoundedRectInstance {
-                    rect: [
-                        tab_x + tab_w - dot * 1.6,
-                        pill_y + (pill_h - dot) * 0.5,
-                        dot,
-                        dot,
-                    ],
+                    rect: [tab_x + tab_w - dot - 2.0 * sf, pill_y + 2.0 * sf, dot, dot],
                     color: crate::term::attention::ATTENTION_COLOR,
                     radius: dot * 0.5,
                     border_width: 0.0,

@@ -109,12 +109,13 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                 // `exit`, Ctrl+D, a crash) -- nothing else in this
                 // module reads `Pty::rx`, so without this an exited
                 // shell's pane just sits there dead until the user
-                // notices and closes it by hand. `TitleChanged` and
-                // `Bell` are drained with no action (TD-GPUI-04:
-                // matches the wgpu build's own handling of both --
-                // `Mux::poll_pty_events` only `log::debug!`s a title
-                // change and does nothing at all for a bell, so there
-                // is no real behavior to port for either). OSC 52
+                // notices and closes it by hand. `TitleChanged` is
+                // drained with no action (TD-GPUI-04: matches the wgpu
+                // build, whose `Mux::poll_pty_events` only
+                // `log::debug!`s a title change). `Bell` and `Notify`
+                // (OSC 9/99/777) feed the attention layer -- see
+                // `attention.rs`; a bell only counts when
+                // `agents.bell_attention` is on. OSC 52
                 // clipboard (`ClipboardStore`/`ClipboardLoad`) DOES
                 // have real wgpu behavior worth porting -- see their
                 // arms below.

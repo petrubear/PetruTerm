@@ -1,6 +1,7 @@
 // A transient top-right notification. Non-modal, no key guard, no
-// `FocusHandle`. Only trigger: config hot-reload; `petruterm.notify()` is
-// not supported in gpui_shell.
+// `FocusHandle`. Triggers: config hot-reload, and the attention layer's
+// fallback when native notifications are unavailable (`attention.rs`);
+// `petruterm.notify()` is not supported in gpui_shell.
 
 use std::time::{Duration, Instant};
 
@@ -19,7 +20,7 @@ impl GpuiShellRoot {
     /// own `dispatch_notification`'s behavior (`self.toast = Some((msg,
     /// deadline))`, unconditional overwrite). Drained on expiry by
     /// `poll.rs`'s own tick, called from `poll.rs`'s config-hot-reload
-    /// branch (the only trigger).
+    /// branch and from `attention.rs`.
     pub(super) fn show_toast(
         &mut self,
         message: impl Into<String>,

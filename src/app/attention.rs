@@ -41,15 +41,18 @@ impl App {
     }
 
     fn deliver_attention(&mut self, terminal_id: usize, title: &str, body: &str) {
-        match self.config.notifications.style {
-            NotificationStyle::Native => {
+        // Native delivery needs an `.app` bundle; fall back to the toast otherwise.
+        let native = self.config.notifications.style == NotificationStyle::Native
+            && crate::platform::notifications::native_available();
+        match native {
+            true => {
                 crate::platform::notifications::send_with(
                     title,
                     body,
                     &format!("petruterm.pane.{terminal_id}"),
                 );
             }
-            NotificationStyle::Toast => {
+            false => {
                 let deadline = Instant::now() + Duration::from_secs(4);
                 self.toast = Some((format!("{title}: {body}"), deadline));
             }
@@ -65,6 +68,8 @@ impl App {
         };
         if self.mux.focus_terminal(id) {
             self.attention.clear(id);
+            // Same follow-up the sidebar's workspace switch does.
+            self.refresh_status_cache();
             self.resize_terminals_for_panel();
             self.request_redraw();
         }
