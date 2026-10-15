@@ -1,6 +1,8 @@
 # Agent Attention Layer - Design
 
-Status: APPROVED (2026-10-15), decisions below resolved. Nothing implemented yet.
+Status: APPROVED (2026-10-15). Slice 1 IMPLEMENTED (OSC/BEL signals, tab dot, pane ring, jump to
+unread, native notifications, `agents` config). Slices 2 and 3 were re-planned on 2026-10-15
+after reading the cmux sources (see "cmux findings" and "Delivery slices").
 
 ## Goal
 
@@ -88,16 +90,56 @@ This is how agent hooks talk to the terminal.
   `PETRUTERM_SOCKET` / `PETRUTERM_PANE_ID` are unset it exits 0 silently, so hooks are safe
   to leave configured when running outside PetruTerm.
 
-### 4. Hook installer (`petruterm hooks setup <agent>`)
+Slice 2 also adds `petruterm hook <agent> <event>`: the entry point agent hooks call. It reads
+the hook's JSON payload from stdin (Claude Code passes one), maps the event to a state, and
+sends the same socket message as `notify`. Same silent exit 0 outside PetruTerm. The mapping
+lives in Rust (testable), not in the shell wrapper.
 
-Explicit command only, never automatic. Shows the diff and writes a backup before touching
-the agent's own config.
+Event mapping for Claude Code:
 
-- Claude Code (`~/.claude/settings.json`): `UserPromptSubmit` -> `--state working`,
-  `Notification` -> `--state needs-input --body "$message"`, `Stop` -> `--state done`.
-- Codex (`notify` program setting in its config) and OpenCode (plugin/event hooks): NOT
-  verified. Confirm the current hook mechanisms from their docs before implementing; ship
-  Claude Code first.
+| Hook event | State | Message |
+|---|---|---|
+| `UserPromptSubmit`, `PreToolUse` | `working` | none |
+| `Notification` | `needs-input` | payload `message` |
+| `Stop`, `SubagentStop` | `done` | none |
+| `SessionEnd` | `idle` | none |
+
+`AgentState::Working` and `Done` (currently `#[allow(dead_code)]`) become live in this slice.
+Unread/notification rules: `needs-input` and `done` raise the dot, ring and native
+notification when the pane is not observed; `working` and `idle` only update state (and clear
+the unread flag of that pane, since the user just acted).
+
+### 4. Zero-setup agent wrapper (slice 3), and explicit installer
+
+Modeled on cmux (see "cmux findings"): the user installs nothing by hand.
+
+**Wrapper.** The app bundle ships `Resources/bin/claude` (a small POSIX shell script). Each
+pane's PATH gets that directory prepended at spawn. The script:
+
+1. If `PETRUTERM_PANE_ID` is unset, or the user already passed `--settings`, or the real
+   `claude` cannot be found: `exec` the real `claude` unchanged.
+2. Otherwise finds the real `claude` by removing its own directory from PATH, and `exec`s it
+   with `--settings '<json>'`, where the JSON registers hooks (`UserPromptSubmit`,
+   `PreToolUse`, `Notification`, `Stop`, `SubagentStop`, `SessionEnd`) running
+   `petruterm hook claude <event>`.
+3. Claude Code merges `--settings` with the user's own `settings.json`; nothing on disk is
+   modified.
+
+Deliberately minimal compared with cmux's 1,669-line wrapper: the JSON is a static string (no
+`node` dependency), and a user-supplied `--settings` disables injection instead of merging.
+Merge support is a later improvement only if users hit it.
+
+`preferredNotifChannel` is NOT overridden: with `TERM_PROGRAM=PetruTerm` Claude Code emits no
+OSC notification by default, so there are no duplicates. If a user opted in to OSC/bell
+manually (slice 1), the attention tracker's 1 event/sec/pane limit absorbs the overlap.
+
+**Explicit installer.** `petruterm hooks setup <agent>` writes the same hooks persistently to
+the agent's own config, for users who run the agent outside PetruTerm's PATH shim or whose
+shell rc reorders PATH. Shows the diff and writes a backup first; never automatic.
+
+Agents other than Claude Code (Codex `notify` setting, OpenCode plugin/event hooks, Gemini
+CLI): NOT verified. Confirm each mechanism from its docs before adding it; they reuse
+`petruterm hook <agent> <event>` and the installer.
 
 ### 5. UI
 
@@ -128,8 +170,26 @@ config.agents = {
    `PtyEvent::Notify`, Bell wiring in both pollers, tab dot + pane ring, jump-to-unread,
    per-pane native notifications, config keys. Fully unit-testable (scanner cases, state
    machine, aggregation).
-2. **Socket + CLI:** listener, env vars, `petruterm notify`, malformed-input tests.
-3. **Hook installer** for Claude Code.
+2. **Socket + CLI** (re-planned):
+   - 2a. Shared client + message types in the lib crate (`src/ipc/`): serialize/parse the
+     newline-delimited JSON, `send()` that exits quietly when env vars are missing. Pure and
+     unit-tested (malformed lines, oversized lines, unknown fields, unknown pane id).
+   - 2b. Listener in each binary (tokio `UnixListener`, 0600 socket in a 0700 dir, one socket
+     per pid, removed on exit, stale sockets from dead pids cleaned at startup). Messages are
+     forwarded to the main loop through the same `attention_events` channel as slice 1
+     (new `AttentionEvent::State { state, message }` variant), so the tracker, UI and
+     notification code are reused.
+   - 2c. Pane env vars (`PETRUTERM_PANE_ID`, `PETRUTERM_SOCKET`) set in `pty.rs` spawn, plus
+     the PATH shim directory prepend (empty until slice 3 ships a wrapper).
+   - 2d. `petruterm notify` and `petruterm hook <agent> <event>` subcommands in both binaries,
+     with the Claude Code event mapping above. An end-to-end test: spawn a real PTY pane, run
+     `petruterm notify` inside it, assert the tracker state changes.
+3. **Claude Code wrapper + installer** (re-planned): `Resources/bin/claude` wrapper script
+   (bundled by `scripts/bundle.sh` for both `.app` bundles), PATH prepend wired to the bundle
+   location (skipped in unbundled dev builds unless `PETRUTERM_BIN_DIR` is set), shell-level
+   test of the wrapper (fake `claude` that echoes its argv; assert `--settings` injected, and
+   skipped when `--settings` is present or `PETRUTERM_PANE_ID` is unset), and
+   `petruterm hooks setup claude` with diff and backup.
 4. **Sidebar enrichment:** per-workspace branch and PR status (`gh`), listening ports
    (`lsof`), last notification line.
 5. **Later, separate designs:** richer control API (create splits, send keys, read screen) so
@@ -165,8 +225,41 @@ Lead for later: Claude Code v2.1.295+ also reports working / waiting / done stat
 that implement the OSC 7501 "Program Status Protocol", with no hook needed. Not read or
 implemented yet.
 
+## cmux findings (read from the cmux sources, 2026-10-15)
+
+cmux does not make the user install hooks for Claude Code. It does three things:
+
+1. **Identity spoof.** Sets `TERM_PROGRAM=ghostty` so Claude Code uses its own notification
+   path (cmux is built on libghostty). Rejected for PetruTerm: other tools key off that value
+   (graphics, shell integration) and PetruTerm is not Ghostty.
+2. **Per-pane environment.** `CMUX_SURFACE_ID`, `CMUX_WORKSPACE_ID`, `CMUX_PANEL_ID`,
+   `CMUX_TAB_ID`, `CMUX_SOCKET_PATH`, ... Equivalent to our `PETRUTERM_PANE_ID` /
+   `PETRUTERM_SOCKET`.
+3. **A `claude` wrapper on the pane PATH** (`Resources/bin/cmux-claude-wrapper`). When
+   `CMUX_SURFACE_ID` is set it injects `--session-id` and a `--settings` JSON that registers
+   hooks (`SessionStart`, `Stop`, `Notification`, `UserPromptSubmit`, `PreToolUse`,
+   `PostToolUse`, `PermissionRequest`, `SubagentStop`, `SessionEnd`) calling
+   `cmux hooks claude <event>` over the socket. It also sets `preferredNotifChannel` to
+   `notifications_disabled` so hooks are the only source. Outside cmux it passes straight
+   through. It needs `node` to merge the user's own `--settings`.
+
+Plain OSC 9/99/777 and `cmux notify` still work for any other program; cmux suppresses them
+for panes with a hooked agent to avoid duplicates. `cmux hooks setup` is the persistent
+alternative for other agents (e.g. Codex).
+
+Adopted here: pane env vars, socket, `hook` subcommand, PATH wrapper with `--settings`
+injection, explicit installer. Not adopted: TERM_PROGRAM spoof, disabling Claude's OSC channel
+(unneeded, see section 4), OSC suppression per pane (the rate limit is enough for now),
+node-based settings merge.
+
 ## Risks
 
+- Wrapper reliability: a user's shell rc can re-prepend its own PATH entries after the pane
+  spawns, putting the real `claude` ahead of the wrapper (mitigation: `hooks setup` as the
+  persistent fallback; document it). A `--settings` flag from the user disables injection.
+- Claude Code's handling of repeated `--settings` flags and the hook payload schema have
+  changed between versions; the wrapper and the `hook` parser must tolerate unknown fields and
+  a missing stdin payload.
 - Untrusted PTY text in notifications (mitigated: sanitize, cap, rate-limit).
 - Socket exposure (mitigated: 0600 socket in a 0700 dir, ignore unknown pane ids, no command
   execution from payloads).
