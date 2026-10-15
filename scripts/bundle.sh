@@ -116,6 +116,12 @@ PLIST
     echo "==> Copying default config..."
     cp -r "$ROOT/config/default" "$RESOURCES/config"
 
+    # Agent shims (e.g. `claude`): PetruTerm puts this directory first on each pane's PATH.
+    echo "==> Copying agent shims..."
+    mkdir -p "$RESOURCES/bin"
+    cp "$ROOT"/scripts/shims/* "$RESOURCES/bin/"
+    chmod +x "$RESOURCES"/bin/*
+
     local ICON_PNG="$ROOT/assets/$ICON_PNG_NAME"
     local ICON_ICNS="$RESOURCES/AppIcon.icns"
     if [ -f "$ICON_PNG" ]; then

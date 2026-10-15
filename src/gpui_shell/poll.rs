@@ -207,6 +207,15 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                         }
                     }
                 }
+                // Hook / `petruterm notify` messages from the control socket.
+                for msg in crate::ipc::server::drain() {
+                    let Some((uid, event)) = msg.into_event() else {
+                        continue;
+                    };
+                    if let Some((&id, _)) = this.terminals.iter().find(|(_, t)| t.pane_uid == uid) {
+                        attention_events.push((id, event));
+                    }
+                }
                 for (id, code) in exit_codes {
                     this.record_terminal_exit_code(id, code);
                 }

@@ -17,12 +17,8 @@ const MIN_EVENT_GAP: Duration = Duration::from_secs(1);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AgentState {
     Idle,
-    /// Reserved for hook-driven state (design slice 2); not constructed yet.
-    #[allow(dead_code)]
     Working,
     NeedsInput,
-    /// Reserved for hook-driven state (design slice 2); not constructed yet.
-    #[allow(dead_code)]
     Done,
 }
 
@@ -45,6 +41,12 @@ pub enum AttentionEvent {
         body: String,
     },
     Bell,
+    /// Explicit state reported by an agent hook (`petruterm hook` / `petruterm notify`).
+    State {
+        state: AgentState,
+        title: Option<String>,
+        message: Option<String>,
+    },
 }
 
 /// A native notification the caller should deliver.
@@ -106,6 +108,11 @@ impl AttentionTracker {
         now: Instant,
     ) -> Option<Alert> {
         let (title, body) = match event {
+            AttentionEvent::State {
+                state,
+                title,
+                message,
+            } => return self.apply_state(terminal_id, state, title, message, observed),
             AttentionEvent::Notify { title, body } => (title, body),
             AttentionEvent::Bell if bell_attention => (None, "Bell".to_string()),
             AttentionEvent::Bell => return None,
@@ -128,6 +135,45 @@ impl AttentionTracker {
         }
         pane.unread = true;
         Some(Alert { title, body })
+    }
+
+    /// Hook-reported state. Not rate-limited (hooks fire in quick bursts and each transition
+    /// matters). `Working` / `Idle` mean the user just acted or the agent resumed, so the
+    /// unread flag drops; `NeedsInput` / `Done` raise it unless the pane is being observed.
+    fn apply_state(
+        &mut self,
+        terminal_id: usize,
+        state: AgentState,
+        title: Option<String>,
+        message: Option<String>,
+        observed: bool,
+    ) -> Option<Alert> {
+        let pane = self
+            .panes
+            .entry(terminal_id)
+            .or_insert_with(PaneAttention::new);
+        pane.state = state;
+        if message.is_some() {
+            pane.last_message = message.clone();
+        }
+        match state {
+            AgentState::Idle | AgentState::Working => {
+                pane.unread = false;
+                None
+            }
+            AgentState::NeedsInput | AgentState::Done if observed => None,
+            AgentState::NeedsInput | AgentState::Done => {
+                pane.unread = true;
+                let body = message.unwrap_or_else(|| {
+                    match state {
+                        AgentState::Done => "Finished",
+                        _ => "Needs your input",
+                    }
+                    .to_string()
+                });
+                Some(Alert { title, body })
+            }
+        }
     }
 
     /// The user is now looking at this pane: clear its indicator.
@@ -229,6 +275,86 @@ mod tests {
         let alert = t.apply(1, AttentionEvent::Bell, false, true, now);
         assert_eq!(alert.map(|a| a.body), Some("Bell".to_string()));
         assert!(t.is_unread(1));
+    }
+
+    fn state(state: AgentState, message: Option<&str>) -> AttentionEvent {
+        AttentionEvent::State {
+            state,
+            title: Some("Claude Code".into()),
+            message: message.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn hook_states_drive_unread_and_alerts() {
+        let mut t = AttentionTracker::new();
+        let now = Instant::now();
+        assert_eq!(
+            t.apply(1, state(AgentState::Working, None), false, false, now),
+            None
+        );
+        assert_eq!(t.get(1).unwrap().state, AgentState::Working);
+        assert!(!t.is_unread(1));
+        let alert = t
+            .apply(1, state(AgentState::Done, None), false, false, now)
+            .unwrap();
+        assert_eq!(alert.body, "Finished");
+        assert_eq!(alert.title.as_deref(), Some("Claude Code"));
+        assert!(t.is_unread(1));
+        // The user answers: the next prompt clears the dot.
+        t.apply(1, state(AgentState::Working, None), true, false, now);
+        assert!(!t.is_unread(1));
+    }
+
+    #[test]
+    fn hook_needs_input_uses_message_and_respects_observed() {
+        let mut t = AttentionTracker::new();
+        let now = Instant::now();
+        let alert = t
+            .apply(
+                1,
+                state(AgentState::NeedsInput, Some("Allow Bash?")),
+                false,
+                false,
+                now,
+            )
+            .unwrap();
+        assert_eq!(alert.body, "Allow Bash?");
+        assert_eq!(
+            t.get(1).unwrap().last_message.as_deref(),
+            Some("Allow Bash?")
+        );
+        assert_eq!(
+            t.apply(2, state(AgentState::NeedsInput, None), true, false, now),
+            None
+        );
+        assert!(!t.is_unread(2));
+    }
+
+    #[test]
+    fn hook_states_are_not_rate_limited() {
+        let mut t = AttentionTracker::new();
+        let now = Instant::now();
+        assert!(t
+            .apply(1, state(AgentState::NeedsInput, None), false, false, now)
+            .is_some());
+        assert!(t
+            .apply(1, state(AgentState::Done, None), false, false, now)
+            .is_some());
+    }
+
+    #[test]
+    fn clear_keeps_working_state() {
+        let mut t = AttentionTracker::new();
+        t.apply(
+            1,
+            state(AgentState::Working, None),
+            false,
+            false,
+            Instant::now(),
+        );
+        t.clear(1);
+        assert_eq!(t.get(1).unwrap().state, AgentState::Working);
     }
 
     #[test]

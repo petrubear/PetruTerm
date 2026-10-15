@@ -1,0 +1,60 @@
+#!/bin/sh
+# PetruTerm shim for Claude Code. Shipped in <app>/Contents/Resources/bin, which PetruTerm
+# puts first on each pane's PATH. Inside a pane it starts the real `claude` with hooks that
+# report working / needs-input / done to PetruTerm (`petruterm hook claude <event>`).
+# Nothing on disk is modified: Claude Code merges `--settings` with the user's own settings.
+# Outside a pane, or when injection would be wrong, it just runs the real `claude`.
+
+self_dir=$(cd "$(dirname "$0")" && pwd)
+
+real=
+oldifs=$IFS
+IFS=:
+for d in $PATH; do
+    [ "$d" = "$self_dir" ] && continue
+    if [ -x "$d/claude" ] && [ ! -d "$d/claude" ]; then
+        real="$d/claude"
+        break
+    fi
+done
+IFS=$oldifs
+if [ -z "$real" ]; then
+    echo "claude: command not found" >&2
+    exit 127
+fi
+
+inject=1
+[ -n "$PETRUTERM_PANE_ID" ] && [ -n "$PETRUTERM_BIN" ] && [ -x "$PETRUTERM_BIN" ] || inject=0
+# `petruterm hooks setup claude` already put the hooks in the user's settings.
+if [ "$inject" = 1 ] && grep -qs PETRUTERM_BIN "$HOME/.claude/settings.json"; then
+    inject=0
+fi
+# A user-supplied --settings is not merged: leave the invocation untouched.
+for a in "$@"; do
+    case "$a" in
+        --settings | --settings=*) inject=0 ;;
+    esac
+done
+# Subcommands (as opposed to a session) do not take hooks.
+case "$1" in
+    mcp | config | doctor | update | install | migrate-installer | setup-token | plugin | plugins | agents | auth | api-key)
+        inject=0
+        ;;
+esac
+
+if [ "$inject" = 0 ]; then
+    exec "$real" "$@"
+fi
+
+group() { # $1 event, $2 optional matcher member (with trailing comma)
+    printf '[{%s"hooks":[{"type":"command","command":"[ -z \\"$PETRUTERM_BIN\\" ] || \\"$PETRUTERM_BIN\\" hook claude %s","timeout":5}]}]' "$2" "$1"
+}
+settings=$(printf '{"hooks":{"UserPromptSubmit":%s,"PreToolUse":%s,"Notification":%s,"Stop":%s,"SubagentStop":%s,"SessionEnd":%s}}' \
+    "$(group UserPromptSubmit)" \
+    "$(group PreToolUse '"matcher":"*",')" \
+    "$(group Notification)" \
+    "$(group Stop)" \
+    "$(group SubagentStop)" \
+    "$(group SessionEnd)")
+
+exec "$real" --settings "$settings" "$@"

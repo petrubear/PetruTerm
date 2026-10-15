@@ -27,6 +27,23 @@ impl Mux {
         ids
     }
 
+    /// Move messages received on the control socket into `attention_events`, resolving each
+    /// pane uid (`PETRUTERM_PANE_ID`) to a terminal id. Unknown panes are dropped.
+    pub fn collect_ipc_events(&mut self) {
+        for msg in crate::ipc::server::drain() {
+            let Some((uid, event)) = msg.into_event() else {
+                continue;
+            };
+            let id = self
+                .terminals
+                .iter()
+                .position(|t| t.as_ref().is_some_and(|t| t.pane_uid == uid));
+            if let Some(id) = id {
+                self.attention_events.push((id, event));
+            }
+        }
+    }
+
     /// Title of the tab (in the active workspace) that holds `terminal_id`.
     pub fn tab_title_of(&self, terminal_id: usize) -> Option<&str> {
         let idx = self

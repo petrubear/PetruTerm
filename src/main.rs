@@ -2,6 +2,7 @@ mod app;
 mod config;
 mod font;
 mod i18n;
+mod ipc;
 mod llm;
 mod platform;
 mod renderer;
@@ -53,6 +54,12 @@ fn inherit_login_shell_env() {
 }
 
 fn main() -> Result<()> {
+    // `notify` / `hook` / `hooks` subcommands run without starting the GUI.
+    let cli_args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(code) = ipc::cli::run(&cli_args) {
+        std::process::exit(code);
+    }
+
     // Inherit login-shell env vars (API keys, PATH, etc.) when launched as a
     // .app bundle from Finder/Dock, where ~/.zshrc is never sourced.
     // Must run before any threads are spawned.
@@ -105,6 +112,14 @@ fn main() -> Result<()> {
     // Proxy lets PTY background threads wake the winit event loop immediately
     // (e.g. on shell exit) without waiting for the next WaitUntil blink timer.
     let wakeup_proxy = event_loop.create_proxy();
+
+    // Control socket for agent hooks / `petruterm notify`; wakes the loop on each message.
+    {
+        let proxy = wakeup_proxy.clone();
+        ipc::server::start(std::sync::Arc::new(move || {
+            let _ = proxy.send_event(());
+        }));
+    }
 
     let mut app = App::new(config, lua, wakeup_proxy);
     event_loop.run_app(&mut app)?;

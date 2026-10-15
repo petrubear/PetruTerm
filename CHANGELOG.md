@@ -13,6 +13,16 @@
   default). Notification text is untrusted PTY output: control characters are stripped, it is
   capped at 200 chars, and each pane is limited to one event per second. ConEmu `OSC 9;4`
   progress sequences are ignored. Design: `docs/superpowers/specs/2026-10-15-agent-attention-design.md`.
+- Control socket and agent hooks (both binaries): each instance listens on
+  `~/.local/state/petruterm/petruterm-<pid>.sock` (0600), and every pane's shell gets
+  `PETRUTERM_PANE_ID`, `PETRUTERM_SOCKET` and `PETRUTERM_BIN`. New subcommands of both
+  binaries: `notify [--state working|needs-input|done|idle] [--title T] [--body B]`,
+  `hook claude <event>` (maps Claude Code hook events to pane state) and
+  `hooks setup claude [--dry-run]` (merges the hooks into `~/.claude/settings.json`, with a
+  backup). Both exit 0 silently outside a PetruTerm pane. The app bundles ship a `claude`
+  shim in `Contents/Resources/bin` (first on each pane's PATH) that injects the same hooks
+  through `--settings` when `claude` runs in a pane; it has no effect if your shell startup
+  files put another `claude` earlier on PATH, in which case use `hooks setup claude`.
 
 ---
 

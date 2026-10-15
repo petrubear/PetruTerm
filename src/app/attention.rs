@@ -11,6 +11,7 @@ impl App {
     /// Drain `mux.attention_events`, update the tracker, deliver notifications, and clear the
     /// indicator of the pane the user is looking at. Called once per loop iteration.
     pub(super) fn process_attention_events(&mut self) {
+        self.mux.collect_ipc_events();
         let events = std::mem::take(&mut self.mux.attention_events);
         let focused = self.mux.focused_terminal_id();
         let now = Instant::now();

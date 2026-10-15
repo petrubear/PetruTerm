@@ -1,8 +1,17 @@
 # Agent Attention Layer - Design
 
-Status: APPROVED (2026-10-15). Slice 1 IMPLEMENTED (OSC/BEL signals, tab dot, pane ring, jump to
-unread, native notifications, `agents` config). Slices 2 and 3 were re-planned on 2026-10-15
-after reading the cmux sources (see "cmux findings" and "Delivery slices").
+Status: APPROVED (2026-10-15). Slices 1, 2 and 3 IMPLEMENTED (OSC/BEL signals, tab dot, pane
+ring, jump to unread, native notifications, `agents` config, control socket, `notify` / `hook` /
+`hooks setup` subcommands, `claude` shim). Slices 2 and 3 were re-planned after reading the cmux
+sources (see "cmux findings" and "Delivery slices").
+
+Implementation deviations: panes are identified on the socket by a process-unique `pane_uid`
+(`PETRUTERM_PANE_ID`), not the terminal id, because the wgpu build allocates terminal ids after
+spawning the shell. Hook state messages are not rate limited (OSC notifications still are).
+Known gap: macOS `path_helper` and user rc files reorder PATH in login shells, so the shim is
+not guaranteed to be first (verified: on the dev machine `~/.local/bin` precedes it). Fix
+candidates: ZDOTDIR-based shell integration that re-prepends the shim directory, or relying on
+`hooks setup claude`.
 
 ## Goal
 

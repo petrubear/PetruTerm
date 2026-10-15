@@ -77,6 +77,9 @@ pub struct Terminal {
     /// PID of the shell child process (for CWD resolution).
     pub child_pid: u32,
     /// OSC 133 command block tracker for this pane.
+    /// Value of `PETRUTERM_PANE_ID` in this pane's shell; maps control-socket messages back
+    /// to this terminal.
+    pub pane_uid: u64,
     pub block_manager: BlockManager,
     /// Shadow of the current input line for decoration (syntax colour, ghost text).
     pub input_shadow: InputShadow,
@@ -109,6 +112,7 @@ impl Terminal {
             scrollback: config.scrollback_lines as usize,
         };
 
+        let pane_uid = crate::ipc::next_pane_uid();
         let (pty, term) = Pty::spawn(
             config,
             cols,
@@ -120,6 +124,7 @@ impl Terminal {
             working_directory,
             term_config,
             &size,
+            &crate::ipc::pane_env(pane_uid),
         )?;
 
         let child_pid = pty.child_pid;
@@ -130,6 +135,7 @@ impl Terminal {
             cols: Cell::new(cols),
             rows: Cell::new(rows),
             child_pid,
+            pane_uid,
             block_manager: BlockManager::new(),
             input_shadow: InputShadow::new(),
         })
@@ -371,5 +377,48 @@ mod notify_pty_tests {
                 },
             ]
         );
+    }
+
+    /// The shell of a new pane sees its own `PETRUTERM_PANE_ID` (matching `pane_uid`) and
+    /// `PETRUTERM_BIN`, so hooks run inside it can report back.
+    #[test]
+    fn real_pty_child_sees_pane_identity_env() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let script = dir.path().join("fake-shell.sh");
+        std::fs::write(
+            &script,
+            "#!/bin/sh\nprintf '\\033]9;%s|%s\\007' \"$PETRUTERM_PANE_ID\" \"$PETRUTERM_BIN\"\nsleep 5\n",
+        )
+        .expect("write script");
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        let config = Config {
+            shell: script.to_string_lossy().into_owned(),
+            ..Config::default()
+        };
+        let terminal = Terminal::new(
+            &config,
+            80,
+            24,
+            8,
+            16,
+            Arc::new(|| {}),
+            Arc::new(WakeupGate::new()),
+            Some(dir.path().to_path_buf()),
+        )
+        .expect("spawn the fake shell in a PTY");
+
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut body = None;
+        while body.is_none() && Instant::now() < deadline {
+            if let Ok(PtyEvent::Notify(n)) =
+                terminal.pty.rx.recv_timeout(Duration::from_millis(100))
+            {
+                body = Some(n.body);
+            }
+        }
+        let body = body.expect("notify event with env values");
+        let (id, bin) = body.split_once('|').expect("id|bin");
+        assert_eq!(id, terminal.pane_uid.to_string());
+        assert!(!bin.is_empty());
     }
 }

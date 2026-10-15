@@ -148,6 +148,7 @@ impl Pty {
         working_directory: Option<std::path::PathBuf>,
         term_config: alacritty_terminal::term::Config,
         term_size: &crate::term::TermSize,
+        extra_env: &[(String, String)],
     ) -> Result<(Self, Arc<FairMutex<Term<PtyEventProxy>>>)> {
         // ── 1. Open PTY pair ───────────────────────────────────────────────
         let (master_fd, slave_fd) =
@@ -181,7 +182,8 @@ impl Pty {
         let term = Arc::new(FairMutex::new(Term::new(term_config, term_size, proxy)));
 
         // ── 6. Spawn shell process ────────────────────────────────────────
-        let child = unsafe { spawn_shell(config, slave_fd, master_fd, working_directory)? };
+        let child =
+            unsafe { spawn_shell(config, slave_fd, master_fd, working_directory, extra_env)? };
         let child_pid = child.id();
         let child_pid_libc = child_pid as libc::pid_t;
 
@@ -408,6 +410,7 @@ unsafe fn spawn_shell(
     slave_fd: RawFd,
     master_fd: RawFd,
     working_directory: Option<std::path::PathBuf>,
+    extra_env: &[(String, String)],
 ) -> Result<std::process::Child> {
     use std::os::fd::FromRawFd;
     use std::process::{Command, Stdio};
@@ -434,6 +437,8 @@ unsafe fn spawn_shell(
     cmd.env("TERM", "xterm-256color")
         .env("COLORTERM", "truecolor")
         .env("TERM_PROGRAM", "PetruTerm");
+    // Pane identity + control socket for agent hooks (see `crate::ipc`).
+    cmd.envs(extra_env.iter().map(|(k, v)| (k, v)));
 
     // Working directory.
     if let Some(dir) = working_directory.or_else(dirs::home_dir) {

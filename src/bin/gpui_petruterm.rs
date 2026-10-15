@@ -14,6 +14,12 @@ fn quit(_: &Quit, cx: &mut App) {
 }
 
 fn main() {
+    // `notify` / `hook` / `hooks` subcommands run without starting the GUI.
+    let cli_args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(code) = petruterm::ipc::cli::run(&cli_args) {
+        std::process::exit(code);
+    }
+
     // Init env_logger (default info), same as src/main.rs.
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
@@ -26,6 +32,9 @@ fn main() {
     // `spawn_config_watcher`'s doc comment for why calling it more than once
     // would race two watcher threads over one process-global slot.
     spawn_config_watcher();
+
+    // Control socket for agent hooks / `petruterm notify`; the shell polls it on its tick.
+    petruterm::ipc::server::start(std::sync::Arc::new(|| {}));
 
     Application::new().run(move |cx: &mut App| {
         cx.on_action(quit);
