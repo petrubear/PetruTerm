@@ -246,14 +246,19 @@ fn pair(dir: &std::path::Path, args: &[String]) -> i32 {
         eprintln!("petruterm remote: could not reach the running instance");
         return 1;
     }
+    let relay = relay_override.unwrap_or(status.relay_public);
     let code = PairingCode {
         host_public,
         secret,
         expires_unix: expires,
-        relay: relay_override.unwrap_or(status.relay_public),
+        relay: relay.clone(),
     }
     .encode();
     print_qr(&code);
+    println!("Relay the phone will connect to: {relay}");
+    if relay.contains("127.0.0.1") || relay.contains("localhost") {
+        println!("Warning: that is this computer's loopback; a phone cannot reach it. Use --relay ws://<this computer's LAN IP>:8787.");
+    }
     println!("\n{code}\n");
     println!(
         "Scan the QR or paste the code in the PetruTerm app within {} minutes. It works once.",
