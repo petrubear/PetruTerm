@@ -29,6 +29,9 @@ struct Running {
     runtime: tokio::runtime::Runtime,
     shutdown: tokio::sync::watch::Sender<bool>,
     ctx: Arc<host::Ctx>,
+    /// Relay address written into pairing codes (read by the gpui binary only).
+    #[allow(dead_code)]
+    relay_public: String,
 }
 
 #[derive(Default)]
@@ -88,19 +91,14 @@ impl Manager {
             .unwrap_or_else(|| Arc::new(|| {}));
         let identity = store::load_or_create_identity(&dir).map_err(|e| e.to_string())?;
         let host_name = hostname();
-        let ctx = host::Ctx::new(
-            dir.clone(),
-            identity.clone(),
-            config.relay.clone(),
-            host_name,
-            wakeup,
-        );
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
             .thread_name("remote")
             .enable_all()
             .build()
             .map_err(|e| e.to_string())?;
+        let (relay_dial, relay_public) = start_relay(&runtime, &config);
+        let ctx = host::Ctx::new(dir.clone(), identity.clone(), relay_dial, host_name, wakeup);
         let (shutdown, shutdown_rx) = tokio::sync::watch::channel(false);
         runtime.spawn(host::run(Arc::clone(&ctx), shutdown_rx));
         store::write_status(
@@ -108,7 +106,7 @@ impl Manager {
             &store::Status {
                 pid: std::process::id(),
                 host_public: remote_proto::hex(&identity.public),
-                relay_public: config.relay_public.clone().unwrap_or(config.relay),
+                relay_public: relay_public.clone(),
                 socket: crate::ipc::server::socket_path().map(|p| p.to_string_lossy().into_owned()),
             },
         )
@@ -117,6 +115,7 @@ impl Manager {
             runtime,
             shutdown,
             ctx,
+            relay_public,
         });
         log::info!("remote: started");
         Ok(())
@@ -130,6 +129,28 @@ impl Manager {
             r.runtime.shutdown_background();
             log::info!("remote: stopped");
         }
+    }
+
+    #[allow(dead_code)] // used by the gpui binary only
+    /// Mint a one-time pairing code for a new phone (starting nothing: remote must be on).
+    /// Returns the code and the relay address it points at.
+    pub fn new_pairing_code(&self) -> Result<(String, String), String> {
+        let (host_public, relay) = {
+            let running = self.running.lock().unwrap();
+            let r = running.as_ref().ok_or("remote access is not running")?;
+            (r.ctx.identity.public, r.relay_public.clone())
+        };
+        let secret = remote_proto::random32().map_err(|e| e.to_string())?;
+        let expires = store::now_unix() + OFFER_TTL.as_secs();
+        self.install_offer(secret, expires)?;
+        let code = remote_proto::pair::PairingCode {
+            host_public,
+            secret,
+            expires_unix: expires,
+            relay: relay.clone(),
+        }
+        .encode();
+        Ok((code, relay))
     }
 
     /// Accept a pairing secret minted elsewhere (the CLI).
@@ -157,6 +178,59 @@ pub fn toggle() -> Result<bool, String> {
     } else {
         m.start().map(|_| true)
     }
+}
+
+/// Decide which relay to use. With `relay = "builtin"` this binds a relay on 0.0.0.0 inside the
+/// app (it only forwards ciphertext) and returns `(url the desktop dials, url for phones)`.
+/// If the port is already taken (a standalone relay is running) that one is used instead.
+fn start_relay(runtime: &tokio::runtime::Runtime, config: &RemoteConfig) -> (String, String) {
+    if config.relay != "builtin" && !config.relay.is_empty() {
+        let public = config
+            .relay_public
+            .clone()
+            .unwrap_or_else(|| config.relay.clone());
+        return (config.relay.clone(), public);
+    }
+    // Bound with std so this works whether or not the caller is inside a runtime.
+    let bound = std::net::TcpListener::bind(("0.0.0.0", config.port)).and_then(|l| {
+        l.set_nonblocking(true)?;
+        let _guard = runtime.enter();
+        tokio::net::TcpListener::from_std(l)
+    });
+    let port = match bound {
+        Ok(listener) => {
+            let port = listener
+                .local_addr()
+                .map(|a| a.port())
+                .unwrap_or(config.port);
+            runtime.spawn(relay::serve(listener, relay::Limits::default()));
+            log::info!("remote: built-in relay listening on 0.0.0.0:{port}");
+            port
+        }
+        Err(e) => {
+            log::warn!(
+                "remote: port {} busy ({e}); using the relay already there",
+                config.port
+            );
+            config.port
+        }
+    };
+    let public = config.relay_public.clone().unwrap_or_else(|| {
+        format!(
+            "ws://{}:{port}",
+            lan_ip().unwrap_or_else(|| "127.0.0.1".into())
+        )
+    });
+    (format!("ws://127.0.0.1:{port}"), public)
+}
+
+/// The address of the primary network interface (the route to the internet), if any. No
+/// packet is sent: connecting a UDP socket only selects the outgoing interface.
+fn lan_ip() -> Option<String> {
+    let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("8.8.8.8:80").ok()?;
+    let ip = socket.local_addr().ok()?.ip();
+    (!ip.is_loopback() && !ip.is_unspecified()).then(|| ip.to_string())
 }
 
 fn hostname() -> String {

@@ -232,3 +232,11 @@ Not done / follow-ups:
 - Relay hosting and TLS (use a TLS-terminating proxy for wss://); relay-side registration proof.
 - Control-socket caveat: any process of the same user can already read `host.key` and edit
   `devices.json`, so the socket commands do not widen the trust boundary.
+
+## Update: relay inside the app (2026-10-16)
+
+No separate relay process: `remote.relay = "builtin"` (default) binds a relay on `0.0.0.0:<port>`
+inside the app's remote runtime while remote access is on, and the desktop dials it over loopback.
+The pairing address defaults to the LAN IP; `remote.relay_public` overrides it for internet use
+(the built-in relay is only reachable from outside if the router forwards the port or a tunnel
+points at it). The gpui binary shows the QR in a popup (`gpui_shell/remote_overlay.rs`).

@@ -34,16 +34,37 @@ impl PaneView for GpuiPanes<'_> {
 }
 
 impl super::GpuiShellRoot {
-    /// Palette / `Leader R`: start or stop remote access and say what happened.
+    /// Palette / `Leader R`: start remote access (and show the pairing QR) or stop it.
     pub(super) fn toggle_remote(&mut self, cx: &mut gpui::Context<Self>) {
-        let msg = match crate::remote::toggle() {
-            Ok(true) => {
-                "Remote access started. Run `petruterm remote pair` in a pane to add a phone."
-                    .to_string()
+        if crate::remote::manager().is_active() {
+            crate::remote::manager().stop();
+            self.remote_overlay.close();
+            self.show_toast(
+                "Remote access stopped.",
+                std::time::Duration::from_secs(4),
+                cx,
+            );
+            cx.notify();
+        } else {
+            self.pair_remote(cx);
+        }
+    }
+
+    /// Palette "Remote: Pair a phone": start remote access if needed, then show a fresh QR.
+    pub(super) fn pair_remote(&mut self, cx: &mut gpui::Context<Self>) {
+        let m = crate::remote::manager();
+        let result = m.start().and_then(|_| m.new_pairing_code());
+        match result {
+            Ok((code, relay)) => {
+                self.remote_overlay
+                    .open(code, relay, crate::remote::OFFER_TTL);
+                cx.notify();
             }
-            Ok(false) => "Remote access stopped.".to_string(),
-            Err(e) => format!("Remote access failed: {e}"),
-        };
-        self.show_toast(msg, std::time::Duration::from_secs(6), cx);
+            Err(e) => self.show_toast(
+                format!("Remote access failed: {e}"),
+                std::time::Duration::from_secs(6),
+                cx,
+            ),
+        }
     }
 }

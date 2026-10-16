@@ -45,6 +45,7 @@ pub(super) fn gpui_shell_actions(config: &Config) -> Vec<PaletteAction> {
                     | Action::Quit
                     | Action::ToggleStatusBar
                     | Action::ToggleRemote
+                    | Action::PairRemote
                     | Action::OpenConfigFile
                     | Action::OpenConfigFolder
                     | Action::ReloadConfig
@@ -133,6 +134,7 @@ impl GpuiShellRoot {
             Action::ToggleFullscreen => window.toggle_fullscreen(),
             Action::Quit => cx.quit(),
             Action::ToggleRemote => self.toggle_remote(cx),
+            Action::PairRemote => self.pair_remote(cx),
             Action::ToggleStatusBar => {
                 self.config.status_bar.enabled = !self.config.status_bar.enabled;
             }

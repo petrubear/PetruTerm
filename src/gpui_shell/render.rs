@@ -8,8 +8,8 @@ use crate::config::schema::TitleBarStyle;
 
 use super::pane_view::to_rgba;
 use super::{
-    ai_block, context_menu, info_overlay, palette, pane_view, render_callbacks, search_bar,
-    status_bar, tabs, toast, GpuiShellRoot,
+    ai_block, context_menu, info_overlay, palette, pane_view, remote_overlay, render_callbacks,
+    search_bar, status_bar, tabs, toast, GpuiShellRoot,
 };
 
 /// Outer window padding and the gap between floating "cards" (sidebar,
@@ -395,6 +395,12 @@ impl Render for GpuiShellRoot {
             .when(self.info_overlay.is_visible(), |el| {
                 el.child(info_overlay::render_info_overlay(
                     &self.info_overlay,
+                    &self.config.colors,
+                ))
+            })
+            .when(self.remote_overlay.is_visible(), |el| {
+                el.child(remote_overlay::render(
+                    &self.remote_overlay,
                     &self.config.colors,
                 ))
             })

@@ -1571,6 +1571,10 @@ impl UiManager {
                 Ok(false) => log::info!("remote access stopped"),
                 Err(e) => log::warn!("remote access: {e}"),
             },
+            Action::PairRemote => match crate::remote::manager().start() {
+                Ok(()) => log::info!("remote access started; run `petruterm remote pair`"),
+                Err(e) => log::warn!("remote access: {e}"),
+            },
             Action::ToggleStatusBar => {
                 config.status_bar.enabled = !config.status_bar.enabled;
             }

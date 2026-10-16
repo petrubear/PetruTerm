@@ -379,6 +379,7 @@ fn inject_petruterm_global(lua: &Lua) -> LuaResult<()> {
         "CommandPalette",
         "ToggleStatusBar",
         "ToggleRemote",
+        "PairRemote",
         "ToggleFullscreen",
         "Quit",
         // AI
@@ -756,6 +757,9 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
     if let Ok(r_table) = table.get::<LuaTable>("remote") {
         if let Ok(Some(v)) = r_table.get::<Option<String>>("relay") {
             config.remote.relay = v;
+        }
+        if let Ok(Some(v)) = r_table.get::<Option<u16>>("port") {
+            config.remote.port = v;
         }
         if let Ok(Some(v)) = r_table.get::<Option<String>>("relay_public") {
             config.remote.relay_public = Some(v);

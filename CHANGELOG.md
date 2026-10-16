@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added
+- Remote access needs no separate process: starting it (palette "Remote: Start / Stop", Leader R) runs a
+  relay inside the app while it is on, and the gpui binary shows the pairing QR in a popup
+  ("Remote: Pair a phone (show QR)" makes a fresh one). The phone is pointed at this computer's LAN
+  address; set `remote.relay_public` to a reachable address (port forward, tunnel) for use away from
+  home, or `remote.relay` to a hosted relay. `remote.port` sets the built-in relay port.
 - Remote access from a phone, on demand only (`petruterm remote start`, palette "Remote: Start /
   Stop phone access", `Leader R` in the gpui build): panes are streamed to an Android app over an
   end-to-end encrypted Noise session through a relay (`petruterm-relay`, new `relay` crate; the

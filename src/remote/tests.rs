@@ -380,3 +380,56 @@ async fn input_to_a_pane_that_was_not_attached_is_refused() {
         other => panic!("expected error, got {other:?}"),
     }
 }
+
+/// With `relay = "builtin"` the app runs its own relay: no separate process is needed, and the
+/// pairing address points at this computer.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn builtin_relay_serves_a_pairing_without_any_other_process() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join("remote");
+    let manager = super::Manager::default();
+    *manager.config.lock().unwrap() = crate::config::schema::RemoteConfig {
+        port: 0,
+        ..Default::default()
+    };
+    manager.start_in(dir.clone()).unwrap();
+
+    let status = store::read_status(&dir).expect("status file written");
+    let port: u16 = status
+        .relay_public
+        .rsplit(':')
+        .next()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_ne!(port, 0, "ephemeral port resolved: {}", status.relay_public);
+    let host_public: [u8; 32] = remote_proto::unhex(&status.host_public).unwrap();
+    let host = Keypair {
+        private: [0; 32], // the phone side only needs the host's public key
+        public: host_public,
+    };
+
+    let me = noise::generate_keypair().unwrap();
+    let secret = remote_proto::random32().unwrap();
+    manager
+        .install_offer(secret, store::now_unix() + 60)
+        .unwrap();
+    // The host dials the relay by itself; give it a moment to register.
+    let relay = format!("ws://127.0.0.1:{port}");
+    let mut phone = None;
+    for _ in 0..50 {
+        if let Ok(p) = Phone::connect(&relay, &host, &me, Mode::Pair { secret }).await {
+            phone = Some(p);
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        // A failed attempt may have used up nothing: the offer is only consumed on success.
+    }
+    let mut phone = phone.expect("phone reaches the built-in relay and host");
+    assert!(matches!(
+        phone.hello().await,
+        Some(Packet::Host(HostMsg::Welcome { .. }))
+    ));
+    manager.stop();
+    assert!(store::read_status(&dir).is_none());
+}

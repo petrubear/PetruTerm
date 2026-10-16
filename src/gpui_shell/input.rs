@@ -37,6 +37,11 @@ impl GpuiShellRoot {
             return;
         }
 
+        // Pairing QR: Escape closes it, everything else is swallowed while it is up.
+        if self.maybe_handle_remote_overlay_key(event, cx) {
+            return;
+        }
+
         // InfoOverlay intercepts all keys (on top visually).
         // See `info_overlay.rs`'s `maybe_handle_info_overlay_key` doc.
         if self.maybe_handle_info_overlay_key(event, cx) {

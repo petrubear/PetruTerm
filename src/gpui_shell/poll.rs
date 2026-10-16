@@ -294,6 +294,9 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                     this.toast = None;
                     should_notify = true;
                 }
+                if this.remote_overlay.expire() {
+                    should_notify = true;
+                }
                 // AI streaming drain: bounded per tick
                 // (`ChatPanelView::drain_events`'s own `AI_POLL_CAP`) so
                 // a fast stream can't starve everything else sharing

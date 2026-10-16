@@ -111,6 +111,7 @@ crossbeam-channel = "0.5"
 
 # Remote access (phone client)
 remote-proto = { path = "crates/remote-proto" }
+relay = { path = "crates/relay" }
 tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
 qrcode = { version = "0.14", default-features = false }
 
@@ -171,7 +172,6 @@ strip = true
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 tempfile = "3"
-relay = { path = "crates/relay" }
 
 [[bench]]
 name = "shaping"

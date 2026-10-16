@@ -19,8 +19,8 @@ use super::panes::PaneForest;
 use super::spawn_terminal::spawn_terminal;
 use super::GpuiShellRoot;
 use super::{
-    ai_block, chat_panel, context_menu, info_overlay, leader, panes, poll, sidebar, status_bar,
-    text_input, workspace,
+    ai_block, chat_panel, context_menu, info_overlay, leader, panes, poll, remote_overlay, sidebar,
+    status_bar, text_input, workspace,
 };
 
 impl GpuiShellRoot {
@@ -194,6 +194,7 @@ impl GpuiShellRoot {
             steering_manager,
             mcp_manager,
             info_overlay: info_overlay::InfoOverlay::new(),
+            remote_overlay: remote_overlay::RemoteOverlay::default(),
             palette,
             palette_query,
             pending_palette_action: None,

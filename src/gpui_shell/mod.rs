@@ -29,6 +29,7 @@ mod panes;
 mod poll;
 mod rasterize;
 mod remote;
+mod remote_overlay;
 mod rename;
 mod render;
 mod render_callbacks;
@@ -201,6 +202,8 @@ pub struct GpuiShellRoot {
     /// -- see `info_overlay.rs`'s own doc comment for why it's
     /// modal and why that makes its `is_visible()` guard correct.
     info_overlay: info_overlay::InfoOverlay,
+    /// Pairing QR for the phone app -- see `remote_overlay.rs`.
+    remote_overlay: remote_overlay::RemoteOverlay,
     /// The command palette's own state (query, filtered results, selected
     /// index, visibility) -- `crate::ui::palette::CommandPalette`, used
     /// directly rather than copied. `gpui_shell` opens it via

@@ -198,17 +198,21 @@ impl Default for AgentsConfig {
 /// Remote access from a phone. Never starts by itself; see `remote`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoteConfig {
-    /// Relay this desktop dials, e.g. `wss://relay.example.com`.
+    /// Relay this desktop dials, e.g. `wss://relay.example.com`. `"builtin"` (the default)
+    /// runs a relay inside the app while remote access is on, for phones on the same network.
     pub relay: String,
-    /// Relay URL written into pairing codes for phones, when it differs from `relay`
-    /// (for example the Android emulator reaches the host's relay at `ws://10.0.2.2:8787`).
+    /// Port of the built-in relay.
+    pub port: u16,
+    /// Relay URL written into pairing codes for phones. Defaults to this computer's LAN
+    /// address with the built-in relay, or to `relay` otherwise.
     pub relay_public: Option<String>,
 }
 
 impl Default for RemoteConfig {
     fn default() -> Self {
         Self {
-            relay: "ws://127.0.0.1:8787".into(),
+            relay: "builtin".into(),
+            port: 8787,
             relay_public: None,
         }
     }
