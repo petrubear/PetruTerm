@@ -112,7 +112,7 @@ crossbeam-channel = "0.5"
 # Remote access (phone client)
 remote-proto = { path = "crates/remote-proto" }
 relay = { path = "crates/relay" }
-tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-native-roots"] }
 qrcode = { version = "0.14", default-features = false }
 
 # System clipboard (copy/paste + OSC 52)

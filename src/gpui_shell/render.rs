@@ -408,6 +408,7 @@ impl Render for GpuiShellRoot {
                 el.child(palette::render_command_palette(
                     &self.palette,
                     &self.palette_query,
+                    &self.palette_scroll,
                     &self.config.colors,
                 ))
             })

@@ -5,7 +5,7 @@
 
 use gpui::{
     div, prelude::*, px, rgba, App, Context, Entity, Focusable, FontWeight, KeyDownEvent,
-    MouseButton, MouseDownEvent, Window,
+    MouseButton, MouseDownEvent, ScrollHandle, Window,
 };
 
 use crate::config::schema::ColorScheme;
@@ -22,6 +22,7 @@ use super::GpuiShellRoot;
 pub fn render_command_palette(
     palette: &CommandPalette,
     query_input: &Entity<TextInput>,
+    scroll: &ScrollHandle,
     colors: &ColorScheme,
 ) -> impl IntoElement {
     let selected = palette.selected;
@@ -99,6 +100,7 @@ pub fn render_command_palette(
                         .flex_1()
                         .min_h_0()
                         .overflow_y_scroll()
+                        .track_scroll(scroll)
                         .font_family(font_state::font_family())
                         .text_size(px(font_state::font_size()))
                         .children(rows),
@@ -131,6 +133,7 @@ impl GpuiShellRoot {
         let content = self.palette_query.read(cx).content();
         if content != self.palette.query {
             self.palette.set_query(content.to_string());
+            self.palette_scroll.scroll_to_item(self.palette.selected);
         }
     }
 
@@ -162,6 +165,7 @@ impl GpuiShellRoot {
             "up" => self.palette.select_up(),
             _ => {}
         }
+        self.palette_scroll.scroll_to_item(self.palette.selected);
         cx.notify();
         true
     }

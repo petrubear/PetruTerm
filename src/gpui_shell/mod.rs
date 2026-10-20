@@ -222,6 +222,8 @@ pub struct GpuiShellRoot {
     /// `cx.subscribe` callback in `construct.rs` is how this struct reacts
     /// to them instead.
     palette_query: gpui::Entity<text_input::TextInput>,
+    /// Keeps the palette's result list scrolled to the keyboard selection.
+    palette_scroll: gpui::ScrollHandle,
     /// Set when the palette confirms an action with no `Window` in hand
     /// (`cx.subscribe` callback) -- `render()`'s own top drains and
     /// dispatches it every frame. Same constraint the chat `/q` close has.

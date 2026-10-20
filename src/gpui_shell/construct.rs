@@ -197,6 +197,7 @@ impl GpuiShellRoot {
             remote_overlay: remote_overlay::RemoteOverlay::default(),
             palette,
             palette_query,
+            palette_scroll: gpui::ScrollHandle::new(),
             pending_palette_action: None,
             search_bar,
             search_query,
