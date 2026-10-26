@@ -268,7 +268,19 @@ pub(super) fn build_tab_reorder_callback(
     let view = cx.entity().downgrade();
     Rc::new(move |tab_id, to_gap, _window, cx| {
         view.update(cx, |root, cx| {
-            if root.workspaces.active_mut().tabs.move_tab(tab_id, to_gap) {
+            let ws = root.workspaces.active_mut();
+            let Some(from) = ws.tabs.tabs().iter().position(|t| t.id == tab_id) else {
+                return;
+            };
+            if ws.tabs.move_tab(tab_id, to_gap) {
+                // `tab_panes` is parallel to `tabs` (indexed by position), so
+                // the pane tree has to follow its tab to the new slot.
+                if let Some(to) = ws.tabs.tabs().iter().position(|t| t.id == tab_id) {
+                    if from < ws.tab_panes.len() && to < ws.tab_panes.len() {
+                        let forest = ws.tab_panes.remove(from);
+                        ws.tab_panes.insert(to, forest);
+                    }
+                }
                 cx.notify();
             }
         })
