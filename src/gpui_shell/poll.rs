@@ -362,12 +362,23 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                 if this.workspace_info.drain() {
                     should_notify = true;
                 }
+                {
+                    let ws = this.workspaces.active();
+                    let tab = ws.tabs.active_index();
+                    if let Some(forest) = ws.tab_panes.get(tab) {
+                        this.workspace_info
+                            .note_focus((ws.id, tab, forest.focused_terminal));
+                    }
+                }
                 if this
                     .workspace_info
                     .refresh_due(sidebar_open && focused, probe_now)
                 {
                     let probes = this.workspace_probes();
                     this.workspace_info.start(probe_now, probes);
+                }
+                if super::agent_scan::tick(this, focused) {
+                    should_notify = true;
                 }
                 // Battery: cheap, local IOKit call (no subprocess), so
                 // this piggybacks on the same 33ms tick like the leader-

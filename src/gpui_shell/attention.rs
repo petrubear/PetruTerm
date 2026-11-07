@@ -105,7 +105,7 @@ impl GpuiShellRoot {
 
     /// Bring `terminal_id` into view: switch workspace and tab, focus the pane, and unzoom if a
     /// different pane is zoomed. Returns false if no pane owns that terminal.
-    fn focus_terminal(&mut self, terminal_id: usize) -> bool {
+    pub(super) fn focus_terminal(&mut self, terminal_id: usize) -> bool {
         let found = self
             .workspaces
             .workspaces()

@@ -183,6 +183,9 @@ pub struct AgentsConfig {
     pub ring: bool,
     /// Treat BEL as "needs attention" (off by default: vim and tab completion ring it too).
     pub bell_attention: bool,
+    /// Extra agents for the sidebar "Agents" list, merged over the built-in defaults.
+    #[serde(default)]
+    pub recognized: Vec<crate::term::agents::RecognizedAgent>,
 }
 
 impl Default for AgentsConfig {
@@ -191,6 +194,7 @@ impl Default for AgentsConfig {
             notifications: true,
             ring: true,
             bell_attention: false,
+            recognized: Vec::new(),
         }
     }
 }

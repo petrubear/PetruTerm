@@ -1,10 +1,11 @@
 // The workspace sidebar drawer's visibility, active-section, and
 // per-section-cursor state.
 
+pub mod agents;
 pub mod render;
 pub mod sections;
 
-/// Which of the sidebar's four sections is active. Cycled by Tab/Shift+Tab
+/// Which of the sidebar's five sections is active. Cycled by Tab/Shift+Tab
 /// while the sidebar holds keyboard focus (`sidebar_nav.rs`), or by clicking a
 /// section-tab label (`render.rs`'s `on_select_section`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -14,21 +15,24 @@ pub enum SidebarSection {
     Mcp,
     Skills,
     Steering,
+    Agents,
 }
 
 impl SidebarSection {
     pub fn next(self) -> Self {
         match self {
+            Self::Agents => Self::Workspaces,
             Self::Workspaces => Self::Mcp,
             Self::Mcp => Self::Skills,
             Self::Skills => Self::Steering,
-            Self::Steering => Self::Workspaces,
+            Self::Steering => Self::Agents,
         }
     }
 
     pub fn prev(self) -> Self {
         match self {
-            Self::Workspaces => Self::Steering,
+            Self::Agents => Self::Steering,
+            Self::Workspaces => Self::Agents,
             Self::Mcp => Self::Workspaces,
             Self::Skills => Self::Mcp,
             Self::Steering => Self::Skills,
@@ -46,6 +50,8 @@ pub struct WorkspaceSidebar {
     skills_cursor: usize,
     /// Highlighted row within the Steering section's list. See `mcp_cursor`.
     steering_cursor: usize,
+    /// Highlighted row within the Agents section's list. See `mcp_cursor`.
+    agents_cursor: usize,
 }
 
 impl WorkspaceSidebar {
@@ -103,6 +109,14 @@ impl WorkspaceSidebar {
     pub fn set_steering_cursor(&mut self, idx: usize) {
         self.steering_cursor = idx;
     }
+
+    pub fn agents_cursor(&self) -> usize {
+        self.agents_cursor
+    }
+
+    pub fn set_agents_cursor(&mut self, idx: usize) {
+        self.agents_cursor = idx;
+    }
 }
 
 #[cfg(test)]
@@ -110,7 +124,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn section_next_cycles_through_all_four_and_wraps() {
+    fn section_next_cycles_through_all_five_and_wraps() {
         let mut s = SidebarSection::Workspaces;
         s = s.next();
         assert_eq!(s, SidebarSection::Mcp);
@@ -119,12 +133,16 @@ mod tests {
         s = s.next();
         assert_eq!(s, SidebarSection::Steering);
         s = s.next();
+        assert_eq!(s, SidebarSection::Agents);
+        s = s.next();
         assert_eq!(s, SidebarSection::Workspaces);
     }
 
     #[test]
     fn section_prev_cycles_backward_and_wraps() {
         let mut s = SidebarSection::Workspaces;
+        s = s.prev();
+        assert_eq!(s, SidebarSection::Agents);
         s = s.prev();
         assert_eq!(s, SidebarSection::Steering);
         s = s.prev();

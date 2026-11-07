@@ -16,6 +16,10 @@ the dev machine `~/.local/bin` precedes the shim). Solved with shell integration
 `ZDOTDIR`, sources their `.zshenv` and re-prepends the shim dir in a one-shot `precmd` hook;
 bash gets a `PROMPT_COMMAND` prefix. Other shells (fish) rely on `hooks setup claude`.
 
+Follow-up (2026-11-06): the gpui sidebar gained an "Agents" section listing every recognized
+agent running in any pane, built on this layer's per-pane state plus a process scan. See
+`specs/001-agents-sidebar-tab/`.
+
 ## Goal
 
 Make PetruTerm a good host for CLI coding agents (Claude Code, Codex, OpenCode, Gemini CLI)

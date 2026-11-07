@@ -136,6 +136,7 @@ impl GpuiShellRoot {
             LeaderAction::RenameWorkspace => self.begin_workspace_rename(window, cx),
             LeaderAction::ToggleWorkspaceSidebar => {
                 self.sidebar.toggle();
+                self.agent_scan.mark_due();
                 // Same division of labor `ToggleAiPanel` already has: opening
                 // moves focus TO the sidebar so Tab/arrow navigation
                 // works immediately; closing gives it back to the terminal

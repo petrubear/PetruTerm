@@ -4,6 +4,12 @@
 **Session Focus:** gpui chrome migration — milestone completion (M0-M5d) plus a visual-polish
 dogfood pass on `gpui_shell`'s chrome, matching an approved design mockup.
 
+## Latest (2026-11-06)
+
+Branch `001-agents-sidebar-tab`: sidebar "Agents" section implemented (spec, plan, tasks in
+`specs/001-agents-sidebar-tab/`). Code complete and unit-tested; manual UI validation
+(`quickstart.md`) and `./scripts/ci-local.sh` still pending. Nothing committed yet.
+
 ## Branch
 
 **Merged to `master` (2026-09-17).** The gpui chrome work was developed on

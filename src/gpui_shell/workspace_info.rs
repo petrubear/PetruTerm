@@ -91,6 +91,10 @@ pub struct WorkspaceInfoState {
     last_spawn: Option<Instant>,
     last_pr: Option<Instant>,
     in_flight: bool,
+    /// Which pane had focus at the last `note_focus`, and whether it moved since the
+    /// last probe started (the rows then describe a different pane's directory).
+    focus: Option<(usize, usize, usize)>,
+    focus_changed: bool,
 }
 
 impl WorkspaceInfoState {
@@ -115,6 +119,15 @@ impl WorkspaceInfoState {
         true
     }
 
+    /// Record which pane has focus (active workspace id, tab index, terminal id). A change
+    /// makes the next tick probe immediately instead of waiting out `REFRESH`.
+    pub fn note_focus(&mut self, focus: (usize, usize, usize)) {
+        if self.focus != Some(focus) {
+            self.focus = Some(focus);
+            self.focus_changed = true;
+        }
+    }
+
     /// Whether a new probe should start now (sidebar open and window focused, interval
     /// elapsed, none running).
     pub fn refresh_due(&self, active: bool, now: Instant) -> bool {
@@ -123,9 +136,12 @@ impl WorkspaceInfoState {
 
     /// Start a background probe for `probes`.
     pub fn start(&mut self, now: Instant, mut probes: Vec<WorkspaceProbe>) {
-        let want_pr = self
-            .last_pr
-            .is_none_or(|t| now.duration_since(t) >= PR_REFRESH);
+        // A focus move can land on another branch, whose PR the old row data doesn't describe.
+        let want_pr = self.focus_changed
+            || self
+                .last_pr
+                .is_none_or(|t| now.duration_since(t) >= PR_REFRESH);
+        self.focus_changed = false;
         for p in &mut probes {
             p.want_pr = want_pr;
         }
@@ -148,9 +164,10 @@ fn should_refresh(state: &WorkspaceInfoState, active: bool, now: Instant) -> boo
     if !active {
         return false;
     }
-    let due = state
-        .last_spawn
-        .is_none_or(|t| now.duration_since(t) >= REFRESH);
+    let due = state.focus_changed
+        || state
+            .last_spawn
+            .is_none_or(|t| now.duration_since(t) >= REFRESH);
     let stuck = state
         .last_spawn
         .is_some_and(|t| now.duration_since(t) >= STUCK_AFTER);
@@ -354,6 +371,26 @@ mod tests {
         s.in_flight = false;
         assert!(!should_refresh(&s, true, now + Duration::from_secs(5)));
         assert!(should_refresh(&s, true, now + REFRESH));
+    }
+
+    #[test]
+    fn focus_change_refreshes_before_the_interval() {
+        let now = Instant::now();
+        let mut s = WorkspaceInfoState::default();
+        s.last_spawn = Some(now);
+        let soon = now + Duration::from_secs(1);
+        s.note_focus((0, 0, 1));
+        s.focus_changed = false; // the probe for this focus already started
+        assert!(!should_refresh(&s, true, soon));
+        s.note_focus((0, 0, 1));
+        assert!(!should_refresh(&s, true, soon), "same pane is not a change");
+        s.note_focus((0, 0, 2));
+        assert!(should_refresh(&s, true, soon));
+        s.in_flight = true;
+        assert!(
+            !should_refresh(&s, true, soon),
+            "waits for the running probe"
+        );
     }
 
     #[test]

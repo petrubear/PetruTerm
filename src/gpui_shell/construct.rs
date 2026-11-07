@@ -170,6 +170,7 @@ impl GpuiShellRoot {
             cursor_blink_on: true,
             attention: crate::term::attention::AttentionTracker::new(),
             workspace_info: super::workspace_info::WorkspaceInfoState::default(),
+            agent_scan: super::agent_scan::AgentScanState::default(),
             cursor_last_blink: std::time::Instant::now(),
             rect_cache: Rc::new(RefCell::new(panes::RectCache::default())),
             leader_active: false,

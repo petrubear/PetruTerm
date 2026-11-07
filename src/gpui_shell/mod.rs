@@ -4,6 +4,8 @@
 
 mod acp_bridge;
 mod actions;
+mod agent_rows;
+mod agent_scan;
 mod ai_actions;
 mod ai_block;
 mod attention;
@@ -245,6 +247,8 @@ pub struct GpuiShellRoot {
     attention: crate::term::attention::AttentionTracker,
     /// Branch / PR / listening ports per workspace, shown in the sidebar (slice 4).
     workspace_info: workspace_info::WorkspaceInfoState,
+    /// Recognized-agent detections for the sidebar Agents section -- see `agent_scan.rs`.
+    agent_scan: agent_scan::AgentScanState,
     /// Confirmed inline agent action, drained at `render()`'s top.
     pending_agent_action: Option<crate::llm::agent_action::AgentAction>,
     /// Exit code of a terminal that has been reaped, keyed by the id it

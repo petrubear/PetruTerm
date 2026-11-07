@@ -72,6 +72,8 @@ pub struct PaneAttention {
     /// Set when an event arrived while the user was not looking at the pane.
     pub unread: bool,
     pub last_message: Option<String>,
+    /// When the last accepted event changed this pane's state or message.
+    pub updated_at: Option<Instant>,
     last_event_at: Option<Instant>,
 }
 
@@ -81,6 +83,7 @@ impl PaneAttention {
             state: AgentState::Idle,
             unread: false,
             last_message: None,
+            updated_at: None,
             last_event_at: None,
         }
     }
@@ -138,6 +141,7 @@ impl AttentionTracker {
             return None;
         }
         pane.last_event_at = Some(now);
+        pane.updated_at = Some(now);
         pane.state = AgentState::NeedsInput;
         pane.last_message = Some(body.clone());
         if observed {
@@ -163,6 +167,7 @@ impl AttentionTracker {
             .entry(terminal_id)
             .or_insert_with(PaneAttention::new);
         pane.state = state;
+        pane.updated_at = Some(Instant::now());
         if message.is_some() {
             pane.last_message = message.clone();
         }

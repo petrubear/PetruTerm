@@ -86,6 +86,14 @@ impl GpuiShellRoot {
                     self.sidebar.set_steering_cursor(next);
                 }
             }
+            sidebar::SidebarSection::Agents => {
+                let count = self.agent_rows().len();
+                if count > 0 {
+                    let current = self.sidebar.agents_cursor() as i32;
+                    let next = (current + delta).rem_euclid(count as i32) as usize;
+                    self.sidebar.set_agents_cursor(next);
+                }
+            }
         }
         cx.notify();
     }
@@ -102,8 +110,29 @@ impl GpuiShellRoot {
             sidebar::SidebarSection::Steering => {
                 self.sidebar_open_steering_at(self.sidebar.steering_cursor())
             }
+            sidebar::SidebarSection::Agents => {
+                let idx = self.sidebar.agents_cursor();
+                if let Some(row) = self.agent_rows().get(idx) {
+                    self.sidebar_open_agent(row.terminal_id);
+                }
+            }
         }
         cx.notify();
+    }
+
+    /// Jump to an agent's pane (workspace, tab and pane); a row whose pane is gone triggers a
+    /// rescan so it disappears.
+    pub(super) fn sidebar_open_agent(&mut self, terminal_id: usize) {
+        if let Some(idx) = self
+            .agent_rows()
+            .iter()
+            .position(|r| r.terminal_id == terminal_id)
+        {
+            self.sidebar.set_agents_cursor(idx);
+        }
+        if !self.focus_terminal(terminal_id) {
+            self.agent_scan.mark_due();
+        }
     }
 
     pub(super) fn sidebar_open_mcp_at(&mut self, idx: usize) {

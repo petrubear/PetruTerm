@@ -1,3 +1,4 @@
+pub mod agents_cfg;
 pub mod keybind_view;
 pub mod llm_view;
 pub mod lua;

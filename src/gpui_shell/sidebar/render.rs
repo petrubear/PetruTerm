@@ -12,6 +12,7 @@ use super::super::font_state;
 use super::super::pane_view::to_rgba;
 use super::super::workspace::WorkspaceManager;
 use super::super::workspace_info::RowDetail;
+use super::agents::{render_agents_section, AgentOpenCallback};
 use super::sections::{
     render_mcp_section, render_skills_section, render_steering_section, render_workspaces_section,
 };
@@ -28,7 +29,7 @@ pub const DEFAULT_SIDEBAR_WIDTH_PX: f32 = 220.0;
 /// Drag-resize clamp -- narrow enough that all four section tabs still fit
 /// without clipping (the exact bug that prompted adding resize at all), wide
 /// enough that it can't eat the whole window.
-pub const MIN_SIDEBAR_WIDTH_PX: f32 = 180.0;
+pub const MIN_SIDEBAR_WIDTH_PX: f32 = 220.0;
 pub const MAX_SIDEBAR_WIDTH_PX: f32 = 480.0;
 
 pub use super::sections::{
@@ -60,6 +61,9 @@ pub struct SidebarRenderCx<'a> {
     pub steering_manager: &'a SteeringManager,
     pub steering_cursor: usize,
     pub on_open_steering: SteeringOpenCallback,
+    pub agent_rows: Vec<crate::term::agents::AgentRow>,
+    pub agents_cursor: usize,
+    pub on_open_agent: AgentOpenCallback,
 }
 
 pub fn render_workspace_sidebar(ctx: SidebarRenderCx<'_>) -> Div {
@@ -110,6 +114,13 @@ pub fn render_workspace_sidebar(ctx: SidebarRenderCx<'_>) -> Div {
                 ctx.on_open_steering,
             )
             .into_any_element(),
+            SidebarSection::Agents => render_agents_section(
+                &ctx.agent_rows,
+                ctx.colors,
+                ctx.agents_cursor,
+                ctx.on_open_agent,
+            )
+            .into_any_element(),
         })
 }
 
@@ -119,6 +130,7 @@ fn render_section_tabs(
     on_select: SectionSelectCallback,
 ) -> Div {
     let tabs = [
+        (SidebarSection::Agents, "Agents"),
         (SidebarSection::Workspaces, "Workspaces"),
         (SidebarSection::Mcp, "MCP"),
         (SidebarSection::Skills, "Skills"),

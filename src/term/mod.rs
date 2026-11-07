@@ -1,3 +1,4 @@
+pub mod agents;
 pub mod attention;
 pub mod blocks;
 pub mod color;

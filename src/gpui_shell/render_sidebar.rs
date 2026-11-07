@@ -49,6 +49,7 @@ impl GpuiShellRoot {
         let on_select_section: sidebar::render::SectionSelectCallback =
             Rc::new(cx.listener(|this, section: &SidebarSection, window, cx| {
                 this.sidebar.set_section(*section);
+                this.agent_scan.mark_due();
                 window.focus(&this.sidebar_focus_handle);
                 cx.notify();
             }));
@@ -69,6 +70,12 @@ impl GpuiShellRoot {
             Rc::new(cx.listener(|this, idx: &usize, _window, cx| {
                 this.sidebar.set_steering_cursor(*idx);
                 this.sidebar_open_steering_at(*idx);
+                cx.notify();
+            }));
+
+        let on_open_agent: sidebar::agents::AgentOpenCallback =
+            Rc::new(cx.listener(|this, terminal_id: &usize, _window, cx| {
+                this.sidebar_open_agent(*terminal_id);
                 cx.notify();
             }));
 
@@ -93,6 +100,9 @@ impl GpuiShellRoot {
             steering_manager: &self.steering_manager,
             steering_cursor: self.sidebar.steering_cursor(),
             on_open_steering,
+            agent_rows: self.agent_rows(),
+            agents_cursor: self.sidebar.agents_cursor(),
+            on_open_agent,
         };
         let bar = sidebar::render::render_workspace_sidebar(sidebar_ctx);
         let bar = bar.with_animation(

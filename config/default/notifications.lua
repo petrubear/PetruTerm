@@ -17,6 +17,10 @@ function module.apply_to_config(config)
         notifications  = true,   -- native/toast notification when you are not looking at the pane
         ring           = true,   -- tab dot and pane ring for panes that need attention
         bell_attention = false,  -- also treat BEL as "needs attention" (noisy: vim, tab completion)
+        -- Extra agents for the sidebar "Agents" list, added to the built-ins (Claude Code,
+        -- Kiro, Codex, Copilot, Antigravity). `process` matches the program name (or the
+        -- script name for node/bun/deno). Same `name` as a built-in replaces it.
+        -- recognized = { { name = "Gemini CLI", process = { "gemini" } } },
     }
 end
 
