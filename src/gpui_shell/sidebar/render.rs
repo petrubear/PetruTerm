@@ -124,6 +124,33 @@ pub fn render_workspace_sidebar(ctx: SidebarRenderCx<'_>) -> Div {
         })
 }
 
+/// Each section tab has its own color, taken from the theme's bright ANSI colors -- the same
+/// palette the terminal tab color picker offers -- so the active section reads at a glance.
+fn section_accent(section: SidebarSection, colors: &ColorScheme) -> [f32; 4] {
+    let idx = match section {
+        SidebarSection::Agents => 5,     // magenta
+        SidebarSection::Workspaces => 4, // blue
+        SidebarSection::Mcp => 2,        // green
+        SidebarSection::Skills => 3,     // yellow
+        SidebarSection::Steering => 6,   // cyan
+    };
+    colors.brights[idx]
+}
+
+/// Flat RGB scale-down of the accent (same approach as the terminal tab pill tint).
+const ACTIVE_TINT: f32 = 0.25;
+const INACTIVE_TINT: f32 = 0.10;
+const INACTIVE_TEXT_ALPHA: f32 = 0.65;
+
+fn tint(accent: [f32; 4], factor: f32) -> gpui::Rgba {
+    gpui::Rgba {
+        r: accent[0] * factor,
+        g: accent[1] * factor,
+        b: accent[2] * factor,
+        a: 1.0,
+    }
+}
+
 fn render_section_tabs(
     active: SidebarSection,
     colors: &ColorScheme,
@@ -158,11 +185,14 @@ fn render_section_tabs(
                 .on_mouse_down(MouseButton::Left, move |_: &MouseDownEvent, window, cx| {
                     select(&section, window, cx)
                 });
+            let accent = section_accent(section, colors);
             if is_active {
-                cell.bg(to_rgba(colors.ui_surface_active))
-                    .text_color(to_rgba(colors.foreground))
+                cell.bg(tint(accent, ACTIVE_TINT))
+                    .text_color(to_rgba(accent))
             } else {
-                cell.text_color(to_rgba(colors.ui_muted))
+                let mut dim = to_rgba(accent);
+                dim.a = INACTIVE_TEXT_ALPHA;
+                cell.bg(tint(accent, INACTIVE_TINT)).text_color(dim)
             }
         })
         .collect();
