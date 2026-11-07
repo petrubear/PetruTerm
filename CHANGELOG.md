@@ -1,8 +1,18 @@
 # Changelog
 
-## [Unreleased]
+## [1.3.0] — 2026-11-06
 
 ### Added
+- `gpui-petruterm`: new "Agents" section in the sidebar, first tab and the one shown when the
+  sidebar opens. It lists every recognized coding agent running in any pane of any workspace or
+  tab (Claude Code, Kiro, Codex, Copilot, Antigravity), each name in its own color, with
+  `workspace / tab`, state, unread dot, last message and time since the last update, most urgent
+  first. Click or Enter jumps to the pane. Agents are found by scanning each pane's foreground
+  process (one `ps` every 2s, only while the section is on screen), so no per-agent setup is
+  needed; hook reports only refine the state. Add your own with `agents.recognized` in
+  `notifications.lua` (`name`, `process`, optional `color`). Each sidebar section tab now has its
+  own theme color, and the sidebar's minimum width grew to 220px to fit five tabs. Design:
+  `specs/001-agents-sidebar-tab/`.
 - Remote access needs no separate process: starting it (palette "Remote: Start / Stop", Leader R) runs a
   relay inside the app while it is on, and the gpui binary shows the pairing QR in a popup
   ("Remote: Pair a phone (show QR)" makes a fresh one). The phone is pointed at this computer's LAN
