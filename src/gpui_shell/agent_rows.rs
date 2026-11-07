@@ -41,6 +41,7 @@ impl GpuiShellRoot {
             rows.push(AgentRow {
                 terminal_id: det.terminal_id,
                 agent: det.agent.clone(),
+                color: det.color,
                 workspace_name,
                 tab_title,
                 pane_number: (pane_count > 1).then_some(pane),

@@ -3,7 +3,7 @@
 
 use mlua::prelude::*;
 
-use crate::term::agents::RecognizedAgent;
+use crate::term::agents::{parse_hex_color, RecognizedAgent};
 
 /// Valid entries of `recognized` in `agents_table`; invalid ones are skipped with a warning.
 pub fn parse_recognized(agents_table: &LuaTable) -> Vec<RecognizedAgent> {
@@ -32,7 +32,17 @@ fn parse_entry(t: &LuaTable) -> Option<RecognizedAgent> {
         .map(|p| p.trim().to_string())
         .filter(|p| !p.is_empty())
         .collect();
-    (!name.is_empty() && !process.is_empty()).then_some(RecognizedAgent { name, process })
+    // An unparsable color is ignored (the agent still works), not a reason to drop the entry.
+    let color = t
+        .get::<Option<String>>("color")
+        .ok()
+        .flatten()
+        .and_then(|c| parse_hex_color(&c));
+    (!name.is_empty() && !process.is_empty()).then_some(RecognizedAgent {
+        name,
+        process,
+        color,
+    })
 }
 
 #[cfg(test)]
@@ -53,6 +63,18 @@ mod tests {
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].name, "Gemini");
         assert_eq!(got[0].process, vec!["gemini", "gemini-cli"]);
+    }
+
+    #[test]
+    fn color_is_parsed_and_bad_color_is_ignored() {
+        let got = parse(
+            r##"return { recognized = {
+                { name = "A", process = { "a" }, color = "#102030" },
+                { name = "B", process = { "b" }, color = "nope" },
+            } }"##,
+        );
+        assert_eq!(got[0].color, Some([0x10, 0x20, 0x30]));
+        assert_eq!(got[1].color, None);
     }
 
     #[test]

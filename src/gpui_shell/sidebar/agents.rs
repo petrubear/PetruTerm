@@ -100,7 +100,16 @@ pub fn render_agents_section(
                                 .flex_shrink_0()
                                 .bg(dot_color),
                         )
-                        .child(div().flex_shrink_0().child(row.agent.clone()))
+                        .child(
+                            div()
+                                .flex_shrink_0()
+                                .when_some(row.color, |el, [r, g, b]| {
+                                    el.text_color(gpui::rgb(
+                                        (u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b),
+                                    ))
+                                })
+                                .child(row.agent.clone()),
+                        )
                         .child(small().child(location(row))),
                 )
                 .child(

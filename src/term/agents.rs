@@ -29,6 +29,9 @@ pub struct RecognizedAgent {
     pub name: String,
     /// Process basenames (or interpreter script names) that identify the agent.
     pub process: Vec<String>,
+    /// Color of the agent's name in the sidebar list (RGB); `None` = default text color.
+    #[serde(default)]
+    pub color: Option<[u8; 3]>,
 }
 
 impl RecognizedAgent {
@@ -36,19 +39,36 @@ impl RecognizedAgent {
         Self {
             name: name.to_string(),
             process: process.iter().map(|p| p.to_string()).collect(),
+            color: None,
         }
     }
+
+    fn colored(mut self, rgb: [u8; 3]) -> Self {
+        self.color = Some(rgb);
+        self
+    }
+}
+
+/// `#rrggbb` (or `rrggbb`) to RGB bytes.
+pub fn parse_hex_color(s: &str) -> Option<[u8; 3]> {
+    let h = s.trim().trim_start_matches('#');
+    if h.len() != 6 || !h.is_ascii() {
+        return None;
+    }
+    let byte = |i: usize| u8::from_str_radix(&h[i..i + 2], 16).ok();
+    Some([byte(0)?, byte(2)?, byte(4)?])
 }
 
 /// Built-in list. Names verified 2026-11-06 against the installed commands (all native
 /// binaries: claude, kiro-cli, codex, copilot, agy); users can extend it via `agents.recognized`.
 pub fn default_agents() -> Vec<RecognizedAgent> {
     vec![
-        RecognizedAgent::new("Claude Code", &["claude"]),
-        RecognizedAgent::new("Kiro", &["kiro-cli", "kiro-cli-chat", "kiro"]),
-        RecognizedAgent::new("Codex", &["codex"]),
-        RecognizedAgent::new("Copilot", &["copilot"]),
-        RecognizedAgent::new("Antigravity", &["agy", "antigravity"]),
+        RecognizedAgent::new("Claude Code", &["claude"]).colored([0xf2, 0x8c, 0x28]), // orange
+        RecognizedAgent::new("Kiro", &["kiro-cli", "kiro-cli-chat", "kiro"])
+            .colored([0xa8, 0x7b, 0xff]), // purple
+        RecognizedAgent::new("Codex", &["codex"]).colored([0x4a, 0xde, 0x80]),        // green
+        RecognizedAgent::new("Copilot", &["copilot"]).colored([0xf7, 0x78, 0xba]),    // pink
+        RecognizedAgent::new("Antigravity", &["agy", "antigravity"]).colored([0x4f, 0x8c, 0xff]), // blue
     ]
 }
 
@@ -60,7 +80,11 @@ pub fn merged_agents(
     let mut out = defaults;
     for u in user {
         match out.iter_mut().find(|a| a.name == u.name) {
-            Some(slot) => *slot = u.clone(),
+            Some(slot) => {
+                let color = u.color.or(slot.color);
+                *slot = u.clone();
+                slot.color = color;
+            }
             None => out.push(u.clone()),
         }
     }
@@ -89,6 +113,7 @@ pub struct AgentDetection {
     pub terminal_id: usize,
     /// `RecognizedAgent::name`.
     pub agent: String,
+    pub color: Option<[u8; 3]>,
 }
 
 /// Parse `ps -axo pid=,ppid=,pgid=,tpgid=,args=` output, skipping malformed lines.
@@ -186,6 +211,7 @@ pub fn detect(
             out.push(AgentDetection {
                 terminal_id: probe.terminal_id,
                 agent: agent.name.clone(),
+                color: agent.color,
             });
         }
     }
@@ -198,6 +224,7 @@ pub fn detect(
 pub struct AgentRow {
     pub terminal_id: usize,
     pub agent: String,
+    pub color: Option<[u8; 3]>,
     pub workspace_name: String,
     pub tab_title: String,
     /// 1-based pane position in its tab; `Some` only when the tab has 2+ panes.

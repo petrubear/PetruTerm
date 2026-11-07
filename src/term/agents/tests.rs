@@ -52,7 +52,8 @@ fn detects_foreground_agent_only() {
         found,
         vec![AgentDetection {
             terminal_id: 7,
-            agent: "Claude Code".into()
+            agent: "Claude Code".into(),
+            color: Some([0xf2, 0x8c, 0x28]),
         }]
     );
 }
@@ -120,12 +121,26 @@ fn merge_appends_and_replaces_by_name() {
         vec!["codex2"]
     );
     assert!(merged.iter().any(|a| a.name == "Gemini"));
+    // a replacement without a color keeps the built-in color
+    assert_eq!(
+        merged.iter().find(|a| a.name == "Codex").unwrap().color,
+        Some([0x4a, 0xde, 0x80])
+    );
+}
+
+#[test]
+fn parses_hex_colors() {
+    assert_eq!(parse_hex_color("#ff8000"), Some([255, 128, 0]));
+    assert_eq!(parse_hex_color("00ff7f"), Some([0, 255, 127]));
+    assert_eq!(parse_hex_color("#fff"), None);
+    assert_eq!(parse_hex_color("#gg0000"), None);
 }
 
 fn agent_row(id: usize, state: Option<AgentState>, at: Option<Instant>) -> AgentRow {
     AgentRow {
         terminal_id: id,
         agent: "x".into(),
+        color: None,
         workspace_name: String::new(),
         tab_title: String::new(),
         pane_number: None,

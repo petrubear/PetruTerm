@@ -20,7 +20,8 @@ function module.apply_to_config(config)
         -- Extra agents for the sidebar "Agents" list, added to the built-ins (Claude Code,
         -- Kiro, Codex, Copilot, Antigravity). `process` matches the program name (or the
         -- script name for node/bun/deno). Same `name` as a built-in replaces it.
-        -- recognized = { { name = "Gemini CLI", process = { "gemini" } } },
+        -- `color` ("#rrggbb", optional) colors the agent's name in the list; built-ins have one.
+        -- recognized = { { name = "Gemini CLI", process = { "gemini" }, color = "#4285f4" } },
     }
 end
 

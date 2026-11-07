@@ -11,11 +11,11 @@ pub mod sections;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SidebarSection {
     #[default]
+    Agents,
     Workspaces,
     Mcp,
     Skills,
     Steering,
-    Agents,
 }
 
 impl SidebarSection {

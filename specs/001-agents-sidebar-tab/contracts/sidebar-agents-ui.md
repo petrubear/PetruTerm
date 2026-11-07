@@ -1,6 +1,6 @@
 # Contract: Agents sidebar section (UI behavior)
 
-Section tab: first label "Agents", before Workspaces. Tab/Shift+Tab cycling includes it (order: Agents, Workspaces, MCP, Skills, Steering). Workspaces remains the default section. Click selects.
+Section tab: first label "Agents", before Workspaces. Tab/Shift+Tab cycling includes it (order: Agents, Workspaces, MCP, Skills, Steering). Agents is the default section when the sidebar opens. Click selects.
 
 Row (single list, scrollable):
 - Line 1: state dot (accent when unread/needs-input, muted otherwise), agent name, then `workspace / tab` truncated; when the tab has more than one pane, ` #N` (pane number in the tab) is appended.
