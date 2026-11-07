@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.5.0] — 2026-11-06
+
+### Added
+- Agent-to-agent messaging (`gpui-petruterm`): an agent can send a message to another agent by its
+  custom name with `petruterm msg [--no-reply] <name> <text>` (or `-` to read the text from stdin).
+  The message is typed into the target's pane as a normal user turn, framed as coming from another
+  agent with the instruction to answer by running the same command, and the command prints whether
+  it was delivered or why not (exit codes 3-13). The sender is verified from the connecting process
+  and its pane, not from the command line. Agents accept messages only after you turn on "Accept
+  messages" in their right-click menu (off by default, never remembered); "Send message..." sends
+  as you. Limits: 10 messages per minute per sender and target, and 10 messages per conversation
+  (a pause of 2 minutes starts a new one). Control characters are stripped from message text and
+  nothing is stored or logged. `petruterm agents setup` / `remove` install or remove a Claude Code
+  skill and a Kiro steering file that explain how to answer (never overwrites files it does not
+  own). Design: `specs/002-agent-messaging/`.
+
+---
+
 ## [1.4.0] — 2026-11-06
 
 ### Added
