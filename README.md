@@ -18,7 +18,9 @@ A developer-first GPU-accelerated terminal emulator written in Rust. Built for s
 - **Floating UI + macOS blur** — translucent vibrancy behind panels and the sidebar (`config.window.blur`)
 - **Tabs & split panes** — tmux-style keybinds, binary-tree layout; each pane has an independent PTY; exiting a shell closes only that pane
 - **Workspaces** — named workspaces with independent tab sets; save and restore layouts with `Leader+W+s` / `Leader+W+L`; auto-save on exit and/or on switch, both configurable
-- **Sidebar** — collapsible VSCode-style drawer (`Leader+e+e`) with four `Tab`-cycled sections: Workspaces, MCP, Skills, Steering
+- **Sidebar** — collapsible VSCode-style drawer (`Leader+e+e`) with `Tab`-cycled sections: Agents, Workspaces, MCP, Skills, Steering; each tab has its own theme color
+- **Agents section** (`gpui-petruterm`) — lists every recognized coding agent (Claude Code, Kiro, Codex, Copilot, Antigravity) running in any pane, with state, unread dot, last message and session id; click to jump to the pane; right-click to rename, copy the session id or reset the name
+- **Agent-to-agent messaging** (`gpui-petruterm`) — an agent can message another by its custom name with `petruterm msg [--no-reply] <name> <text>`; target agents must opt in via "Accept messages" in their right-click menu; rate limited, nothing stored. `petruterm agents setup` / `remove` install or remove the Claude Code skill and Kiro steering file that explain how to reply
 - **Status bar** — configurable plain or powerline bottom bar with leader mode, CWD, git branch, exit code, and time
 - **Input decoration** — syntax highlighting for shell commands (valid command = green, flags = cyan, strings = yellow), ghost text from shell history, inline flag hints on the row below the cursor
 - **Kitty keyboard protocol** — `Shift+Enter`, `Ctrl+Enter`, and other disambiguated key sequences work correctly in Neovim, Claude Code CLI, and other KKP-aware apps
