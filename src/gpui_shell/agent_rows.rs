@@ -43,6 +43,10 @@ impl GpuiShellRoot {
                 agent: det.agent.clone(),
                 color: det.color,
                 agent_pid: det.pid,
+                accepting: self.agent_accept.is_accepting(det.terminal_id, det.pid),
+                msg_recent: self
+                    .msg
+                    .delivered_recently(det.terminal_id, std::time::Instant::now()),
                 custom_name: self.agent_names.name_of(det.terminal_id).map(str::to_owned),
                 session: self
                     .agent_sessions

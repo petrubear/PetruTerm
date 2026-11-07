@@ -4,7 +4,14 @@
 **Session Focus:** gpui chrome migration — milestone completion (M0-M5d) plus a visual-polish
 dogfood pass on `gpui_shell`'s chrome, matching an approved design mockup.
 
-## Latest (2026-11-06)
+## Latest (2026-11-06, later)
+
+Branch `002-agent-messaging`: `petruterm msg`, router in the gpui chrome, acceptance toggle,
+"Send message..." editor, `petruterm agents setup|remove` (specs in `specs/002-agent-messaging/`).
+Code complete and unit-tested (`./scripts/ci-local.sh` passes); manual checks with real Claude
+Code and Kiro in the app (quickstart.md) are pending. Nothing committed yet.
+
+## Earlier (2026-11-06)
 
 Branch `001-agents-sidebar-tab`: sidebar "Agents" section implemented (spec, plan, tasks in
 `specs/001-agents-sidebar-tab/`). Code complete and unit-tested; manual UI validation

@@ -4,7 +4,7 @@
 
 use super::{parse_line, Message, MAX_LINE_BYTES};
 use crossbeam_channel::{Receiver, Sender};
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
@@ -82,6 +82,7 @@ fn accept_loop(listener: UnixListener, tx: Sender<Message>, wakeup: Arc<dyn Fn()
 
 fn handle_connection(stream: UnixStream, tx: &Sender<Message>, wakeup: &(dyn Fn() + Send + Sync)) {
     let _ = stream.set_read_timeout(Some(READ_TIMEOUT));
+    let peer = super::peer::peer_pid(&stream).unwrap_or(0);
     let mut reader = BufReader::new(stream);
     loop {
         let mut line = Vec::new();
@@ -96,6 +97,15 @@ fn handle_connection(stream: UnixStream, tx: &Sender<Message>, wakeup: &(dyn Fn(
             Ok(_) => {}
         }
         if let Some(msg) = std::str::from_utf8(&line).ok().and_then(parse_line) {
+            if let Some(m) = msg.msg.clone() {
+                // A message request: answer on this connection, one request per connection.
+                let out = super::msg_bus::global()
+                    .submit(peer, msg.pane, m.to, m.text, m.no_reply, wakeup);
+                let mut w = reader.get_ref();
+                let _ = w.set_write_timeout(Some(Duration::from_secs(1)));
+                let _ = writeln!(w, "{}", super::msg_cli::reply_line(&out));
+                return;
+            }
             if msg.remote.is_some() {
                 crate::remote::control::apply(&msg);
             } else if tx.try_send(msg).is_ok() {
@@ -176,6 +186,25 @@ mod tests {
         };
         send_to(&path, &msg).unwrap();
         assert_eq!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), msg);
+    }
+
+    #[test]
+    fn msg_requests_get_an_answer_and_hooks_still_queue() {
+        // The process-wide bus is never enabled in unit tests, so the answer is `unsupported`.
+        let dir = tempfile::tempdir().unwrap();
+        let (path, rx) = serve(dir.path());
+        let mut s = UnixStream::connect(&path).unwrap();
+        s.write_all(b"{\"pane\":3,\"msg\":{\"to\":\"kterm\",\"text\":\"hi\"}}\n")
+            .unwrap();
+        let mut reply = String::new();
+        BufReader::new(s.try_clone().unwrap())
+            .read_line(&mut reply)
+            .unwrap();
+        assert!(reply.contains("\"unsupported\""), "{reply}");
+        // the connection is done after the answer; a hook on a new connection still queues
+        let mut h = UnixStream::connect(&path).unwrap();
+        h.write_all(b"{\"pane\":5,\"state\":\"done\"}\n").unwrap();
+        assert_eq!(rx.recv_timeout(Duration::from_secs(2)).unwrap().pane, 5);
     }
 
     #[test]

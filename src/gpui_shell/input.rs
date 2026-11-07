@@ -114,6 +114,13 @@ impl GpuiShellRoot {
             }
         }
 
+        // Same guard, same reasoning, for the agent send-message editor.
+        if let Some(c) = &self.agent_compose {
+            if c.input.focus_handle(cx).is_focused(window) {
+                return;
+            }
+        }
+
         // Same guard, same reasoning, for the chat composer: while it
         // holds focus every key is either one of `TextInput`'s own bound
         // actions (dispatched before this bubble listener runs) or a

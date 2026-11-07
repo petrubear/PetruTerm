@@ -24,6 +24,10 @@ pub enum ContextAction {
     AgentCopySessionId(usize),
     #[allow(dead_code)]
     AgentResetName(usize),
+    #[allow(dead_code)]
+    AgentToggleAccept(usize),
+    #[allow(dead_code)]
+    AgentSendMessage(usize),
     /// Non-interactive separator row.
     Separator,
     /// Non-interactive informational label (displays text, no action).

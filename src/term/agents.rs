@@ -239,6 +239,10 @@ pub struct AgentRow {
     pub color: Option<[u8; 3]>,
     /// Pid of the agent process (identity for names and session ids).
     pub agent_pid: u32,
+    /// The agent accepts messages from other agents.
+    pub accepting: bool,
+    /// A message was delivered to it in the last few seconds (badge accent).
+    pub msg_recent: bool,
     /// User-assigned name, if any.
     pub custom_name: Option<String>,
     /// Full session id when known (shown shortened).

@@ -35,6 +35,10 @@ impl Render for GpuiShellRoot {
             window.focus(&self.focus_handle);
         }
 
+        if let Some(terminal_id) = self.pending_agent_compose.take() {
+            self.begin_agent_compose(terminal_id, window, cx);
+        }
+
         if let Some(terminal_id) = self.pending_agent_rename.take() {
             self.begin_agent_rename(terminal_id, window, cx);
         }
@@ -81,6 +85,7 @@ impl Render for GpuiShellRoot {
         if self.tab_rename.is_none()
             && self.workspace_rename.is_none()
             && self.agent_rename.is_none()
+            && self.agent_compose.is_none()
             && (!self.chat.is_visible() || !self.chat.composer_focused(window, cx))
             && (!self.ai_block.is_visible() || !self.ai_block.composer_focused(window, cx))
             && (!self.palette.visible || !self.palette_query_focused(window, cx))

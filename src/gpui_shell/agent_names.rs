@@ -36,6 +36,10 @@ impl AgentNames {
         Ok(())
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.names.is_empty()
+    }
+
     pub fn reset(&mut self, terminal_id: usize) {
         self.names.remove(&terminal_id);
     }
@@ -111,6 +115,17 @@ mod tests {
         assert_eq!(n.set(1, 10, "", here), Err(NameError::Empty));
         assert_eq!(n.set(1, 10, "a b", here), Err(NameError::BadChar(' ')));
         assert_eq!(n.name_of(1), None);
+    }
+
+    #[test]
+    fn a_reset_or_changed_name_no_longer_routes() {
+        let mut n = AgentNames::default();
+        n.set(1, 10, "cterm", here).unwrap();
+        assert_eq!(n.terminal_for("cterm"), Some(1));
+        n.set(1, 10, "claude-1", here).unwrap();
+        assert_eq!(n.terminal_for("cterm"), None, "old name must not route");
+        n.reset(1);
+        assert_eq!(n.terminal_for("claude-1"), None);
     }
 
     #[test]

@@ -164,6 +164,18 @@ pub fn render_agents_section(
                             .children(row.session.as_deref().map(|id| {
                                 small().flex_shrink_0().child(short_session(id).to_string())
                             }))
+                            .children(row.accepting.then(|| {
+                                let c = if row.msg_recent {
+                                    to_rgba(ATTENTION_COLOR)
+                                } else {
+                                    to_rgba(colors.ui_muted)
+                                };
+                                div()
+                                    .flex_shrink_0()
+                                    .text_size(px(9.5))
+                                    .text_color(c)
+                                    .child("msg")
+                            }))
                             .child(small().child(location(row))),
                     )
                     .children(error.map(|msg| {

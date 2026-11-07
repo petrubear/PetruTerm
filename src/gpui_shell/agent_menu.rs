@@ -26,6 +26,18 @@ impl GpuiShellRoot {
             return;
         };
         let mut items = vec![item("Rename", ContextAction::AgentRename(terminal_id))];
+        items.push(item(
+            if row.accepting {
+                "Stop accepting messages"
+            } else {
+                "Accept messages"
+            },
+            ContextAction::AgentToggleAccept(terminal_id),
+        ));
+        items.push(item(
+            "Send message...",
+            ContextAction::AgentSendMessage(terminal_id),
+        ));
         if row.session.is_some() {
             items.push(item(
                 "Copy session id",
@@ -59,6 +71,12 @@ impl GpuiShellRoot {
                 }
             }
             ContextAction::AgentResetName(t) => self.agent_names.reset(t),
+            ContextAction::AgentToggleAccept(t) => {
+                if let Some(row) = self.agent_rows().into_iter().find(|r| r.terminal_id == t) {
+                    self.agent_accept.set(t, row.agent_pid, !row.accepting);
+                }
+            }
+            ContextAction::AgentSendMessage(t) => self.pending_agent_compose = Some(t),
             _ => {}
         }
         cx.notify();

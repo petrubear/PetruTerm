@@ -962,7 +962,9 @@ impl App {
                             // Agents list actions exist only in the gpui build.
                             ContextAction::AgentRename(_)
                             | ContextAction::AgentCopySessionId(_)
-                            | ContextAction::AgentResetName(_) => {}
+                            | ContextAction::AgentResetName(_)
+                            | ContextAction::AgentToggleAccept(_)
+                            | ContextAction::AgentSendMessage(_) => {}
                         }
                         self.request_redraw();
                         return;

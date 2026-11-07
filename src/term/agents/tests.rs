@@ -144,6 +144,8 @@ fn agent_row(id: usize, state: Option<AgentState>, at: Option<Instant>) -> Agent
         agent: "x".into(),
         color: None,
         agent_pid: 0,
+        accepting: false,
+        msg_recent: false,
         custom_name: None,
         session: None,
         workspace_name: String::new(),

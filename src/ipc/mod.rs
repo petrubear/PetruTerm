@@ -7,8 +7,12 @@
 //! [`AttentionEvent`], never executed. See
 //! `docs/superpowers/specs/2026-10-15-agent-attention-design.md`.
 
+pub mod agent_setup;
 pub mod claude_hooks;
 pub mod cli;
+pub mod msg_bus;
+pub mod msg_cli;
+pub mod peer;
 pub mod server;
 pub mod shell;
 
@@ -38,6 +42,9 @@ pub struct Message {
     /// Use [`Message::session`], which validates it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<String>,
+    /// An agent-to-agent message request (see `msg_bus`). Answered on the same connection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub msg: Option<MsgPayload>,
     /// Remote-access command (`start`, `stop`, `offer`); handled by `remote::control`, not
     /// an attention event.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -46,6 +53,15 @@ pub struct Message {
     pub secret: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expires: Option<u64>,
+}
+
+/// The body of a message request: who to send to and what.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MsgPayload {
+    pub to: String,
+    pub text: String,
+    #[serde(default)]
+    pub no_reply: bool,
 }
 
 pub fn parse_state(s: &str) -> Option<AgentState> {
@@ -234,6 +250,27 @@ mod tests {
         let long = format!(r#"{{"pane":2,"session":"{}"}}"#, "a".repeat(200));
         assert_eq!(parse_line(&long).unwrap().session(), None);
         assert_eq!(parse_line(r#"{"pane":2}"#).unwrap().session(), None);
+    }
+
+    #[test]
+    fn msg_requests_parse_and_hook_messages_are_unchanged() {
+        let m =
+            parse_line(r#"{"pane":4,"msg":{"to":"kterm","text":"hi","no_reply":true}}"#).unwrap();
+        let p = m.msg.clone().unwrap();
+        assert_eq!(
+            (p.to.as_str(), p.text.as_str(), p.no_reply),
+            ("kterm", "hi", true)
+        );
+        assert!(
+            m.into_event().is_none(),
+            "a msg request is not an attention event"
+        );
+        let h = parse_line(r#"{"pane":4,"state":"done"}"#).unwrap();
+        assert!(h.msg.is_none());
+        let json = serde_json::to_string(&h).unwrap();
+        assert!(!json.contains("msg"), "{json}");
+        let d = parse_line(r#"{"pane":4,"msg":{"to":"k","text":"x"}}"#).unwrap();
+        assert!(!d.msg.unwrap().no_reply);
     }
 
     #[test]

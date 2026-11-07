@@ -25,6 +25,7 @@ use super::{
 
 impl GpuiShellRoot {
     pub fn new(cx: &mut Context<Self>, config: Config) -> Self {
+        crate::ipc::msg_bus::global().enable(); // this build can deliver agent messages
         let (terminal, gate) = spawn_terminal(80, 24, &config).expect("spawn initial terminal");
         let terminal_id = 0;
 
@@ -175,6 +176,10 @@ impl GpuiShellRoot {
             agent_names: super::agent_names::AgentNames::default(),
             agent_rename: None,
             pending_agent_rename: None,
+            pending_agent_compose: None,
+            agent_compose: None,
+            agent_accept: super::agent_accept::AgentAccept::default(),
+            msg: super::agent_msg::AgentMsgState::default(),
             cursor_last_blink: std::time::Instant::now(),
             rect_cache: Rc::new(RefCell::new(panes::RectCache::default())),
             leader_active: false,

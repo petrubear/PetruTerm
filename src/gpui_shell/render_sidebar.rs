@@ -89,7 +89,10 @@ impl GpuiShellRoot {
         let on_cancel_agent_edit: sidebar::agents::AgentEditCancelCallback =
             Rc::new(move |_window, cx| {
                 agent_view
-                    .update(cx, |root, cx| root.end_agent_rename(cx))
+                    .update(cx, |root, cx| {
+                        root.end_agent_rename(cx);
+                        root.end_agent_compose(cx);
+                    })
                     .ok();
             });
         let agent_editor = self
@@ -99,6 +102,15 @@ impl GpuiShellRoot {
                 terminal_id: r.terminal_id,
                 element: r.input.clone().into_any_element(),
                 error: r.error.clone(),
+            })
+            .or_else(|| {
+                self.agent_compose
+                    .as_ref()
+                    .map(|c| sidebar::agents::AgentEditor {
+                        terminal_id: c.terminal_id,
+                        element: c.input.clone().into_any_element(),
+                        error: c.error.clone(),
+                    })
             });
 
         let width_px = self.sidebar_width_px;

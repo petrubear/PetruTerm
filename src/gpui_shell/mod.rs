@@ -4,7 +4,10 @@
 
 mod acp_bridge;
 mod actions;
+mod agent_accept;
+mod agent_compose;
 mod agent_menu;
+mod agent_msg;
 mod agent_names;
 mod agent_rename;
 mod agent_rows;
@@ -261,6 +264,14 @@ pub struct GpuiShellRoot {
     agent_rename: Option<agent_rename::AgentRename>,
     /// Rename requested from the agent menu; `render()` opens the editor (it needs a `Window`).
     pending_agent_rename: Option<usize>,
+    /// Send-message requested from the agent menu; `render()` opens the editor.
+    pending_agent_compose: Option<usize>,
+    /// Inline send-message editor open on an Agents row, if any -- see `agent_compose.rs`.
+    agent_compose: Option<agent_compose::AgentCompose>,
+    /// Agents that accepted agent-to-agent messages -- see `agent_accept.rs`.
+    agent_accept: agent_accept::AgentAccept,
+    /// Router state of agent-to-agent messaging (limits) -- see `agent_msg.rs`.
+    msg: agent_msg::AgentMsgState,
     /// Confirmed inline agent action, drained at `render()`'s top.
     pending_agent_action: Option<crate::llm::agent_action::AgentAction>,
     /// Exit code of a terminal that has been reaped, keyed by the id it

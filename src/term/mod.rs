@@ -4,6 +4,7 @@ pub mod blocks;
 pub mod color;
 pub mod flag_db;
 pub mod input_shadow;
+pub mod messaging;
 pub mod osc133;
 pub mod osc_notify;
 pub mod pty;

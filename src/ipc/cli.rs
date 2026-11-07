@@ -22,6 +22,8 @@ pub fn run(args: &[String]) -> Option<i32> {
         "hook" => Some(hook(&args[1..])),
         "hooks" => Some(hooks(&args[1..])),
         "remote" => Some(crate::remote::control::cli(&args[1..])),
+        "msg" => Some(super::msg_cli::msg(&args[1..])),
+        "agents" => Some(super::agent_setup::run(&args[1..])),
         _ => None,
     }
 }

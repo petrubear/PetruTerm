@@ -27,6 +27,7 @@ impl GpuiShellRoot {
         else {
             return;
         };
+        self.agent_compose = None; // one editor at a time
         let colors = self.config.colors.clone();
         let current = row.custom_name.clone().unwrap_or_default();
         let input = cx.new(|cx| text_input::TextInput::new(cx, &colors, current, "agent name"));

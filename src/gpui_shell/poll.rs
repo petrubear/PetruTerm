@@ -383,6 +383,9 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                 if super::agent_scan::tick(this, focused) {
                     should_notify = true;
                 }
+                if super::agent_msg::tick(this) {
+                    should_notify = true;
+                }
                 // Battery: cheap, local IOKit call (no subprocess), so
                 // this piggybacks on the same 33ms tick like the leader-
                 // deadline/toast checks above rather than needing its

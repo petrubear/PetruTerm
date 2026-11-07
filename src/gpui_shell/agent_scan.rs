@@ -86,6 +86,13 @@ fn run_ps() -> Option<String> {
     String::from_utf8(out.stdout).ok()
 }
 
+/// Scan while the Agents list is on screen, and also while messaging is in use (a custom name
+/// or acceptance is set): messages arrive when the sidebar is closed and the window is not
+/// focused, and the router needs to know the target is still running. Idle users pay nothing.
+fn scan_wanted(list_on_screen: bool, messaging_in_use: bool) -> bool {
+    list_on_screen || messaging_in_use
+}
+
 /// Called from the poll loop each tick: drain finished scans and start one when due.
 /// Returns true when the visible list changed.
 pub(super) fn tick(root: &mut GpuiShellRoot, window_focused: bool) -> bool {
@@ -95,6 +102,7 @@ pub(super) fn tick(root: &mut GpuiShellRoot, window_focused: bool) -> bool {
         root.agent_sessions
             .retain_live(root.agent_scan.detections(), now);
         root.agent_names.retain_live(root.agent_scan.detections());
+        root.agent_accept.retain_live(root.agent_scan.detections());
         // The editor closes without saving when its agent is gone or was replaced.
         let gone = root.agent_rename.as_ref().is_some_and(|r| {
             !root
@@ -106,10 +114,22 @@ pub(super) fn tick(root: &mut GpuiShellRoot, window_focused: bool) -> bool {
         if gone {
             root.agent_rename = None;
         }
+        let compose_gone = root.agent_compose.as_ref().is_some_and(|c| {
+            !root
+                .agent_scan
+                .detections()
+                .iter()
+                .any(|d| d.terminal_id == c.terminal_id && d.pid == c.pid)
+        });
+        if compose_gone {
+            root.agent_compose = None;
+        }
     }
-    let active = window_focused
+    let on_screen = window_focused
         && root.sidebar.is_visible()
         && root.sidebar.active_section() == SidebarSection::Agents;
+    let messaging = !root.agent_names.is_empty() || root.agent_accept.any();
+    let active = scan_wanted(on_screen, messaging);
     if root.agent_scan.due(active, now) {
         let probes = root.agent_probes();
         let known = agents::merged_agents(agents::default_agents(), &root.config.agents.recognized);
@@ -134,6 +154,13 @@ mod tests {
         s.in_flight = false;
         assert!(!s.due(true, t0 + Duration::from_millis(500)));
         assert!(s.due(true, t0 + Duration::from_secs(2)));
+    }
+
+    #[test]
+    fn scan_runs_for_the_list_or_for_messaging_only() {
+        assert!(!scan_wanted(false, false));
+        assert!(scan_wanted(true, false));
+        assert!(scan_wanted(false, true));
     }
 
     #[test]
