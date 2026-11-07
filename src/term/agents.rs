@@ -17,6 +17,12 @@ use serde::{Deserialize, Serialize};
 
 use super::attention::AgentState;
 
+mod names;
+mod session;
+#[allow(unused_imports)] // the wgpu binary compiles this module but never calls it
+pub use names::*;
+pub use session::session_from_args;
+
 /// Arguments for the single `ps` run per scan.
 pub const PS_ARGS: [&str; 2] = ["-axo", "pid=,ppid=,pgid=,tpgid=,args="];
 
@@ -114,6 +120,10 @@ pub struct AgentDetection {
     /// `RecognizedAgent::name`.
     pub agent: String,
     pub color: Option<[u8; 3]>,
+    /// Pid of the matched agent process; ties names and session ids to one running agent.
+    pub pid: u32,
+    /// Session id found on the process command line, if any.
+    pub session: Option<String>,
 }
 
 /// Parse `ps -axo pid=,ppid=,pgid=,tpgid=,args=` output, skipping malformed lines.
@@ -206,12 +216,14 @@ pub fn detect(
         let found = candidates
             .into_iter()
             .filter(|r| seen.insert(r.pid))
-            .find_map(|r| match_agent(r, agents));
-        if let Some(agent) = found {
+            .find_map(|r| match_agent(r, agents).map(|a| (r, a)));
+        if let Some((row, agent)) = found {
             out.push(AgentDetection {
                 terminal_id: probe.terminal_id,
                 agent: agent.name.clone(),
                 color: agent.color,
+                pid: row.pid,
+                session: session_from_args(&row.args),
             });
         }
     }
@@ -225,6 +237,12 @@ pub struct AgentRow {
     pub terminal_id: usize,
     pub agent: String,
     pub color: Option<[u8; 3]>,
+    /// Pid of the agent process (identity for names and session ids).
+    pub agent_pid: u32,
+    /// User-assigned name, if any.
+    pub custom_name: Option<String>,
+    /// Full session id when known (shown shortened).
+    pub session: Option<String>,
     pub workspace_name: String,
     pub tab_title: String,
     /// 1-based pane position in its tab; `Some` only when the tab has 2+ panes.

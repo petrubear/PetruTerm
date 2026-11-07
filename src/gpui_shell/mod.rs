@@ -4,8 +4,12 @@
 
 mod acp_bridge;
 mod actions;
+mod agent_menu;
+mod agent_names;
+mod agent_rename;
 mod agent_rows;
 mod agent_scan;
+mod agent_sessions;
 mod ai_actions;
 mod ai_block;
 mod attention;
@@ -249,6 +253,14 @@ pub struct GpuiShellRoot {
     workspace_info: workspace_info::WorkspaceInfoState,
     /// Recognized-agent detections for the sidebar Agents section -- see `agent_scan.rs`.
     agent_scan: agent_scan::AgentScanState,
+    /// Session ids announced by agent hooks -- see `agent_sessions.rs`.
+    agent_sessions: agent_sessions::AgentSessions,
+    /// User-assigned names of running agents -- see `agent_names.rs`.
+    agent_names: agent_names::AgentNames,
+    /// Inline rename editor open on an Agents row, if any -- see `agent_rename.rs`.
+    agent_rename: Option<agent_rename::AgentRename>,
+    /// Rename requested from the agent menu; `render()` opens the editor (it needs a `Window`).
+    pending_agent_rename: Option<usize>,
     /// Confirmed inline agent action, drained at `render()`'s top.
     pending_agent_action: Option<crate::llm::agent_action::AgentAction>,
     /// Exit code of a terminal that has been reaped, keyed by the id it

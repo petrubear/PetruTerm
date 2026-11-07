@@ -107,6 +107,13 @@ impl GpuiShellRoot {
             }
         }
 
+        // Same guard, same reasoning, for the agent-rename editor.
+        if let Some(r) = &self.agent_rename {
+            if r.input.focus_handle(cx).is_focused(window) {
+                return;
+            }
+        }
+
         // Same guard, same reasoning, for the chat composer: while it
         // holds focus every key is either one of `TextInput`'s own bound
         // actions (dispatched before this bubble listener runs) or a

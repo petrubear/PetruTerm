@@ -37,3 +37,37 @@
 
 ## R9. Jump to pane
 - **Decision**: Reuse `GpuiShellRoot::focus_terminal` (switches workspace/tab, focuses pane, unzooms); change its visibility to `pub(super)`. If it returns false (pane gone), drop the row on next render.
+
+
+---
+## Amendment 2026-11-06: session id and custom names
+
+## R10. Session id source for Claude Code
+- **Decision**: Use the `session_id` field that Claude Code puts in the JSON it sends to every hook (documented common field, with `transcript_path`, `cwd`, `hook_event_name`). `petruterm hook claude` already reads that payload; copy `session_id` into the socket message as a new optional `session` field. Also register the hook for `SessionStart` (in the injected `--settings` JSON and in `hooks setup claude`) so the id is known at launch and updates on `/clear` or resume, instead of waiting for the first prompt.
+- **Fallback**: parse `--resume <id>`, `-r <id>` or `--session-id <id>` from the process command line during the scan.
+- **Rationale**: no file reads in `~/.claude`, no transcript access (FR-019), and it uses the integration already shipped. Limitation: only panes with the hooks active (the bundled shim does this automatically).
+- **Alternatives**: scanning `~/.claude/projects/*/*.jsonl` by mtime (guesses wrong with two sessions in one directory, touches conversation files); reading `~/.claude/sessions` (not confirmed to exist, and outside the project without permission).
+- Source: Claude Code hooks reference (docs.claude.com/en/docs/claude-code/hooks).
+
+## R11. Session id source for Kiro (OPEN: needs a verification spike)
+- **Known**: Kiro's docs say sessions have UUID ids, are stored per directory in a local SQLite database under `~/.kiro/`, `kiro-cli chat --resume-id <ID>` resumes one, the id is printed on exit and by `/session-id`. Kiro's own draft (`agent-comm-draft.md`, from another machine, KAS 0.66.x) instead describes `~/.kiro/sessions/<hash>/sess_<uuid>/` directories with a `.lock` file holding `{"pid": N}`. The two descriptions differ.
+- **Decision**: ship a chain, in this order: (1) hook payload if Kiro's hooks expose a session id (verify), (2) `--resume-id <id>` in the process arguments, (3) pid-to-session lookup in the on-disk store only if the layout is confirmed on this machine. Whatever is not confirmed stays out; Kiro then shows no id (FR-019, edge case "store unreadable").
+- **Spike (task T041)**: with the user's permission, list file names (not contents of conversations) under `~/.kiro` and read only small lock/metadata files, while a Kiro session runs, to confirm which layout is real. Record the result here. SC-007 for Kiro depends on this outcome.
+- **Risk**: if only the SQLite store exists, a lookup would need a SQLite dependency or the `kiro-cli chat --list-sessions` command (per-directory, no pid), which cannot tell two sessions in one directory apart. In that case Kiro shows an id only when it can be determined unambiguously (args or hook).
+
+## R12. Which source wins, and when an id is stale
+- **Decision**: store ids per `(terminal_id, agent pid)`. Priority: hook-reported > store lookup > command-line args. When the detection's pid changes or the row disappears, the stored id is dropped. A newer hook-reported id replaces the old one immediately (covers `/clear`).
+- **Rationale**: ties the id to one running agent so a reused pane never shows the previous agent's id; implements Acceptance Scenario 4 of US5.
+
+## R13. Custom name storage, validation, uniqueness
+- **Decision**: `AgentNames` in the gpui chrome: `terminal_id -> { pid, name }`. Pure `validate_name(&str) -> Result<String, NameError>` in shared `term/agents.rs` (1-32 chars, `[A-Za-z0-9._-]`, trimmed). Uniqueness is checked case-insensitively against the other live entries. Entries are dropped when the detection disappears or its pid changes (FR-025). Not persisted (clarification).
+- **Lookup for the future bus (FR-027)**: `terminal_for(name) -> Option<terminal_id>` and `name_of(terminal_id)`. No other consumer is built now.
+- **Alternatives**: persisting by session id (rejected by the user: pane lifetime only); storing the name in `PaneAttention` (mixes concerns, and the tracker outlives the agent process).
+
+## R14. Right-click menu and inline rename
+- **Decision**: reuse the existing gpui context menu (`gpui_shell/context_menu.rs`: pixel position + `ContextMenuItem` list + `ContextAction` dispatch). Add `AgentRename(terminal_id)`, `AgentCopySessionId(terminal_id)`, `AgentResetName(terminal_id)` to the shared `ContextAction`; build the item list in a new `agent_menu.rs` so `context_menu.rs` (262 lines) barely grows. Rename editor reuses `text_input::TextInput` exactly like `rename.rs` does for workspaces, with one difference: a refused name keeps the editor open and shows the message under the row instead of closing.
+- **Click elsewhere cancels** (FR-021): wrap the editor row in `on_mouse_down_out`, as the context menu already does.
+- **Clipboard**: `cx.write_to_clipboard(ClipboardItem::new_string(id))` as the existing Copy action does.
+
+## R15. Process identity needs the agent pid
+- **Decision**: `AgentDetection` gains `pid` (the matched process) and an optional `session` parsed from the command line during `detect` (only the id token is kept; `args` is still never stored, logged or shown). All new keys use `(terminal_id, pid)`.

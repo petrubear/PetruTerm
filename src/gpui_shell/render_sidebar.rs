@@ -79,6 +79,28 @@ impl GpuiShellRoot {
                 cx.notify();
             }));
 
+        let on_agent_menu: sidebar::agents::AgentMenuCallback = Rc::new(cx.listener(
+            |this, (terminal_id, position): &(usize, gpui::Point<gpui::Pixels>), _window, cx| {
+                this.open_agent_menu(*terminal_id, *position);
+                cx.notify();
+            },
+        ));
+        let agent_view = cx.entity().downgrade();
+        let on_cancel_agent_edit: sidebar::agents::AgentEditCancelCallback =
+            Rc::new(move |_window, cx| {
+                agent_view
+                    .update(cx, |root, cx| root.end_agent_rename(cx))
+                    .ok();
+            });
+        let agent_editor = self
+            .agent_rename
+            .as_ref()
+            .map(|r| sidebar::agents::AgentEditor {
+                terminal_id: r.terminal_id,
+                element: r.input.clone().into_any_element(),
+                error: r.error.clone(),
+            });
+
         let width_px = self.sidebar_width_px;
         let sidebar_ctx = sidebar::render::SidebarRenderCx {
             workspaces: &self.workspaces,
@@ -103,6 +125,9 @@ impl GpuiShellRoot {
             agent_rows: self.agent_rows(),
             agents_cursor: self.sidebar.agents_cursor(),
             on_open_agent,
+            on_agent_menu,
+            agent_editor,
+            on_cancel_agent_edit,
         };
         let bar = sidebar::render::render_workspace_sidebar(sidebar_ctx);
         let bar = bar.with_animation(

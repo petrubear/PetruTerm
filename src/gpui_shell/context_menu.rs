@@ -183,6 +183,9 @@ impl GpuiShellRoot {
                 cx.notify();
             }
             ContextAction::Clear => self.clear_active_terminal(),
+            a @ (ContextAction::AgentRename(_)
+            | ContextAction::AgentCopySessionId(_)
+            | ContextAction::AgentResetName(_)) => self.dispatch_agent_action(a, cx),
             ContextAction::SetTabColor(idx, color) => {
                 self.workspaces.active_mut().tabs.set_tab_color(idx, color);
                 cx.notify();

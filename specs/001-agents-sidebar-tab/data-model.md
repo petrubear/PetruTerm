@@ -39,3 +39,25 @@ State display order: NeedsInput, Working, Done, Idle, Running; ties by most rece
 
 ## Relationships
 Workspace 1..* Tab 1..* Pane(terminal) 0..1 AgentDetection; AgentDetection joins AttentionTracker by `terminal_id`.
+
+
+---
+## Amendment 2026-11-06: session id and custom names
+
+### Changes to existing entities
+- **AgentDetection**: + `pid: u32` (matched agent process), + `session: Option<String>` (id found in the command line, if any).
+- **AgentRow**: + `custom_name: Option<String>`, + `session: Option<String>` (full id; the view shortens it to 8 chars), + `agent_pid: u32`.
+- **ipc::Message**: + `session: Option<String>` (optional; sanitized to `[A-Za-z0-9_-]`, max 64 chars; ignored when invalid).
+
+### New entities
+| Entity | Fields | Rules |
+|---|---|---|
+| AgentName | terminal_id, pid, name | name valid per FR-022; unique case-insensitively among AgentNames; dropped when the detection disappears or its pid changes; never persisted |
+| ReportedSession | terminal_id, pid, id | latest hook-reported id wins; dropped on pid change or row removal; pane uid from the socket message is resolved to terminal_id as for attention events |
+| NameError | Empty, TooLong, BadChar(char), Duplicate(String) | each maps to a visible message |
+
+### Resolution of a row's session id
+`ReportedSession(terminal_id, pid)` if present, else `AgentDetection.session` (args or store lookup), else none. The id is shown shortened and copied in full.
+
+### Name lookup (future bus, FR-027)
+`terminal_for(name) -> Option<terminal_id>`, `name_of(terminal_id) -> Option<&str>`.

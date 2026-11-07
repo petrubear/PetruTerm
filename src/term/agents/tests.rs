@@ -54,6 +54,8 @@ fn detects_foreground_agent_only() {
             terminal_id: 7,
             agent: "Claude Code".into(),
             color: Some([0xf2, 0x8c, 0x28]),
+            pid: 200,
+            session: None,
         }]
     );
 }
@@ -141,6 +143,9 @@ fn agent_row(id: usize, state: Option<AgentState>, at: Option<Instant>) -> Agent
         terminal_id: id,
         agent: "x".into(),
         color: None,
+        agent_pid: 0,
+        custom_name: None,
+        session: None,
         workspace_name: String::new(),
         tab_title: String::new(),
         pane_number: None,
@@ -189,4 +194,17 @@ fn real_ps_output_parses_and_contains_this_process() {
         "own pid missing from ps rows"
     );
     assert!(rows.len() > 10);
+}
+
+#[test]
+fn detection_carries_pid_and_session_from_args_only() {
+    let id = "3f6c0a52-91d4-4b1e-8c3a-0d2f7e5b9a11";
+    let rows = vec![
+        row(100, 1, 100, 200, "-zsh"),
+        row(200, 100, 200, 200, &format!("claude --resume {id}")),
+    ];
+    let found = detect(&rows, &[probe(1, 100)], &default_agents());
+    assert_eq!(found[0].pid, 200);
+    assert_eq!(found[0].session.as_deref(), Some(id));
+    assert!(!format!("{:?}", found[0]).contains("--resume"));
 }

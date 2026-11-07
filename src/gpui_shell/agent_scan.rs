@@ -37,15 +37,16 @@ impl AgentScanState {
         self.force = true;
     }
 
-    /// Take a finished scan's results. True when the list changed (caller re-renders).
-    fn drain(&mut self) -> bool {
+    /// Take a finished scan's results. Returns `(drained, changed)`: whether a scan result
+    /// arrived, and whether it differs from the previous one (caller re-renders).
+    fn drain(&mut self) -> (bool, bool) {
         let Some(found) = PENDING.lock().unwrap().take() else {
-            return false;
+            return (false, false);
         };
         self.in_flight = false;
         let changed = found != self.detections;
         self.detections = found;
-        changed
+        (true, changed)
     }
 
     fn due(&self, active: bool, now: Instant) -> bool {
@@ -88,8 +89,24 @@ fn run_ps() -> Option<String> {
 /// Called from the poll loop each tick: drain finished scans and start one when due.
 /// Returns true when the visible list changed.
 pub(super) fn tick(root: &mut GpuiShellRoot, window_focused: bool) -> bool {
-    let changed = root.agent_scan.drain();
+    let (drained, changed) = root.agent_scan.drain();
     let now = Instant::now();
+    if drained {
+        root.agent_sessions
+            .retain_live(root.agent_scan.detections(), now);
+        root.agent_names.retain_live(root.agent_scan.detections());
+        // The editor closes without saving when its agent is gone or was replaced.
+        let gone = root.agent_rename.as_ref().is_some_and(|r| {
+            !root
+                .agent_scan
+                .detections()
+                .iter()
+                .any(|d| d.terminal_id == r.terminal_id && d.pid == r.pid)
+        });
+        if gone {
+            root.agent_rename = None;
+        }
+    }
     let active = window_focused
         && root.sidebar.is_visible()
         && root.sidebar.active_section() == SidebarSection::Agents;

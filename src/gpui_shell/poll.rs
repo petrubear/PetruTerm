@@ -210,6 +210,9 @@ pub(super) fn spawn_poll_loop(cx: &mut Context<GpuiShellRoot>) {
                 // Hook / `petruterm notify` messages from the control socket.
                 crate::remote::bridge::service(&super::remote::GpuiPanes(&this.terminals));
                 for msg in crate::ipc::server::drain() {
+                    if let Some(id) = msg.session() {
+                        should_notify |= this.note_agent_session(msg.pane, id);
+                    }
                     let Some((uid, event)) = msg.into_event() else {
                         continue;
                     };

@@ -49,7 +49,8 @@ fi
 group() { # $1 event, $2 optional matcher member (with trailing comma)
     printf '[{%s"hooks":[{"type":"command","command":"[ -z \\"$PETRUTERM_BIN\\" ] || \\"$PETRUTERM_BIN\\" hook claude %s","timeout":5}]}]' "$2" "$1"
 }
-settings=$(printf '{"hooks":{"UserPromptSubmit":%s,"PreToolUse":%s,"Notification":%s,"Stop":%s,"SubagentStop":%s,"SessionEnd":%s}}' \
+settings=$(printf '{"hooks":{"SessionStart":%s,"UserPromptSubmit":%s,"PreToolUse":%s,"Notification":%s,"Stop":%s,"SubagentStop":%s,"SessionEnd":%s}}' \
+    "$(group SessionStart)" \
     "$(group UserPromptSubmit)" \
     "$(group PreToolUse '"matcher":"*",')" \
     "$(group Notification)" \

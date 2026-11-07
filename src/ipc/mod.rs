@@ -34,6 +34,10 @@ pub struct Message {
     pub title: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub body: Option<String>,
+    /// The agent's session id (e.g. Claude Code's `session_id`), announced by its hooks.
+    /// Use [`Message::session`], which validates it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<String>,
     /// Remote-access command (`start`, `stop`, `offer`); handled by `remote::control`, not
     /// an attention event.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -59,6 +63,14 @@ pub fn parse_line(line: &str) -> Option<Message> {
 }
 
 impl Message {
+    #[cfg_attr(not(test), allow(dead_code))] // read by the gpui build only
+    /// The session id if it is well formed (`[A-Za-z0-9_-]`, 1-64 chars); otherwise `None`.
+    pub fn session(&self) -> Option<String> {
+        self.session
+            .as_deref()
+            .and_then(crate::term::agents::sanitize_session)
+    }
+
     /// Sanitize and map to the pane uid plus the attention event. `None` when the message
     /// carries nothing actionable (unknown state, or no state and no text).
     pub fn into_event(self) -> Option<(u64, AttentionEvent)> {
@@ -209,6 +221,19 @@ mod tests {
         let m = parse_line(r#"{"pane":3,"state":"done","extra":1}"#).unwrap();
         assert_eq!(m.pane, 3);
         assert_eq!(m.state.as_deref(), Some("done"));
+    }
+
+    #[test]
+    fn session_is_validated_and_does_not_make_an_event() {
+        let id = "3f6c0a52-91d4-4b1e-8c3a-0d2f7e5b9a11";
+        let m = parse_line(&format!(r#"{{"pane":2,"session":"{id}"}}"#)).unwrap();
+        assert_eq!(m.session().as_deref(), Some(id));
+        assert!(m.into_event().is_none());
+        let bad = parse_line(r#"{"pane":2,"session":"../../x"}"#).unwrap();
+        assert_eq!(bad.session(), None);
+        let long = format!(r#"{{"pane":2,"session":"{}"}}"#, "a".repeat(200));
+        assert_eq!(parse_line(&long).unwrap().session(), None);
+        assert_eq!(parse_line(r#"{"pane":2}"#).unwrap().session(), None);
     }
 
     #[test]

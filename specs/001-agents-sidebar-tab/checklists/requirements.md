@@ -33,3 +33,4 @@
 
 - The final Assumptions bullet mentions existing state reports; this is context about existing behaviour, not a design choice.
 - Defaults chosen instead of clarification markers: gpui only, single window, Claude Code + Kiro, read-only.
+- Amendment 2026-11-06 (session id, custom names): re-validated; two clarifications answered by the user (name format, name lifetime). FR-027 states a required lookup capability for the later messaging feature; it names no mechanism.

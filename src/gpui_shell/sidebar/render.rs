@@ -12,7 +12,10 @@ use super::super::font_state;
 use super::super::pane_view::to_rgba;
 use super::super::workspace::WorkspaceManager;
 use super::super::workspace_info::RowDetail;
-use super::agents::{render_agents_section, AgentOpenCallback};
+use super::agents::{
+    render_agents_section, AgentEditCancelCallback, AgentEditor, AgentMenuCallback,
+    AgentOpenCallback,
+};
 use super::sections::{
     render_mcp_section, render_skills_section, render_steering_section, render_workspaces_section,
 };
@@ -64,6 +67,9 @@ pub struct SidebarRenderCx<'a> {
     pub agent_rows: Vec<crate::term::agents::AgentRow>,
     pub agents_cursor: usize,
     pub on_open_agent: AgentOpenCallback,
+    pub on_agent_menu: AgentMenuCallback,
+    pub agent_editor: Option<AgentEditor>,
+    pub on_cancel_agent_edit: AgentEditCancelCallback,
 }
 
 pub fn render_workspace_sidebar(ctx: SidebarRenderCx<'_>) -> Div {
@@ -119,6 +125,9 @@ pub fn render_workspace_sidebar(ctx: SidebarRenderCx<'_>) -> Div {
                 ctx.colors,
                 ctx.agents_cursor,
                 ctx.on_open_agent,
+                ctx.on_agent_menu,
+                ctx.agent_editor,
+                ctx.on_cancel_agent_edit,
             )
             .into_any_element(),
         })

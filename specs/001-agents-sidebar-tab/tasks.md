@@ -148,3 +148,67 @@ description: "Task list for the Agents sidebar tab"
 2. Add US2 (jump) next; it makes the list actionable.
 3. Add US3 (triage) and US4 (config extensibility) in either order.
 4. Finish with Polish; run `./scripts/ci-local.sh` before committing. Commits follow `[TASK_ID] type: Message.`
+
+---
+
+# Amendment 2026-11-06: session id (US5) and custom names (US6)
+
+Design: `plan.md` (Amendment), `research.md` R10-R15, `data-model.md`, `contracts/ipc-message-session.md`, `contracts/agent-context-menu.md`. Same conventions as above: files already over 400 lines (`poll.rs`, `term/mod.rs`, `config/lua.rs`) get hooks of <= ~10 lines; `term/agents.rs` (269 lines) must not grow past 400, so new helpers go into submodules; never log or store `args`.
+
+## Phase 8: Foundational for the amendment
+
+- [ ] T041 Kiro session-source spike (needs the user's permission first, because it reads under `~/.kiro`): with a Kiro session running, list file names under `~/.kiro` and read only small lock/metadata files to confirm which layout is real (SQLite only, or `sessions/<hash>/sess_<uuid>/` with a `.lock` holding the pid). Also check whether a Kiro hook payload exposes a session id. Record the result in research.md R11 and decide whether T050 is built or marked N/A
+- [X] T042 [P] Create `src/term/agents/names.rs` with `validate_name(&str) -> Result<String, NameError>` (trim, 1-32 chars, `[A-Za-z0-9._-]`), `NameError` with user-facing messages, `sanitize_session(&str) -> Option<String>` (`[A-Za-z0-9_-]`, 1-64 chars) and `short_session(&str) -> &str` (first 8 chars), with unit tests; add `mod names; pub use names::*;` to `src/term/agents.rs`
+- [X] T043 [P] Create `src/term/agents/session.rs` with `session_from_args(args: &str) -> Option<String>` recognizing `--resume <id>`, `-r <id>`, `--resume-id <id>`, `--session-id <id>` (and `=` forms), passing the result through `sanitize_session`, with unit tests (including a flag with no value, and a path-like value that is rejected); add `mod session;` to `src/term/agents.rs`
+- [X] T044 Extend `AgentDetection` in `src/term/agents.rs` with `pid: u32` (the matched process) and `session: Option<String>` (from `session_from_args`, args themselves still never kept); update `detect()` and the existing tests in `src/term/agents/tests.rs`
+- [X] T045 Add the optional `session: Option<String>` field to `ipc::Message` in `src/ipc/mod.rs` (serde default and skip-if-none), sanitized with `sanitize_session` on receipt via a `Message::session()` accessor; unit tests for absent, valid, invalid and oversized values, and that a message with only `pane` and `session` yields no attention event
+- [X] T046 In `src/ipc/claude_hooks.rs` copy the payload's `session_id` into `Message.session` and add `SessionStart` (session only, no state change); add `SessionStart` to the hook set in `scripts/shims/claude` (the static settings JSON) and to the list used by `petruterm hooks setup claude`; update the tests there
+
+**Checkpoint**: `cargo test agents` and `cargo test ipc` pass.
+
+## Phase 9: User Story 5 - Session id on the row (Priority: P2)
+
+**Goal**: A row shows the first 8 characters of the agent's session id when known; nothing otherwise.
+
+**Independent Test**: quickstart steps 10-12.
+
+- [X] T047 [US5] Create `src/gpui_shell/agent_sessions.rs` with `AgentSessions` (`note(terminal_id, pid, id)`, `get(terminal_id, pid)`, `retain_live(&[AgentDetection])`) implementing research R12 (latest report wins; dropped on pid change or row removal), with unit tests; add `mod agent_sessions;` and a field in `src/gpui_shell/mod.rs`, initialized in `src/gpui_shell/construct.rs`
+- [X] T048 [US5] In the control-socket drain loop in `src/gpui_shell/poll.rs`, read `msg.session()` before `into_event`, resolve the pane uid to a terminal id as the loop already does, and call `AgentSessions::note` with the current detection's pid (<= 5 lines; if more is needed, put it in a function in `agent_sessions.rs`)
+- [X] T049 [US5] Call `AgentSessions::retain_live` from `tick` in `src/gpui_shell/agent_scan.rs` whenever a scan result is drained
+- [X] T050 [US5] **N/A for now** (T041 not run, no permission to inspect `~/.kiro`; Kiro shows an id only from `--resume-id`). Only if T041 confirms a usable Kiro store: create `src/gpui_shell/session_lookup.rs` (`lookup(pid) -> Option<String>`, read-only, tolerant of missing/unreadable/unknown formats, never reads conversation files) and call it from the scan thread in `src/gpui_shell/agent_scan.rs` to fill `AgentDetection.session` for Kiro; otherwise mark this task N/A in tasks.md with the reason
+- [X] T051 [US5] Add `session: Option<String>` and `agent_pid: u32` to `AgentRow` in `src/term/agents.rs`; fill them in `src/gpui_shell/agent_rows.rs` (reported id if present, else the detection's `session`); update the row helper in `src/term/agents/tests.rs`
+- [X] T052 [US5] Render the muted 8-character id after the agent name in `src/gpui_shell/sidebar/agents.rs` (nothing when unknown); keep the line truncating cleanly at the minimum sidebar width
+- [ ] T053 [US5] Validate quickstart steps 10-12 and record the Kiro outcome in research.md R11
+
+## Phase 10: User Story 6 - Rename agents from a right-click menu (Priority: P2)
+
+**Goal**: Right-click a row to Rename / Copy session id / Reset name; custom names are unique, address-safe and live with the pane.
+
+**Independent Test**: quickstart steps 13-17.
+
+- [X] T054 [US6] Add `AgentRename(usize)`, `AgentCopySessionId(usize)` and `AgentResetName(usize)` to `ContextAction` in `src/ui/context_menu.rs`; add no-op arms for them in the wgpu match in `src/app/mod.rs` (that binary has no Agents list); grep every `match` on `ContextAction` so none is left non-exhaustive
+- [X] T055 [US6] Create `src/gpui_shell/agent_names.rs` with `AgentNames` (`set(terminal_id, pid, name) -> Result<(), NameError>` checking case-insensitive uniqueness against other live entries, `get`, `reset`, `retain_live(&[AgentDetection])`, `terminal_for(name)`, `name_of(terminal_id)`) with unit tests for duplicates, case-insensitivity, pid change clearing the name, and lookups; add the module and a field in `src/gpui_shell/mod.rs`, initialized in `src/gpui_shell/construct.rs`; call `retain_live` from `tick` in `src/gpui_shell/agent_scan.rs`
+- [X] T056 [US6] Create `src/gpui_shell/agent_menu.rs` that builds the 3-item menu for a row (Copy session id only with an id, Reset name only with a name, per contracts/agent-context-menu.md) and opens it at the pointer through the existing `ContextMenu`; add a delegating arm for the three new actions in `dispatch_context_action` in `src/gpui_shell/context_menu.rs` (copy via `cx.write_to_clipboard`, reset via `AgentNames::reset`, rename via T057)
+- [X] T057 [US6] Create `src/gpui_shell/agent_rename.rs` following `src/gpui_shell/rename.rs`: a `TextInput` editor pinned to a terminal id, Enter validates with `validate_name` then `AgentNames::set`; on error keep the editor open and store the message for display, Escape and click-outside cancel, the editor closes if the row disappears; add the state fields in `src/gpui_shell/mod.rs` / `construct.rs`
+- [X] T058 [US6] In `src/gpui_shell/sidebar/agents.rs` add the right-click handler (`MouseButton::Right`, passes terminal id and pointer position), render the custom name prominently with the agent name muted next to it, render the inline editor and the one-line error under the row; thread `custom_name`, the editor element and the new callback through `SidebarRenderCx` in `src/gpui_shell/sidebar/render.rs` and `src/gpui_shell/render_sidebar.rs`
+- [X] T059 [US6] Add `custom_name: Option<String>` to `AgentRow` in `src/term/agents.rs` and fill it in `src/gpui_shell/agent_rows.rs`; make sure sorting and jump still use the terminal id only
+- [ ] T060 [US6] Validate quickstart steps 13-17 (menu items, valid/invalid/duplicate names, cancel paths, name cleared when a different agent takes the pane, nothing after restart)
+
+## Phase 11: Polish for the amendment
+
+- [X] T061 [P] Confirm no touched file exceeds 400 lines unless it already did (`wc -l` on every changed file, especially `src/term/agents.rs`), then run `./scripts/ci-local.sh`
+- [X] T062 [P] Update `CHANGELOG.md` (Unreleased: session id and rename), `contracts/config-agents-recognized.md` untouched, and `specs/001-agents-sidebar-tab/checklists/requirements.md` re-validated against the amended spec
+- [X] T063 [P] Run `graphify update .`
+
+## Amendment dependencies
+
+- T042, T043 (parallel) -> T044 -> T051. T045 -> T046 -> T048. T041 gates only T050.
+- US5: T047 -> T048/T049 -> T051 -> T052 -> T053. T050 independent once T041 is answered.
+- US6 depends on Phase 8 (T042 for `validate_name`) and on T044 (`pid` on detections) but not on US5; T054 -> T056; T055 -> T056/T057; T057 -> T058; T059 after T055.
+- US5 and US6 can proceed in parallel after Phase 8 (they touch different files except `agents/agents.rs`, `agent_rows.rs` and `mod.rs`/`construct.rs`, so serialize those edits).
+
+## Amendment implementation strategy
+
+1. Phase 8 first (pure logic and the socket field are fully unit-testable).
+2. Ask for permission and run the Kiro spike (T041) early; it decides whether Kiro shows ids and can run while other work proceeds.
+3. Deliver US6 (rename) first if you want the naming for the later bus soonest; it does not depend on session ids.

@@ -5,7 +5,8 @@ use super::Message;
 use serde_json::{json, Map, Value};
 
 /// Hook events we register, with an optional tool matcher.
-pub const EVENTS: [(&str, Option<&str>); 6] = [
+pub const EVENTS: [(&str, Option<&str>); 7] = [
+    ("SessionStart", None),
     ("UserPromptSubmit", None),
     ("PreToolUse", Some("*")),
     ("Notification", None),
@@ -74,7 +75,19 @@ pub fn merge_into(settings: &mut Value) -> Result<Vec<&'static str>, String> {
 /// Map a Claude Code hook invocation to a socket message. `payload` is the JSON Claude Code
 /// passes on stdin (`Null` when absent or malformed).
 pub fn message_for(event: &str, payload: &Value, pane: u64) -> Option<Message> {
+    let session = payload
+        .get("session_id")
+        .and_then(Value::as_str)
+        .and_then(crate::term::agents::sanitize_session);
     let (state, body) = match event {
+        // Announces the session id only; the state is left as it is.
+        "SessionStart" => {
+            return session.map(|session| Message {
+                pane,
+                session: Some(session),
+                ..Message::default()
+            })
+        }
         "UserPromptSubmit" | "PreToolUse" => ("working", None),
         "Notification" => (
             "needs-input",
@@ -95,6 +108,7 @@ pub fn message_for(event: &str, payload: &Value, pane: u64) -> Option<Message> {
         state: Some(state.into()),
         title: Some("Claude Code".into()),
         body,
+        session,
         ..Message::default()
     })
 }
@@ -113,6 +127,20 @@ mod tests {
         assert_eq!(state("SubagentStop"), "done");
         assert_eq!(state("SessionEnd"), "idle");
         assert!(message_for("PostToolUse", &none, 1).is_none());
+    }
+
+    #[test]
+    fn session_id_is_forwarded_and_session_start_carries_only_it() {
+        let id = "3f6c0a52-91d4-4b1e-8c3a-0d2f7e5b9a11";
+        let payload = json!({ "session_id": id });
+        let start = message_for("SessionStart", &payload, 3).unwrap();
+        assert_eq!(start.session.as_deref(), Some(id));
+        assert!(start.state.is_none() && start.body.is_none());
+        let work = message_for("UserPromptSubmit", &payload, 3).unwrap();
+        assert_eq!(work.session.as_deref(), Some(id));
+        assert!(message_for("SessionStart", &Value::Null, 3).is_none());
+        let bad = json!({ "session_id": "../x" });
+        assert!(message_for("Stop", &bad, 3).unwrap().session.is_none());
     }
 
     #[test]

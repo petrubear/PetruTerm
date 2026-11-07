@@ -42,6 +42,13 @@ impl GpuiShellRoot {
                 terminal_id: det.terminal_id,
                 agent: det.agent.clone(),
                 color: det.color,
+                agent_pid: det.pid,
+                custom_name: self.agent_names.name_of(det.terminal_id).map(str::to_owned),
+                session: self
+                    .agent_sessions
+                    .get(det.terminal_id)
+                    .map(str::to_owned)
+                    .or_else(|| det.session.clone()),
                 workspace_name,
                 tab_title,
                 pane_number: (pane_count > 1).then_some(pane),

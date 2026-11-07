@@ -10,6 +10,7 @@ Row (single list, scrollable):
 Ordering: NeedsInput, Working, Done, Idle, Running; ties by most recent update.
 
 Interaction
+- Right-click a row: opens the context menu described in `agent-context-menu.md` (Rename, Copy session id, Reset name). Left click and Enter still jump to the pane.
 - Click row: focus that pane (switch workspace + tab, focus, unzoom) and set the cursor.
 - Keyboard (sidebar focused): Down/j, Up/k move the cursor (wraps), Enter activates; Escape closes the sidebar (existing behavior).
 - Empty state: "No agents running" centered muted text.

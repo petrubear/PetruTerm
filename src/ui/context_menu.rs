@@ -17,6 +17,13 @@ pub enum ContextAction {
     ReRunCommand(String),
     /// Set the accent color for a tab (tab_index, color). None resets to theme default.
     SetTabColor(usize, Option<[f32; 4]>),
+    /// Agents list (gpui build only): rename / copy session id / reset name, by terminal id.
+    #[allow(dead_code)] // only the gpui build constructs these
+    AgentRename(usize),
+    #[allow(dead_code)]
+    AgentCopySessionId(usize),
+    #[allow(dead_code)]
+    AgentResetName(usize),
     /// Non-interactive separator row.
     Separator,
     /// Non-interactive informational label (displays text, no action).

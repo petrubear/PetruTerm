@@ -959,6 +959,10 @@ impl App {
                                 }
                             }
                             ContextAction::Separator | ContextAction::Label => {}
+                            // Agents list actions exist only in the gpui build.
+                            ContextAction::AgentRename(_)
+                            | ContextAction::AgentCopySessionId(_)
+                            | ContextAction::AgentResetName(_) => {}
                         }
                         self.request_redraw();
                         return;
