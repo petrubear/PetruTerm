@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.0] — 2026-11-06
+
+### Added
+- `gpui-petruterm`: the Agents list shows each agent's session id (first 8 characters, Claude Code
+  via its hooks, which now include `SessionStart`; `--resume`-style arguments for any agent) and a
+  right-click menu with Rename, Copy session id and Reset name. Custom names are 1-32 characters
+  (letters, digits, `- _ .`), unique, last while the agent runs in its pane, and are meant as
+  the address for future agent-to-agent messaging. The control-socket message gained an optional
+  `session` field.
+
+---
+
 ## [1.3.0] — 2026-11-06
 
 ### Added
