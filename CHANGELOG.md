@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.6.0] — 2026-11-07
+
+### Added
+- `gpui-petruterm`: detected agents get unique valid default names (`Claude1`, `Kiro1`, `Agy1`,
+  `Codex1`, ...) instead of the program name, so two agents of the same kind no longer share a name
+  and every default can be used with `petruterm msg`.
+- Agents list: a live activity line for a working agent (`Bash: cargo test`, `Edit: src/a.rs`),
+  controlled by `config.agents.activity` = `"full"` | `"tool"` | `"off"`. Cards are tinted by state
+  with a colored edge, and the selected card is outlined in the agent's own color. `petruterm notify`
+  gained `--activity`. Design: `specs/003-agent-activity-cards/`.
+- Agent integrations behind one `AgentIntegration` interface (`src/ipc/integrations/`) for Claude
+  Code, Kiro, Codex and Antigravity. `petruterm hooks setup [kiro|codex|agy|all]`, `hooks remove`
+  and `hooks status` (with `--dry-run`) install the hook files; existing user hook entries are never
+  touched and backups are written as `.petruterm-bak`. Agents without hooks get a working/idle card
+  inferred from terminal output (`config.agents.output_state`, on by default); hook-reported state
+  always wins. Design: `specs/004-agent-integrations/`.
+
+### Fixed
+- A "done" agent card is cleared when you visit its pane (switching tabs and returning included).
+- CI: the benchmark baseline push no longer fails when `master` moved (rebases before pushing).
+
+### Changed
+- `serde_json` uses `preserve_order`, so hook files keep the key order of your own entries.
+
+---
+
 ## [1.5.0] — 2026-11-06
 
 ### Added
