@@ -9,6 +9,7 @@ mod agent_compose;
 mod agent_menu;
 mod agent_msg;
 mod agent_names;
+mod agent_observer;
 mod agent_rename;
 mod agent_rows;
 mod agent_scan;
@@ -252,6 +253,8 @@ pub struct GpuiShellRoot {
     /// Per-terminal "needs the user" state (OSC 9/99/777 notifications, optionally BEL) --
     /// see `attention.rs`.
     attention: crate::term::attention::AttentionTracker,
+    /// The panes on screen on the previous tick (see `attention.rs`).
+    attention_seen: Vec<usize>,
     /// Branch / PR / listening ports per workspace, shown in the sidebar (slice 4).
     workspace_info: workspace_info::WorkspaceInfoState,
     /// Recognized-agent detections for the sidebar Agents section -- see `agent_scan.rs`.
@@ -260,6 +263,8 @@ pub struct GpuiShellRoot {
     agent_sessions: agent_sessions::AgentSessions,
     /// User-assigned names of running agents -- see `agent_names.rs`.
     agent_names: agent_names::AgentNames,
+    /// Output-based state of agent panes, for repaint detection -- see `agent_observer.rs`.
+    agent_observer: agent_observer::AgentObserver,
     /// Inline rename editor open on an Agents row, if any -- see `agent_rename.rs`.
     agent_rename: Option<agent_rename::AgentRename>,
     /// Rename requested from the agent menu; `render()` opens the editor (it needs a `Window`).

@@ -8,6 +8,8 @@ use std::io;
 use std::os::fd::RawFd;
 use std::os::unix::process::CommandExt;
 use std::sync::{Arc, OnceLock};
+
+use super::pty_activity::PtyActivity;
 use std::thread::JoinHandle;
 
 use crate::app::pty_schedule::WakeupGate;
@@ -132,6 +134,8 @@ pub struct Pty {
     write_mutex: Arc<parking_lot::Mutex<()>>,
     /// Remote subscribers fed by the reader thread.
     pub(crate) tee: Arc<Tee>,
+    /// Timing of user input and agent output, for the Agents list.
+    activity: Arc<PtyActivity>,
 }
 
 impl Pty {
@@ -201,6 +205,8 @@ impl Pty {
         let wakeup_gate_clone = Arc::clone(&wakeup_gate);
         let tee = Arc::new(Tee::default());
         let tee_clone = Arc::clone(&tee);
+        let activity = Arc::new(PtyActivity::default());
+        let activity_clone = Arc::clone(&activity);
         let reader_thread = std::thread::Builder::new()
             .name("pty-reader".into())
             .spawn(move || {
@@ -211,6 +217,7 @@ impl Pty {
                     wakeup_clone,
                     wakeup_gate_clone,
                     tee_clone,
+                    activity_clone,
                 )
             })
             .context("failed to spawn pty reader thread")?;
@@ -256,6 +263,7 @@ impl Pty {
                 child_thread: Some(child_thread),
                 write_mutex,
                 tee,
+                activity,
             },
             term,
         ))
@@ -264,9 +272,16 @@ impl Pty {
     /// Write raw bytes to the PTY (keyboard input → shell).
     pub fn write(&self, data: &[u8]) {
         if self.master_fd >= 0 && !data.is_empty() {
+            self.activity.on_input();
             let _guard = self.write_mutex.lock();
             pty_write_all(self.master_fd, data);
         }
+    }
+
+    /// Input/output timing of this PTY.
+    #[allow(dead_code)] // read by the gpui Agents list only
+    pub fn activity(&self) -> &Arc<PtyActivity> {
+        &self.activity
     }
 
     /// Resize the PTY to new terminal dimensions.
@@ -493,6 +508,7 @@ fn reader_loop(
     wakeup: Wakeup,
     wakeup_gate: Arc<WakeupGate>,
     tee: Arc<Tee>,
+    activity: Arc<PtyActivity>,
 ) {
     let mut processor: VteProcessor<StdSyncHandler> = VteProcessor::new();
     let mut scanner = Osc133Scanner::new();
@@ -510,6 +526,7 @@ fn reader_loop(
         }
         let n = n as usize;
         let bytes = &buf[..n];
+        activity.on_output();
 
         // OSC 133 + erase scan — must run before VTE advance.
         for &b in bytes {

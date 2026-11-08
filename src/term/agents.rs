@@ -19,11 +19,14 @@ use super::attention::AgentState;
 
 mod activity;
 mod names;
+mod observer;
 mod session;
 #[allow(unused_imports)] // the wgpu binary compiles this module but never calls it
 pub use activity::*;
 #[allow(unused_imports)] // the wgpu binary compiles this module but never calls it
 pub use names::*;
+#[allow(unused_imports)] // the wgpu binary compiles this module but never calls it
+pub use observer::*;
 pub use session::session_from_args;
 
 /// Arguments for the single `ps` run per scan.

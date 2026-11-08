@@ -215,6 +215,21 @@ impl AttentionTracker {
         }
     }
 
+    /// The user came back to this pane: a finished turn has been seen, so `Done` becomes
+    /// `Idle`. Anything else (including `NeedsInput`, which still wants an answer) is kept.
+    /// Returns true when the state changed.
+    #[cfg_attr(not(test), allow(dead_code))] // gpui only; the wgpu bin does not use it
+    pub fn dismiss_done(&mut self, terminal_id: usize) -> bool {
+        match self.panes.get_mut(&terminal_id) {
+            Some(p) if p.state == AgentState::Done => {
+                p.state = AgentState::Idle;
+                p.unread = false;
+                true
+            }
+            _ => false,
+        }
+    }
+
     /// Forget a closed pane.
     pub fn remove(&mut self, terminal_id: usize) {
         self.panes.remove(&terminal_id);
@@ -276,6 +291,22 @@ impl AttentionTracker {
             .map(|off| order[(start + off) % order.len()])
             .find(|&id| self.is_unread(id))
     }
+}
+
+/// Tracks which panes the user can see between ticks. `visible` is every pane of the active
+/// tab (just the zoomed one when zoomed) while the window is active, empty otherwise. Returns
+/// the panes that have just come into view (tab, workspace or zoom switch, or back to the
+/// window), once per arrival.
+#[cfg_attr(not(test), allow(dead_code))] // gpui only; the wgpu bin does not use it
+pub fn newly_visible(seen: &mut Vec<usize>, visible: &[usize]) -> Vec<usize> {
+    let arrived = visible
+        .iter()
+        .copied()
+        .filter(|id| !seen.contains(id))
+        .collect();
+    seen.clear();
+    seen.extend_from_slice(visible);
+    arrived
 }
 
 #[cfg(test)]
@@ -340,6 +371,61 @@ mod tests {
             message: None,
             activity: activity.map(str::to_string),
         }
+    }
+
+    #[test]
+    fn dismiss_done_only_clears_a_finished_turn() {
+        let mut t = AttentionTracker::new();
+        let now = Instant::now();
+        assert!(!t.dismiss_done(1), "unknown pane");
+        t.apply(1, state(AgentState::Done, None), true, false, now);
+        assert_eq!(t.get(1).unwrap().state, AgentState::Done);
+        assert!(t.dismiss_done(1));
+        assert_eq!(t.get(1).unwrap().state, AgentState::Idle);
+        assert!(!t.dismiss_done(1), "already idle");
+        t.apply(2, working(Some("Bash: ls")), false, false, now);
+        assert!(!t.dismiss_done(2));
+        assert_eq!(t.get(2).unwrap().state, AgentState::Working);
+        t.apply(
+            3,
+            state(AgentState::NeedsInput, Some("Allow?")),
+            true,
+            false,
+            now,
+        );
+        assert!(
+            !t.dismiss_done(3),
+            "a pending question is not dismissed by looking"
+        );
+        assert_eq!(t.get(3).unwrap().state, AgentState::NeedsInput);
+    }
+
+    #[test]
+    fn newly_visible_reports_each_arrival_once() {
+        let mut seen = Vec::new();
+        assert_eq!(newly_visible(&mut seen, &[1, 2]), vec![1, 2]);
+        assert_eq!(
+            newly_visible(&mut seen, &[1, 2]),
+            Vec::<usize>::new(),
+            "still there"
+        );
+        assert_eq!(newly_visible(&mut seen, &[3]), vec![3], "another tab");
+        assert_eq!(
+            newly_visible(&mut seen, &[]),
+            Vec::<usize>::new(),
+            "window inactive"
+        );
+        assert_eq!(
+            newly_visible(&mut seen, &[3, 4]),
+            vec![3, 4],
+            "back in the window"
+        );
+        assert_eq!(
+            newly_visible(&mut seen, &[4]),
+            Vec::<usize>::new(),
+            "a split was zoomed"
+        );
+        assert_eq!(newly_visible(&mut seen, &[3, 4]), vec![3], "and unzoomed");
     }
 
     #[test]

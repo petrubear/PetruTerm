@@ -77,17 +77,24 @@ fn notify(args: &[String]) -> i32 {
 }
 
 fn hook(args: &[String]) -> i32 {
+    use std::io::Write;
     let (Some(agent), Some(event)) = (args.first(), args.get(1)) else {
         return 0;
     };
+    let Some(integration) = super::integrations::find(agent) else {
+        return 0;
+    };
+    // Some agents require a reply on stdout (and treat silence as an error), pane or not.
+    if let Some(out) = integration.hook_stdout(event) {
+        let mut stdout = std::io::stdout();
+        let _ = stdout.write_all(out.as_bytes());
+        let _ = stdout.flush();
+    }
     let Some((pane, sock)) = pane_target() else {
         return 0;
     };
-    if agent != "claude" {
-        return 0;
-    }
     let payload = read_stdin_json(Duration::from_millis(500));
-    if let Some(msg) = claude_hooks::message_for(event, &payload, pane) {
+    if let Some(msg) = integration.on_hook(event, &payload, pane) {
         deliver(&sock, &msg);
     }
     0
@@ -109,9 +116,13 @@ fn read_stdin_json(timeout: Duration) -> Value {
 
 fn hooks(args: &[String]) -> i32 {
     match args.first().map(String::as_str) {
-        Some("setup") => setup(&args[1..]),
+        // Claude's hooks live in its settings file and keep their own flags.
+        Some("setup") if args.get(1).map(String::as_str) == Some("claude") => setup(&args[1..]),
+        Some("setup" | "remove" | "status") => super::hooks_cli::run(args),
         _ => {
-            eprintln!("usage: petruterm hooks setup claude [--dry-run] [--settings PATH]");
+            eprintln!(
+                "usage: petruterm hooks setup|remove [kiro|codex|agy|all] [--dry-run] | hooks status | hooks setup claude [--dry-run] [--settings PATH]"
+            );
             2
         }
     }

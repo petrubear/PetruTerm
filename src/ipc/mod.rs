@@ -10,6 +10,9 @@
 pub mod agent_setup;
 pub mod claude_hooks;
 pub mod cli;
+pub mod hook_files;
+pub mod hooks_cli;
+pub mod integrations;
 pub mod msg_bus;
 pub mod msg_cli;
 pub mod peer;

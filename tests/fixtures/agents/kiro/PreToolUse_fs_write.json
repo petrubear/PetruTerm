@@ -1,0 +1,1 @@
+{"hook_event_name":"PreToolUse","cwd":"/p","session_id":"kiro-sess-1","tool_name":"fs_write","tool_input":{"command":"create","path":"/p/notes.md","file_text":"hello"}}

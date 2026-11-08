@@ -1,0 +1,1 @@
+{"hook_event_name":"PreToolUse","cwd":"/p","session_id":"kiro-sess-1","tool_name":"execute_bash","tool_input":{"command":"ls -la"}}

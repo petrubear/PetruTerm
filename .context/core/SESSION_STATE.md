@@ -4,6 +4,16 @@
 **Session Focus:** gpui chrome migration — milestone completion (M0-M5d) plus a visual-polish
 dogfood pass on `gpui_shell`'s chrome, matching an approved design mockup.
 
+## Latest (2026-11-07, later)
+
+Feature `004-agent-integrations` (specs in `specs/004-agent-integrations/`): `AgentIntegration`
+trait + registry (`src/ipc/integrations/`: claude, kiro, codex, agy), generic `hook` CLI,
+`hooks setup|remove|status`, hook-file helpers, PTY output observer (`pty_activity`, `observer`,
+`agent_observer`), `agents.output_state`. `serde_json` now has `preserve_order` (user hook files
+keep their key order). Code complete and unit/integration-tested (551 lib tests + `hook_cli`,
+`hooks_setup`). Pending: T034, the real-session check of Kiro, Codex and agy (payload fields marked
+UNVERIFIED in `research.md`) and recording the results. Nothing committed yet.
+
 ## Latest (2026-11-07)
 
 Feature `003-agent-activity-cards` (specs in `specs/003-agent-activity-cards/`): the Agents row

@@ -22,6 +22,9 @@ function module.apply_to_config(config)
         -- contain secrets; they are only shown in the local sidebar. Use "tool" when sharing
         -- your screen.
         activity       = "full",
+        -- Agents with no hooks (or hooks not installed) still get a working/idle card, inferred
+        -- from terminal output (typing does not count). Hook-reported state always wins.
+        output_state   = true,
         -- Extra agents for the sidebar "Agents" list, added to the built-ins (Claude Code,
         -- Kiro, Codex, Copilot, Antigravity). `process` matches the program name (or the
         -- script name for node/bun/deno). Same `name` as a built-in replaces it.

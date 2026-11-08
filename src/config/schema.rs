@@ -189,6 +189,13 @@ pub struct AgentsConfig {
     /// How much of an agent's current action the Agents list shows: "full", "tool" or "off".
     #[serde(default)]
     pub activity: crate::term::agents::ActivityDetail,
+    /// Infer working/idle from terminal output for agents with no hook-reported state.
+    #[serde(default = "default_true")]
+    pub output_state: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Default for AgentsConfig {
@@ -199,6 +206,7 @@ impl Default for AgentsConfig {
             bell_attention: false,
             recognized: Vec::new(),
             activity: crate::term::agents::ActivityDetail::Full,
+            output_state: true,
         }
     }
 }

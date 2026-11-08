@@ -8,6 +8,7 @@ pub mod messaging;
 pub mod osc133;
 pub mod osc_notify;
 pub mod pty;
+pub mod pty_activity;
 pub mod search;
 pub mod snapshot;
 pub mod tee;

@@ -428,4 +428,23 @@ mod tests {
         assert_eq!(c.agents.activity, ActivityDetail::Full);
     }
 
+    #[test]
+    fn agents_output_state_defaults_on_and_can_be_turned_off() {
+        let load = |src: &str| {
+            lua::load_config_str(src, "test/config.lua", &[])
+                .expect("config loads")
+                .0
+        };
+        assert!(load("return {}").agents.output_state);
+        assert!(
+            load("return { agents = { ring = false } }")
+                .agents
+                .output_state
+        );
+        assert!(
+            !load("return { agents = { output_state = false } }")
+                .agents
+                .output_state
+        );
+    }
 }

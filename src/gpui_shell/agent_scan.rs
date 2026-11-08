@@ -11,6 +11,7 @@ use crate::term::agents::{self, AgentDetection, PaneProbe, RecognizedAgent};
 
 use super::sidebar::SidebarSection;
 use super::GpuiShellRoot;
+use crate::term::pty_activity;
 
 /// Gap between scans while the section is visible (rows appear/disappear within 5 s).
 const INTERVAL: Duration = Duration::from_secs(2);
@@ -96,7 +97,7 @@ fn scan_wanted(list_on_screen: bool, messaging_in_use: bool) -> bool {
 /// Called from the poll loop each tick: drain finished scans and start one when due.
 /// Returns true when the visible list changed.
 pub(super) fn tick(root: &mut GpuiShellRoot, window_focused: bool) -> bool {
-    let (drained, changed) = root.agent_scan.drain();
+    let (drained, mut changed) = root.agent_scan.drain();
     let now = Instant::now();
     if drained {
         root.agent_sessions
@@ -130,6 +131,15 @@ pub(super) fn tick(root: &mut GpuiShellRoot, window_focused: bool) -> bool {
     let on_screen = window_focused
         && root.sidebar.is_visible()
         && root.sidebar.active_section() == SidebarSection::Agents;
+    // Terminal output does not repaint the sidebar by itself: poll the observed states.
+    if on_screen && root.config.agents.output_state {
+        let terminals = &root.terminals;
+        let observed = root.agent_scan.detections().iter().filter_map(|d| {
+            let t = terminals.get(&d.terminal_id)?;
+            Some((d.terminal_id, t.pty.activity().last_agent_output_ms()))
+        });
+        changed |= root.agent_observer.poll(observed, pty_activity::now_ms());
+    }
     let messaging = !root.agent_names.is_empty() || root.agent_accept.any();
     let active = scan_wanted(on_screen, messaging);
     if root.agent_scan.due(active, now) {

@@ -318,3 +318,15 @@ Claude Code hook payload (`PreToolUse`, `UserPromptSubmit`) -> `ipc::claude_hook
 `gpui_shell::agent_rows` (filtered by `agents.activity` via `apply_detail`) -> `AgentRow.activity`
 -> `sidebar/agents.rs::detail_text`. Card color: `sidebar/agent_card.rs::card_style`. The activity
 never goes to `remote::notify_attention`, native notifications or `last_message`.
+
+## Agent integrations (specs/004-agent-integrations)
+
+`petruterm hook <agent> <event>` resolves `<agent>` in `ipc::integrations::all()` (trait
+`AgentIntegration`: Claude, Kiro, Codex, Antigravity). Each implementation maps its hook payload to
+the normalized `ipc::Message` (state, activity, body, session), and declares the stdout its agent
+requires (Antigravity needs JSON). `petruterm hooks setup|remove|status` (`ipc/hooks_cli.rs`,
+helpers in `ipc/hook_files.rs`) merges marker-identified (`PETRUTERM_BIN`) entries into the
+agents' global hook files. Agents with no hook-reported state get an output-based state:
+`term/pty_activity.rs` (two atomics stamped by the PTY reader thread and `Pty::write`) ->
+`term/agents/observer.rs` (`observed_state`, `merge_state`) -> `gpui_shell/agent_rows.rs`;
+`gpui_shell/agent_observer.rs` only detects changes for repaint.

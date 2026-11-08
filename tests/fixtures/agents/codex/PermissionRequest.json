@@ -1,0 +1,1 @@
+{"session_id":"019a-codex-1","cwd":"/p","hook_event_name":"PermissionRequest","turn_id":"t1","tool_name":"Bash","tool_input":{"command":"rm -rf build","description":"Delete the build directory"}}

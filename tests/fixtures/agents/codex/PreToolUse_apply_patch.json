@@ -1,0 +1,1 @@
+{"session_id":"019a-codex-1","cwd":"/p","hook_event_name":"PreToolUse","turn_id":"t1","tool_name":"apply_patch","tool_use_id":"call_2","tool_input":{"patch":"*** Begin Patch\n*** Update File: /p/src/parser.rs\n@@\n-old\n+new\n*** Add File: /p/tests/parser.rs\n+x\n*** End Patch"}}

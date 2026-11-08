@@ -757,6 +757,10 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
                 config.agents.activity = v;
             }
         }
+        // `Option<bool>`: mlua converts a missing key to `false` for a bare `bool`.
+        if let Ok(Some(v)) = a_table.get::<Option<bool>>("output_state") {
+            config.agents.output_state = v;
+        }
         config.agents.recognized = super::agents_cfg::parse_recognized(&a_table);
     }
 

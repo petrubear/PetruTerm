@@ -24,6 +24,18 @@ impl GpuiShellRoot {
         let focused = self.focused_terminal_id();
         let now = Instant::now();
         let mut changed = false;
+        // Panes that just came into view (tab, pane or workspace switch, or back to the
+        // window) count as seen: a finished turn there is no longer news. Visible means every
+        // pane of the active tab, not only the focused one. Done before this tick's events so
+        // a turn that finishes right now is not dismissed unseen.
+        let visible = if window_active {
+            self.visible_terminal_ids()
+        } else {
+            Vec::new()
+        };
+        for id in crate::term::attention::newly_visible(&mut self.attention_seen, &visible) {
+            changed |= self.attention.dismiss_done(id);
+        }
         for (id, event) in events {
             let observed = window_active && id == focused;
             let alert =
@@ -72,6 +84,15 @@ impl GpuiShellRoot {
     fn focused_terminal_id(&self) -> usize {
         let ws = self.workspaces.active();
         ws.tab_panes[ws.tabs.active_index()].focused_terminal
+    }
+
+    /// Terminals on screen: every pane of the active tab, or only the zoomed one.
+    fn visible_terminal_ids(&self) -> Vec<usize> {
+        let ws = self.workspaces.active();
+        if let Some(id) = ws.zoomed_pane {
+            return vec![id];
+        }
+        ws.tab_panes[ws.tabs.active_index()].root.leaf_ids()
     }
 
     /// Title of the tab (in the active workspace) that holds `terminal_id`.

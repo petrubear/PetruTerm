@@ -4,6 +4,7 @@
 use super::GpuiShellRoot;
 use crate::term::agents::{self, AgentRow, PaneProbe};
 use crate::term::attention::AgentState;
+use crate::term::pty_activity;
 
 impl GpuiShellRoot {
     /// One probe per live terminal: its id and the pid of its shell.
@@ -39,6 +40,20 @@ impl GpuiShellRoot {
                 continue;
             };
             let tracked = self.attention.get(det.terminal_id);
+            // A hook-reported state wins; without one (or when it went stale) the terminal's
+            // output decides.
+            let hook = tracked.and_then(|p| p.updated_at.map(|at| (p.state, at)));
+            let observed = if self.config.agents.output_state {
+                self.terminals.get(&det.terminal_id).and_then(|t| {
+                    agents::observed_state(
+                        pty_activity::now_ms(),
+                        t.pty.activity().last_agent_output_ms(),
+                    )
+                })
+            } else {
+                None
+            };
+            let state = agents::merge_state(hook, observed, std::time::Instant::now());
             rows.push(AgentRow {
                 terminal_id: det.terminal_id,
                 agent: det.agent.clone(),
@@ -57,11 +72,11 @@ impl GpuiShellRoot {
                 workspace_name,
                 tab_title,
                 pane_number: (pane_count > 1).then_some(pane),
-                state: tracked.map(|p| p.state),
+                state,
                 unread: tracked.is_some_and(|p| p.unread) && self.config.agents.ring,
                 message: tracked.and_then(|p| p.last_message.clone()),
                 activity: tracked
-                    .filter(|p| p.state == AgentState::Working)
+                    .filter(|_| state == Some(AgentState::Working))
                     .and_then(|p| p.activity.as_deref())
                     .and_then(|a| agents::apply_detail(self.config.agents.activity, a)),
                 updated_at: tracked.and_then(|p| p.updated_at),
