@@ -47,6 +47,27 @@ pub fn validate_name(input: &str) -> Result<String, NameError> {
     Ok(name.to_string())
 }
 
+/// Valid short prefix for the auto-assigned name of an agent type ("Claude Code" -> "Claude").
+/// Unknown (user-defined) agents use the first word, stripped to valid characters.
+pub fn default_name_base(agent: &str) -> String {
+    match agent {
+        "Claude Code" => return "Claude".into(),
+        "Antigravity" => return "Agy".into(),
+        _ => {}
+    }
+    let word = agent.split_whitespace().next().unwrap_or("");
+    let base: String = word
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        .take(MAX_NAME_LEN - 4)
+        .collect();
+    if base.is_empty() {
+        "Agent".into()
+    } else {
+        base
+    }
+}
+
 /// A session id is kept only if it is 1-64 chars of `[A-Za-z0-9_-]`.
 pub fn sanitize_session(input: &str) -> Option<String> {
     let id = input.trim();
@@ -88,6 +109,17 @@ mod tests {
             validate_name("caf\u{e9}"),
             Err(NameError::BadChar('\u{e9}'))
         );
+    }
+
+    #[test]
+    fn default_bases_are_valid_names() {
+        assert_eq!(default_name_base("Claude Code"), "Claude");
+        assert_eq!(default_name_base("Kiro"), "Kiro");
+        assert_eq!(default_name_base("Antigravity"), "Agy");
+        assert_eq!(default_name_base("My Tool"), "My");
+        assert_eq!(default_name_base("caf\u{e9}"), "caf");
+        assert_eq!(default_name_base("???"), "Agent");
+        assert!(validate_name(&format!("{}99", default_name_base(&"x".repeat(80)))).is_ok());
     }
 
     #[test]

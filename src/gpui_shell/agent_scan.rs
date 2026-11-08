@@ -102,6 +102,8 @@ pub(super) fn tick(root: &mut GpuiShellRoot, window_focused: bool) -> bool {
         root.agent_sessions
             .retain_live(root.agent_scan.detections(), now);
         root.agent_names.retain_live(root.agent_scan.detections());
+        root.agent_names
+            .assign_defaults(root.agent_scan.detections());
         root.agent_accept.retain_live(root.agent_scan.detections());
         // The editor closes without saving when its agent is gone or was replaced.
         let gone = root.agent_rename.as_ref().is_some_and(|r| {

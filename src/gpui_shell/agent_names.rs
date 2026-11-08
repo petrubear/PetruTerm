@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use crate::term::agents::{validate_name, AgentDetection, NameError};
+use crate::term::agents::{default_name_base, validate_name, AgentDetection, NameError};
 
 #[derive(Default)]
 pub struct AgentNames {
@@ -55,6 +55,24 @@ impl AgentNames {
             .iter()
             .find(|(_, (_, n))| n.eq_ignore_ascii_case(name))
             .map(|(t, _)| *t)
+    }
+
+    /// Give every detected agent without a name a unique default ("Claude1", "Kiro2", ...):
+    /// the agent's short base plus the lowest number not already taken.
+    pub fn assign_defaults(&mut self, detections: &[AgentDetection]) {
+        let mut fresh: Vec<&AgentDetection> = detections
+            .iter()
+            .filter(|d| !self.names.contains_key(&d.terminal_id))
+            .collect();
+        fresh.sort_by_key(|d| d.terminal_id);
+        for d in fresh {
+            let base = default_name_base(&d.agent);
+            let name = (1..)
+                .map(|n| format!("{base}{n}"))
+                .find(|c| self.terminal_for(c).is_none())
+                .expect("unbounded range");
+            self.names.insert(d.terminal_id, (d.pid, name));
+        }
     }
 
     /// Drop names whose agent process is gone or was replaced by a different one.
@@ -115,6 +133,39 @@ mod tests {
         assert_eq!(n.set(1, 10, "", here), Err(NameError::Empty));
         assert_eq!(n.set(1, 10, "a b", here), Err(NameError::BadChar(' ')));
         assert_eq!(n.name_of(1), None);
+    }
+
+    fn det_of(agent: &str, terminal_id: usize, pid: u32) -> AgentDetection {
+        AgentDetection {
+            agent: agent.into(),
+            ..det(terminal_id, pid)
+        }
+    }
+
+    #[test]
+    fn defaults_are_unique_valid_and_stable() {
+        let mut n = AgentNames::default();
+        let dets = [
+            det_of("Claude Code", 2, 20),
+            det_of("Claude Code", 1, 10),
+            det_of("Kiro", 3, 30),
+            det_of("Antigravity", 4, 40),
+        ];
+        n.assign_defaults(&dets);
+        assert_eq!(n.name_of(1), Some("Claude1"));
+        assert_eq!(n.name_of(2), Some("Claude2"));
+        assert_eq!(n.name_of(3), Some("Kiro1"));
+        assert_eq!(n.name_of(4), Some("Agy1"));
+        n.assign_defaults(&dets);
+        assert_eq!(n.name_of(2), Some("Claude2"), "existing names are kept");
+        // A freed number is reused; a user name that collides is skipped.
+        n.reset(1);
+        n.set(3, 30, "claude1", here).unwrap();
+        n.assign_defaults(&dets);
+        assert_eq!(n.name_of(1), Some("Claude3"));
+        for t in 1..=4 {
+            assert!(validate_name(n.name_of(t).unwrap()).is_ok());
+        }
     }
 
     #[test]
