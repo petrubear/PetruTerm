@@ -1,1 +1,0 @@
-/Users/edison/Documents/Projects/Rust/PetruTerm/assets/AppIcon.png

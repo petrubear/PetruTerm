@@ -1,7 +1,0 @@
-# Generated benchmark snapshots (large JSON artifacts, no architectural signal)
-.criterion-baselines/
-
-# Build/output artifacts
-target/
-dist/
-graphify-out/
