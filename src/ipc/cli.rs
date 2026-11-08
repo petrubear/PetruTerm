@@ -1,6 +1,6 @@
 //! Subcommands handled before any GUI starts, shared by both binaries:
 //!
-//! - `notify [--state S] [--title T] [--body B]`: report state / send a notification
+//! - `notify [--state S] [--title T] [--body B] [--activity A]`: report state / send a notification
 //! - `hook <agent> <event>`: entry point for agent hooks (payload JSON on stdin)
 //! - `hooks setup claude [--dry-run]`: install the hooks in `~/.claude/settings.json`
 //! - `remote ...`: phone access (see `remote::control`)
@@ -48,6 +48,7 @@ fn notify(args: &[String]) -> i32 {
             "--state" => &mut msg.state,
             "--title" => &mut msg.title,
             "--body" => &mut msg.body,
+            "--activity" => &mut msg.activity,
             other => {
                 eprintln!("petruterm notify: unknown argument `{other}`");
                 return 2;
@@ -65,7 +66,7 @@ fn notify(args: &[String]) -> i32 {
             return 2;
         }
     } else if msg.body.is_none() {
-        eprintln!("usage: petruterm notify [--state S] [--title T] [--body B]");
+        eprintln!("usage: petruterm notify [--state S] [--title T] [--body B] [--activity A]");
         return 2;
     }
     if let Some((pane, sock)) = pane_target() {
@@ -217,6 +218,8 @@ mod tests {
         assert_eq!(notify(&args(&["--state", "bogus"])), 2);
         assert_eq!(notify(&args(&["--bogus", "x"])), 2);
         assert_eq!(notify(&args(&["--body"])), 2);
+        assert_eq!(notify(&args(&["--activity"])), 2);
+        assert_eq!(notify(&args(&["--activity", "x"])), 2);
         assert_eq!(notify(&args(&[])), 2);
     }
 

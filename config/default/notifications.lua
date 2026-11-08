@@ -17,6 +17,11 @@ function module.apply_to_config(config)
         notifications  = true,   -- native/toast notification when you are not looking at the pane
         ring           = true,   -- tab dot and pane ring for panes that need attention
         bell_attention = false,  -- also treat BEL as "needs attention" (noisy: vim, tab completion)
+        -- What the Agents list shows while an agent works: "full" (tool and target, e.g.
+        -- "Bash: cargo test"), "tool" (tool name only) or "off". Commands and prompts can
+        -- contain secrets; they are only shown in the local sidebar. Use "tool" when sharing
+        -- your screen.
+        activity       = "full",
         -- Extra agents for the sidebar "Agents" list, added to the built-ins (Claude Code,
         -- Kiro, Codex, Copilot, Antigravity). `process` matches the program name (or the
         -- script name for node/bun/deno). Same `name` as a built-in replaces it.

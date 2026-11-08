@@ -186,6 +186,9 @@ pub struct AgentsConfig {
     /// Extra agents for the sidebar "Agents" list, merged over the built-in defaults.
     #[serde(default)]
     pub recognized: Vec<crate::term::agents::RecognizedAgent>,
+    /// How much of an agent's current action the Agents list shows: "full", "tool" or "off".
+    #[serde(default)]
+    pub activity: crate::term::agents::ActivityDetail,
 }
 
 impl Default for AgentsConfig {
@@ -195,6 +198,7 @@ impl Default for AgentsConfig {
             ring: true,
             bell_attention: false,
             recognized: Vec::new(),
+            activity: crate::term::agents::ActivityDetail::Full,
         }
     }
 }

@@ -406,4 +406,26 @@ mod tests {
         assert!(config.agents.ring);
         assert!(config.agents.bell_attention);
     }
+
+    #[test]
+    fn agents_activity_detail() {
+        use crate::term::agents::ActivityDetail;
+        let load = |src: &str| {
+            lua::load_config_str(src, "test/config.lua", &[])
+                .expect("config loads")
+                .0
+        };
+        assert_eq!(load("return {}").agents.activity, ActivityDetail::Full);
+        for (v, want) in [
+            ("full", ActivityDetail::Full),
+            ("tool", ActivityDetail::Tool),
+            ("off", ActivityDetail::Off),
+        ] {
+            let c = load(&format!(r#"return {{ agents = {{ activity = "{v}" }} }}"#));
+            assert_eq!(c.agents.activity, want);
+        }
+        let c = load(r#"return { agents = { activity = "bogus" } }"#);
+        assert_eq!(c.agents.activity, ActivityDetail::Full);
+    }
+
 }

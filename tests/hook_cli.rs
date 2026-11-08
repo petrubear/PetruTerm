@@ -46,6 +46,76 @@ fn hook_sends_mapped_state_to_the_socket() {
 }
 
 #[test]
+fn pre_tool_use_hook_sends_the_activity() {
+    let dir = tempfile::tempdir().unwrap();
+    let sock = dir.path().join("t.sock");
+    let listener = UnixListener::bind(&sock).unwrap();
+    let status = run_cli(
+        &["hook", "claude", "PreToolUse"],
+        r#"{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"cargo test"},"cwd":"/p"}"#,
+        &sock,
+    );
+    assert!(status.success());
+    let msg = first_line(&listener);
+    assert_eq!(msg["state"], "working");
+    assert_eq!(msg["activity"], "Bash: cargo test");
+}
+
+#[test]
+fn prompt_hook_sends_the_prompt_start_and_stop_sends_no_activity() {
+    let dir = tempfile::tempdir().unwrap();
+    let sock = dir.path().join("t.sock");
+    let listener = UnixListener::bind(&sock).unwrap();
+    let status = run_cli(
+        &["hook", "claude", "UserPromptSubmit"],
+        r#"{"hook_event_name":"UserPromptSubmit","prompt":"fix the bug\nin detail"}"#,
+        &sock,
+    );
+    assert!(status.success());
+    assert_eq!(first_line(&listener)["activity"], "Prompt: fix the bug");
+    let status = run_cli(&["hook", "claude", "Stop"], "{}", &sock);
+    assert!(status.success());
+    let msg = first_line(&listener);
+    assert_eq!(msg["state"], "done");
+    assert!(msg.get("activity").is_none());
+}
+
+#[test]
+fn notify_sends_activity_and_truncation_is_left_to_the_app() {
+    let dir = tempfile::tempdir().unwrap();
+    let sock = dir.path().join("t.sock");
+    let listener = UnixListener::bind(&sock).unwrap();
+    let status = run_cli(
+        &[
+            "notify",
+            "--state",
+            "working",
+            "--activity",
+            "Indexing repo",
+        ],
+        "",
+        &sock,
+    );
+    assert!(status.success());
+    let msg = first_line(&listener);
+    assert_eq!(msg["state"], "working");
+    assert_eq!(msg["activity"], "Indexing repo");
+    let long = "x".repeat(5000);
+    let status = run_cli(
+        &["notify", "--state", "working", "--activity", &long],
+        "",
+        &sock,
+    );
+    assert!(status.success());
+    let msg = first_line(&listener);
+    assert_eq!(msg["state"], "working");
+    assert_eq!(msg["activity"].as_str().unwrap().len(), 5000);
+    let status = run_cli(&["notify", "--state", "done"], "", &sock);
+    assert!(status.success());
+    assert!(first_line(&listener).get("activity").is_none());
+}
+
+#[test]
 fn notify_sends_state_title_and_body() {
     let dir = tempfile::tempdir().unwrap();
     let sock = dir.path().join("t.sock");
@@ -95,3 +165,4 @@ fn hooks_setup_dry_run_does_not_write() {
     assert!(out.status.success());
     assert!(!settings.exists());
 }
+

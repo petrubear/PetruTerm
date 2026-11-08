@@ -4,6 +4,18 @@
 **Session Focus:** gpui chrome migration — milestone completion (M0-M5d) plus a visual-polish
 dogfood pass on `gpui_shell`'s chrome, matching an approved design mockup.
 
+## Latest (2026-11-07)
+
+Feature `003-agent-activity-cards` (specs in `specs/003-agent-activity-cards/`): the Agents row
+shows what a working Claude Code is doing (`Bash: cargo test`, from the `PreToolUse` /
+`UserPromptSubmit` hook payloads, via the new optional `activity` field of the control-socket
+`Message`, `AttentionEvent::State`, `PaneAttention.activity`, `AgentRow.activity`) and each card is
+tinted/edged by state (`gpui_shell/sidebar/agent_card.rs`). Config: `agents.activity`
+(`full`/`tool`/`off`). `petruterm notify --activity` feeds the same line. Also on this branch's
+working tree: unique auto-assigned agent names (`Claude1`, `Kiro2`, `Agy1`) in
+`gpui_shell/agent_names.rs`. Code complete and unit-tested; manual quickstart (real Claude Code,
+Esc-interrupt check, both themes) is pending. Nothing committed yet.
+
 ## Latest (2026-11-06, later)
 
 Branch `002-agent-messaging`: `petruterm msg`, router in the gpui chrome, acceptance toggle,

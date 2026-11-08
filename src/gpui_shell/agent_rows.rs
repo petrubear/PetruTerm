@@ -3,6 +3,7 @@
 
 use super::GpuiShellRoot;
 use crate::term::agents::{self, AgentRow, PaneProbe};
+use crate::term::attention::AgentState;
 
 impl GpuiShellRoot {
     /// One probe per live terminal: its id and the pid of its shell.
@@ -59,6 +60,10 @@ impl GpuiShellRoot {
                 state: tracked.map(|p| p.state),
                 unread: tracked.is_some_and(|p| p.unread) && self.config.agents.ring,
                 message: tracked.and_then(|p| p.last_message.clone()),
+                activity: tracked
+                    .filter(|p| p.state == AgentState::Working)
+                    .and_then(|p| p.activity.as_deref())
+                    .and_then(|a| agents::apply_detail(self.config.agents.activity, a)),
                 updated_at: tracked.and_then(|p| p.updated_at),
             });
         }

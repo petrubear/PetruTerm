@@ -56,6 +56,8 @@ pub enum AttentionEvent {
         state: AgentState,
         title: Option<String>,
         message: Option<String>,
+        /// What the agent is doing right now; kept only while `Working`.
+        activity: Option<String>,
     },
 }
 
@@ -72,6 +74,9 @@ pub struct PaneAttention {
     /// Set when an event arrived while the user was not looking at the pane.
     pub unread: bool,
     pub last_message: Option<String>,
+    /// Current action of a working agent; separate from `last_message` so it never outlives
+    /// the `Working` state or reaches notifications and the remote protocol.
+    pub activity: Option<String>,
     /// When the last accepted event changed this pane's state or message.
     pub updated_at: Option<Instant>,
     last_event_at: Option<Instant>,
@@ -83,6 +88,7 @@ impl PaneAttention {
             state: AgentState::Idle,
             unread: false,
             last_message: None,
+            activity: None,
             updated_at: None,
             last_event_at: None,
         }
@@ -125,7 +131,8 @@ impl AttentionTracker {
                 state,
                 title,
                 message,
-            } => return self.apply_state(terminal_id, state, title, message, observed),
+                activity,
+            } => return self.apply_state(terminal_id, state, title, message, activity, observed),
             AttentionEvent::Notify { title, body } => (title, body),
             AttentionEvent::Bell if bell_attention => (None, "Bell".to_string()),
             AttentionEvent::Bell => return None,
@@ -143,6 +150,7 @@ impl AttentionTracker {
         pane.last_event_at = Some(now);
         pane.updated_at = Some(now);
         pane.state = AgentState::NeedsInput;
+        pane.activity = None;
         pane.last_message = Some(body.clone());
         if observed {
             return None;
@@ -160,6 +168,7 @@ impl AttentionTracker {
         state: AgentState,
         title: Option<String>,
         message: Option<String>,
+        activity: Option<String>,
         observed: bool,
     ) -> Option<Alert> {
         let pane = self
@@ -170,6 +179,11 @@ impl AttentionTracker {
         pane.updated_at = Some(Instant::now());
         if message.is_some() {
             pane.last_message = message.clone();
+        }
+        if state != AgentState::Working {
+            pane.activity = None;
+        } else if activity.is_some() {
+            pane.activity = activity;
         }
         match state {
             AgentState::Idle | AgentState::Working => {
@@ -209,6 +223,14 @@ impl AttentionTracker {
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn get(&self, terminal_id: usize) -> Option<&PaneAttention> {
         self.panes.get(&terminal_id)
+    }
+
+    /// Current action of a working agent in this pane (cleared whenever it leaves `Working`).
+    #[cfg_attr(not(test), allow(dead_code))] // gpui sidebar only; the wgpu bin does not use it
+    pub fn activity(&self, terminal_id: usize) -> Option<&str> {
+        self.panes
+            .get(&terminal_id)
+            .and_then(|p| p.activity.as_deref())
     }
 
     pub fn is_unread(&self, terminal_id: usize) -> bool {
@@ -307,7 +329,59 @@ mod tests {
             state,
             title: Some("Claude Code".into()),
             message: message.map(str::to_string),
+            activity: None,
         }
+    }
+
+    fn working(activity: Option<&str>) -> AttentionEvent {
+        AttentionEvent::State {
+            state: AgentState::Working,
+            title: None,
+            message: None,
+            activity: activity.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn activity_is_set_replaced_and_kept_while_working() {
+        let mut t = AttentionTracker::new();
+        let now = Instant::now();
+        t.apply(1, working(Some("Bash: ls")), false, false, now);
+        assert_eq!(t.activity(1), Some("Bash: ls"));
+        t.apply(1, working(Some("Read: a.rs")), false, false, now);
+        assert_eq!(t.activity(1), Some("Read: a.rs"));
+        t.apply(1, working(None), false, false, now);
+        assert_eq!(t.activity(1), Some("Read: a.rs"));
+        assert_eq!(t.activity(2), None);
+    }
+
+    #[test]
+    fn activity_is_cleared_by_every_other_state_and_by_notifications() {
+        let now = Instant::now();
+        for s in [AgentState::NeedsInput, AgentState::Done, AgentState::Idle] {
+            let mut t = AttentionTracker::new();
+            t.apply(1, working(Some("Bash: ls")), false, false, now);
+            t.apply(1, state(s, None), false, false, now);
+            assert_eq!(t.activity(1), None, "{s:?}");
+            // A new working event without activity does not bring the old one back.
+            t.apply(1, working(None), false, false, now);
+            assert_eq!(t.activity(1), None);
+        }
+        let mut t = AttentionTracker::new();
+        t.apply(1, working(Some("Bash: ls")), false, false, now);
+        t.apply(1, notify("hi"), false, false, now);
+        assert_eq!(t.activity(1), None);
+    }
+
+    #[test]
+    fn activity_is_dropped_with_the_pane_and_never_reaches_the_message() {
+        let mut t = AttentionTracker::new();
+        let now = Instant::now();
+        t.apply(1, working(Some("Bash: ls")), false, false, now);
+        assert_eq!(t.get(1).unwrap().last_message, None);
+        assert_eq!(t.message_for([1]), None);
+        t.remove(1);
+        assert_eq!(t.activity(1), None);
     }
 
     #[test]

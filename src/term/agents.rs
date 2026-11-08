@@ -17,8 +17,11 @@ use serde::{Deserialize, Serialize};
 
 use super::attention::AgentState;
 
+mod activity;
 mod names;
 mod session;
+#[allow(unused_imports)] // the wgpu binary compiles this module but never calls it
+pub use activity::*;
 #[allow(unused_imports)] // the wgpu binary compiles this module but never calls it
 pub use names::*;
 pub use session::session_from_args;
@@ -254,6 +257,9 @@ pub struct AgentRow {
     pub state: Option<AgentState>,
     pub unread: bool,
     pub message: Option<String>,
+    /// Current action of a working agent, already filtered by `agents.activity`; `None` when
+    /// off, not working, or never reported.
+    pub activity: Option<String>,
     pub updated_at: Option<Instant>,
 }
 

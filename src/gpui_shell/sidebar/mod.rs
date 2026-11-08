@@ -1,6 +1,7 @@
 // The workspace sidebar drawer's visibility, active-section, and
 // per-section-cursor state.
 
+pub mod agent_card;
 pub mod agents;
 pub mod render;
 pub mod sections;

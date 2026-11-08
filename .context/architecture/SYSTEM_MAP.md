@@ -308,3 +308,13 @@ explicitly deprioritized by the user (their own shell's own suggestions cover it
 | `dirs` | Config paths | `dirs::config_dir()` for `~/.config` |
 | `anyhow` | Error handling | Application-level errors |
 | `thiserror` | Error types | Library-style typed errors |
+
+## Agent activity data path (specs/003-agent-activity-cards)
+
+Claude Code hook payload (`PreToolUse`, `UserPromptSubmit`) -> `ipc::claude_hooks::message_for`
+(`term::agents::tool_activity` / `prompt_activity`) -> control socket `Message.activity` ->
+`Message::into_event` (re-cleaned with `clean_activity`) -> `AttentionEvent::State.activity` ->
+`PaneAttention.activity` (set while `Working`, cleared by every other state) ->
+`gpui_shell::agent_rows` (filtered by `agents.activity` via `apply_detail`) -> `AgentRow.activity`
+-> `sidebar/agents.rs::detail_text`. Card color: `sidebar/agent_card.rs::card_style`. The activity
+never goes to `remote::notify_attention`, native notifications or `last_message`.

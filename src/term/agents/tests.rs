@@ -154,6 +154,7 @@ fn agent_row(id: usize, state: Option<AgentState>, at: Option<Instant>) -> Agent
         state,
         unread: false,
         message: None,
+        activity: None,
         updated_at: at,
     }
 }

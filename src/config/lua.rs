@@ -752,6 +752,11 @@ fn table_to_config(table: LuaTable) -> LuaResult<Config> {
         if let Ok(Some(v)) = a_table.get::<Option<bool>>("bell_attention") {
             config.agents.bell_attention = v;
         }
+        if let Ok(Some(s)) = a_table.get::<Option<String>>("activity") {
+            if let Some(v) = crate::term::agents::ActivityDetail::parse(&s) {
+                config.agents.activity = v;
+            }
+        }
         config.agents.recognized = super::agents_cfg::parse_recognized(&a_table);
     }
 

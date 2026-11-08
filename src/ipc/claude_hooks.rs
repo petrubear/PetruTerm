@@ -2,6 +2,7 @@
 //! `petruterm hooks setup claude`) and the mapping from a hook event to a [`Message`].
 
 use super::Message;
+use crate::term::agents::{prompt_activity, tool_activity};
 use serde_json::{json, Map, Value};
 
 /// Hook events we register, with an optional tool matcher.
@@ -108,9 +109,28 @@ pub fn message_for(event: &str, payload: &Value, pane: u64) -> Option<Message> {
         state: Some(state.into()),
         title: Some("Claude Code".into()),
         body,
+        activity: activity_for(event, payload),
         session,
         ..Message::default()
     })
+}
+
+/// What the agent is doing, from the hook payload: the prompt start on `UserPromptSubmit`, the
+/// tool and its target on `PreToolUse`. Nothing for the other events.
+fn activity_for(event: &str, payload: &Value) -> Option<String> {
+    match event {
+        "UserPromptSubmit" => payload
+            .get("prompt")
+            .and_then(Value::as_str)
+            .and_then(prompt_activity),
+        "PreToolUse" => {
+            let tool = payload.get("tool_name").and_then(Value::as_str)?;
+            let input = payload.get("tool_input").unwrap_or(&Value::Null);
+            let cwd = payload.get("cwd").and_then(Value::as_str);
+            tool_activity(tool, input, cwd)
+        }
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -151,6 +171,54 @@ mod tests {
         assert_eq!(m.pane, 4);
         let m = message_for("Notification", &Value::Null, 4).unwrap();
         assert_eq!(m.body.as_deref(), Some("Claude Code needs your attention"));
+    }
+
+    #[test]
+    fn activity_comes_from_the_prompt_and_the_tool() {
+        let tool = json!({
+            "tool_name": "Bash",
+            "tool_input": { "command": "cargo test" },
+            "cwd": "/p"
+        });
+        let m = message_for("PreToolUse", &tool, 1).unwrap();
+        assert_eq!(m.state.as_deref(), Some("working"));
+        assert_eq!(m.activity.as_deref(), Some("Bash: cargo test"));
+        let edit = json!({
+            "tool_name": "Edit",
+            "tool_input": { "file_path": "/p/src/a.rs" },
+            "cwd": "/p"
+        });
+        let m = message_for("PreToolUse", &edit, 1).unwrap();
+        assert_eq!(m.activity.as_deref(), Some("Edit: src/a.rs"));
+        let unknown = json!({ "tool_name": "mcp__x__y", "tool_input": {} });
+        let m = message_for("PreToolUse", &unknown, 1).unwrap();
+        assert_eq!(m.activity.as_deref(), Some("mcp__x__y"));
+        let prompt = json!({ "prompt": "fix the bug\nplease" });
+        let m = message_for("UserPromptSubmit", &prompt, 1).unwrap();
+        assert_eq!(m.activity.as_deref(), Some("Prompt: fix the bug"));
+        // no tool name, no payload: still working, without activity
+        let m = message_for("PreToolUse", &json!({}), 1).unwrap();
+        assert_eq!((m.state.as_deref(), m.activity), (Some("working"), None));
+        let m = message_for("PreToolUse", &Value::Null, 1).unwrap();
+        assert_eq!(m.activity, None);
+    }
+
+    #[test]
+    fn other_events_carry_no_activity() {
+        let payload = json!({
+            "tool_name": "Bash",
+            "tool_input": { "command": "ls" },
+            "prompt": "hi",
+            "message": "Allow?"
+        });
+        for e in ["Stop", "SubagentStop", "SessionEnd", "Notification"] {
+            assert_eq!(message_for(e, &payload, 1).unwrap().activity, None, "{e}");
+        }
+        let start = json!({ "session_id": "abc" });
+        assert_eq!(
+            message_for("SessionStart", &start, 1).unwrap().activity,
+            None
+        );
     }
 
     #[test]

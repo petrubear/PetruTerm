@@ -38,6 +38,10 @@ pub struct Message {
     pub title: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub body: Option<String>,
+    /// What the agent is doing right now (`Bash: cargo test`); only meaningful with a
+    /// `working` state. Cleaned again on receipt (see `into_event`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activity: Option<String>,
     /// The agent's session id (e.g. Claude Code's `session_id`), announced by its hooks.
     /// Use [`Message::session`], which validates it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -93,11 +97,16 @@ impl Message {
         let clean = |s: Option<String>| s.map(|t| sanitize(&t)).filter(|t| !t.is_empty());
         let title = clean(self.title);
         let body = clean(self.body);
+        let activity = self
+            .activity
+            .as_deref()
+            .and_then(crate::term::agents::clean_activity);
         let event = match self.state {
             Some(s) => AttentionEvent::State {
                 state: parse_state(&s)?,
                 title,
                 message: body,
+                activity,
             },
             None => AttentionEvent::Notify { title, body: body? },
         };
@@ -191,8 +200,72 @@ mod tests {
                 state: AgentState::NeedsInput,
                 title: Some("Claude Code".into()),
                 message: Some("Allow?".into()),
+                activity: None,
             }
         );
+    }
+
+    #[test]
+    fn activity_is_cleaned_forwarded_and_ignored_without_state() {
+        let m = Message {
+            activity: Some(format!("Bash:\n\tcargo\x1b test {}", "x".repeat(5000))),
+            ..msg(Some("working"), None, None)
+        };
+        let (_, ev) = m.into_event().unwrap();
+        let AttentionEvent::State {
+            activity, message, ..
+        } = ev
+        else {
+            panic!("expected state")
+        };
+        let a = activity.unwrap();
+        assert!(a.starts_with("Bash: cargo test"));
+        assert!(a.chars().count() <= crate::term::agents::MAX_ACTIVITY_CHARS);
+        assert!(!a.chars().any(char::is_control));
+        assert_eq!(message, None);
+
+        // needs-input keeps its own message next to the activity field
+        let m = Message {
+            activity: Some("Bash: ls".into()),
+            ..msg(Some("needs-input"), None, Some("Allow?"))
+        };
+        let (_, ev) = m.into_event().unwrap();
+        let AttentionEvent::State {
+            message, activity, ..
+        } = ev
+        else {
+            panic!("expected state")
+        };
+        assert_eq!(
+            (message.as_deref(), activity.as_deref()),
+            (Some("Allow?"), Some("Bash: ls"))
+        );
+
+        // blank activity counts as absent; a state-less message ignores it
+        let blank = Message {
+            activity: Some(" \n ".into()),
+            ..msg(Some("working"), None, None)
+        };
+        let (_, ev) = blank.into_event().unwrap();
+        assert!(matches!(ev, AttentionEvent::State { activity: None, .. }));
+        let plain = Message {
+            activity: Some("Bash: ls".into()),
+            ..msg(None, None, Some("hi"))
+        };
+        assert!(matches!(
+            plain.into_event().unwrap().1,
+            AttentionEvent::Notify { .. }
+        ));
+    }
+
+    #[test]
+    fn activity_field_is_optional_on_the_wire() {
+        let old = parse_line(r#"{"pane":3,"state":"working"}"#).unwrap();
+        assert_eq!(old.activity, None);
+        let json = serde_json::to_string(&old).unwrap();
+        assert!(!json.contains("activity"));
+        let new = parse_line(r#"{"pane":3,"state":"working","activity":"Read: a"}"#).unwrap();
+        assert_eq!(new.activity.as_deref(), Some("Read: a"));
     }
 
     #[test]
